@@ -99,7 +99,7 @@ export default function ReturnHistogram({
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`과거 유사 신호 ${caseCount}건의 실현 수익률 분포. 과거 표본의 중앙 ${ciPercent}% 범위는 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
+        aria-label={`과거 유사 신호 ${caseCount}건의 실현 수익률 분포. ${ciPercent}% 구간은 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
       >
         {/* 68% 구간 음영 + 경계선 */}
         <rect
@@ -110,9 +110,9 @@ export default function ReturnHistogram({
           style={{ fill: signal.ink }}
           opacity={0.09}
         />
-        {[band.low, band.high].map((edge, index) => (
+        {[band.low, band.high].map((edge) => (
           <line
-            key={index}
+            key={edge}
             x1={x(edge)}
             y1={PAD.top - 14}
             x2={x(edge)}
@@ -131,7 +131,7 @@ export default function ReturnHistogram({
           fontWeight={600}
           style={{ fill: signal.ink }}
         >
-          과거 표본의 중앙 {ciPercent}% 범위 {formatSigned(band.low)} ~ {formatSigned(band.high)}
+          10번 중 {Math.round(ciPercent / 10)}번 {formatSigned(band.low)} ~ {formatSigned(band.high)}
         </text>
 
         {/* 수평 그리드 + 건수 라벨 */}
@@ -155,14 +155,14 @@ export default function ReturnHistogram({
         </text>
 
         {/* 0% 기준선 */}
-        {xMin <= 0 && xMax >= 0 && <line
+        <line
           x1={x(0)}
           y1={PAD.top - 4}
           x2={x(0)}
           y2={baseline}
           style={{ stroke: "var(--color-edge)" }}
           strokeWidth={1}
-        />}
+        />
 
         {/* 막대: 구간 안은 신호 색, 밖은 회색 */}
         {bins.map((bin, i) => {
