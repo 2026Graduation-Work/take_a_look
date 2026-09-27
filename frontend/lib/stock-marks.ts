@@ -7,7 +7,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMemo, useSyncExternalStore } from "react";
-import { getSupabaseClient } from "./supabase";
+import { assertOk, getSupabaseClient } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 import type { OnboardingState } from "./auth";
 
@@ -58,22 +58,19 @@ type QueryError = { code?: string; message: string } | null;
 // 테이블이 아직 없음(PostgREST 스키마 캐시에 없음 / Postgres undefined_table)
 const missingTable = (error: QueryError) => error?.code === "PGRST205" || error?.code === "42P01";
 
-function assertResult(error: QueryError, operation: string) {
-  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
-}
 
 async function appUser(mode: Mode): Promise<{ client: SupabaseClient; userId: string } | null> {
   const client = mode === "supabase" ? getSupabaseClient() : null;
   if (!client) return null;
   const { data, error } = await client.auth.getUser();
-  assertResult(error, "로그인 사용자 확인");
+  assertOk(error, "로그인 사용자 확인");
   if (!data.user) return null;
   const { data: row, error: userError } = await client
     .from("users")
     .select("id")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
-  assertResult(userError, "서비스 사용자 확인");
+  assertOk(userError, "서비스 사용자 확인");
   return row ? { client, userId: (row as { id: string }).id } : null;
 }
 
@@ -86,7 +83,7 @@ export async function syncMarks(mode: Mode, names: Record<string, string>): Prom
     client.from("watchlist").select("stock_code").eq("user_id", userId).eq("is_active", true).order("display_order"),
     client.from("stock_notes").select("stock_code,note,updated_at").eq("user_id", userId),
   ]);
-  assertResult(watchResult.error, "관심 종목 조회");
+  assertOk(watchResult.error, "관심 종목 조회");
   write(
     STORAGE_KEYS.watchlist,
     ((watchResult.data ?? []) as { stock_code: string }[]).map(({ stock_code }) => ({
@@ -95,7 +92,7 @@ export async function syncMarks(mode: Mode, names: Record<string, string>): Prom
     })),
   );
   if (missingTable(noteResult.error)) return; // 0006 적용 전: 브라우저 메모 유지
-  assertResult(noteResult.error, "판단 메모 조회");
+  assertOk(noteResult.error, "판단 메모 조회");
   write(
     STORAGE_KEYS.stockNotes,
     Object.fromEntries(
@@ -122,7 +119,7 @@ export async function setWatched(stock: WatchedStock, watched: boolean, mode: Mo
       },
       { onConflict: "user_id,stock_code" },
     );
-    assertResult(error, "관심 종목 저장");
+    assertOk(error, "관심 종목 저장");
   }
   write(STORAGE_KEYS.watchlist, next);
 }
@@ -141,7 +138,7 @@ export async function saveNote(code: string, text: string, mode: Mode): Promise<
           { onConflict: "user_id,stock_code" },
         )
       : await table.delete().eq("user_id", user.userId).eq("stock_code", code);
-    if (!missingTable(error)) assertResult(error, "판단 메모 저장");
+    if (!missingTable(error)) assertOk(error, "판단 메모 저장");
   }
   if (trimmed) notes[code] = { text: trimmed, updatedAt };
   else delete notes[code];

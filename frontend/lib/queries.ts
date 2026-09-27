@@ -33,7 +33,7 @@ import {
 import { isStyleAxes } from "./profiling-rules";
 import { passesHardConstraints } from "./recommendation-filter";
 import type { HoldingWeight } from "./providers";
-import { getSupabaseClient } from "./supabase";
+import { assertOk, getSupabaseClient } from "./supabase";
 import type {
   InvestorProfileSummary,
   MarketStatus,
@@ -116,7 +116,7 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
   if (!client) throw new Error("계정 기능이 아직 연결되지 않았어요.");
 
   const { data: authData, error: authError } = await client.auth.getUser();
-  assertQuery(authError, "로그인 사용자 확인");
+  assertOk(authError, "로그인 사용자 확인");
   if (!authData.user) throw new Error("로그인 사용자 정보가 없습니다.");
 
   const { data: appUser, error: appUserError } = await client
@@ -124,7 +124,7 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
     .select("id")
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
-  assertQuery(appUserError, "대시보드 사용자 확인");
+  assertOk(appUserError, "대시보드 사용자 확인");
   if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
 
   const [currentMarketStatus, profileContext, holdingRows] = await Promise.all([
@@ -171,7 +171,7 @@ export async function getAuthenticatedStockDetailData(
   if (!client) throw new Error("계정 기능이 아직 연결되지 않았어요.");
 
   const { data: authData, error: authError } = await client.auth.getUser();
-  assertQuery(authError, "로그인 사용자 확인");
+  assertOk(authError, "로그인 사용자 확인");
   if (!authData.user) throw new Error("로그인 사용자 정보가 없습니다.");
 
   const { data: appUser, error: appUserError } = await client
@@ -179,7 +179,7 @@ export async function getAuthenticatedStockDetailData(
     .select("id")
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
-  assertQuery(appUserError, "상세 화면 사용자 확인");
+  assertOk(appUserError, "상세 화면 사용자 확인");
   if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
 
   return queryStockDetail(client, appUser.id, code);
@@ -205,7 +205,7 @@ async function queryRecommendedStocks(
     .eq("is_recommended", true)
     .order("prediction_date", { ascending: false })
     .order("display_order", { ascending: true });
-  assertQuery(error, "오늘 신호 조회");
+  assertOk(error, "오늘 신호 조회");
 
   const predictions = latestDateRows((data ?? []) as PredictionRow[]);
   const stocks = await loadStocks(
@@ -245,7 +245,7 @@ async function queryHoldingAlerts(
     )
     .order("prediction_date", { ascending: false })
     .order("display_order", { ascending: true });
-  assertQuery(error, "보유 종목 알림 조회");
+  assertOk(error, "보유 종목 알림 조회");
 
   const predictions = latestRowsByStock((data ?? []) as PredictionRow[]);
   const stocks = await loadStocks(
@@ -281,7 +281,7 @@ async function queryPortfolio(
       .in("stock_code", codes)
       .order("prediction_date", { ascending: false }),
   ]);
-  assertQuery(predictionResult.error, "포트폴리오 예측 조회");
+  assertOk(predictionResult.error, "포트폴리오 예측 조회");
 
   const stockByCode = new Map(stocks.map((stock) => [stock.code, stock]));
   const predictionByCode = new Map(
@@ -325,9 +325,9 @@ async function queryStockDetail(
       .eq("is_active", true)
       .maybeSingle(),
   ]);
-  assertQuery(userResult.error, "상세 화면 사용자 조회");
-  assertQuery(profileResult.error, "상세 화면 IPS 프로필 조회");
-  assertQuery(stockResult.error, "상세 화면 종목 조회");
+  assertOk(userResult.error, "상세 화면 사용자 조회");
+  assertOk(profileResult.error, "상세 화면 IPS 프로필 조회");
+  assertOk(stockResult.error, "상세 화면 종목 조회");
   if (!userResult.data || !profileResult.data) {
     throw new Error("사용자 또는 IPS 프로필 데이터가 없습니다.");
   }
@@ -344,7 +344,7 @@ async function queryStockDetail(
     .order("prediction_date", { ascending: false })
     .limit(1)
     .maybeSingle();
-  assertQuery(predictionError, "상세 화면 예측 조회");
+  assertOk(predictionError, "상세 화면 예측 조회");
   if (!predictionData) {
     throw new Error(`${code}의 ${profile.profile_type} 모델 예측이 없습니다.`);
   }
@@ -355,7 +355,7 @@ async function queryStockDetail(
     .select(PREDICTION_FEATURE_COLUMNS)
     .eq("prediction_id", prediction.id)
     .order("display_order", { ascending: true });
-  assertQuery(featureError, "상세 화면 예측 근거 조회");
+  assertOk(featureError, "상세 화면 예측 근거 조회");
 
   return {
     // 시세는 DB 저장 계약이 없어 실데이터 스냅샷에서 붙인다(데모 4종목만).
@@ -403,9 +403,9 @@ async function loadProfileQueryContext(
       .eq("user_id", userId)
       .eq("is_active", true),
   ]);
-  assertQuery(userResult.error, "사용자 조회");
-  assertQuery(profileResult.error, "IPS 프로필 조회");
-  assertQuery(avoidedResult.error, "회피 설정 조회");
+  assertOk(userResult.error, "사용자 조회");
+  assertOk(profileResult.error, "IPS 프로필 조회");
+  assertOk(avoidedResult.error, "회피 설정 조회");
   if (!userResult.data || !profileResult.data) {
     throw new Error("사용자 또는 IPS 프로필 데이터가 없습니다.");
   }
@@ -445,8 +445,8 @@ async function loadProfileSettings(
       .eq("user_id", userId)
       .eq("is_active", true),
   ]);
-  assertQuery(profileResult.error, "성향 설정 조회");
-  assertQuery(avoidedResult.error, "제외 항목 조회");
+  assertOk(profileResult.error, "성향 설정 조회");
+  assertOk(avoidedResult.error, "제외 항목 조회");
   if (!profileResult.data) throw new Error("투자 성향 프로필이 없습니다.");
 
   return toProfileSettings(
@@ -480,7 +480,7 @@ async function loadAvoidedStocks(
     .select(STOCK_COLUMNS)
     .eq("is_active", true)
     .overlaps("risk_flags", avoidedTypes);
-  assertQuery(error, "회피 대상 종목 조회");
+  assertOk(error, "회피 대상 종목 조회");
   return (data ?? []) as StockRow[];
 }
 
@@ -492,7 +492,7 @@ async function loadStocks(
   let query = client.from("stocks").select(STOCK_COLUMNS).eq("is_active", true);
   if (codes) query = query.in("code", [...new Set(codes)]);
   const { data, error } = await query;
-  assertQuery(error, "종목 마스터 조회");
+  assertOk(error, "종목 마스터 조회");
   return (data ?? []) as StockRow[];
 }
 
@@ -506,7 +506,7 @@ async function loadHoldings(
     .eq("user_id", userId)
     .eq("is_active", true)
     .order("display_order", { ascending: true });
-  assertQuery(error, "보유 종목 조회");
+  assertOk(error, "보유 종목 조회");
   return (data ?? []) as PortfolioHoldingRow[];
 }
 
@@ -526,9 +526,3 @@ function latestRowsByStock(rows: PredictionRow[]): PredictionRow[] {
   );
 }
 
-function assertQuery(
-  error: { message: string } | null,
-  operation: string,
-): asserts error is null {
-  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
-}

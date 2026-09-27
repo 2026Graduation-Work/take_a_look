@@ -505,7 +505,6 @@ function SentimentChart({ sentiment }: { sentiment: SentimentData }) {
                   fill={few ? CHART.page : CHART.priceLine}
                   stroke={few ? CHART.ghost : CHART.priceLine}
                   strokeWidth={1.5}
-                  data-few-articles={few || undefined}
                 />
               );
             }}
