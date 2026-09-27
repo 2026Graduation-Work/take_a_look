@@ -11,10 +11,6 @@ V2_VALIDATOR = Draft202012Validator(V2_SCHEMA, format_checker=FormatChecker())
 
 
 def validate_snapshot(value):
-    return validate_snapshot_v2(value)
-
-
-def validate_snapshot_v2(value):
     V2_VALIDATOR.validate(value)
     inference, distribution = value["inference"], value["distribution"]
     if (value["horizon"] == 5) != (value["profile"] == "aggressive"):

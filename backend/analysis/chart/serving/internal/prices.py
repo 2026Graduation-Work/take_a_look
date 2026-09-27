@@ -1,11 +1,7 @@
 """Adjusted KRX OHLCV with actual turnover-derived adjusted VWAP."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-
-REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
@@ -54,19 +50,6 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     return attach_actual_vwap(adjusted, raw).reset_index()
 
 
-def load_prices(path: str | Path) -> pd.DataFrame:
-    """Load an immutable raw price snapshot with the fields needed by training."""
-    frame = pd.read_parquet(path)
-    missing = set(REQUIRED).difference(frame.columns)
-    if missing:
-        raise ValueError(f"Raw price snapshot missing: {sorted(missing)}")
-    if "Date" not in frame.columns:
-        raise ValueError("Raw price snapshot missing Date")
-    frame = frame.copy()
-    frame["Date"] = pd.to_datetime(frame["Date"])
-    if frame["Date"].isna().any() or frame["Date"].duplicated().any():
-        raise ValueError("Invalid or duplicate raw price dates")
-    return frame.sort_values("Date").reset_index(drop=True)
 
 def price_snapshot(frame, code, as_of, source):
     """Export observed bars only; do not forward-fill missing sessions."""

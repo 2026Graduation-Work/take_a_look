@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 import pandas as pd
 
 from ..contracts import validate_snapshot
+from .distribution import POLICY_ID
 from .hashing import canonical_hash
 
 
@@ -126,21 +127,6 @@ class SupabaseStore:
                       [record], prefer="resolution=merge-duplicates,return=minimal")
         return record
 
-    def load_features(self, code, as_of, builder_id, input_hash):
-        path = ("/rest/v1/chart_feature_snapshots?stock_code=eq." + quote(code) +
-                "&as_of=eq." + quote(as_of) + "&builder_id=eq." + quote(builder_id) +
-                "&input_sha256=eq." + quote(input_hash) +
-                "&select=storage_path,feature_sha256")
-        rows = self._request("GET", path)
-        if not rows:
-            return None
-        item = rows[0]
-        data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" +
-                             quote(item["storage_path"], safe="/"))
-        if hashlib.sha256(data).hexdigest() != item["feature_sha256"]:
-            raise ValueError("Stored feature checksum mismatch")
-        return pd.read_parquet(io.BytesIO(data))
-
 
     def _existing_batch(self, batch_id):
         rows = self._request("GET", "/rest/v1/chart_batches?id=eq." + quote(batch_id, safe="") +
@@ -238,7 +224,7 @@ def _pack_releases(manifest):
             raise ValueError("Pack horizon mismatch")
         releases.append({"release_id": f"{manifest['pack_id']}:{key}",
                          "horizon": horizon, "profile": item["profile"],
-                         "policy_id": "multi_stock_up_sigma_001_005_v1",
+                         "policy_id": POLICY_ID,
                          "model_sha256": item["model_sha256"],
                          "features_sha256": canonical_hash({
                              "builder": manifest["feature_builder_id"],
