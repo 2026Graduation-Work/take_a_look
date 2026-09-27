@@ -22,6 +22,8 @@ import {
 import {
   BIAS_MODE_WORD,
   CHECKPOINT_RULE,
+  FEW_ARTICLES,
+  FEW_ARTICLES_RULE,
   FINANCIAL_TERM,
   PSYCHOLOGY_RULE,
   STYLE_TYPE_RULE,
@@ -52,6 +54,7 @@ import {
   type FinancialSnapshot,
   type HoldingWeight,
   type SentimentData,
+  type SentimentDay,
   type StockInsights,
   type SupplyDemandDay,
 } from "@/lib/providers";
@@ -471,8 +474,43 @@ function SentimentChart({ sentiment }: { sentiment: SentimentData }) {
             width={36}
           />
           <ReferenceLine y={0} stroke={CHART.line} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => signed(Number(value))} />
-          <Line dataKey="score" name={TERM.sentiment} stroke={CHART.priceLine} strokeWidth={2} dot={false} isAnimationActive={false} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(value, _name, item) => {
+              const count = (item.payload as SentimentDay).articleCount;
+              return count < FEW_ARTICLES ? (
+                <>
+                  {signed(Number(value))}
+                  <br />
+                  기사 {count}건이라 참고만
+                </>
+              ) : (
+                signed(Number(value))
+              );
+            }}
+          />
+          <Line
+            dataKey="score"
+            name={TERM.sentiment}
+            stroke={CHART.priceLine}
+            strokeWidth={2}
+            dot={({ cx, cy, index, payload }) => {
+              const few = (payload as SentimentDay).articleCount < FEW_ARTICLES;
+              return (
+                <circle
+                  key={index}
+                  cx={cx}
+                  cy={cy}
+                  r={few ? 3.5 : 2.5}
+                  fill={few ? CHART.page : CHART.priceLine}
+                  stroke={few ? CHART.ghost : CHART.priceLine}
+                  strokeWidth={1.5}
+                  data-few-articles={few || undefined}
+                />
+              );
+            }}
+            isAnimationActive={false}
+          />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -703,6 +741,11 @@ export function CalculationBasis({
             {signed(insights.psychology.axis)}({insights.psychology.word}).
           </li>
         )}
+        {insights.sentiment?.days.length ? (
+          <li>
+            <strong className="font-semibold text-ink">{TERM.sentiment} 흐린 점</strong>: {FEW_ARTICLES_RULE}
+          </li>
+        ) : null}
         {nudges.map((nudge) => (
           <li key={nudge.id} className="tabular-nums">
             <strong className="font-semibold text-ink">체크포인트가 뜬 이유</strong>: 설문의 &lsquo;{AXIS_META[nudge.axis].name}&rsquo;
