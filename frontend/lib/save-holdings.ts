@@ -1,6 +1,6 @@
 "use client";
 
-import { getSupabaseClient } from "./supabase";
+import { assertOk, getSupabaseClient } from "./supabase";
 import { isValidHolding, type SavedHolding } from "./holdings-rules";
 import { STORAGE_KEYS } from "./storage-keys";
 
@@ -27,7 +27,7 @@ export async function saveHoldings(
   }
 
   const { data, error: authError } = await client.auth.getUser();
-  assertResult(authError, "로그인 사용자 확인");
+  assertOk(authError, "로그인 사용자 확인");
   if (!data.user) throw new Error("로그인 후 보유 종목을 저장할 수 있습니다.");
 
   const { data: appUser, error: appUserError } = await client
@@ -35,7 +35,7 @@ export async function saveHoldings(
     .select("id")
     .eq("auth_user_id", data.user.id)
     .maybeSingle();
-  assertResult(appUserError, "서비스 사용자 확인");
+  assertOk(appUserError, "서비스 사용자 확인");
   if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
 
   const userId = (appUser as { id: string }).id;
@@ -49,7 +49,7 @@ export async function saveHoldings(
       .from("stocks")
       .select("code")
       .in("code", codes);
-    assertResult(stockError, "보유 종목 마스터 확인");
+    assertOk(stockError, "보유 종목 마스터 확인");
     for (const { code } of (stockRows ?? []) as { code: string }[]) known.add(code);
   }
   const unknown = valid.filter(({ code }) => !known.has(code));
@@ -60,7 +60,7 @@ export async function saveHoldings(
     .from("portfolio_holdings")
     .update({ is_active: false, updated_at: now })
     .eq("user_id", userId);
-  assertResult(resetError, "기존 보유 종목 비활성화");
+  assertOk(resetError, "기존 보유 종목 비활성화");
 
   if (storable.length > 0) {
     const { error: upsertError } = await client.from("portfolio_holdings").upsert(
@@ -75,7 +75,7 @@ export async function saveHoldings(
       })),
       { onConflict: "user_id,stock_code" },
     );
-    assertResult(upsertError, "보유 종목 저장");
+    assertOk(upsertError, "보유 종목 저장");
   }
 
   persistHoldings(storable);
@@ -94,12 +94,6 @@ function persistHoldings(holdings: SavedHolding[]): void {
   window.dispatchEvent(new Event(HOLDINGS_UPDATED_EVENT));
 }
 
-function assertResult(
-  error: { message: string } | null,
-  operation: string,
-): asserts error is null {
-  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
-}
 
 export function getSavedHoldingsSnapshot(): string | null {
   if (typeof window === "undefined") return null;

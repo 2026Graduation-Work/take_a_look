@@ -70,6 +70,8 @@ venv/
 # Claude Code — 개인 설정은 무시하고, 검토한 디자인 스킬(AGENTS.md 허용 목록)만 추적한다
 .claude/*
 !.claude/skills/
+# 팀 공용 권한: schema/(freeze) 수정은 매번 사람에게 묻는다
+!.claude/settings.json
 
 # ---------- 데이터 및 로컬 설정 (Data & Config) ----------
 **/data/

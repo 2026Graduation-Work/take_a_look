@@ -2,7 +2,7 @@
 
 import type { ProfilingOutput } from "./types";
 import { isStyleAxes, threeAxisSummary } from "./profiling-rules";
-import { getSupabaseClient } from "./supabase";
+import { assertOk, getSupabaseClient } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 
 export const PROFILE_STORAGE_KEY = STORAGE_KEYS.profile;
@@ -22,7 +22,7 @@ export async function saveProfile(
   }
 
   const { data, error: userAuthError } = await client.auth.getUser();
-  assertSupabaseResult(userAuthError, "로그인 사용자 확인");
+  assertOk(userAuthError, "로그인 사용자 확인");
   if (!data.user) throw new Error("로그인 후 설문 결과를 저장할 수 있습니다.");
 
   const now = new Date().toISOString();
@@ -39,7 +39,7 @@ export async function saveProfile(
     .select("id")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  assertSupabaseResult(existingUserError, "기존 사용자 확인");
+  assertOk(existingUserError, "기존 사용자 확인");
 
   // Supabase Auth ID를 최초 DB 사용자 ID로 사용하고, 재설문 시 기존 ID를 재사용한다.
   const userId = (existingUser as { id: string } | null)?.id ?? authUserId;
@@ -54,7 +54,7 @@ export async function saveProfile(
     },
     { onConflict: "auth_user_id" },
   );
-  assertSupabaseResult(userError, "사용자 저장");
+  assertOk(userError, "사용자 저장");
 
   const investor = profile.investor_profile;
   const psychology = profile.psychological_state;
@@ -102,7 +102,7 @@ export async function saveProfile(
     },
     { onConflict: "user_id" },
   );
-  assertSupabaseResult(profileError, "IPS 프로필 저장");
+  assertOk(profileError, "IPS 프로필 저장");
 
   // 보유 종목(save-holdings.ts)·관심 종목(watchlist.ts)은 각자 저장한다. 성향을 다시 저장해도 건드리지 않는다
   // (전에는 여기서 둘 다 비활성화한 뒤 설문 payload의 빈 목록으로 덮어 다시 진단할 때마다 지워졌다).
@@ -110,7 +110,7 @@ export async function saveProfile(
     .from("avoided_assets")
     .update({ is_active: false, updated_at: now })
     .eq("user_id", userId);
-  assertSupabaseResult(avoidedResetError, "기존 회피 설정 비활성화");
+  assertOk(avoidedResetError, "기존 회피 설정 비활성화");
   await upsertAvoidedAssets(profile, userId, now);
 
   persistProfile(storedProfile);
@@ -138,15 +138,9 @@ async function upsertAvoidedAssets(
     })),
     { onConflict: "user_id,asset_type" },
   );
-  assertSupabaseResult(error, "회피 설정 저장");
+  assertOk(error, "회피 설정 저장");
 }
 
-function assertSupabaseResult(
-  error: { message: string } | null,
-  operation: string,
-): asserts error is null {
-  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
-}
 
 export function getSavedProfileSnapshot(): string | null {
   if (typeof window === "undefined") return null;

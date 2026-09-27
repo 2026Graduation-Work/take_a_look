@@ -110,4 +110,4 @@
 - 팀 산출물에 **참고한 다른 팀·조직의 프로젝트명**을 쓰지 않는다 → "참고 자료"로 표현
   - 사용한 도구·라이브러리·데이터 원천의 이름(예: FinanceDataReader, BigKinds, 허용 목록의 디자인 스킬)은 출처 표기로 쓴다
 - 유료 기능 활성화 금지 (GitHub Advanced Security 등)
-- schema/ 파일을 단독 판단으로 수정 금지 (freeze 상태, 전원 합의 필요)
+- schema/ 파일을 단독 판단으로 수정 금지 (freeze 상태, 전원 합의 필요). Claude Code는 `.claude/settings.json`이 수정 전에 묻는다
