@@ -50,6 +50,9 @@ async function watchAndNote(page: Page) {
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
 }
 
+// 지우기·빼기·로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
+test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
+
 test("데모: 관심 종목·판단 메모가 브라우저에 남고 다시 읽힌다", async ({ page }) => {
   await demoReady(page);
   await watchAndNote(page);

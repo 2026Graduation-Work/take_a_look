@@ -83,7 +83,7 @@ export default function PerformanceDashboard({
           <h1 id="scorecard-title" className="text-3xl font-semibold tabular-nums">
             판별력(AUC) {auc === null ? "미산출" : auc.toFixed(2)} · 0.5는 동전 던지기 수준
           </h1>
-          <p className="m-0 text-sm text-body">
+          <p className="m-0 max-w-2xl text-sm text-body">
             A는 가격 지표만, B는 같은 지표에 가격·거래량 심리 지표와 뉴스 분위기를 더한 모델이에요. 바뀌는 조건은 지표 묶음뿐이에요.
           </p>
           {isSample && <p className="m-0 text-xs text-muted">예시 데이터 · 실제 실험 결과가 들어오면 바뀌어요</p>}

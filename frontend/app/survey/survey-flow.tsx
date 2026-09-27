@@ -228,7 +228,7 @@ export default function SurveyFlow() {
     });
     const parsed = (await response.json()) as ProfilingOutput | { error: string };
     if (!response.ok) {
-      throw new Error("error" in parsed ? parsed.error : "프로필을 만들지 못했습니다.");
+      throw new Error("error" in parsed ? parsed.error : "결과를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     }
     return parsed as ProfilingOutput;
   }
@@ -239,7 +239,7 @@ export default function SurveyFlow() {
     try {
       await task();
     } catch (taskError) {
-      setError(taskError instanceof Error ? taskError.message : "프로필을 만들지 못했습니다.");
+      setError(taskError instanceof Error ? taskError.message : "결과를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -292,7 +292,7 @@ export default function SurveyFlow() {
     <div className="min-h-dvh bg-page">
       <header className="sticky top-0 z-50 glass-bar">
         <div className="mx-auto flex min-h-14 w-full max-w-[880px] items-center gap-3 px-4 sm:px-8">
-          <Link href="/" className="flex-none whitespace-nowrap text-lg hover:no-underline">
+          <Link href="/" className="flex min-h-11 flex-none items-center whitespace-nowrap text-lg hover:no-underline">
             <Wordmark size={26} compact />
           </Link>
           {firstRun ? (

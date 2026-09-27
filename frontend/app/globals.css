@@ -203,6 +203,9 @@ summary::-webkit-details-marker {
     transform: none;
   }
   .btn-text {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
     font-size: var(--text-sm);
     font-weight: 500;
     color: var(--color-brand);

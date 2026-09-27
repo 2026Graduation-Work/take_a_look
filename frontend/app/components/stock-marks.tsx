@@ -32,7 +32,7 @@ export default function StockMarks({ code, name }: { code: string; name: string 
     try {
       await task();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "저장하지 못했어요.");
+      setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     }
   }
 
@@ -62,7 +62,11 @@ export default function StockMarks({ code, name }: { code: string; name: string 
             <button type="button" onClick={() => setDraft(note.text)} className="btn-text text-sm">
               고치기
             </button>
-            <button type="button" onClick={() => void run(() => saveNote(code, "", mode))} className="btn-text text-sm">
+            <button
+              type="button"
+              onClick={() => window.confirm("이 메모를 지울까요? 지우면 되돌릴 수 없어요.") && void run(() => saveNote(code, "", mode))}
+              className="btn-text text-sm"
+            >
               지우기
             </button>
           </div>
@@ -124,8 +128,9 @@ export function WatchlistEditor() {
               type="button"
               aria-label={`${stock.name} 관심 종목에서 빼기`}
               onClick={() =>
+                window.confirm(`${stock.name}을(를) 관심 종목에서 뺄까요?`) &&
                 void setWatched(stock, false, mode).catch((cause: unknown) =>
-                  setError(cause instanceof Error ? cause.message : "저장하지 못했어요."),
+                  setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."),
                 )
               }
               className="min-h-11 text-xs font-medium text-danger hover:underline"

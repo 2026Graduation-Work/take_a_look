@@ -59,7 +59,7 @@ type QueryError = { code?: string; message: string } | null;
 const missingTable = (error: QueryError) => error?.code === "PGRST205" || error?.code === "42P01";
 
 function assertResult(error: QueryError, operation: string) {
-  if (error) throw new Error(`${operation} 실패: ${error.message}`);
+  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
 }
 
 async function appUser(mode: Mode): Promise<{ client: SupabaseClient; userId: string } | null> {

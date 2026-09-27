@@ -6,11 +6,13 @@ import { useOnboarding } from "./onboarding-provider";
 
 export default function SignOutButton({ className, label }: { className?: string; label?: string } = {}) {
   const router = useRouter();
-  const { logOut } = useOnboarding();
+  const { state, logOut } = useOnboarding();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSignOut() {
+    const warning = state.mode === "demo" ? "이 기기에 저장한 데모 응답과 보유 종목이 지워져요. " : "";
+    if (!window.confirm(`${warning}로그아웃할까요?`)) return;
     setSubmitting(true);
     setError("");
     try {
@@ -20,7 +22,7 @@ export default function SignOutButton({ className, label }: { className?: string
       setError(
         signOutError instanceof Error
           ? signOutError.message
-          : "로그아웃하지 못했습니다.",
+          : "로그아웃하지 못했어요. 잠시 뒤 다시 눌러 주세요.",
       );
     } finally {
       setSubmitting(false);
@@ -36,7 +38,7 @@ export default function SignOutButton({ className, label }: { className?: string
         title={error || undefined}
         className={
           className ??
-          "whitespace-nowrap text-xs font-medium text-body hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+          "min-h-11 whitespace-nowrap text-xs font-medium text-body hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
         }
       >
         {submitting ? (
