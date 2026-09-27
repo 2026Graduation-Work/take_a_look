@@ -10,6 +10,8 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
+from .auth import service_headers
+
 PRICE_COLUMNS = {
     "Date": "trade_date", "Open": "open", "High": "high", "Low": "low",
     "Close": "close", "Volume": "volume", "VWAP": "vwap", "Change": "change_percent",
@@ -27,7 +29,7 @@ class SupabaseStore:
 
     def _request(self, method, path, body=None, *, content_type="application/json", prefer=None,
                  extra_headers=None):
-        headers = {"apikey": self.key}
+        headers = service_headers(self.key)
         if body is not None:
             headers["Content-Type"] = content_type
         if prefer:

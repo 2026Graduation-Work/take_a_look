@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from serving.auth import service_headers
 from serving.contracts import validate_snapshot
 from serving.hashing import canonical_hash
 
@@ -39,7 +40,7 @@ def _request(method, path, body=None, *, prefer=None):
     key = os.environ.get("SUPABASE_SECRET_KEY")
     if not base or not key:
         raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY are required")
-    headers = {"apikey": key, "Content-Type": "application/json"}
+    headers = {**service_headers(key), "Content-Type": "application/json"}
     if prefer:
         headers["Prefer"] = prefer
     request = Request(base + "/rest/v1/" + path,

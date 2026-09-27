@@ -7,9 +7,20 @@
 | 3. 실제 과거 표본·히스토그램 | 로컬 구현 완료 | H5 1,353,596건, H20 1,353,353건. 각 기간 82,701건은 기존 `Trading_Halt` 표시로 제외. H5 64건·H20 307건은 후속 H거래행 부족. 공식 과거 달력 파일이 없어 전체 휴장일 감사 결과로 간주하지 않음. |
 | 4. 가격·피처 저장과 최신 추론 | 코드 연결 완료, 실서비스 미검증 | Supabase 저장과 일일 수집·추론 코드를 연결함. 2026-06-12 실제 저장 입력의 삼성전자 H5/H20 snapshot을 생성해 각각 699/615개 표본의 히스토그램 검증. 최신 KRX/Supabase 실실행은 인증·네트워크가 없어 미확인. |
 | 5. v2 계약·DB migration·공개 | 코드 완료, DB 미적용 | `0006` migration과 공개 RPC 경로 작성. 실제 DB 적용·첫 배치 공개는 미확인. |
-| 6. 상세 화면 | 로컬 구현 완료 | v2 히스토그램·상태·비교 범위 및 v1 호환 화면. TS·ESLint·단위 테스트 통과, 로컬 build는 실행 환경 오류. |
+| 6. 상세 화면 | 프론트 팀 연결 대기 | 이 브랜치에서 변경했던 프론트 소스를 `main` 기준으로 복원함. 백엔드는 공개 snapshot과 차트 필드 전달 자료를 제공함. 현재 `main` 화면은 실제 공개 snapshot을 조회하지 않음. |
 | 7. Actions | workflow 작성 완료, 실행 미확인 | 평일 18:30 KST·수동 실행·pack 내려받기 설정. GitHub 인증 토큰이 무효여서 Release 업로드·dispatch 미확인. |
 | 8. 교체·재실행·복구 | 로컬 검증 완료, 원격 미검증 | pack 해시·class·피처 순서 검사, 저장·재실행·일부 업로드 실패 테스트 및 serving 단독 복사 CLI 검증 완료. 실제 원격 교체·복구 미확인. |
+
+## 로컬 Supabase 확인 (2026-09-27)
+
+| 단계 | 상태 | 확인 내용 |
+|---|---|---|
+| 로컬 실행 설정 | 완료 | `supabase/config.toml`과 `serving/LOCAL_SUPABASE.md` 추가. 로컬 service_role JWT 인증 헤더 처리. |
+| 캐시된 실제 자료 계산 | 완료 | `python -m serving.local_preview --compute-only`: 삼성전자 2026-06-12, H5 699건·H20 615건, snapshot 생성. 기존 가공 피처는 계산 버전 미확인으로 별도 preview ID 사용. |
+| 로컬 Supabase 저장·공개 조회 | 완료 | 2026-06-12 삼성전자 가격 162행, `legacy_processed_unverified_preview` 피처 1건, published batch 1건, 공개 H5/H20 snapshot 2건. 히스토그램 막대 합계 699/615건 일치. |
+| 프론트 상세 화면 | 프론트 팀 연결 대기 | 프론트 코드를 `main`과 동일하게 복원하고 확인용 `.env.local` 제거. 현재 화면의 데모 히스토그램은 로컬 공개 배치와 연결되지 않음. |
+| 프론트 데이터 전달 | 완료 | `frontend_chart_handoff_v1` 변환기와 `FRONTEND_HANDOFF.md` 추가. 기존 `StockDetail`의 실제 차트 필드만 전달하고 미보유 순위·적중률·H10은 생성하지 않음. |
+| 최신 KRX 수집 | 실행 대기 | KRX 인증·당일 확정 거래일·외부 네트워크 필요. |
 
 실제 pack: `data/packs/hold2022_2024_wf2019_2025_v1/` (Git 제외). 압축 파일 SHA-256: `69170ee2d4ae047a364630ecc619b450d78427f9e6c5c65ef1898fe911322d70`.
 
