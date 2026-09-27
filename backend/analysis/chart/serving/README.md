@@ -72,9 +72,9 @@ const { data, error } = await supabase
 
 ## 파일 구조
 
-`run_daily.py`, `build_pack.py`, `pack.py`, `local_preview.py`는 인자 해석과 `internal/` 호출만 맡는다. 일일 수집·추론과 로컬 미리보기 흐름은 `internal/pipeline.py`, 모델 pack 생성·검증·다운로드는 `internal/pack.py`, 과거 표본 생성은 `internal/samples.py`에 있다. Supabase 가격·피처 저장과 배치 발행·철회는 `internal/storage.py`의 `SupabaseStore`가 담당한다. `internal/`의 나머지 파일은 거래일, 가격 이력, 피처, 추론, 히스토그램, snapshot, 해시를 처리한다.
+`run_daily.py`, `build_pack.py`, `pack.py`, `local_preview.py`는 인자 해석과 `internal/` 호출만 맡는다. 일일 수집·추론과 로컬 미리보기 흐름은 `internal/pipeline.py`, 모델 pack 생성·검증은 `internal/pack.py`, 과거 표본 생성은 `internal/samples.py`에 있다. Supabase 가격·피처 저장과 배치 발행·철회는 `internal/storage.py`의 `SupabaseStore`가 담당한다. `internal/`의 나머지 파일은 거래일, 가격 이력, 피처, 추론, 히스토그램, snapshot, 해시를 처리한다.
 
-설정과 기본 로컬 데이터 경로는 각각 `serving/config.yaml`, `serving/data/`다. 공개 계약은 [`contracts/chart_signal_detail_v2.schema.json`](contracts/chart_signal_detail_v2.schema.json), 기록용 v1 설명은 [`contracts/v1_contract.md`](contracts/v1_contract.md)에 있다.
+설정과 기본 로컬 데이터 경로는 각각 `serving/config.yaml`, `serving/data/`다. 공개 계약은 [`contracts/chart_signal_detail_v2.schema.json`](contracts/chart_signal_detail_v2.schema.json) 하나다. 모델과 과거 표본 pack은 `serving/data/packs/`에 추적한다.
 
 ## 실제 확인 상태
 
@@ -84,6 +84,6 @@ const { data, error } = await supabase
 | 로컬 Supabase 실제 입력 미리보기 | 2026-06-12 삼성전자 가격 162행·피처 1건·H5/H20 공개 2행 확인. 히스토그램 H5 699건, H20 615건. **기존 가공 피처 버전 미검증.** |
 | 최신 KRX 수집 → 실제 피처 → 운영 Supabase 공개 | 아직 실실행 확인 전. |
 | `main` 프론트 화면에 새 데이터 표시 | 프론트 담당 연결 전. |
-| GitHub Release 업로드·Actions 수동/예약 실행 | 설정은 있으나 실실행 확인 전. |
+| Git 추적 pack·Actions 수동/예약 실행 | pack 파일은 저장소에 포함. Actions 실실행은 미확인. |
 
 실행 명령과 로컬 Supabase 조회는 [OPERATIONS.md](OPERATIONS.md)에 모았다. 검증 상태는 위 표에 기록한다.

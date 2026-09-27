@@ -1,17 +1,11 @@
-"""Validate an immutable H5/H20 model pack and download its release archive."""
+"""Build and validate the committed H5/H20 model pack."""
 
 import json
-import os
-import re
 import shutil
-import tarfile
-import tempfile
-import urllib.request
 from pathlib import Path
 
 import lightgbm as lgb
 import pandas as pd
-import yaml
 
 from .hashing import sha256_file
 from .samples import build_samples
@@ -53,56 +47,6 @@ def load_pack(path):
             raise ValueError("Historical samples mixed or swapped H5/H20")
         paths[horizon] = tuple(checked)
     return manifest, paths
-
-
-def download(config_file):
-    config = yaml.safe_load(Path(config_file).read_text())["active_pack"]
-    pack_id, tag, asset, expected = (config[k] for k in ("pack_id", "release_tag", "asset_name", "sha256"))
-    if not all((pack_id, tag, asset, expected)) or len(expected) != 64:
-        raise ValueError("Active pack release configuration is incomplete")
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", pack_id) or not re.fullmatch(r"[A-Za-z0-9._-]+", asset) or not re.fullmatch(r"[A-Fa-f0-9]{64}", expected):
-        raise ValueError("Unsafe pack identity or asset name")
-    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
-    destination = root / "packs" / pack_id
-    if destination.exists():
-        load_pack(destination)
-        return destination
-    repository = os.environ.get("GITHUB_REPOSITORY")
-    if not repository:
-        raise ValueError("GITHUB_REPOSITORY required to download a release pack")
-    url = f"https://api.github.com/repos/{repository}/releases/tags/{tag}"
-    headers = {"Accept": "application/vnd.github+json", "User-Agent": "chart-serving"}
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as response:
-        release = json.load(response)
-    matches = [item for item in release["assets"] if item["name"] == asset]
-    if len(matches) != 1:
-        raise ValueError("Configured pack asset missing from release")
-    headers["Accept"] = "application/octet-stream"
-    request = urllib.request.Request(matches[0]["url"], headers=headers)
-    archive = root / "packs" / asset
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(request, timeout=120) as response, archive.open("wb") as target:
-        while chunk := response.read(1024 * 1024):
-            target.write(chunk)
-    if sha256_file(archive) != expected:
-        archive.unlink()
-        raise ValueError("Pack archive SHA-256 mismatch")
-    with tempfile.TemporaryDirectory(dir=root / "packs") as temporary:
-        with tarfile.open(archive, "r:gz") as tar:
-            members = tar.getmembers()
-            if any(member.issym() or member.islnk() or (not member.isfile() and not member.isdir())
-                   or Path(member.name).is_absolute() or ".." in Path(member.name).parts
-                   or Path(member.name).parts[0] != pack_id for member in members):
-                raise ValueError("Unsafe pack archive")
-            tar.extractall(temporary, filter="data")
-        load_pack(Path(temporary) / pack_id)
-        (Path(temporary) / pack_id).replace(destination)
-    load_pack(destination)
-    return destination
-
 
 
 def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_file=None):
@@ -157,7 +101,4 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
     (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     (root / "build_report.json").write_text(json.dumps(reports, ensure_ascii=False, indent=2) + "\n")
     load_pack(root)
-    archive = root.parent / f"{pack_id}.tar.gz"
-    with tarfile.open(archive, "w:gz") as tar:
-        tar.add(root, arcname=pack_id)
-    return root, archive, reports
+    return root, reports

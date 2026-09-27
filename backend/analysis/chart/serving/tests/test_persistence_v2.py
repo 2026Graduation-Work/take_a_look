@@ -10,23 +10,7 @@ from serving.internal.storage import SupabaseStore, _pack_releases
 
 
 def v2_snapshot():
-    value = json.loads((Path(__file__).parents[1] / "contracts/examples/normal.json").read_text())
-    value["contract"] = "chart_signal_detail_v2"
-    value["pack_id"] = "pack-1"
-    del value["cases"]
-    value["distribution"] = {
-        "status": "available", "reason": None,
-        "policy_id": "multi_stock_up_sigma_001_005_v1",
-        "current": {"up": value["inference"]["scores"]["up"],
-                    "sigma": value["inference"]["sigma"]},
-        "tolerances": {"up_absolute": 0.01, "sigma_relative": 0.05},
-        "sample_count": 1, "stock_count": 1,
-        "period_start": "2024-01-01", "period_end": "2024-01-01",
-        "observed_through": "2024-02-01", "by_fold": {"fold-1": 1},
-        "histogram": {"bins": [{"left": -2, "right": 0, "count": 1}],
-                      "central_68": {"low": -1, "high": -1}},
-    }
-    return value
+    return json.loads((Path(__file__).parents[1] / "contracts/examples/normal.json").read_text())
 
 
 def test_v2_one_case_and_partition_guard():

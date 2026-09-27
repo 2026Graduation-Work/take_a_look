@@ -1,5 +1,5 @@
 {
-  "contract": "chart_signal_detail_v1",
+  "contract": "chart_signal_detail_v2",
   "stock_code": "005930",
   "data_asof": "2026-09-24",
   "horizon": 5,
@@ -24,39 +24,6 @@
     "contribution_space": "class_2_raw_margin",
     "features": []
   },
-  "cases": {
-    "status": "available",
-    "reason": null,
-    "policy_id": "same_stock_up_down_001_sigma_rel010_v1",
-    "current": {
-      "up": 0.5,
-      "down": 0.3,
-      "sigma": 0.02
-    },
-    "tolerances": {
-      "up_absolute": 0.01,
-      "down_absolute": 0.01,
-      "sigma_relative": 0.1
-    },
-    "sample_count": 2,
-    "up_count": 1,
-    "down_count": 1,
-    "both_count": 0,
-    "neither_count": 0,
-    "up_rate": 0.5,
-    "down_rate": 0.5,
-    "period_start": "2020-01-02",
-    "period_end": "2021-01-02",
-    "observed_through": "2021-01-09",
-    "by_fold": {
-      "1": 1,
-      "2": 1
-    },
-    "by_year": {
-      "2020": 1,
-      "2021": 1
-    }
-  },
   "prices": {
     "basis": "adjusted_close",
     "source": "example-adjusted-daily",
@@ -75,5 +42,40 @@
     "cases_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "stock_name": "삼성전자"
+  "stock_name": "삼성전자",
+  "pack_id": "pack-1",
+  "distribution": {
+    "status": "available",
+    "reason": null,
+    "policy_id": "multi_stock_up_sigma_001_005_v1",
+    "current": {
+      "up": 0.5,
+      "sigma": 0.02
+    },
+    "tolerances": {
+      "up_absolute": 0.01,
+      "sigma_relative": 0.05
+    },
+    "sample_count": 1,
+    "stock_count": 1,
+    "period_start": "2024-01-01",
+    "period_end": "2024-01-01",
+    "observed_through": "2024-02-01",
+    "by_fold": {
+      "fold-1": 1
+    },
+    "histogram": {
+      "bins": [
+        {
+          "left": -2,
+          "right": 0,
+          "count": 1
+        }
+      ],
+      "central_68": {
+        "low": -1,
+        "high": -1
+      }
+    }
+  }
 }

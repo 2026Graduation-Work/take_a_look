@@ -12,7 +12,7 @@ npx --yes supabase@latest start
 npx --yes supabase@latest status
 ```
 
-`start`는 저장소 migration을 적용한다. `status`에 표시된 Project URL과 Secret key(구 CLI에서는 service_role key)를 사용한다. `db reset`은 데이터를 지우므로 확인용 실행에 사용하지 않는다. `serving/data/packs/hold2022_2024_wf2019_2025_v1/`, `serving/data/raw/005930.parquet`, `serving/data/processed/005930.parquet`가 있어야 한다. 다른 컴퓨터라면 파일을 별도로 준비해야 하며 **로컬 pack이 있으면 GitHub Release가 필요 없다.**
+`start`는 저장소 migration을 적용한다. `status`에 표시된 Project URL과 Secret key(구 CLI에서는 service_role key)를 사용한다. `db reset`은 데이터를 지우므로 확인용 실행에 사용하지 않는다. 모델과 과거 표본 pack `serving/data/packs/hold2022_2024_wf2019_2025_v1/`은 Git에 포함돼 있다. 미리보기에 쓰는 `serving/data/raw/005930.parquet`, `serving/data/processed/005930.parquet`는 별도로 준비해야 한다.
 
 ```bash
 cd backend/analysis/chart
@@ -58,17 +58,16 @@ python -m serving.run_daily --publish
 
 ## 3. 새 pack과 Actions
 
-`config.yaml`의 `active_pack`이 pack ID·Release 태그·첨부 파일명·압축 파일 SHA-256을 고정한다. 로컬에 같은 pack 디렉터리가 있으면 다운로드를 생략한다. 새 Actions runner에는 로컬 pack이 없으므로 GitHub Release 첨부 파일에서 내려받는다.
+현재 H5/H20 모델과 과거 표본은 `serving/data/packs/<pack-id>/`에 Git으로 추적한다. Actions는 checkout한 pack을 `python -m serving.pack validate`로 해시·모델 피처 순서·클래스·표본 H를 확인한다. GitHub Release 업로드는 필요 없다. `config.yaml`의 `active_pack.pack_id`가 선택할 디렉터리를 정한다.
+
+새 pack은 `backend/analysis/chart`에서 아래처럼 생성한다. H5/H20을 함께 만들고 보고서의 표본 수와 제외 사유를 확인한 뒤 pack 디렉터리와 `config.yaml`의 새 ID를 같은 PR에 포함한다.
 
 ```bash
 python -m serving.build_pack --pack-id PACK_ID --output serving/data/packs \
   --model-h5 H5_MODEL.txt --model-h20 H20_MODEL.txt \
   --predictions-h5 H5_OOS.parquet --predictions-h20 H20_OOS.parquet \
   --processed-dir PROCESSED_DATA_DIR
-sha256sum serving/data/packs/PACK_ID.tar.gz
-gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart pack PACK_ID" --notes "H5/H20 serving pack"
+python -m serving.pack validate --path serving/data/packs/PACK_ID
 ```
 
-pack 생성 보고서의 원본 예측 수·사용 표본 수·제외 사유를 확인한다. 기존 태그라면 `gh release upload`를 사용한다. 새 pack으로 바꿀 때 H5/H20을 함께 교체하고 `config.yaml` 네 값을 한 번에 변경한다. 이전 설정으로 되돌리면 이전 pack을 다시 쓸 수 있다.
-
-Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
