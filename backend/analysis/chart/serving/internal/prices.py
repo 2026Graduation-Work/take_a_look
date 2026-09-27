@@ -67,3 +67,39 @@ def load_prices(path: str | Path) -> pd.DataFrame:
     if frame["Date"].isna().any() or frame["Date"].duplicated().any():
         raise ValueError("Invalid or duplicate raw price dates")
     return frame.sort_values("Date").reset_index(drop=True)
+
+def price_snapshot(frame, code, as_of, source):
+    """Export observed bars only; do not forward-fill missing sessions."""
+    required = {"Date", "Close", "Volume"}
+    if not required.issubset(frame.columns):
+        raise ValueError(f"Missing price columns: {sorted(required - set(frame.columns))}")
+    prices = frame.copy()
+    prices["Date"] = pd.to_datetime(prices["Date"], errors="raise").dt.normalize()
+    cutoff = pd.Timestamp(as_of).normalize()
+    prices = prices.loc[prices.Date <= cutoff].sort_values("Date")
+    if prices.empty or prices.Date.duplicated().any():
+        raise ValueError("Empty price history or duplicate dates")
+    values = prices[["Close", "Volume"]].to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (values[:, 0] <= 0).any() or (values[:, 1] < 0).any():
+        raise ValueError("Prices must be positive and volumes nonnegative, all finite")
+    last = prices.iloc[-1]
+    history = prices.tail(60)
+    return {
+        "code": str(code),
+        "requested_asof": cutoff.date().isoformat(),
+        "data_asof": last.Date.date().isoformat(),
+        "status": "available" if last.Date == cutoff else "stale",
+        "source": source,
+        "price_basis": "adjusted_close",
+        "close": float(last.Close),
+        "volume": float(last.Volume),
+        "change_percent": (
+            float((last.Close / prices.iloc[-2].Close - 1) * 100)
+            if len(prices) >= 2 else None
+        ),
+        "history": [
+            {"date": row.Date.date().isoformat(), "close": float(row.Close),
+             "volume": float(row.Volume)}
+            for row in history.itertuples()
+        ],
+    }

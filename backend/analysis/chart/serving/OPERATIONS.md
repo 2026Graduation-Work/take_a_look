@@ -1,63 +1,74 @@
-# Chart serving 운영 절차
+# 실행 방법
 
-이 문서는 `serving/`만 복사한 실행 환경과 `.github/workflows/chart-serving.yml`에 적용한다. 실행에 필요한 모델과 과거 표본은 하나의 model pack이다. 활성 pack은 `config.yaml`의 `active_pack`으로 지정한다.
+현재 계산·DB·화면 데이터 규격은 [README.md](README.md)에 있다. 모든 명령은 `backend/analysis/chart`에서 실행한다. `serving/data/`는 Git에서 제외한 작업 공간이다.
 
-## 배포 준비
+## 1. 로컬 Supabase에서 저장된 실제 입력 확인
 
-1. 새 serving migration을 Supabase에 적용하고 공개 snapshot 조회 권한을 확인한다. DB 적용 여부는 코드 배포와 별도로 기록한다.
-2. `README.md`의 `python -m serving.build_pack` 명령으로 H5/H20 모델과 2019~2025 walk-forward 자료를 묶는다. 생성 보고서의 원본 예측 수, 사용 가능한 표본 수, 제외 사유를 확인한다.
-3. pack 압축 파일을 GitHub Release 첨부 파일로 올린다. `config.yaml`의 `active_pack.release_tag`, `asset_name`, `sha256`, `pack_id`를 해당 파일에 맞춘다. SHA-256은 압축 파일 전체의 값이다. H5/H20은 항상 함께 교체한다.
-4. Actions repository secrets에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`를 등록한다. KRX 비수정 가격·거래대금과 거래일 조회에는 `KRX_ID`, `KRX_PW`가 필요하다. 서비스 키를 프론트 환경변수나 로그에 넣지 않는다.
-5. `Daily chart serving`을 수동 실행해 첫 배치를 확인한다. 실행 성공, DB 반영, 상세 화면 표시는 각각 따로 확인한다.
-
-pack 생성 후 release 업로드 예시는 다음과 같다. 태그가 이미 있으면 `gh release upload`만 사용한다.
+저장소 루트에서 Docker가 실행 중인지 확인하고 로컬 Supabase를 시작한다. CLI 전역 설치는 필요 없다.
 
 ```bash
-sha256sum serving/data/packs/PACK_ID.tar.gz
-gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart pack PACK_ID" --notes "H5/H20 serving pack"
+docker info
+npx --yes supabase@latest start
+npx --yes supabase@latest status
 ```
 
-## 로컬 실행
+`start`는 저장소 migration을 적용한다. `status`에 표시된 Project URL과 Secret key(구 CLI에서는 service_role key)를 사용한다. `db reset`은 데이터를 지우므로 확인용 실행에 사용하지 않는다. `serving/data/packs/hold2022_2024_wf2019_2025_v1/`, `serving/data/raw/005930.parquet`, `serving/data/processed/005930.parquet`가 있어야 한다. 다른 컴퓨터라면 파일을 별도로 준비해야 하며 **로컬 pack이 있으면 GitHub Release가 필요 없다.**
 
 ```bash
 cd backend/analysis/chart
+python3 -m venv /tmp/chart-serving-venv
+source /tmp/chart-serving-venv/bin/activate
 python -m pip install -r serving/requirements.txt
-export CHART_SERVING_DATA_DIR="$PWD/serving/data"
-export GITHUB_REPOSITORY=2026Graduation-Work/Stock_Prediction_v2
-# 비공개 Release라면 GH_TOKEN도 설정한다.
-python -m serving.pack download --config serving/config.yaml
+export SUPABASE_URL=http://127.0.0.1:54321
+read -rsp '로컬 Secret 또는 service_role key: ' SUPABASE_SECRET_KEY; echo
+export SUPABASE_SECRET_KEY
+python -m serving.local_preview --compute-only
+python -m serving.local_preview --publish
+```
+
+첫 명령은 DB 없이 snapshot을 계산한다. 둘째 명령은 가격 DB·비공개 피처 Storage·H5/H20 공개 snapshot을 기록한다. 기본 입력은 **2026-06-12 삼성전자** 캐시이며, 기존 가공 피처 계산 버전은 미확인이다. `--as-of`는 raw와 processed 양쪽에 있는 날만, `--code`는 해당 두 캐시 파일이 있는 종목만 허용한다. 이 미리보기는 최신 KRX 수집을 검증하지 않는다.
+
+로컬 Studio SQL Editor(보통 `http://127.0.0.1:54323`)에서 확인한다.
+
+```sql
+select count(*) from public.chart_prices where stock_code = '005930';
+select as_of, builder_id, storage_path from public.chart_feature_snapshots where stock_code = '005930';
+select id, as_of, status, pack_id from public.chart_batches order by created_at desc limit 3;
+select horizon, payload->'distribution'->>'sample_count' as cases,
+       payload->'distribution'->>'stock_count' as stocks
+from public.latest_chart_signal_snapshots where stock_code = '005930' order by horizon;
+```
+
+검증 당시 가격 162행, 피처 1건, 공개 snapshot 2행이었고 H5/H20 사례 수는 각각 699/615건이었다. `main` 프론트는 아직 이 공개 view를 읽지 않으므로 DB에 보이는 것과 화면에 보이는 것을 구분한다. 작업 후 저장소 루트에서 `npx --yes supabase@latest stop`으로 서비스를 종료할 수 있다.
+
+## 2. 최신 거래일 수집·추론
+
+거래일 **18:00 KST 이후** KRX 접근과 인터넷이 가능한 환경에서 실행한다. 현재 runner는 전체 KOSPI를 처리한다. `--dry-run`도 가격·피처를 Supabase에 저장하지만 새 공개 batch는 만들지 않는다.
+
+```bash
+cd backend/analysis/chart
+read -rp 'KRX ID: ' KRX_ID
+read -rsp 'KRX password: ' KRX_PW; echo
+export KRX_ID KRX_PW
 python -m serving.run_daily --dry-run
 python -m serving.run_daily --publish
 ```
 
-로컬에서 `serving/data/packs/<pack_id>/`를 이미 생성했다면 `serving.pack download`는 생략한다. Release는 새 Actions runner가 pack을 받을 때 사용한다.
+`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
 
-`--publish`에는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`가 필요하다. `--as-of YYYY-MM-DD`를 지정하면 그 날짜를 재실행한다. 과거 날짜의 정확한 종목 목록과 입력이 Supabase에 없으면 runner가 이유를 출력하고 종료한다. 새 runner의 로컬 `serving/data/`는 작업 공간이며 가격·피처 상태의 정본은 Supabase다.
+## 3. 새 pack과 Actions
 
-## 예약과 재실행
+`config.yaml`의 `active_pack`이 pack ID·Release 태그·첨부 파일명·압축 파일 SHA-256을 고정한다. 로컬에 같은 pack 디렉터리가 있으면 다운로드를 생략한다. 새 Actions runner에는 로컬 pack이 없으므로 GitHub Release 첨부 파일에서 내려받는다.
 
-워크플로는 평일 09:30 UTC, 즉 18:30 KST에 예약되어 있다. GitHub Actions의 예약 시작 시각은 지연될 수 있으므로 로그의 실제 기준일을 확인한다. 수동 실행에서는 선택적으로 `as_of` 날짜를 입력한다. 예약·수동 실행은 하나의 concurrency 그룹을 사용한다.
+```bash
+python -m serving.build_pack --pack-id PACK_ID --output serving/data/packs \
+  --model-h5 H5_MODEL.txt --model-h20 H20_MODEL.txt \
+  --predictions-h5 H5_OOS.parquet --predictions-h20 H20_OOS.parquet \
+  --processed-dir PROCESSED_DATA_DIR
+sha256sum serving/data/packs/PACK_ID.tar.gz
+gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart pack PACK_ID" --notes "H5/H20 serving pack"
+```
 
-pack 다운로드는 실패 시 최대 세 번 시도한다. runner는 휴장일에 당일 배치를 만들지 않는다. 가격 전체 수집이나 모델 로드, 필수 저장이 실패하면 공개 전 단계에서 중단하고 직전 공개 배치를 유지한다. 같은 날짜·pack·입력·계산 버전으로 재실행하면 동일 batch ID에 저장하며, 입력 정정 또는 pack 교체 뒤에는 새 batch ID를 공개한다.
+pack 생성 보고서의 원본 예측 수·사용 표본 수·제외 사유를 확인한다. 기존 태그라면 `gh release upload`를 사용한다. 새 pack으로 바꿀 때 H5/H20을 함께 교체하고 `config.yaml` 네 값을 한 번에 변경한다. 이전 설정으로 되돌리면 이전 pack을 다시 쓸 수 있다.
 
-로그에서 기준일, pack ID, 처리 건수, 실패 단계, 공개 batch ID를 확인한다. 일부 종목의 가격이 없으면 해당 종목의 `unavailable` 상태와 건수를 확인한다. 비공개 Storage의 피처 파일은 계산 버전·기준일·입력 해시로 찾고, 공개 화면은 snapshot만 읽는다.
-
-## 교체와 복구
-
-새 pack을 GitHub Release에 올리고 `active_pack` 네 값을 바꾼 PR을 배포한다. 이전 pack으로 되돌릴 때는 이전 release 태그·첨부 파일명·SHA-256·pack ID를 설정에 다시 지정한다. 매번 수동 실행으로 H5/H20이 같은 pack에서 왔는지, snapshot 건수가 대상 종목 수의 두 배인지 확인한다.
-
-공개 실패 후에는 이전 배치가 계속 조회되는지 확인하고 같은 입력으로 다시 실행한다. 이미 공개한 잘못된 배치는 batch 철회 절차를 사용한다. DB migration 철회는 별도 백업과 영향 확인 후 진행한다.
-
-## 확인 기록
-
-| 단계 | 상태 | 근거 |
-|---|---|---|
-| 코드 구현 | 로컬 완료 | chart Ruff와 chart/serving 테스트 31개 통과, pack 검증·단일 종목 실제 모델 추론 완료 |
-| Actions 설정 작성 | 완료 | 평일 18:30 KST 예약, 수동 날짜 입력, 단일 실행 설정 및 YAML 검사 |
-| 실제 DB migration 적용 | 미확인 | Supabase 적용 결과 필요 |
-| 첫 실제 batch 공개 | 미확인 | batch ID와 조회 결과 필요 |
-| 수동 Actions 실행 | 미확인 | workflow run URL 필요 |
-| 예약 실행 | 미확인 | 예약 run URL 필요 |
-
-현재 환경의 `gh auth status`는 토큰 무효를 보고한다. Release 업로드와 수동 workflow 실행은 GitHub 인증이 복구된 뒤 수행해야 한다.
-이 환경에는 Supabase secret key 값과 KRX 로그인 정보가 없고 KRX/Naver 호스트 이름 조회가 실패한다. DB migration 적용과 최신 가격 수집은 이 환경에서 검증하지 못했다.
+Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.

@@ -1,6 +1,6 @@
 import pytest
-from serving.auth import service_headers
-from serving.local_preview import require_local_url
+from serving.internal.pipeline import require_local_url
+from serving.internal.storage import service_headers
 
 
 def test_local_preview_never_targets_remote_project():

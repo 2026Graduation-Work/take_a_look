@@ -5,9 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 from serving.contracts import validate_snapshot
-from serving.persistence import SupabaseStore
-from serving.publish import _pack_releases
-from serving.snapshot import unavailable_snapshot
+from serving.internal.snapshot import unavailable_snapshot
+from serving.internal.storage import SupabaseStore, _pack_releases
 
 
 def v2_snapshot():
@@ -68,7 +67,7 @@ def test_price_upsert_uses_stock_day_key(monkeypatch):
 
 
 def test_new_secret_key_uses_apikey_header_only(monkeypatch):
-    from serving import persistence, publish
+    from serving.internal import storage
 
     requests = []
 
@@ -88,12 +87,11 @@ def test_new_secret_key_uses_apikey_header_only(monkeypatch):
         requests.append(request)
         return Response()
 
-    monkeypatch.setattr(persistence, "urlopen", capture)
-    monkeypatch.setattr(publish, "urlopen", capture)
+    monkeypatch.setattr(storage, "urlopen", capture)
     monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
     monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_example")
     SupabaseStore()._request("GET", "/rest/v1/chart_prices")
-    publish._request("GET", "chart_batches")
+    SupabaseStore()._request("GET", "/rest/v1/chart_batches")
     assert all(request.get_header("Apikey") == "sb_secret_example" for request in requests)
     assert all(request.get_header("Authorization") is None for request in requests)
 

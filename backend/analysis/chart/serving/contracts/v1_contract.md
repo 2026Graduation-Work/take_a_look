@@ -1,8 +1,10 @@
-# `chart_signal_detail_v1` data contract
+# 구형 `chart_signal_detail_v1` 계약 기록
 
-Schema: `contracts/chart_signal_detail_v1.schema.json`; validator:
+**현재 일일 실행·공개에는 사용하지 않는다.** 현재 계약과 프론트 조회 필드는 [README.md](../README.md), 기계 검증 규격은 [chart_signal_detail_v2.schema.json](chart_signal_detail_v2.schema.json)을 참조한다. 아래 내용은 구형 v1 연구 경로를 위한 기록이다.
+
+Schema: `chart_signal_detail_v1.schema.json`; validator:
 `serving.contracts.validate_snapshot`. The four examples in
-`contracts/examples/` cover normal, both directions, no cases and unavailable.
+`examples/` cover normal, both directions, no cases and unavailable.
 This contract is separate from frozen `schema/chart_output.schema.json`.
 
 Each JSON identifies a stock code and exact-date stock name, actual data date, H5/H20, profile, release and
