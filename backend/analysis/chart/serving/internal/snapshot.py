@@ -1,6 +1,6 @@
 """Assemble and validate the public chart detail v2 payload."""
 
-from .contracts import validate_snapshot
+from ..contracts import validate_snapshot
 
 POLICY_ID = "multi_stock_up_sigma_001_005_v1"
 TOLERANCES = {"up_absolute": 0.01, "sigma_relative": 0.05}
