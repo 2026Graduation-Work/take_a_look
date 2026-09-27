@@ -112,6 +112,8 @@ jobs:
         run: ruff check backend/analysis/chart/
 
       - name: Run tests (pytest)
+        env:
+          PYTHONPATH: backend/analysis/chart
         run: |
           if find backend/analysis/chart -name "test_*.py" -o -name "*_test.py" | grep -q .; then
             pytest backend/analysis/chart/ -v

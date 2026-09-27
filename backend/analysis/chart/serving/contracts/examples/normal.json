@@ -1,0 +1,81 @@
+{
+  "contract": "chart_signal_detail_v2",
+  "stock_code": "005930",
+  "data_asof": "2026-09-24",
+  "horizon": 5,
+  "profile": "aggressive",
+  "release_id": "example-h5",
+  "batch_id": "example-batch",
+  "inference": {
+    "status": "available",
+    "reason": null,
+    "scores": {
+      "down": 0.3,
+      "neutral": 0.2,
+      "up": 0.5
+    },
+    "score_event": "class_2_upper_barrier_first",
+    "close": 100,
+    "sigma": 0.02,
+    "barriers": {
+      "up": 103.5,
+      "down": 97
+    },
+    "contribution_space": "class_2_raw_margin",
+    "features": []
+  },
+  "prices": {
+    "basis": "adjusted_close",
+    "source": "example-adjusted-daily",
+    "history": [
+      {
+        "date": "2026-09-24",
+        "close": 100,
+        "volume": 1000
+      }
+    ]
+  },
+  "sources": {
+    "model_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "features_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "prices_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "cases_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "stock_name": "삼성전자",
+  "pack_id": "pack-1",
+  "distribution": {
+    "status": "available",
+    "reason": null,
+    "policy_id": "multi_stock_up_sigma_001_005_v1",
+    "current": {
+      "up": 0.5,
+      "sigma": 0.02
+    },
+    "tolerances": {
+      "up_absolute": 0.01,
+      "sigma_relative": 0.05
+    },
+    "sample_count": 1,
+    "stock_count": 1,
+    "period_start": "2024-01-01",
+    "period_end": "2024-01-01",
+    "observed_through": "2024-02-01",
+    "by_fold": {
+      "fold-1": 1
+    },
+    "histogram": {
+      "bins": [
+        {
+          "left": -2,
+          "right": 0,
+          "count": 1
+        }
+      ],
+      "central_68": {
+        "low": -1,
+        "high": -1
+      }
+    }
+  }
+}
