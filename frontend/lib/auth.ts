@@ -6,6 +6,7 @@ import {
   PROFILE_UPDATED_EVENT,
   parseSavedProfile,
 } from "./save-profile";
+import { isRecord } from "./profiling-rules";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 
@@ -273,8 +274,4 @@ function clearSavedProfile(): void {
   if (!window.localStorage.getItem(PROFILE_STORAGE_KEY)) return;
   window.localStorage.removeItem(PROFILE_STORAGE_KEY);
   window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

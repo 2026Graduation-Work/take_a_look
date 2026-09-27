@@ -37,7 +37,6 @@ export interface SupplyDemandDay {
   foreign: number;
   institution: number; // 기관합계
 }
-export type SupplyDemandProvider = (code: string) => Promise<SupplyDemandDay[] | null>;
 
 export interface SentimentDay {
   date: string;
@@ -65,7 +64,6 @@ export interface SentimentData extends SentimentSeries {
   asOf?: string;
   coverage?: NewsTrackCoverage;
 }
-export type SentimentProvider = (code: string) => Promise<SentimentData | null>;
 
 export type NewsTrackStatus = "ok" | "partial" | "insufficient_data";
 
@@ -146,7 +144,6 @@ export interface ContributionSignal extends Omit<ContributionSignalInput, "weigh
   share: number; // 0~100, 종목 안에서 합 100
   direction: 1 | -1;
 }
-export type ContributionProvider = (code: string) => Promise<ContributionSignal[] | null>;
 
 export interface FinancialMetric {
   key: string;
@@ -170,9 +167,8 @@ const FINANCIAL_LABEL: Record<string, string> = {
   debt_ratio: "부채비율",
   revenue_growth: "매출 증가율(전년 대비)",
 };
-export type FinancialProvider = (code: string) => Promise<FinancialSnapshot | null>;
 
-export const supplyDemandProvider: SupplyDemandProvider = async (code) =>
+export const supplyDemandProvider = async (code: string): Promise<SupplyDemandDay[] | null> =>
   SUPPLY_SNAPSHOT[code] ?? null;
 
 const SENTIMENT_BY_CODE: Record<string, SentimentData> = {
@@ -181,10 +177,10 @@ const SENTIMENT_BY_CODE: Record<string, SentimentData> = {
   "035720": sentimentFromTrack(KAKAO_SENTIMENT as NewsTrack),
   "068270": sentimentFromTrack(CELLTRION_SENTIMENT as NewsTrack),
 };
-export const sentimentProvider: SentimentProvider = async (code) =>
+export const sentimentProvider = async (code: string): Promise<SentimentData | null> =>
   SENTIMENT_BY_CODE[code] ?? null;
 
-export const contributionProvider: ContributionProvider = async (code) => {
+export const contributionProvider = async (code: string): Promise<ContributionSignal[] | null> => {
   const inputs = CONTRIBUTION_FIXTURE[code];
   if (!inputs) return null;
   const total = inputs.reduce((sum, { weight }) => sum + Math.abs(weight), 0);
@@ -197,7 +193,7 @@ export const contributionProvider: ContributionProvider = async (code) => {
     .sort((left, right) => right.share - left.share);
 };
 
-export const financialProvider: FinancialProvider = async (code) => {
+export const financialProvider = async (code: string): Promise<FinancialSnapshot | null> => {
   const row = FINANCIAL_SNAPSHOT[code];
   if (!row) return null;
   return {

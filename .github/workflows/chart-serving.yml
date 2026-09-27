@@ -31,7 +31,8 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       KRX_ID: ${{ secrets.KRX_ID }}
-      KRX_PW: ${{ secrets.KRX_PW }}
+      # 저장소 secret 이름은 KRX_WD다(2026-09-27 등록). pykrx는 KRX_PW 환경 변수를 읽는다
+      KRX_PW: ${{ secrets.KRX_WD }}
     steps:
       - uses: actions/checkout@v7
 

@@ -1,6 +1,7 @@
 """Build and validate the committed H5/H20 model pack."""
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -50,7 +51,7 @@ def load_pack(path):
 
 
 def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_file=None):
-    if not pack_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in pack_id):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", pack_id or ""):
         raise ValueError("Invalid pack ID")
     root = Path(output) / pack_id
     if root.exists():

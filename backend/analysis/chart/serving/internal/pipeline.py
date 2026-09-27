@@ -64,8 +64,6 @@ def _retry_fetch(code, start, as_of):
     for attempt in range(3):
         try:
             return fetch_prices(code, start, as_of)
-        except ValueError:
-            raise
         except (OSError, TimeoutError, ConnectionError):
             if attempt == 2:
                 raise
@@ -74,17 +72,14 @@ def _retry_fetch(code, start, as_of):
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
+    days = refresh_krx_trading_days(start, as_of)
+    if pd.Timestamp(as_of).date() not in days:
+        return None
     if replay:
         universe = store.load_universe(as_of)
         if universe.empty:
             raise ValueError("Historical date lacks an archived universe")
-        days = refresh_krx_trading_days(start, as_of)
-        if pd.Timestamp(as_of).date() not in days:
-            return None
     else:
-        days = refresh_krx_trading_days(start, as_of)
-        if pd.Timestamp(as_of).date() not in days:
-            return None
         universe = fetch_universe(as_of, code=code)
         if not historical_test:
             store.save_universe(as_of, universe)
@@ -118,7 +113,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 continue
             digest = frame_hash(raw)
             store.upload_features(code, as_of, "alpha158_actual_vwap_v1", digest, features)
-            frames[code] = (raw, current.iloc[0].to_dict(), current)
+            frames[code] = (raw, current.iloc[0].to_dict())
             raw_hashes[code] = digest
         except ValueError as exc:
             if replay:
@@ -155,7 +150,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                     reason=unavailable[code], model_sha256=item["model_sha256"],
                     samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack)))
                 continue
-            raw, row, _ = frames[code]
+            raw, row = frames[code]
             scores, contributions, features_hash = by_code[code]
             sigma, close = float(row["Sigma"]), float(row["Close"])
             up, down = (item["label_barriers"][key] for key in ("up_mult", "down_mult"))
@@ -183,19 +178,31 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
     return batch, snapshots
 
 
+def data_root():
+    return Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+
+
+def active_pack(root=None):
+    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
+    return load_pack((root or data_root()) / "packs" / config["pack_id"])
+
+
+def write_batch(root, batch, snapshots):
+    out = root / "batches" / batch["id"]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
+    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
+
+
 def run(args):
-    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
-    root.mkdir(parents=True, exist_ok=True)
+    root = data_root()
     as_of = official_day(args.as_of)
     historical_test = getattr(args, "historical_test", False)
     if historical_test:
         require_local_url(os.environ.get("SUPABASE_URL", ""))
-        if not args.dry_run or args.publish:
-            raise ValueError("--historical-test is dry-run only")
         if as_of == datetime.now(KST).date().isoformat():
             raise ValueError("--historical-test requires a past date")
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
-    pack, paths = load_pack(root / "packs" / config["pack_id"])
+    pack, paths = active_pack(root)
     store = SupabaseStore()
     replay = pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
@@ -206,10 +213,7 @@ def run(args):
     batch, snapshots = build_batch(as_of, pack, paths, *collected)
     if historical_test:
         batch["result"]["historical_test"] = True
-    out = root / "batches" / batch["id"]
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
-    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
+    write_batch(root, batch, snapshots)
     if args.publish:
         store.publish(batch, snapshots, pack)
     print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
@@ -251,29 +255,25 @@ def load_cached_input(data_root, code, requested_date=None):
 def run_preview(args):
     if not args.compute_only:
         require_local_url(os.environ.get("SUPABASE_URL", ""))
-    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    root = data_root()
     as_of, name, raw, current = load_cached_input(root, args.code, args.as_of)
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
-    pack, paths = load_pack(root / "packs" / config["pack_id"])
+    pack, paths = active_pack(root)
     # Give legacy input a separate release identity so this local preview can
     # never be mistaken for the production alpha158_actual_vwap_v1 builder.
     pack = dict(pack, pack_id=pack["pack_id"] + "_legacy_preview",
                 feature_builder_id="legacy_processed_unverified_preview")
     digest = frame_hash(raw)
     universe = pd.DataFrame({"Code": [args.code], "Name": [name]})
-    if not args.compute_only:
-        store = SupabaseStore()
+    store = None if args.compute_only else SupabaseStore()
+    if store:
         store.save_universe(as_of, universe)
         store.upsert_prices(args.code, raw)
         store.upload_features(args.code, as_of, pack["feature_builder_id"], digest, current)
-    frames = {args.code: (raw, current.iloc[0].to_dict(), current)}
+    frames = {args.code: (raw, current.iloc[0].to_dict())}
     batch, snapshots = build_batch(as_of, pack, paths, universe, frames, {}, {args.code: digest})
-    out = root / "batches" / batch["id"]
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
-    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
+    write_batch(root, batch, snapshots)
     if args.publish:
-        SupabaseStore().publish(batch, snapshots, pack)
+        store.publish(batch, snapshots, pack)
     event = "local_preview_published" if args.publish else (
         "local_preview_computed" if args.compute_only else "local_preview_staged")
     print(json.dumps({"event": event,

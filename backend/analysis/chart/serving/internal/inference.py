@@ -4,9 +4,7 @@ import hashlib
 import json
 import math
 
-import lightgbm as lgb
 import numpy as np
-import pandas as pd
 
 BASE_INFO = {
     "Change": ("전일 대비 등락", "수정종가의 전일 대비 변화율"),
@@ -71,8 +69,6 @@ def feature_info(name):
 
 def infer_batch(model, features):
     """One model call per horizon for all valid current stock rows."""
-    if isinstance(model, (str, bytes)) or hasattr(model, "__fspath__"):
-        model = lgb.Booster(model_file=str(model))
     names = model.feature_name()
     if features.empty or set(names) - set(features):
         raise ValueError("Compatible feature rows required")
@@ -109,9 +105,3 @@ def infer_batch(model, features):
                         "up": float(scores[row_index, 2])}, features_top, feature_hash))
     return result
 
-
-def infer(model_path, features, as_of):
-    frame = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
-    if len(frame) != 1:
-        raise ValueError("Exactly one compatible feature row required")
-    return infer_batch(model_path, frame)[0]

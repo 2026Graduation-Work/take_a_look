@@ -1,7 +1,7 @@
 "use client";
 
 import type { ProfilingOutput } from "./types";
-import { isStyleAxes, threeAxisSummary } from "./profiling-rules";
+import { isRecord, isStyleAxes, threeAxisSummary } from "./profiling-rules";
 import { assertOk, getSupabaseClient } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 
@@ -211,8 +211,4 @@ function isProfilingOutput(value: unknown): value is ProfilingOutput {
     (meta.schema_version === "1.0.0" || meta.schema_version === "1.1.0") &&
     (value.style_axes === undefined || isStyleAxes(value.style_axes))
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

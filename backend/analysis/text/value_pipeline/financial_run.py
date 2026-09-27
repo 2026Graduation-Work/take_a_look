@@ -10,6 +10,7 @@ from typing import Any
 from . import collectors, financial_tracks, metrics
 from .agents import validation_agent
 from .config import SETTINGS
+from .news_run import _parse_target
 
 Collector = Callable[[str, str], tuple[dict[str, Any], str]]
 FilingLoader = Callable[[str, int, str], dict[str, Any]]
@@ -109,13 +110,6 @@ def write_financial_outputs(
         financial_tracks.write_financial_track(
             output, out_dir / f"{ticker}_financial.json"
         )
-
-
-def _parse_target(value: str) -> tuple[str, str]:
-    ticker, separator, company_name = value.partition(":")
-    if not separator or not ticker.strip() or not company_name.strip():
-        raise argparse.ArgumentTypeError("대상은 종목코드:회사명 형식이어야 합니다.")
-    return ticker.strip(), company_name.strip()
 
 
 def build_parser() -> argparse.ArgumentParser:

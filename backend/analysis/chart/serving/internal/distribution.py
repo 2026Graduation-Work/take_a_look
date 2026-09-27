@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 POLICY_ID = "multi_stock_up_sigma_001_005_v1"
+TOLERANCES = {"up_absolute": 0.01, "sigma_relative": 0.05}
 
 
 class SampleIndex:
@@ -50,7 +51,7 @@ class SampleIndex:
         selected = self.select(horizon=horizon, score=score, sigma=sigma, as_of=as_of)
         base = {"status": "available" if len(selected) else "no_cases", "reason": None,
                 "policy_id": POLICY_ID, "current": {"up": float(score), "sigma": float(sigma)},
-                "tolerances": {"up_absolute": .01, "sigma_relative": .05},
+                "tolerances": TOLERANCES,
                 "sample_count": len(selected), "stock_count": int(selected.code.nunique()),
                 "period_start": selected.prediction_date.min().date().isoformat() if len(selected) else None,
                 "period_end": selected.prediction_date.max().date().isoformat() if len(selected) else None,

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import news_run, newsapi_ai, supabase_store
+from .news_run import _parse_target
 
 DEFAULT_TARGETS: dict[str, str] = {
     "005930": "삼성전자",
@@ -69,37 +70,24 @@ def _read_track(path: Path, expected: set[str]) -> dict[str, Any]:
     return value
 
 
-def backfill_news(paths: Sequence[Path], *, client: Any) -> SyncResult:
+def _backfill(paths: Sequence[Path], expected: set[str], persist: Any, client: Any) -> SyncResult:
     result = SyncResult()
     for path in paths:
         try:
-            track = _read_track(path, {"historical", "live"})
-            supabase_store.persist_news_track(client, track)
+            persist(client, _read_track(path, expected))
         except Exception as exc:
             result.failures[str(path)] = _failure_name(exc)
         else:
             result.succeeded.append(str(path))
     return result
+
+
+def backfill_news(paths: Sequence[Path], *, client: Any) -> SyncResult:
+    return _backfill(paths, {"historical", "live"}, supabase_store.persist_news_track, client)
 
 
 def backfill_financial(paths: Sequence[Path], *, client: Any) -> SyncResult:
-    result = SyncResult()
-    for path in paths:
-        try:
-            track = _read_track(path, {"financial"})
-            supabase_store.persist_financial_track(client, track)
-        except Exception as exc:
-            result.failures[str(path)] = _failure_name(exc)
-        else:
-            result.succeeded.append(str(path))
-    return result
-
-
-def _parse_target(value: str) -> tuple[str, str]:
-    ticker, separator, company_name = value.partition(":")
-    if not separator or not ticker.strip() or not company_name.strip():
-        raise argparse.ArgumentTypeError("대상은 종목코드:회사명 형식이어야 합니다")
-    return ticker.strip(), company_name.strip()
+    return _backfill(paths, {"financial"}, supabase_store.persist_financial_track, client)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -115,8 +103,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def targets_from_args(args: argparse.Namespace) -> dict[str, str]:
-    if args.command != "live":
-        raise ValueError("live 명령에서만 대상 종목을 해석할 수 있습니다")
     return dict(args.target) if args.target else dict(DEFAULT_TARGETS)
 
 
