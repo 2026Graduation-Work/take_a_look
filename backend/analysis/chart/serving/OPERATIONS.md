@@ -53,7 +53,7 @@ python -m serving.run_daily --publish
 
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. `KRX_ID`, `KRX_PW`가 있으면 pykrx가 KRX 로그인을 시도한다. 계정이 없어도 인증 없는 조회를 시도하므로 필수 입력으로 막지 않는다. 로그인 실패 메시지만으로 성공·실패를 판단하지 말고 실제 거래일·가격 데이터와 실행 결과를 확인한다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
 
-지난 거래일의 실제 가격으로 수집·피처·추론·히스토그램을 시험할 때는 **로컬 Supabase**에서만 아래 옵션을 쓴다. `--code`를 빼면 현재 KOSPI 목록 전체를 수집하므로 먼저 한 종목으로 확인한다. 현재 종목 목록에서 상장일로 거르기 때문에 과거 상장폐지 종목은 복원하지 못한다. 결과는 `serving/data/batches/<batch-id>/`에 쓰고, 새로 받은 가격·피처는 로컬 Supabase에 저장한다. 기존 종목 목록은 덮어쓰지 않고 공개 batch도 발행하지 않는다.
+지난 거래일의 실제 가격으로 수집·피처·추론·히스토그램을 시험할 때는 **로컬 Supabase**에서만 아래 옵션을 쓴다. `--code`를 빼면 KRX의 지정일 KOSPI 목록 전체를 수집하므로 먼저 한 종목으로 확인한다. 단일 종목 테스트는 현재 KRX 종목명을 쓰며, 지정일 가격이 있어야 진행한다. 결과는 `serving/data/batches/<batch-id>/`에 쓰고, 새로 받은 가격·피처는 로컬 Supabase에 저장한다. 기존 종목 목록은 덮어쓰지 않고 공개 batch도 발행하지 않는다.
 
 ```bash
 python -m serving.run_daily --as-of 2026-09-21 --historical-test --code 005930 --dry-run

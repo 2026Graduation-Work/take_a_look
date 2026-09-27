@@ -5,4 +5,3 @@ lightgbm>=4.0
 PyYAML>=6.0
 jsonschema>=4.0
 pykrx>=1.2.8
-finance-datareader>=0.9.202

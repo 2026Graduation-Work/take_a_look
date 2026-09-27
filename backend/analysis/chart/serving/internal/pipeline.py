@@ -36,18 +36,21 @@ def official_day(requested=None):
     return day.isoformat()
 
 
-def fetch_universe(as_of):
-    import FinanceDataReader as fdr
+def fetch_universe(as_of, code=None):
+    from pykrx import stock
 
-    listing = fdr.StockListing("KOSPI-DESC")
-    required = {"Code", "Name", "Market", "ListingDate"}
-    if required - set(listing):
-        raise ValueError("KOSPI listing lacks required fields")
-    rows = listing.loc[listing.Market.eq("KOSPI")].copy()
-    rows["Code"] = rows.Code.astype(str).str.zfill(6)
-    rows = rows.loc[pd.to_datetime(rows.ListingDate).le(as_of), ["Code", "Name"]]
-    if rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9]{6}").all() or not 500 <= len(rows) <= 1200:
-        raise ValueError("Invalid current KOSPI universe")
+    if code:
+        if not re.fullmatch(r"[0-9]{6}", code):
+            raise ValueError("Stock code must be six digits")
+        codes = [code]
+    else:
+        codes = stock.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI")
+        if not 500 <= len(codes) <= 1200:
+            raise ValueError("Invalid KOSPI universe size")
+    rows = pd.DataFrame({"Code": codes, "Name": [stock.get_market_ticker_name(item) for item in codes]})
+    if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9]{6}").all()
+            or rows.Name.isna().any() or not rows.Name.astype(str).str.strip().all()):
+        raise ValueError("Invalid KOSPI universe")
     return rows.sort_values("Code").reset_index(drop=True)
 
 
@@ -82,13 +85,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         days = refresh_krx_trading_days(start, as_of)
         if pd.Timestamp(as_of).date() not in days:
             return None
-        universe = fetch_universe(as_of)
-        if code:
-            if not re.fullmatch(r"[0-9]{6}", code):
-                raise ValueError("Stock code must be six digits")
-            universe = universe.loc[universe.Code.eq(code)].reset_index(drop=True)
-            if universe.empty:
-                raise ValueError(f"Stock {code} is absent from the current KOSPI listing")
+        universe = fetch_universe(as_of, code=code)
         if not historical_test:
             store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
