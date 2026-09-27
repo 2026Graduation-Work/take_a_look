@@ -76,7 +76,7 @@ export default function HoldingsStep({
       await saveHoldings(next, mode);
       onDone();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "저장하지 못했어요.");
+      setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
       setSaving(false);
     }
   }
@@ -116,7 +116,7 @@ export default function HoldingsStep({
                   <button
                     type="button"
                     onClick={() => setRows((current) => current.filter(({ code }) => code !== row.code))}
-                    className="text-xs font-medium text-danger hover:underline"
+                    className="min-h-11 text-xs font-medium text-danger hover:underline"
                     aria-label={`${row.name} 빼기`}
                   >
                     빼기

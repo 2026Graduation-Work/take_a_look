@@ -56,7 +56,7 @@ export default function MarketDetail({ label, children }: { label: ReactNode; ch
         onFocus={(event) => event.target.matches(":focus-visible") && setOpen(true)}
         // 마우스는 이미 올려서 열려 있으니 누르면 그대로, 터치·키보드는 누를 때마다 열고 닫는다
         onClick={(event) => setOpen((current) => ((event.nativeEvent as PointerEvent).pointerType === "mouse" ? true : !current))}
-        className="flex min-h-10 items-center whitespace-nowrap text-xs text-body"
+        className="flex min-h-11 items-center whitespace-nowrap text-xs text-body"
       >
         {label}
       </button>

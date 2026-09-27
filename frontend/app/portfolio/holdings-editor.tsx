@@ -136,7 +136,7 @@ export default function HoldingsEditor({
       setStatus("saved");
     } catch (cause) {
       setStatus("idle");
-      setSaveError(cause instanceof Error ? cause.message : "저장하지 못했습니다.");
+      setSaveError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     }
   }
 
@@ -189,7 +189,7 @@ export default function HoldingsEditor({
                       aria-label={`${row.name} 수량`}
                       value={String(row.quantity)}
                       onChange={(event) => updateRow(row.code, { quantity: toInt(event.target.value) })}
-                      className="h-9 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
@@ -200,13 +200,13 @@ export default function HoldingsEditor({
                       value={row.avgBuyPrice === null ? "" : String(row.avgBuyPrice)}
                       placeholder="모름 · 현재가 기준"
                       onChange={(event) => updateRow(row.code, { avgBuyPrice: toOptionalInt(event.target.value) })}
-                      className="h-9 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
                   <button
                     type="button"
                     onClick={() => removeRow(row.code)}
-                    className="col-span-2 justify-self-start text-xs font-medium text-danger hover:underline sm:col-span-1 sm:justify-self-end"
+                    className="col-span-2 min-h-11 justify-self-start text-xs font-medium text-danger hover:underline sm:col-span-1 sm:justify-self-end"
                   >
                     삭제
                   </button>
@@ -222,18 +222,18 @@ export default function HoldingsEditor({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 px-1">
-          <button type="button" onClick={submit} disabled={status === "saving"} className="btn-primary">
-            {status === "saving" ? "저장 중…" : "저장"}
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-3 px-1">
+          <span className="mr-auto text-xs text-muted">
+            {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
+          </span>
           {status === "saved" && (
             <span role="status" className="text-sm text-body">
               저장했어요. <Link href="/">대시보드에서 보기</Link>
             </span>
           )}
-          <span className="ml-auto text-xs text-muted">
-            {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
-          </span>
+          <button type="button" onClick={submit} disabled={status === "saving"} className="btn-primary">
+            {status === "saving" ? "저장 중…" : "저장"}
+          </button>
         </div>
 
         <WatchlistEditor />

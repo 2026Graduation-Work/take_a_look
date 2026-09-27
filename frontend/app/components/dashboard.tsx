@@ -201,7 +201,7 @@ export default function Dashboard(initialData: DashboardData) {
             <button
               type="button"
               onClick={retryAuthenticatedData}
-              className="h-9 flex-none surface px-4 text-xs font-medium text-body hover:bg-field sm:ml-auto"
+              className="h-11 flex-none surface px-4 text-xs font-medium text-body hover:bg-field sm:ml-auto"
             >
               다시 시도
             </button>

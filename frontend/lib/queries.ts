@@ -530,5 +530,5 @@ function assertQuery(
   error: { message: string } | null,
   operation: string,
 ): asserts error is null {
-  if (error) throw new Error(`${operation} 실패: ${error.message}`);
+  if (error) throw new Error(`${operation} 실패: ${error.message}. 잠시 뒤 다시 시도해 주세요.`);
 }

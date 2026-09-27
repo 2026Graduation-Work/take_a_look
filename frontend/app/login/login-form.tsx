@@ -33,7 +33,7 @@ export default function LoginForm() {
     try {
       await task();
     } catch (taskError) {
-      setError(taskError instanceof Error ? taskError.message : "요청을 처리하지 못했습니다.");
+      setError(taskError instanceof Error ? taskError.message : "요청을 처리하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
       setSubmitting(false);
     }

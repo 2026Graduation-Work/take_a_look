@@ -164,7 +164,7 @@ export function useDemoStyleAxes(original: StyleAxes | null) {
 
 function Why({ children }: { children: ReactNode }) {
   return (
-    <p className="m-0 text-xs text-muted">
+    <p className="m-0 max-w-2xl text-xs text-muted">
       <span className="font-medium text-body">왜 봐야 하나요? </span>
       {children}
     </p>
@@ -229,7 +229,7 @@ export function Checkpoints({
           {items.map((item, index) => (
             <li key={item.key} data-nudge={item.key} className="flex gap-3">
               <span className="flex-none text-sm font-semibold text-muted tabular-nums">{index + 1}</span>
-              <p className="m-0 text-base leading-relaxed text-ink">{item.text}</p>
+              <p className="m-0 max-w-2xl text-base leading-relaxed text-ink">{item.text}</p>
             </li>
           ))}
         </ol>
@@ -250,7 +250,7 @@ export function Checkpoints({
                   type="button"
                   aria-pressed={active}
                   onClick={() => demo.setViewAs(type)}
-                  className={`min-h-9 rounded-sm px-3.5 text-xs font-medium ${
+                  className={`min-h-11 rounded-sm px-3.5 text-xs font-medium ${
                     active ? "bg-brand-soft text-brand" : "bg-track text-body hover:bg-line"
                   }`}
                 >

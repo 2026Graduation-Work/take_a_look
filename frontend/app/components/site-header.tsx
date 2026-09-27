@@ -32,7 +32,7 @@ export default function SiteHeader({
     <>
       <header className="glass-bar sticky top-0 z-50">
         <div className="mx-auto box-border flex min-h-14 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0 lg:px-8">
-          <Link href="/" className="flex-none text-lg hover:no-underline">
+          <Link href="/" className="flex min-h-11 flex-none items-center text-lg hover:no-underline">
             <Wordmark size={26} />
           </Link>
 
@@ -65,7 +65,7 @@ export default function SiteHeader({
                 onChange={(event) => onQueryChange?.(event.target.value)}
                 placeholder="종목명 또는 코드 검색"
                 aria-label="종목 검색"
-                className="box-border h-9 w-full min-w-0 rounded-md bg-track px-3.5 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30 sm:max-w-[280px]"
+                className="box-border h-11 w-full min-w-0 rounded-md bg-track px-3.5 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30 sm:max-w-[280px]"
               />
             </div>
           ) : (

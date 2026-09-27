@@ -195,7 +195,7 @@ export default function StockDetailView({
             </p>
           )}
           <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-            <span>지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
+            <span className="max-w-2xl">지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
             <span>주가: <SourceChip provenance={detail.priceProvenance ?? detail.provenance} /></span>
             <span>신호·범위: <SourceChip provenance={detail.provenance} /></span>
           </p>
