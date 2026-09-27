@@ -48,8 +48,6 @@ jobs:
         run: |
           test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
-          test -n "$KRX_ID" || { echo "KRX_ID secret is missing"; exit 1; }
-          test -n "$KRX_PW" || { echo "KRX_PW secret is missing"; exit 1; }
 
       - name: Validate committed model pack
         run: python -m serving.pack validate

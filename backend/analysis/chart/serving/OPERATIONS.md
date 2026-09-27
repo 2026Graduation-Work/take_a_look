@@ -47,14 +47,11 @@ from public.latest_chart_signal_snapshots where stock_code = '005930' order by h
 
 ```bash
 cd backend/analysis/chart
-read -rp 'KRX ID: ' KRX_ID
-read -rsp 'KRX password: ' KRX_PW; echo
-export KRX_ID KRX_PW
 python -m serving.run_daily --dry-run
 python -m serving.run_daily --publish
 ```
 
-`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
+`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. `KRX_ID`, `KRX_PW`가 있으면 pykrx가 KRX 로그인을 시도한다. 계정이 없어도 인증 없는 조회를 시도하므로 필수 입력으로 막지 않는다. 로그인 실패 메시지만으로 성공·실패를 판단하지 말고 실제 거래일·가격 데이터와 실행 결과를 확인한다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
 
 ## 3. 새 pack과 Actions
 
@@ -70,4 +67,4 @@ python -m serving.build_pack --pack-id PACK_ID --output serving/data/packs \
 python -m serving.pack validate --path serving/data/packs/PACK_ID
 ```
 
-Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX 인증이 필요한 조회가 있으면 `KRX_ID`, `KRX_PW`도 설정한다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
