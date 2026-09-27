@@ -69,7 +69,7 @@ def _retry_fetch(code, start, as_of):
             time.sleep(2 * (attempt + 1))
 
 
-def collect(as_of, store, *, replay=False):
+def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
     if replay:
         universe = store.load_universe(as_of)
@@ -83,14 +83,21 @@ def collect(as_of, store, *, replay=False):
         if pd.Timestamp(as_of).date() not in days:
             return None
         universe = fetch_universe(as_of)
-        store.save_universe(as_of, universe)
+        if code:
+            if not re.fullmatch(r"[0-9]{6}", code):
+                raise ValueError("Stock code must be six digits")
+            universe = universe.loc[universe.Code.eq(code)].reset_index(drop=True)
+            if universe.empty:
+                raise ValueError(f"Stock {code} is absent from the current KOSPI listing")
+        if not historical_test:
+            store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
     frames, unavailable, raw_hashes = {}, {}, {}
     for row in universe.itertuples():
         code = row.Code
         try:
-            stored = store.load_prices(code, start, as_of)
+            stored = pd.DataFrame() if historical_test else store.load_prices(code, start, as_of)
             if replay:
                 if stored.empty or stored.Date.max().date().isoformat() != as_of:
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
@@ -183,22 +190,32 @@ def run(args):
     root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
     root.mkdir(parents=True, exist_ok=True)
     as_of = official_day(args.as_of)
+    historical_test = getattr(args, "historical_test", False)
+    if historical_test:
+        require_local_url(os.environ.get("SUPABASE_URL", ""))
+        if not args.dry_run or args.publish:
+            raise ValueError("--historical-test is dry-run only")
+        if as_of == datetime.now(KST).date().isoformat():
+            raise ValueError("--historical-test requires a past date")
     config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
     pack, paths = load_pack(root / "packs" / config["pack_id"])
     store = SupabaseStore()
-    replay = pd.Timestamp(as_of).date() != datetime.now(KST).date()
-    collected = collect(as_of, store, replay=replay)
+    replay = pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test
+    collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
+                        historical_test=historical_test)
     if collected is None:
         print(json.dumps({"event": "holiday", "as_of": as_of, "pack_id": pack["pack_id"]}))
         return
     batch, snapshots = build_batch(as_of, pack, paths, *collected)
+    if historical_test:
+        batch["result"]["historical_test"] = True
     out = root / "batches" / batch["id"]
     out.mkdir(parents=True, exist_ok=True)
     (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
     (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
     if args.publish:
         store.publish(batch, snapshots, pack)
-    print(json.dumps({"event": "published" if args.publish else "dry_run", "as_of": as_of,
+    print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
                       "pack_id": pack["pack_id"], "stock_count": len(batch["expected_stock_codes"]),
                       "batch_id": batch["id"], **batch["result"]}))
 
