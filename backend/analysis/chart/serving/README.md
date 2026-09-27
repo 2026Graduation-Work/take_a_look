@@ -26,6 +26,8 @@ export GITHUB_REPOSITORY=2026Graduation-Work/Stock_Prediction_v2
 python -m serving.pack download --config serving/config.yaml
 ```
 
+로컬에 같은 pack 디렉터리가 있으면 다운로드 단계는 생략할 수 있다.
+
 ## 일일 실행
 
 ```bash
@@ -34,6 +36,6 @@ python -m serving.run_daily --publish
 python -m serving.run_daily --as-of YYYY-MM-DD --publish
 ```
 
-`--publish`에는 Supabase service role 환경변수가 필요하다. 최신 확정 거래일에는 원천 가격을 새로 수집해 가격 DB와 피처 Storage를 갱신한다. 과거 날짜 재실행에는 저장된 해당 날짜의 종목 목록과 입력이 필요하다. H5/H20은 한 배치로 저장·공개되며, 실행 실패 시 이전 공개 배치는 유지된다. 실제 표본이 1건 이상이면 히스토그램을 만들고 0건은 `no_cases`로 표시한다.
+`--publish`에는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`가 필요하다. 최신 확정 거래일에는 원천 가격을 새로 수집해 가격 DB와 피처 Storage를 갱신한다. 과거 날짜 재실행에는 저장된 해당 날짜의 종목 목록과 입력이 필요하다. H5/H20은 한 배치로 저장·공개되며, 실행 실패 시 이전 공개 배치는 유지된다. 실제 표본이 1건 이상이면 히스토그램을 만들고 0건은 `no_cases`로 표시한다.
 
 자세한 배포·재실행·복구 절차와 실제 운영 확인 상태는 [OPERATIONS.md](OPERATIONS.md)에 기록한다. [HISTOGRAM_INFERENCE.md](HISTOGRAM_INFERENCE.md)는 확정된 계산·표시 규칙이다.

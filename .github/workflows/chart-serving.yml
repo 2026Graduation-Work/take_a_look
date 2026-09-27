@@ -29,7 +29,7 @@ jobs:
     env:
       CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/serving/data
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       KRX_ID: ${{ secrets.KRX_ID }}
       KRX_PW: ${{ secrets.KRX_PW }}
       GH_TOKEN: ${{ github.token }}
@@ -48,7 +48,7 @@ jobs:
       - name: Check publishing secrets
         run: |
           test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
-          test -n "$SUPABASE_SERVICE_ROLE_KEY" || { echo "SUPABASE_SERVICE_ROLE_KEY secret is missing"; exit 1; }
+          test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
           test -n "$KRX_ID" || { echo "KRX_ID secret is missing"; exit 1; }
           test -n "$KRX_PW" || { echo "KRX_PW secret is missing"; exit 1; }
 

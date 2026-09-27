@@ -21,13 +21,13 @@ PRICE_COLUMNS = {
 class SupabaseStore:
     def __init__(self, url=None, key=None):
         self.url = (url or os.environ.get("SUPABASE_URL", "")).rstrip("/")
-        self.key = key or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        self.key = key or os.environ.get("SUPABASE_SECRET_KEY")
         if not self.url or not self.key:
-            raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
+            raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY are required")
 
     def _request(self, method, path, body=None, *, content_type="application/json", prefer=None,
                  extra_headers=None):
-        headers = {"apikey": self.key, "Authorization": f"Bearer {self.key}"}
+        headers = {"apikey": self.key}
         if body is not None:
             headers["Content-Type"] = content_type
         if prefer:

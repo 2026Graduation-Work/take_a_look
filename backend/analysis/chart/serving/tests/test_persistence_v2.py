@@ -67,6 +67,37 @@ def test_price_upsert_uses_stock_day_key(monkeypatch):
     assert seen[0][0][2][0]["stock_code"] == "005930"
 
 
+def test_new_secret_key_uses_apikey_header_only(monkeypatch):
+    from serving import persistence, publish
+
+    requests = []
+
+    class Response:
+        headers = {"Content-Type": "application/json"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b"[]"
+
+    def capture(request, timeout):
+        requests.append(request)
+        return Response()
+
+    monkeypatch.setattr(persistence, "urlopen", capture)
+    monkeypatch.setattr(publish, "urlopen", capture)
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_example")
+    SupabaseStore()._request("GET", "/rest/v1/chart_prices")
+    publish._request("GET", "chart_batches")
+    assert all(request.get_header("Apikey") == "sb_secret_example" for request in requests)
+    assert all(request.get_header("Authorization") is None for request in requests)
+
+
 def test_pack_release_pair_and_unavailable_snapshot():
     manifest = {"pack_id": "pack-1", "feature_builder_id": "builder-1",
                 "horizons": {key: {"horizon": horizon,

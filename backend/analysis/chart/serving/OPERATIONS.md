@@ -7,7 +7,7 @@
 1. 새 serving migration을 Supabase에 적용하고 공개 snapshot 조회 권한을 확인한다. DB 적용 여부는 코드 배포와 별도로 기록한다.
 2. `README.md`의 `python -m serving.build_pack` 명령으로 H5/H20 모델과 2019~2025 walk-forward 자료를 묶는다. 생성 보고서의 원본 예측 수, 사용 가능한 표본 수, 제외 사유를 확인한다.
 3. pack 압축 파일을 GitHub Release 첨부 파일로 올린다. `config.yaml`의 `active_pack.release_tag`, `asset_name`, `sha256`, `pack_id`를 해당 파일에 맞춘다. SHA-256은 압축 파일 전체의 값이다. H5/H20은 항상 함께 교체한다.
-4. Actions repository secrets에 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`를 등록한다. KRX 계정이 필요한 수집 환경이면 `KRX_ID`, `KRX_PW`도 등록한다. 서비스 키를 프론트 환경변수나 로그에 넣지 않는다.
+4. Actions repository secrets에 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`를 등록한다. KRX 비수정 가격·거래대금과 거래일 조회에는 `KRX_ID`, `KRX_PW`가 필요하다. 서비스 키를 프론트 환경변수나 로그에 넣지 않는다.
 5. `Daily chart serving`을 수동 실행해 첫 배치를 확인한다. 실행 성공, DB 반영, 상세 화면 표시는 각각 따로 확인한다.
 
 pack 생성 후 release 업로드 예시는 다음과 같다. 태그가 이미 있으면 `gh release upload`만 사용한다.
@@ -30,7 +30,9 @@ python -m serving.run_daily --dry-run
 python -m serving.run_daily --publish
 ```
 
-`--publish`에는 `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`가 필요하다. `--as-of YYYY-MM-DD`를 지정하면 그 날짜를 재실행한다. 과거 날짜의 정확한 종목 목록과 입력이 Supabase에 없으면 runner가 이유를 출력하고 종료한다. 새 runner의 로컬 `serving/data/`는 작업 공간이며 가격·피처 상태의 정본은 Supabase다.
+로컬에서 `serving/data/packs/<pack_id>/`를 이미 생성했다면 `serving.pack download`는 생략한다. Release는 새 Actions runner가 pack을 받을 때 사용한다.
+
+`--publish`에는 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`가 필요하다. `--as-of YYYY-MM-DD`를 지정하면 그 날짜를 재실행한다. 과거 날짜의 정확한 종목 목록과 입력이 Supabase에 없으면 runner가 이유를 출력하고 종료한다. 새 runner의 로컬 `serving/data/`는 작업 공간이며 가격·피처 상태의 정본은 Supabase다.
 
 ## 예약과 재실행
 
@@ -58,4 +60,4 @@ pack 다운로드는 실패 시 최대 세 번 시도한다. runner는 휴장일
 | 예약 실행 | 미확인 | 예약 run URL 필요 |
 
 현재 환경의 `gh auth status`는 토큰 무효를 보고한다. Release 업로드와 수동 workflow 실행은 GitHub 인증이 복구된 뒤 수행해야 한다.
-이 환경에는 Supabase service role 정보와 KRX 로그인 정보도 없고 KRX/Naver 호스트 이름 조회가 실패한다. DB migration 적용과 최신 가격 수집은 이 환경에서 검증하지 못했다.
+이 환경에는 Supabase secret key 값과 KRX 로그인 정보가 없고 KRX/Naver 호스트 이름 조회가 실패한다. DB migration 적용과 최신 가격 수집은 이 환경에서 검증하지 못했다.

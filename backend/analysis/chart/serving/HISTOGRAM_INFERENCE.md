@@ -15,7 +15,7 @@
 
 `serving/data/raw`와 `serving/data/processed`에 복사한 가공 자료의 계산 버전은 확인되지 않았다. 이를 `alpha158_actual_vwap_v1` 산출물로 표시하거나 Supabase의 새 피처로 업로드하지 않는다. 과거 달력 복사본은 2026-09-14~17의 4일만 담은 부분 자료다. 과거 표본 생성에는 이 달력을 전달하지 않았고, 기존 `Trading_Halt` 표시를 사용했다.
 
-로컬 검사: chart Ruff 통과, chart `tests`와 serving `tests` 31개 통과, serving 단독 복사본에서 pack 검증·CLI 도움말 실행 통과. 최신 KRX 조회는 로컬 KRX 인증 정보 부재와 외부 호스트 이름 조회 실패로 완료되지 않았다. `SUPABASE_URL`·`SUPABASE_SERVICE_ROLE_KEY`가 없으며, GitHub CLI 인증 토큰도 무효다.
+로컬 검사: chart Ruff 통과, chart `tests`와 serving `tests` 31개 통과, serving 단독 복사본에서 pack 검증·CLI 도움말 실행 통과. 최신 KRX 조회는 로컬 KRX 인증 정보 부재와 외부 호스트 이름 조회 실패로 완료되지 않았다. `SUPABASE_URL`·`SUPABASE_SECRET_KEY` 값은 로컬에 없으며, GitHub CLI 인증 토큰도 무효다. GitHub Actions에는 `SUPABASE_URL`·`SUPABASE_SECRET_KEY`가 등록되어 있다.
 
 ---
 

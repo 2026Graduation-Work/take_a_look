@@ -36,11 +36,10 @@ def _pack_releases(manifest):
 
 def _request(method, path, body=None, *, prefer=None):
     base = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    key = os.environ.get("SUPABASE_SECRET_KEY")
     if not base or not key:
-        raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required")
-    headers = {"apikey": key, "Authorization": f"Bearer {key}",
-               "Content-Type": "application/json"}
+        raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY are required")
+    headers = {"apikey": key, "Content-Type": "application/json"}
     if prefer:
         headers["Prefer"] = prefer
     request = Request(base + "/rest/v1/" + path,
