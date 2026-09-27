@@ -1,0 +1,8 @@
+pandas>=2.2
+numpy>=2.0
+pyarrow>=19
+lightgbm>=4.0
+PyYAML>=6.0
+jsonschema>=4.0
+pykrx>=1.2.8
+finance-datareader>=0.9.202

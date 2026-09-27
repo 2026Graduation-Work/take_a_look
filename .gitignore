@@ -76,6 +76,7 @@ venv/
 *.csv
 *.parquet
 **/config.yaml
+!backend/analysis/chart/serving/config.yaml
 /chart_handoff_output/
 
 # 기본 Baseline 실험의 모델/캐시/결과는 Git에 올려서 공유 (추적 허용)

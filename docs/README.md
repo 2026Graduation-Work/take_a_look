@@ -11,6 +11,8 @@
 | [data-inventory.md](data-inventory.md) | 화면 수치 43행의 출처·실데이터 여부, 시장 분위기 산식 |
 | [auth-setup.md](auth-setup.md) | 계정 로그인 설정(Supabase·Vercel), 사람이 할 일 |
 | [erd.md](erd.md) | Supabase 테이블(마이그레이션 0001~0004) |
+| [../backend/analysis/chart/serving/README.md](../backend/analysis/chart/serving/README.md) | H5·H20 serving 구조·공개 계약·검증 상태 |
+| [../backend/analysis/chart/serving/OPERATIONS.md](../backend/analysis/chart/serving/OPERATIONS.md) | H5·H20 실행·DB 발행 절차 |
 | [../frontend/DESIGN.md](../frontend/DESIGN.md) | 화면 규칙(성균관대 색·애플 톤). 값은 `frontend/app/globals.css` `@theme` |
 | [../.claude/skills/README.md](../.claude/skills/README.md) | 검토한 디자인 스킬 4종·충돌 판정표 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 협업 규칙 |

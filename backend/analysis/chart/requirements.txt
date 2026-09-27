@@ -9,6 +9,7 @@ tqdm>=4.70.1
 # ── 머신러닝 모델링 (DT 계열) ───────────────────
 scikit-learn>=1.9.1
 lightgbm>=4.7.0
+jsonschema>=4.0  # serving snapshot validation
 pyyaml>=6.0.3
 
 # ── 백테스트 및 시뮬레이션 ─────────────────────
