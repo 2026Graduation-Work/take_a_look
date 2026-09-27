@@ -1,104 +1,21 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
-import StockDetailView from "./stock-detail";
-import { useOnboarding } from "./onboarding-provider";
-import { summaryFromProfilingOutput } from "@/lib/profiling-rules";
-import type { StockInsights } from "@/lib/providers";
-import {
-  getAuthenticatedStockDetailData,
-  type StockDetailData,
-} from "@/lib/queries";
-import {
-  getSavedProfileSnapshot,
-  getServerProfileSnapshot,
-  parseSavedProfile,
-  subscribeToSavedProfile,
-} from "@/lib/save-profile";
+import { useEffect, useState } from "react";
+import RealChartDetail from "./real-chart-detail";
+import { getPublishedChartDetail, type PublishedChartDetail } from "@/lib/chart-signal";
 
-interface AuthenticatedDetailResult {
-  userId: string;
-  code: string;
-  data?: StockDetailData;
-  error?: string;
-}
-
-export default function StockDetailBoundary({
-  code,
-  initialData,
-  insights,
-}: {
-  code: string;
-  initialData: StockDetailData;
-  insights: StockInsights;
-}) {
-  const { state: onboardingState } = useOnboarding();
-  const [authenticatedResult, setAuthenticatedResult] =
-    useState<AuthenticatedDetailResult | null>(null);
+export default function StockDetailBoundary({ code }: { code: string }) {
   const [requestVersion, setRequestVersion] = useState(0);
+  const [chartResult, setChartResult] = useState<{ data: PublishedChartDetail | null; error: string } | null>(null);
 
   useEffect(() => {
-    const userId = onboardingState.userId;
-    if (onboardingState.mode !== "supabase" || !userId) return;
-
     let active = true;
-    getAuthenticatedStockDetailData(code)
-      .then((data) => {
-        if (active) setAuthenticatedResult({ userId, code, data });
-      })
-      .catch((error: unknown) => {
-        if (!active) return;
-        setAuthenticatedResult({
-          userId,
-          code,
-          error:
-            error instanceof Error
-              ? error.message
-              : "종목 상세 데이터를 불러오지 못했습니다.",
-        });
-      });
+    getPublishedChartDetail(code)
+      .then((data) => { if (active) setChartResult({ data, error: "" }); })
+      .catch((error: unknown) => { if (active) setChartResult({ data: null, error: error instanceof Error ? error.message : "차트 데이터를 불러오지 못했습니다." }); });
+    return () => { active = false; };
+  }, [code, requestVersion]);
 
-    return () => {
-      active = false;
-    };
-  }, [code, onboardingState.mode, onboardingState.userId, requestVersion]);
-
-  const currentResult =
-    onboardingState.mode === "supabase" &&
-    authenticatedResult &&
-    authenticatedResult.userId === onboardingState.userId &&
-    authenticatedResult.code === code
-      ? authenticatedResult
-      : null;
-  const fetched = currentResult?.data ?? initialData;
-  // 데모 모드에서도 이 브라우저에서 마친 설문 결과가 있으면 대시보드와 같은 8축을 쓴다.
-  const savedProfile = parseSavedProfile(
-    useSyncExternalStore(subscribeToSavedProfile, getSavedProfileSnapshot, getServerProfileSnapshot),
-  );
-  const data =
-    fetched.source === "mock" && savedProfile?.style_axes
-      ? {
-          ...fetched,
-          styleAxes: savedProfile.style_axes,
-          profile: summaryFromProfilingOutput(savedProfile, fetched.profile),
-        }
-      : fetched;
-  const error = currentResult?.error ?? "";
-  const loading =
-    onboardingState.mode === "supabase" && !currentResult?.data && !error;
-
-  function retry() {
-    setAuthenticatedResult(null);
-    setRequestVersion((version) => version + 1);
-  }
-
-  return (
-    <StockDetailView
-      {...data}
-      insights={insights}
-      loading={loading}
-      dataError={error}
-      onRetry={retry}
-    />
-  );
+  if (chartResult?.data) return <RealChartDetail data={chartResult.data} />;
+  return <main className="mx-auto max-w-[960px] p-6"><h1 className="text-2xl font-semibold">종목 상세</h1><p role={chartResult?.error ? "alert" : "status"} className="text-sm text-body">{chartResult?.error || (chartResult ? "공개된 차트 데이터가 없어요." : "공개된 차트 데이터를 불러오는 중이에요.")}</p><button type="button" className="btn-secondary" onClick={() => { setChartResult(null); setRequestVersion((version) => version + 1); }}>다시 시도</button></main>;
 }
