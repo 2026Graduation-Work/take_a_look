@@ -98,8 +98,14 @@ function publisherDomain(url: string | undefined): string {
   }
 }
 
-function displayPublisher(url: string | undefined): string {
-  return publisherDomain(url) || "언론사 미상";
+function verifiedStoredDomain(press: string | null): string {
+  const candidate = cleanDisplayText(press).replace(/^www\./i, "").toLowerCase();
+  const domainLabel = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+  return new RegExp(`^${domainLabel}(?:\\.${domainLabel})+$`, "i").test(candidate) ? candidate : "";
+}
+
+function displayPublisher(url: string | undefined, press: string | null): string {
+  return publisherDomain(url) || verifiedStoredDomain(press) || "언론사 미상";
 }
 
 function articleEventKey(article: ArticleRow): string {
@@ -123,7 +129,7 @@ function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headli
     for (const article of pool) {
       if (selected.length >= 3) break;
       const eventKey = articleEventKey(article);
-      const press = displayPublisher(article.url);
+      const press = displayPublisher(article.url, article.press);
       if (seenEvents.has(eventKey) || (requireNewPublisher && seenPublishers.has(press))) continue;
       selected.push({ ...article, press });
       seenEvents.add(eventKey);

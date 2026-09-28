@@ -310,6 +310,26 @@ test("도메인으로 검증할 수 없는 언론사 값은 본문 대신 미상
   assert.equal(result.headlines[0].press, "언론사 미상");
 });
 
+test("기사 URL이 없어도 수집 단계에서 검증한 언론사 도메인은 표시한다", async () => {
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: [{
+      news_id: "source-domain-only",
+      title: "삼성전자 실적 개선",
+      press: "hankyung.com",
+      url: "",
+      event_id: "event-source-domain-only",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    }], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.headlines[0].press, "hankyung.com");
+});
+
 test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 계약으로 바꾼다", async () => {
   const snapshot = {
     id: "snapshot-id",
