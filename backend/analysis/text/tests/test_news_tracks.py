@@ -187,7 +187,7 @@ def test_live_cycle_fetches_once_per_stock_with_no_combined_query(
     )
 
     assert [call["keywords"] for call in fetcher.calls] == [
-        ["삼성전자"],
+        ["삼성"],
         ["현대차"],
         ["카카오"],
         ["셀트리온"],
@@ -199,6 +199,60 @@ def test_live_cycle_fetches_once_per_stock_with_no_combined_query(
     assert outputs["005930"]["coverage"]["provider_total_results"] == 150
     assert outputs["005930"]["coverage"]["provider_truncated"] is True
     assert outputs["005930"]["status"] == "partial"
+
+
+def test_samsung_live_query_collects_broadly_but_keeps_exact_company_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(news_tracks.sentiment, "score_texts", _fixed_scores)
+    captured_keywords: list[list[str]] = []
+
+    def fetcher(keywords, date_start, date_end, *, page_size):
+        captured_keywords.append(keywords)
+        return [
+            {
+                "news_id": "electronics-title",
+                "title": "삼성전자 반도체 실적 개선",
+                "summary": "영업이익이 증가했다.",
+                "press": "A",
+                "published_at": "2026-09-18T01:00:00Z",
+            },
+            {
+                "news_id": "electronics-body",
+                "title": "반도체 업계 실적 개선",
+                "summary": "삼성전자의 영업이익이 증가했다.",
+                "press": "A",
+                "published_at": "2026-09-18T00:45:00Z",
+            },
+            {
+                "news_id": "insurance",
+                "title": "삼성생명 실적 발표",
+                "summary": "삼성생명보험 관련 뉴스",
+                "press": "B",
+                "published_at": "2026-09-18T00:30:00Z",
+            },
+            {
+                "news_id": "baseball",
+                "title": "삼성 라이온즈 5연승",
+                "summary": "프로야구 경기 결과",
+                "press": "C",
+                "published_at": "2026-09-18T00:00:00Z",
+            },
+        ]
+
+    output = news_run.run_live_cycle(
+        {"005930": "삼성전자"},
+        fetcher=fetcher,
+        as_of=datetime(2026, 9, 18, 12, 0, tzinfo=KST),
+    )["005930"]
+
+    assert captured_keywords == [["삼성"]]
+    assert output["coverage"]["fetched_count"] == 4
+    assert output["coverage"]["relevant_count"] == 2
+    assert [article["news_id"] for article in output["articles"]] == [
+        "electronics-title",
+        "electronics-body",
+    ]
 
 
 def test_live_track_uses_exact_preceding_24_hours_and_scores_all_remaining(

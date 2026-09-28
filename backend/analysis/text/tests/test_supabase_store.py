@@ -256,6 +256,7 @@ def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:
 def test_persist_news_track_identifies_zero_relevant_as_no_data() -> None:
     track = _live_track()
     track["coverage"]["relevant_count"] = 0
+    track["backend"] = "none"
     client = _RecordingClient()
 
     with pytest.raises(supabase_store.SupabaseNoDataError) as caught:

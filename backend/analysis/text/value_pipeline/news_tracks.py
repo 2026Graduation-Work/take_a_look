@@ -35,9 +35,18 @@ def _article_text(item: dict[str, Any]) -> str:
 
 
 def _score_relevant(
-    items: list[dict[str, Any]], company_name: str, *, require_finbert: bool = False
+    items: list[dict[str, Any]],
+    company_name: str,
+    *,
+    relevance_key_override: str | None = None,
+    require_finbert: bool = False,
 ) -> tuple[list[tuple[dict[str, Any], float]], str]:
-    relevant = [items[index] for index in relevant_indices(items, company_name)]
+    relevant = [
+        items[index]
+        for index in relevant_indices(
+            items, company_name, key_override=relevance_key_override
+        )
+    ]
     scores, backend = sentiment.score_texts(
         [_article_text(item) for item in relevant], require_finbert=require_finbert
     )
@@ -157,6 +166,7 @@ def build_live_track(
     *,
     as_of: datetime | None = None,
     provider_metadata: Mapping[str, Any] | None = None,
+    relevance_key_override: str | None = None,
     require_finbert: bool = False,
 ) -> dict[str, Any]:
     """기준시각 직전 24시간의 뉴스 심리지수를 만든다."""
@@ -172,7 +182,10 @@ def build_live_track(
         and window_start <= published <= now
     ]
     in_window, backend = _score_relevant(
-        bounded, company_name, require_finbert=require_finbert
+        bounded,
+        company_name,
+        relevance_key_override=relevance_key_override,
+        require_finbert=require_finbert,
     )
     coverage = _coverage(len(items), in_window, now)
     if provider_metadata:
