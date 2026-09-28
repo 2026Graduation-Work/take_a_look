@@ -65,6 +65,93 @@ const FINANCIAL_LABEL: Record<string, string> = {
 const STATEMENT_LABEL: Record<string, string> = { CFS: "연결", OFS: "별도" };
 
 const METRIC_KEYS = Object.keys(FINANCIAL_LABEL);
+const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {
+  "005930": ["삼성전자"],
+  "005380": ["현대차", "현대자동차"],
+  "035720": ["카카오"],
+  "068270": ["셀트리온"],
+};
+
+interface ArticleRow {
+  title: string;
+  press: string | null;
+  url?: string;
+  article_date: string;
+  published_at: string | null;
+  event_id?: string | null;
+}
+
+function cleanDisplayText(value: string | null | undefined): string {
+  return (value ?? "").normalize("NFC").trim();
+}
+
+function hasBrokenCharacters(value: string): boolean {
+  return value.includes("\uFFFD") || /[\u0000-\u001F]/u.test(value);
+}
+
+function publisherDomain(url: string | undefined): string {
+  if (!url || !/^https?:\/\//i.test(url)) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function displayPublisher(press: string | null, url: string | undefined): string {
+  const cleaned = cleanDisplayText(press);
+  const looksLikeName = cleaned
+    && cleaned.length <= 32
+    && cleaned.split(/\s+/u).length <= 4
+    && !/[…?!]/u.test(cleaned)
+    && !hasBrokenCharacters(cleaned);
+  if (looksLikeName) return cleaned;
+  return publisherDomain(url) || "언론사 미상";
+}
+
+function articleEventKey(article: ArticleRow): string {
+  const eventId = cleanDisplayText(article.event_id);
+  if (eventId) return `event:${eventId}`;
+  return `title:${cleanDisplayText(article.title).replace(/[^0-9A-Za-zㄱ-힝]/gu, "").toLowerCase()}`;
+}
+
+function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headline[] {
+  const terms = REPRESENTATIVE_TITLE_TERMS[code] ?? [];
+  const candidates = rows
+    .map((article) => ({ ...article, title: cleanDisplayText(article.title) }))
+    .filter(({ title }) => title && !hasBrokenCharacters(title))
+    .sort((left, right) => {
+      const leftDirect = terms.some((term) => left.title.includes(term));
+      const rightDirect = terms.some((term) => right.title.includes(term));
+      return Number(rightDirect) - Number(leftDirect);
+    });
+  const selected: Array<ArticleRow & { press: string }> = [];
+  const seenEvents = new Set<string>();
+  const seenPublishers = new Set<string>();
+
+  const addCandidates = (requireNewPublisher: boolean) => {
+    for (const article of candidates) {
+      if (selected.length >= 3) break;
+      const eventKey = articleEventKey(article);
+      const press = displayPublisher(article.press, article.url);
+      if (seenEvents.has(eventKey) || (requireNewPublisher && seenPublishers.has(press))) continue;
+      selected.push({ ...article, press });
+      seenEvents.add(eventKey);
+      seenPublishers.add(press);
+    }
+  };
+  addCandidates(true);
+  addCandidates(false);
+
+  return selected.map(({ article_date, title, press, url, published_at }) => ({
+    date: article_date,
+    title,
+    press,
+    // DB 값이 그대로 href가 되므로 http(s)만 링크로 쓴다.
+    url: url && /^https?:\/\//.test(url) ? url : undefined,
+    publishedAt: published_at ?? undefined,
+  }));
+}
 
 function unwrap(result: QueryResult, table: string): unknown {
   if (result.error) throw new Error(`${table}: ${result.error.message ?? "query failed"}`);
@@ -103,11 +190,11 @@ export async function loadSupabaseSentiment(
     .limit(20) as QueryResult;
   const articleResult = await client
     .from("news_articles")
-    .select("news_id,title,press,url,article_date,published_at")
+    .select("news_id,title,press,url,article_date,published_at,event_id")
     .eq("stock_code", code)
     .eq("track", "live")
     .order("published_at", { ascending: false, nullsFirst: false })
-    .limit(3) as QueryResult;
+    .limit(25) as QueryResult;
 
   const tracks = (unwrap(tracksResult, "news_sentiment_tracks") ?? []) as TrackRow[];
   const daily = (unwrap(dailyResult, "news_sentiment_daily") ?? []) as Array<{
@@ -115,13 +202,7 @@ export async function loadSupabaseSentiment(
     sentiment_mean: number | null;
     article_count: number;
   }>;
-  const articles = (unwrap(articleResult, "news_articles") ?? []) as Array<{
-    title: string;
-    press: string;
-    url?: string;
-    article_date: string;
-    published_at: string | null;
-  }>;
+  const articles = (unwrap(articleResult, "news_articles") ?? []) as ArticleRow[];
   const historicalTrack = tracks.find(({ track }) => track === "historical");
   const liveTrack = tracks.find(({ track }) => track === "live");
   const days = daily
@@ -133,16 +214,7 @@ export async function loadSupabaseSentiment(
       articleCount: article_count,
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
-  const headlines = articles
-    .slice(0, 3)
-    .map(({ article_date, title, press, url, published_at }) => ({
-      date: article_date,
-      title,
-      press,
-      // DB 값이 그대로 href가 되므로 http(s)만 링크로 쓴다.
-      url: url && /^https?:\/\//.test(url) ? url : undefined,
-      publishedAt: published_at ?? undefined,
-    }));
+  const headlines = selectRepresentativeHeadlines(code, articles);
 
   return {
     historical: historicalTrack && days.length

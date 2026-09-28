@@ -6,9 +6,11 @@ FinBERT 추론을 위한 일시 필드(`summary`)로만 반환하며, 저장 계
 """
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import requests
@@ -73,10 +75,43 @@ def _kst_day(published_at: str) -> str | None:
     return parsed.astimezone(KST).date().isoformat()
 
 
+def _display_text(value: object) -> str:
+    return unicodedata.normalize("NFC", str(value or "")).strip()
+
+
+def _has_broken_characters(value: str) -> bool:
+    return "\ufffd" in value or any(ord(character) < 32 for character in value)
+
+
+def _publisher_domain(source_uri: object, article_url: object) -> str:
+    raw_source = _display_text(source_uri)
+    if raw_source and "." in raw_source and " " not in raw_source:
+        candidate = raw_source if "://" in raw_source else f"https://{raw_source}"
+        hostname = urlparse(candidate).hostname
+        if hostname:
+            return hostname.removeprefix("www.")
+    hostname = urlparse(_display_text(article_url)).hostname
+    return hostname.removeprefix("www.") if hostname else ""
+
+
+def _publisher_name(source: dict[str, Any], article_url: object) -> str:
+    title = _display_text(source.get("title"))
+    looks_like_name = (
+        title
+        and len(title) <= 32
+        and len(title.split()) <= 4
+        and not any(mark in title for mark in ("…", "?", "!"))
+        and not _has_broken_characters(title)
+    )
+    if looks_like_name:
+        return title
+    return _publisher_domain(source.get("uri"), article_url)
+
+
 def _normalize_article(row: dict[str, Any]) -> dict[str, str] | None:
-    news_id = str(row.get("uri") or "").strip()
-    title = str(row.get("title") or "").strip()
-    if not news_id or not title:
+    news_id = _display_text(row.get("uri"))
+    title = _display_text(row.get("title"))
+    if not news_id or not title or _has_broken_characters(title):
         return None
     published_at = str(
         row.get("dateTimePub") or row.get("dateTime") or row.get("date") or ""
@@ -85,12 +120,13 @@ def _normalize_article(row: dict[str, Any]) -> dict[str, str] | None:
         row.get("date") or published_at[:10]
     ).strip()
     source = row.get("source") if isinstance(row.get("source"), dict) else {}
+    article_url = _display_text(row.get("url"))
     return {
         "news_id": news_id,
         "title": title,
-        "summary": str(row.get("body") or "").strip(),
-        "url": str(row.get("url") or "").strip(),
-        "press": str(source.get("title") or source.get("uri") or "").strip(),
+        "summary": _display_text(row.get("body")),
+        "url": article_url,
+        "press": _publisher_name(source, article_url),
         "date": article_date,
         "published_at": published_at,
         "event_id": str(row.get("eventUri") or "").strip(),

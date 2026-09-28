@@ -132,6 +132,65 @@ def test_article_date_is_normalized_to_kst() -> None:
     assert rows[0]["date"] == "2026-09-18"
 
 
+@pytest.mark.parametrize(
+    ("source", "url", "expected_press"),
+    [
+        (
+            {
+                "uri": "it.donga.com",
+                "title": "GS칼텍스, 인도네시아서 바이오원료 생산 개시… 원료 확보부터 판매까지",
+            },
+            "https://it.donga.com/106000/",
+            "it.donga.com",
+        ),
+        (
+            {"uri": "", "title": "������"},
+            "https://www.hankyung.com/article/1",
+            "hankyung.com",
+        ),
+        (
+            {"uri": "hankyung.com", "title": "한국경제"},
+            "https://www.hankyung.com/article/1",
+            "한국경제",
+        ),
+    ],
+)
+def test_fetch_articles_uses_only_display_safe_publisher_names(
+    source: dict[str, str], url: str, expected_press: str
+) -> None:
+    """본문 조각과 깨진 문자열을 언론사명으로 저장하지 않는다."""
+    payload = _api_response()
+    article = payload["articles"]["results"][0]
+    article["source"] = source
+    article["url"] = url
+
+    rows = newsapi_ai.fetch_articles(
+        ["삼성전자"],
+        "2026-09-18",
+        "2026-09-18",
+        api_key="test-key",
+        session=_FakeSession(payload),
+    )
+
+    assert rows[0]["press"] == expected_press
+
+
+def test_fetch_articles_drops_title_with_broken_replacement_characters() -> None:
+    """사용자가 읽을 수 없는 제목은 대표 기사 후보로 유통시키지 않는다."""
+    payload = _api_response()
+    payload["articles"]["results"][0]["title"] = "��� 삼성전자 기사"
+
+    rows = newsapi_ai.fetch_articles(
+        ["삼성전자"],
+        "2026-09-18",
+        "2026-09-18",
+        api_key="test-key",
+        session=_FakeSession(payload),
+    )
+
+    assert rows == []
+
+
 def test_fetch_articles_requires_nonempty_api_key() -> None:
     """빈 키로 네트워크를 호출하며 토큰/오류를 혼동하지 않게 즉시 중단한다."""
     with pytest.raises(newsapi_ai.NewsApiAiConfigurationError, match="NEWSAPI_AI_KEY"):
