@@ -206,6 +206,8 @@ def test_client_retries_server_errors_and_redacts_secret(
     with pytest.raises(supabase_store.SupabaseWriteError) as caught:
         failed.upsert("news_articles", [], on_conflict="stock_code,track,news_id")
     assert "secret-value" not in str(caught.value)
+    assert caught.value.code == "supabase_news_articles_http_401"
+    assert "news_articles" in str(caught.value)
 
 
 def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:

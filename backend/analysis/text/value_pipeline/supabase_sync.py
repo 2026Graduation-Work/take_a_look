@@ -34,6 +34,8 @@ class SyncResult:
 def _failure_name(exc: Exception) -> str:
     """비밀값이 섞일 수 있는 외부 오류 메시지 대신 예외 종류만 남긴다."""
     if isinstance(exc, supabase_store.SupabaseWriteError):
+        if exc.code == "supabase_write_error":
+            return f"{exc.code}: {exc}"
         return exc.code
     return type(exc).__name__
 

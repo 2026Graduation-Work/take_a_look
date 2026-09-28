@@ -94,8 +94,8 @@ class SupabaseRestClient:
         if response is None or not 200 <= response.status_code < 300:
             status = getattr(response, "status_code", "unknown")
             raise SupabaseWriteError(
-                f"Supabase 쓰기에 실패했습니다 (HTTP {status})",
-                code=f"supabase_http_{status}",
+                f"Supabase {table} 쓰기에 실패했습니다 (HTTP {status})",
+                code=f"supabase_{table}_http_{status}",
             )
         if not return_rows:
             return []

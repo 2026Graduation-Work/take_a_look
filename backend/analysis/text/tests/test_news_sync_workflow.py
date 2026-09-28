@@ -29,7 +29,10 @@ def test_manual_workflow_offers_live_and_four_stock_backfill_modes() -> None:
 
     assert "mode:" in text
     assert "- live" in text
+    assert "- live-samsung" in text
     assert "- backfill" in text
+    assert "inputs.mode == 'live-samsung'" in text
+    assert "python -m value_pipeline.supabase_sync live --target 005930:삼성전자" in text
     for path in (
         "sentiment-005930.json",
         "sentiment-005380.json",
