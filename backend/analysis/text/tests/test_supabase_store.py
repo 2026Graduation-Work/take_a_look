@@ -251,6 +251,18 @@ def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:
     assert not {"body", "summary", "content"}.intersection(article)
 
 
+def test_persist_news_track_identifies_zero_relevant_as_no_data() -> None:
+    track = _live_track()
+    track["coverage"]["relevant_count"] = 0
+    client = _RecordingClient()
+
+    with pytest.raises(supabase_store.SupabaseNoDataError) as caught:
+        supabase_store.persist_news_track(client, track)
+
+    assert caught.value.code == "no_relevant_news"
+    assert client.calls == []
+
+
 def test_persist_financial_track_uses_returned_uuid_for_all_six_metrics() -> None:
     client = _RecordingClient()
 

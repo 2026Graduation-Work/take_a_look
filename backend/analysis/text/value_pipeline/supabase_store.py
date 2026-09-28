@@ -17,6 +17,14 @@ class SupabaseConfigurationError(RuntimeError):
 class SupabaseWriteError(RuntimeError):
     """Supabase 적재 계약 또는 HTTP 요청이 실패한 경우."""
 
+    def __init__(self, message: str, *, code: str = "supabase_write_error") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class SupabaseNoDataError(SupabaseWriteError):
+    """새로 적재할 유효 데이터가 없어 기존 행을 유지하는 경우."""
+
 
 class SupabaseRestClient:
     def __init__(
@@ -73,7 +81,10 @@ class SupabaseRestClient:
                 )
             except requests.RequestException as exc:
                 if attempt == 2:
-                    raise SupabaseWriteError("Supabase 네트워크 요청에 실패했습니다") from exc
+                    raise SupabaseWriteError(
+                        "Supabase 네트워크 요청에 실패했습니다",
+                        code="supabase_network_error",
+                    ) from exc
                 time.sleep(float(2**attempt))
                 continue
             if response.status_code < 500 or attempt == 2:
@@ -82,15 +93,24 @@ class SupabaseRestClient:
 
         if response is None or not 200 <= response.status_code < 300:
             status = getattr(response, "status_code", "unknown")
-            raise SupabaseWriteError(f"Supabase 쓰기에 실패했습니다 (HTTP {status})")
+            raise SupabaseWriteError(
+                f"Supabase 쓰기에 실패했습니다 (HTTP {status})",
+                code=f"supabase_http_{status}",
+            )
         if not return_rows:
             return []
         try:
             payload = response.json()
         except (TypeError, ValueError) as exc:
-            raise SupabaseWriteError("Supabase 응답 JSON이 올바르지 않습니다") from exc
+            raise SupabaseWriteError(
+                "Supabase 응답 JSON이 올바르지 않습니다",
+                code="supabase_invalid_json",
+            ) from exc
         if not isinstance(payload, list) or not all(isinstance(row, dict) for row in payload):
-            raise SupabaseWriteError("Supabase 응답 행 형식이 올바르지 않습니다")
+            raise SupabaseWriteError(
+                "Supabase 응답 행 형식이 올바르지 않습니다",
+                code="supabase_invalid_rows",
+            )
         return payload
 
 
@@ -111,7 +131,10 @@ def _require_news_track(track: Mapping[str, Any]) -> None:
         raise SupabaseWriteError("KR-FinBERT 뉴스 track만 적재할 수 있습니다")
     coverage = track.get("coverage")
     if not isinstance(coverage, Mapping) or int(coverage.get("relevant_count") or 0) <= 0:
-        raise SupabaseWriteError("관련 기사가 없는 뉴스 track은 적재하지 않습니다")
+        raise SupabaseNoDataError(
+            "관련 기사가 없는 뉴스 track은 적재하지 않습니다",
+            code="no_relevant_news",
+        )
 
 
 def persist_news_track(client: SupabaseRestClient, track: Mapping[str, Any]) -> None:

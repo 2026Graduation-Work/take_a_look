@@ -23,6 +23,7 @@ DEFAULT_TARGETS: dict[str, str] = {
 @dataclass
 class SyncResult:
     succeeded: list[str] = field(default_factory=list)
+    skipped: dict[str, str] = field(default_factory=dict)
     failures: dict[str, str] = field(default_factory=dict)
 
     @property
@@ -32,6 +33,8 @@ class SyncResult:
 
 def _failure_name(exc: Exception) -> str:
     """비밀값이 섞일 수 있는 외부 오류 메시지 대신 예외 종류만 남긴다."""
+    if isinstance(exc, supabase_store.SupabaseWriteError):
+        return exc.code
     return type(exc).__name__
 
 
@@ -53,6 +56,8 @@ def run_live_sync(
                 require_finbert=True,
             )[ticker]
             supabase_store.persist_news_track(client, output)
+        except supabase_store.SupabaseNoDataError as exc:
+            result.skipped[ticker] = exc.code
         except Exception as exc:
             result.failures[ticker] = _failure_name(exc)
         else:
@@ -109,6 +114,8 @@ def targets_from_args(args: argparse.Namespace) -> dict[str, str]:
 def _print_result(result: SyncResult) -> None:
     for item in result.succeeded:
         print(f"{item}: ok")
+    for item, reason in result.skipped.items():
+        print(f"{item}: skipped ({reason})")
     for item, error_name in result.failures.items():
         print(f"{item}: failed ({error_name})")
 
