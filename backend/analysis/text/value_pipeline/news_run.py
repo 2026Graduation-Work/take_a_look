@@ -16,6 +16,13 @@ KST = ZoneInfo("Asia/Seoul")
 Fetcher = Callable[..., newsapi_ai.ArticleBatch | list[dict[str, Any]]]
 Loader = Callable[..., list[dict[str, Any]]]
 
+# NewsAPI.ai의 한국어 색인은 '삼성전자' 붙임말 검색을 0건으로 반환한다.
+# 수집은 '삼성'으로 넓히되, 삼성생명·삼성 라이온즈 등을 제외하도록
+# 관련성 판정은 '삼성전자' 정확 키워드를 유지한다.
+LIVE_QUERY_OVERRIDES: dict[str, tuple[str, str]] = {
+    "005930": ("삼성", "삼성전자"),
+}
+
 
 def run_live_cycle(
     targets: Mapping[str, str],
@@ -37,8 +44,11 @@ def run_live_cycle(
     query_start = start - timedelta(days=1)
     outputs: dict[str, dict[str, Any]] = {}
     for ticker, company_name in targets.items():
+        search_keyword, relevance_key_override = LIVE_QUERY_OVERRIDES.get(
+            ticker, (company_name, None)
+        )
         fetched = fetcher(
-            [company_name],
+            [search_keyword],
             query_start.isoformat(),
             end.isoformat(),
             page_size=page_size,
@@ -60,6 +70,7 @@ def run_live_cycle(
             company_name,
             as_of=now,
             provider_metadata=provider_metadata,
+            relevance_key_override=relevance_key_override,
             require_finbert=require_finbert,
         )
     return outputs

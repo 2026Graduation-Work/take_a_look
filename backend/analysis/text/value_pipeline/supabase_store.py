@@ -127,14 +127,14 @@ def _require_news_track(track: Mapping[str, Any]) -> None:
         raise SupabaseWriteError("지원하지 않는 뉴스 track입니다")
     if track.get("status") == "error":
         raise SupabaseWriteError("오류 뉴스 track은 적재하지 않습니다")
-    if track.get("backend") != "kr-finbert":
-        raise SupabaseWriteError("KR-FinBERT 뉴스 track만 적재할 수 있습니다")
     coverage = track.get("coverage")
     if not isinstance(coverage, Mapping) or int(coverage.get("relevant_count") or 0) <= 0:
         raise SupabaseNoDataError(
             "관련 기사가 없는 뉴스 track은 적재하지 않습니다",
             code="no_relevant_news",
         )
+    if track.get("backend") != "kr-finbert":
+        raise SupabaseWriteError("KR-FinBERT 뉴스 track만 적재할 수 있습니다")
 
 
 def persist_news_track(client: SupabaseRestClient, track: Mapping[str, Any]) -> None:
