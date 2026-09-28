@@ -143,6 +143,13 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건�
   assert.deepEqual(result.headlines.map(({ title }) => title), ["기사 0", "기사 1", "기사 2"]);
   assert.ok(client.operations.news_sentiment_daily.some(([name, count]) => name === "limit" && count === 20));
   assert.ok(client.operations.news_articles.some(([name, count]) => name === "limit" && count === 25));
+  assert.deepEqual(
+    client.operations.news_articles.filter(([name]) => name === "order"),
+    [
+      ["order", "published_at", { ascending: false, nullsFirst: false }],
+      ["order", "news_id", { ascending: true }],
+    ],
+  );
 });
 
 test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 우선한다", async () => {
@@ -226,6 +233,61 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
   ]);
   assert.equal(result.headlines[0].press, "newsis.com");
   assert.ok(result.headlines.every(({ title }) => !title.includes("�")));
+});
+
+test("직접 관련 기사가 3건 이상이면 언론사가 겹쳐도 간접 기사로 대체하지 않는다", async () => {
+  const articles = [
+    {
+      news_id: "direct-1",
+      title: "삼성전자 반도체 투자 확대",
+      press: "한국경제",
+      url: "https://hankyung.com/1",
+      event_id: "direct-event-1",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    },
+    {
+      news_id: "direct-2",
+      title: "삼성전자 파운드리 신규 수주",
+      press: "한국경제",
+      url: "https://hankyung.com/2",
+      event_id: "direct-event-2",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:00:00+09:00",
+    },
+    {
+      news_id: "direct-3",
+      title: "삼성전자 신규 메모리 공개",
+      press: "한국경제",
+      url: "https://hankyung.com/3",
+      event_id: "direct-event-3",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T09:00:00+09:00",
+    },
+    {
+      news_id: "indirect-1",
+      title: "갤럭시 최신 동향",
+      press: "매일경제",
+      url: "https://mk.co.kr/4",
+      event_id: "indirect-event-1",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T08:00:00+09:00",
+    },
+  ];
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: articles, error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.deepEqual(result.headlines.map(({ title }) => title), [
+    "삼성전자 반도체 투자 확대",
+    "삼성전자 파운드리 신규 수주",
+    "삼성전자 신규 메모리 공개",
+  ]);
+  assert.ok(result.headlines.every(({ press }) => press === "hankyung.com"));
 });
 
 test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 계약으로 바꾼다", async () => {

@@ -84,7 +84,7 @@ def test_fetch_articles_encodes_korean_keyword_request() -> None:
             "title": "삼성전자 반도체 실적 개선",
             "summary": "삼성전자의 반도체 부문 실적이 개선됐다.",
             "url": "https://example.com/news/1",
-            "press": "한국경제",
+            "press": "hankyung.com",
             "date": "2026-09-18",
             "published_at": "2026-09-18T01:20:00Z",
             "event_id": "kor-event-1",
@@ -151,7 +151,12 @@ def test_article_date_is_normalized_to_kst() -> None:
         (
             {"uri": "hankyung.com", "title": "한국경제"},
             "https://www.hankyung.com/article/1",
-            "한국경제",
+            "hankyung.com",
+        ),
+        (
+            {"uri": "", "title": "원료 확보부터 판매까지"},
+            "https://www.mk.co.kr/news/1",
+            "mk.co.kr",
         ),
     ],
 )
@@ -189,6 +194,22 @@ def test_fetch_articles_drops_title_with_broken_replacement_characters() -> None
     )
 
     assert rows == []
+
+
+def test_fetch_articles_normalizes_title_whitespace_without_dropping_article() -> None:
+    """줄바꿈과 탭은 깨진 문자가 아니므로 한 칸 공백으로 정규화한다."""
+    payload = _api_response()
+    payload["articles"]["results"][0]["title"] = "삼성전자\n\t반도체 실적 개선"
+
+    rows = newsapi_ai.fetch_articles(
+        ["삼성전자"],
+        "2026-09-18",
+        "2026-09-18",
+        api_key="test-key",
+        session=_FakeSession(payload),
+    )
+
+    assert rows[0]["title"] == "삼성전자 반도체 실적 개선"
 
 
 def test_fetch_articles_requires_nonempty_api_key() -> None:

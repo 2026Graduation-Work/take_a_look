@@ -82,7 +82,7 @@ interface ArticleRow {
 }
 
 function cleanDisplayText(value: string | null | undefined): string {
-  return (value ?? "").normalize("NFC").trim();
+  return (value ?? "").normalize("NFC").replace(/\s+/gu, " ").trim();
 }
 
 function hasBrokenCharacters(value: string): boolean {
@@ -99,6 +99,8 @@ function publisherDomain(url: string | undefined): string {
 }
 
 function displayPublisher(press: string | null, url: string | undefined): string {
+  const domain = publisherDomain(url);
+  if (domain) return domain;
   const cleaned = cleanDisplayText(press);
   const looksLikeName = cleaned
     && cleaned.length <= 32
@@ -106,7 +108,7 @@ function displayPublisher(press: string | null, url: string | undefined): string
     && !/[…?!]/u.test(cleaned)
     && !hasBrokenCharacters(cleaned);
   if (looksLikeName) return cleaned;
-  return publisherDomain(url) || "언론사 미상";
+  return looksLikeName ? cleaned : "언론사 미상";
 }
 
 function articleEventKey(article: ArticleRow): string {
@@ -119,18 +121,15 @@ function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headli
   const terms = REPRESENTATIVE_TITLE_TERMS[code] ?? [];
   const candidates = rows
     .map((article) => ({ ...article, title: cleanDisplayText(article.title) }))
-    .filter(({ title }) => title && !hasBrokenCharacters(title))
-    .sort((left, right) => {
-      const leftDirect = terms.some((term) => left.title.includes(term));
-      const rightDirect = terms.some((term) => right.title.includes(term));
-      return Number(rightDirect) - Number(leftDirect);
-    });
+    .filter(({ title }) => title && !hasBrokenCharacters(title));
+  const direct = candidates.filter(({ title }) => terms.some((term) => title.includes(term)));
+  const indirect = candidates.filter(({ title }) => !terms.some((term) => title.includes(term)));
   const selected: Array<ArticleRow & { press: string }> = [];
   const seenEvents = new Set<string>();
   const seenPublishers = new Set<string>();
 
-  const addCandidates = (requireNewPublisher: boolean) => {
-    for (const article of candidates) {
+  const addCandidates = (pool: ArticleRow[], requireNewPublisher: boolean) => {
+    for (const article of pool) {
       if (selected.length >= 3) break;
       const eventKey = articleEventKey(article);
       const press = displayPublisher(article.press, article.url);
@@ -140,8 +139,10 @@ function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headli
       seenPublishers.add(press);
     }
   };
-  addCandidates(true);
-  addCandidates(false);
+  addCandidates(direct, true);
+  addCandidates(direct, false);
+  addCandidates(indirect, true);
+  addCandidates(indirect, false);
 
   return selected.map(({ article_date, title, press, url, published_at }) => ({
     date: article_date,
@@ -194,6 +195,7 @@ export async function loadSupabaseSentiment(
     .eq("stock_code", code)
     .eq("track", "live")
     .order("published_at", { ascending: false, nullsFirst: false })
+    .order("news_id", { ascending: true })
     .limit(25) as QueryResult;
 
   const tracks = (unwrap(tracksResult, "news_sentiment_tracks") ?? []) as TrackRow[];

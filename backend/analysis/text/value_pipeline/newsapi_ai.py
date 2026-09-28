@@ -76,7 +76,8 @@ def _kst_day(published_at: str) -> str | None:
 
 
 def _display_text(value: object) -> str:
-    return unicodedata.normalize("NFC", str(value or "")).strip()
+    normalized = unicodedata.normalize("NFC", str(value or ""))
+    return " ".join(normalized.split())
 
 
 def _has_broken_characters(value: str) -> bool:
@@ -95,6 +96,9 @@ def _publisher_domain(source_uri: object, article_url: object) -> str:
 
 
 def _publisher_name(source: dict[str, Any], article_url: object) -> str:
+    domain = _publisher_domain(source.get("uri"), article_url)
+    if domain:
+        return domain
     title = _display_text(source.get("title"))
     looks_like_name = (
         title
@@ -105,7 +109,7 @@ def _publisher_name(source: dict[str, Any], article_url: object) -> str:
     )
     if looks_like_name:
         return title
-    return _publisher_domain(source.get("uri"), article_url)
+    return title if looks_like_name else ""
 
 
 def _normalize_article(row: dict[str, Any]) -> dict[str, str] | None:
