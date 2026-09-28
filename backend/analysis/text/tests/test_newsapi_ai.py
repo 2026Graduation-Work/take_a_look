@@ -158,6 +158,11 @@ def test_article_date_is_normalized_to_kst() -> None:
             "https://www.mk.co.kr/news/1",
             "mk.co.kr",
         ),
+        (
+            {"uri": "", "title": "원료 확보부터 판매까지"},
+            "",
+            "",
+        ),
     ],
 )
 def test_fetch_articles_uses_only_display_safe_publisher_names(

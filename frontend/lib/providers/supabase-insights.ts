@@ -98,17 +98,8 @@ function publisherDomain(url: string | undefined): string {
   }
 }
 
-function displayPublisher(press: string | null, url: string | undefined): string {
-  const domain = publisherDomain(url);
-  if (domain) return domain;
-  const cleaned = cleanDisplayText(press);
-  const looksLikeName = cleaned
-    && cleaned.length <= 32
-    && cleaned.split(/\s+/u).length <= 4
-    && !/[…?!]/u.test(cleaned)
-    && !hasBrokenCharacters(cleaned);
-  if (looksLikeName) return cleaned;
-  return looksLikeName ? cleaned : "언론사 미상";
+function displayPublisher(url: string | undefined): string {
+  return publisherDomain(url) || "언론사 미상";
 }
 
 function articleEventKey(article: ArticleRow): string {
@@ -132,7 +123,7 @@ function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headli
     for (const article of pool) {
       if (selected.length >= 3) break;
       const eventKey = articleEventKey(article);
-      const press = displayPublisher(article.press, article.url);
+      const press = displayPublisher(article.url);
       if (seenEvents.has(eventKey) || (requireNewPublisher && seenPublishers.has(press))) continue;
       selected.push({ ...article, press });
       seenEvents.add(eventKey);

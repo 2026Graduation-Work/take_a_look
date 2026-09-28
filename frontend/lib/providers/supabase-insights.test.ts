@@ -290,6 +290,26 @@ test("직접 관련 기사가 3건 이상이면 언론사가 겹쳐도 간접 �
   assert.ok(result.headlines.every(({ press }) => press === "hankyung.com"));
 });
 
+test("도메인으로 검증할 수 없는 언론사 값은 본문 대신 미상으로 표시한다", async () => {
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: [{
+      news_id: "missing-domain",
+      title: "삼성전자 실적 개선",
+      press: "원료 확보부터 판매까지",
+      url: "",
+      event_id: "event-missing-domain",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    }], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.headlines[0].press, "언론사 미상");
+});
+
 test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 계약으로 바꾼다", async () => {
   const snapshot = {
     id: "snapshot-id",

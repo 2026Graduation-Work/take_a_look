@@ -96,20 +96,7 @@ def _publisher_domain(source_uri: object, article_url: object) -> str:
 
 
 def _publisher_name(source: dict[str, Any], article_url: object) -> str:
-    domain = _publisher_domain(source.get("uri"), article_url)
-    if domain:
-        return domain
-    title = _display_text(source.get("title"))
-    looks_like_name = (
-        title
-        and len(title) <= 32
-        and len(title.split()) <= 4
-        and not any(mark in title for mark in ("…", "?", "!"))
-        and not _has_broken_characters(title)
-    )
-    if looks_like_name:
-        return title
-    return title if looks_like_name else ""
+    return _publisher_domain(source.get("uri"), article_url)
 
 
 def _normalize_article(row: dict[str, Any]) -> dict[str, str] | None:
