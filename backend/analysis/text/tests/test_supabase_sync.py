@@ -114,3 +114,70 @@ def test_live_sync_keeps_three_successes_when_second_stock_fails(
     assert result.succeeded == ["005930", "035720", "068270"]
     assert list(result.failures) == ["005380"]
     assert result.exit_code == 1
+
+
+def test_live_sync_skips_zero_relevant_without_overwriting_or_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class RecordingClient:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def upsert(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+            self.calls.append({"args": args, "kwargs": kwargs})
+            return []
+
+    client = RecordingClient()
+
+    def no_news_cycle(targets, **kwargs):
+        ticker = next(iter(targets))
+        track = _track("live", ticker)
+        track["coverage"]["relevant_count"] = 0
+        return {ticker: track}
+
+    monkeypatch.setattr(supabase_sync.news_run, "run_live_cycle", no_news_cycle)
+
+    result = supabase_sync.run_live_sync(
+        {"005930": "삼성전자"},
+        client=client,
+        fetcher=object(),
+    )
+
+    assert client.calls == []
+    assert result.succeeded == []
+    assert result.failures == {}
+    assert result.skipped == {"005930": "no_relevant_news"}
+    assert result.exit_code == 0
+
+
+def test_live_sync_reports_safe_supabase_error_code_without_response_body(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        supabase_sync.news_run,
+        "run_live_cycle",
+        lambda targets, **kwargs: {"005930": _track("live")},
+    )
+    monkeypatch.setattr(
+        supabase_sync.supabase_store,
+        "persist_news_track",
+        lambda client, track: (_ for _ in ()).throw(
+            supabase_sync.supabase_store.SupabaseWriteError(
+                "secret response body", code="supabase_http_400"
+            )
+        ),
+    )
+
+    result = supabase_sync.run_live_sync(
+        {"005930": "삼성전자"},
+        client=object(),
+        fetcher=object(),
+    )
+    supabase_sync._print_result(result)
+    output = capsys.readouterr().out
+
+    assert result.failures == {"005930": "supabase_http_400"}
+    assert result.exit_code == 1
+    assert "supabase_http_400" in output
+    assert "secret response body" not in output

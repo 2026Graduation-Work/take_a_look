@@ -100,7 +100,9 @@ python -m value_pipeline.supabase_sync backfill-financial \
 
 동일 파일을 다시 실행해도 migration 0005의 고유키로 upsert되어 중복 행이 생기지
 않는다. 한 종목/파일이 실패해도 나머지는 처리하지만 명령은 종료 코드 1을 반환한다.
-오류 실행이나 관련 기사 0건은 기존 정상 뉴스 track을 덮어쓰지 않는다.
+오류 실행이나 관련 기사 0건은 기존 정상 뉴스 track을 덮어쓰지 않는다. 관련 기사
+0건은 `skipped (no_relevant_news)`로 기록하고 정상 종료하며, API·DB 오류는
+비밀값이 없는 오류 코드를 남기고 종료 코드 1을 반환한다.
 
 ### GitHub Actions 자동 적재
 
@@ -111,10 +113,15 @@ Repository secret 세 개를 직접 등록한다. 값은 채팅·이슈·커밋�
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
 
-workflow 이름은 `News Supabase Sync`다. 평일 09:00 KST에 실행되며, Secret 등록 후
-cron을 기다리기 전에 Actions 화면의 **Run workflow**로 한 번 수동 실행한다. 로그의
-네 종목이 모두 `ok`인지와 Supabase의 뉴스 세 테이블 행을 확인한 뒤 자동 실행을
-유지한다.
+workflow 이름은 `News Supabase Sync`다. 평일 09:00 KST 예약 실행은 `live`로
+네 종목의 직전 24시간 뉴스를 적재한다. Actions 화면의 **Run workflow**에서는
+다음 두 모드를 선택한다.
+
+- `live`: NewsAPI.ai 수집 → KR-FinBERT 분석 → 최신 뉴스 upsert
+- `backfill`: 저장소의 4종목 BigKinds 과거 JSON과 DART 재무 JSON upsert
+
+Secret 등록 후 운영 전에 수동 `backfill`과 `live`를 각각 한 번 실행한다. 로그와
+Supabase 행을 확인한 뒤 평일 자동 실행을 유지한다.
 
 ## DART 재무 적재용 JSON
 

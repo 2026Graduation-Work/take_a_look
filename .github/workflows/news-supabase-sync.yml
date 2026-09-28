@@ -5,6 +5,15 @@ on:
     # GitHub cron은 UTC 기준: 평일 00:00 UTC = 09:00 KST.
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 실행할 적재 작업
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - backfill
 
 permissions:
   contents: read
@@ -49,9 +58,24 @@ jobs:
           pip install -r requirements.txt
 
       - name: Collect, analyze, and persist four stocks
+        if: github.event_name == 'schedule' || inputs.mode == 'live'
         run: |
           python -m value_pipeline.supabase_sync live \
             --target 005930:삼성전자 \
             --target 005380:현대차 \
             --target 035720:카카오 \
             --target 068270:셀트리온
+
+      - name: Backfill four-stock historical news and DART snapshots
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'
+        run: |
+          python -m value_pipeline.supabase_sync backfill-news \
+            ../../../frontend/lib/providers/sentiment-005930.json \
+            ../../../frontend/lib/providers/sentiment-005380.json \
+            ../../../frontend/lib/providers/sentiment-035720.json \
+            ../../../frontend/lib/providers/sentiment-068270.json
+          python -m value_pipeline.supabase_sync backfill-financial \
+            value_pipeline/output_sample/financial_tracks/005930_financial.json \
+            value_pipeline/output_sample/financial_tracks/005380_financial.json \
+            value_pipeline/output_sample/financial_tracks/035720_financial.json \
+            value_pipeline/output_sample/financial_tracks/068270_financial.json

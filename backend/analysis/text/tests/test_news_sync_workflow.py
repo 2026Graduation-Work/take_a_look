@@ -22,3 +22,22 @@ def test_news_sync_workflow_has_schedule_targets_secrets_and_runtime_guards() ->
     assert "python-version: \"3.12\"" in text
     assert "permissions:\n  contents: read" in text
     assert "timeout-minutes:" in text
+
+
+def test_manual_workflow_offers_live_and_four_stock_backfill_modes() -> None:
+    text = WORKFLOW.read_text(encoding="utf-8")
+
+    assert "mode:" in text
+    assert "- live" in text
+    assert "- backfill" in text
+    for path in (
+        "sentiment-005930.json",
+        "sentiment-005380.json",
+        "sentiment-035720.json",
+        "sentiment-068270.json",
+        "005930_financial.json",
+        "005380_financial.json",
+        "035720_financial.json",
+        "068270_financial.json",
+    ):
+        assert path in text
