@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - live
+          - live-samsung
           - backfill
 
 permissions:
@@ -65,6 +66,10 @@ jobs:
             --target 005380:현대차 \
             --target 035720:카카오 \
             --target 068270:셀트리온
+
+      - name: Retry Samsung live sync with safe diagnostics
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'live-samsung'
+        run: python -m value_pipeline.supabase_sync live --target 005930:삼성전자
 
       - name: Backfill four-stock historical news and DART snapshots
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'

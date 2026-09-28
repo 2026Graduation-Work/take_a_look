@@ -115,13 +115,16 @@ Repository secret 세 개를 직접 등록한다. 값은 채팅·이슈·커밋�
 
 workflow 이름은 `News Supabase Sync`다. 평일 09:00 KST 예약 실행은 `live`로
 네 종목의 직전 24시간 뉴스를 적재한다. Actions 화면의 **Run workflow**에서는
-다음 두 모드를 선택한다.
+다음 세 모드를 선택한다.
 
 - `live`: NewsAPI.ai 수집 → KR-FinBERT 분석 → 최신 뉴스 upsert
+- `live-samsung`: 삼성전자(`005930`) 한 종목만 재실행. 적재 실패 진단·복구에 사용
 - `backfill`: 저장소의 4종목 BigKinds 과거 JSON과 DART 재무 JSON upsert
 
 Secret 등록 후 운영 전에 수동 `backfill`과 `live`를 각각 한 번 실행한다. 로그와
 Supabase 행을 확인한 뒤 평일 자동 실행을 유지한다.
+적재 실패 로그는 응답 본문과 인증값을 출력하지 않고,
+실패한 테이블·HTTP 상태 또는 내부 검증 항목만 표시한다.
 
 ## DART 재무 적재용 JSON
 
