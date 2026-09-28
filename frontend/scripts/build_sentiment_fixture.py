@@ -300,14 +300,18 @@ def main() -> None:
     if args.daily_log:
         flags += f" --daily-log {display_path(args.daily_log)}"
     previous = window[-2]
+    payload = build_historical_track(
+        window,
+        corpus,
+        "kr-finbert" if args.scorer == "finbert" else "dictionary",
+    )
+    track_out = PROVIDERS / f"sentiment-{TICKER}.json"
+    track_out.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     if TICKER != "005930":
-        payload = build_historical_track(
-            window,
-            corpus,
-            "kr-finbert" if args.scorer == "finbert" else "dictionary",
-        )
-        OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"wrote {OUT} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})", file=sys.stderr)
+        print(f"wrote {track_out} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})", file=sys.stderr)
         return
     last_scores = last.get("scores") or score([_text_of(item) for item in last["items"]], args.scorer)
     if "scores" not in last and abs(aggregate(last_scores)[0] - last["score"]) > 1e-4:
@@ -345,7 +349,8 @@ def main() -> None:
         encoding="utf-8",
     )
     print(
-        f"wrote {OUT} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})",
+        f"wrote {OUT} and {track_out} "
+        f"(days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})",
         file=sys.stderr,
     )
 

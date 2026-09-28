@@ -4,6 +4,7 @@ import { investorStyleAxes, portfolioHoldings, stockDetails } from "../mock-data
 import { classifyBit } from "../profiling/bit.ts";
 import { selectNudges } from "../profiling/nudges.ts";
 import type { StyleAxes } from "../types.ts";
+import SAMSUNG_NEWS_TRACK from "./sentiment-005930.json" with { type: "json" };
 import KAKAO_NEWS_TRACK from "./sentiment-035720.json" with { type: "json" };
 import HYUNDAI_NEWS_TRACK from "./sentiment-005380.json" with { type: "json" };
 import CELLTRION_NEWS_TRACK from "./sentiment-068270.json" with { type: "json" };
@@ -20,6 +21,7 @@ import {
 const CODES = ["005930", "005380"];
 
 for (const [code, companyName, track] of [
+  ["005930", "삼성전자", SAMSUNG_NEWS_TRACK],
   ["005380", "현대차", HYUNDAI_NEWS_TRACK],
   ["035720", "카카오", KAKAO_NEWS_TRACK],
   ["068270", "셀트리온", CELLTRION_NEWS_TRACK],
