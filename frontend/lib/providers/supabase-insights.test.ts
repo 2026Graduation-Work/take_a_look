@@ -92,7 +92,7 @@ const trackRows = [
   },
 ];
 
-test("Supabase 감성은 최신 과거 20일과 live 요약·최신 기사 3건을 분리한다", async () => {
+test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건을 분리한다", async () => {
   const daily = Array.from({ length: 22 }, (_, index) => ({
     sentiment_date: `2025-11-${String(index + 1).padStart(2, "0")}`,
     status: "ok",
@@ -142,7 +142,192 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·최신 기사 3건�
   });
   assert.deepEqual(result.headlines.map(({ title }) => title), ["기사 0", "기사 1", "기사 2"]);
   assert.ok(client.operations.news_sentiment_daily.some(([name, count]) => name === "limit" && count === 20));
-  assert.ok(client.operations.news_articles.some(([name, count]) => name === "limit" && count === 3));
+  assert.ok(client.operations.news_articles.some(([name, count]) => name === "limit" && count === 25));
+  assert.deepEqual(
+    client.operations.news_articles.filter(([name]) => name === "order"),
+    [
+      ["order", "published_at", { ascending: false, nullsFirst: false }],
+      ["order", "news_id", { ascending: true }],
+    ],
+  );
+});
+
+test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 우선한다", async () => {
+  const articles = [
+    {
+      news_id: "indirect-newest",
+      title: "아이폰 이어 갤럭시까지 가격 역주행 조심",
+      press: "it.donga.com",
+      url: "https://it.donga.com/1",
+      event_id: "event-indirect",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    },
+    {
+      news_id: "direct-a",
+      title: "삼성전자, 삼성 AI 구독 새단장",
+      press: "GS칼텍스, 인도네시아서 바이오원료 생산 개시… 원료 확보부터 판매까지",
+      url: "https://www.newsis.com/view/1",
+      event_id: "event-subscription",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:30:00+09:00",
+    },
+    {
+      news_id: "direct-a-duplicate",
+      title: "삼성전자 AI 구독 새단장…맞춤 케어 강화",
+      press: "서울신문",
+      url: "https://seoul.co.kr/2",
+      event_id: "event-subscription",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:20:00+09:00",
+    },
+    {
+      news_id: "broken",
+      title: "��� 삼성전자 기사",
+      press: "�����",
+      url: "https://broken.example/3",
+      event_id: "event-broken",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:10:00+09:00",
+    },
+    {
+      news_id: "direct-b",
+      title: "삼성전자 파운드리 신규 수주",
+      press: "한국경제",
+      url: "https://hankyung.com/4",
+      event_id: "event-foundry",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:00:00+09:00",
+    },
+    {
+      news_id: "direct-c",
+      title: "삼성전자 반도체 생산량 확대",
+      press: "한국경제",
+      url: "https://hankyung.com/5",
+      event_id: "event-production",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T09:50:00+09:00",
+    },
+    {
+      news_id: "direct-d",
+      title: "삼성전자 신규 메모리 공개",
+      press: "매일경제",
+      url: "https://mk.co.kr/6",
+      event_id: "event-memory",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T09:40:00+09:00",
+    },
+  ];
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: articles, error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.deepEqual(result.headlines.map(({ title }) => title), [
+    "삼성전자, 삼성 AI 구독 새단장",
+    "삼성전자 파운드리 신규 수주",
+    "삼성전자 신규 메모리 공개",
+  ]);
+  assert.equal(result.headlines[0].press, "newsis.com");
+  assert.ok(result.headlines.every(({ title }) => !title.includes("�")));
+});
+
+test("직접 관련 기사가 3건 이상이면 언론사가 겹쳐도 간접 기사로 대체하지 않는다", async () => {
+  const articles = [
+    {
+      news_id: "direct-1",
+      title: "삼성전자 반도체 투자 확대",
+      press: "한국경제",
+      url: "https://hankyung.com/1",
+      event_id: "direct-event-1",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    },
+    {
+      news_id: "direct-2",
+      title: "삼성전자 파운드리 신규 수주",
+      press: "한국경제",
+      url: "https://hankyung.com/2",
+      event_id: "direct-event-2",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T10:00:00+09:00",
+    },
+    {
+      news_id: "direct-3",
+      title: "삼성전자 신규 메모리 공개",
+      press: "한국경제",
+      url: "https://hankyung.com/3",
+      event_id: "direct-event-3",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T09:00:00+09:00",
+    },
+    {
+      news_id: "indirect-1",
+      title: "갤럭시 최신 동향",
+      press: "매일경제",
+      url: "https://mk.co.kr/4",
+      event_id: "indirect-event-1",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T08:00:00+09:00",
+    },
+  ];
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: articles, error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.deepEqual(result.headlines.map(({ title }) => title), [
+    "삼성전자 반도체 투자 확대",
+    "삼성전자 파운드리 신규 수주",
+    "삼성전자 신규 메모리 공개",
+  ]);
+  assert.ok(result.headlines.every(({ press }) => press === "hankyung.com"));
+});
+
+test("도메인으로 검증할 수 없는 언론사 값은 본문 대신 미상으로 표시한다", async () => {
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: [{
+      news_id: "missing-domain",
+      title: "삼성전자 실적 개선",
+      press: "원료 확보부터 판매까지",
+      url: "",
+      event_id: "event-missing-domain",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    }], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.headlines[0].press, "언론사 미상");
+});
+
+test("기사 URL이 없어도 수집 단계에서 검증한 언론사 도메인은 표시한다", async () => {
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: [{
+      news_id: "source-domain-only",
+      title: "삼성전자 실적 개선",
+      press: "hankyung.com",
+      url: "",
+      event_id: "event-source-domain-only",
+      article_date: "2026-09-28",
+      published_at: "2026-09-28T11:00:00+09:00",
+    }], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.headlines[0].press, "hankyung.com");
 });
 
 test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 계약으로 바꾼다", async () => {
