@@ -1,9 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { mockSupabaseAuth } from "./supabase-mock";
 
-// 지우기·빼기·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
-test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
-
 test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로그인", async ({ page }) => {
   await mockSupabaseAuth(page);
   const email = "new-user@example.com";
