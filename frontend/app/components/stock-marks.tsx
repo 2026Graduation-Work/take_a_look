@@ -126,16 +126,16 @@ export function WatchlistEditor() {
             <span className="text-xs text-muted tabular-nums">{stock.code}</span>
             <button
               type="button"
-              aria-label={`${stock.name} 관심 종목에서 빼기`}
+              aria-label={`${stock.name} 관심 종목에서 삭제`}
               onClick={() =>
-                window.confirm(`${stock.name}을(를) 관심 종목에서 뺄까요?`) &&
+                window.confirm(`${stock.name}을(를) 관심 종목에서 삭제할까요?`) &&
                 void setWatched(stock, false, mode).catch((cause: unknown) =>
                   setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."),
                 )
               }
               className="btn-remove"
             >
-              빼기
+              삭제
             </button>
           </li>
         ))}

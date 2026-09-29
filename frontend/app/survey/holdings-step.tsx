@@ -117,9 +117,9 @@ export default function HoldingsStep({
                     type="button"
                     onClick={() => setRows((current) => current.filter(({ code }) => code !== row.code))}
                     className="btn-remove"
-                    aria-label={`${row.name} 빼기`}
+                    aria-label={`${row.name} 삭제`}
                   >
-                    빼기
+                    삭제
                   </button>
                 </li>
               ))}

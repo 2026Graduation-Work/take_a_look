@@ -217,10 +217,10 @@ export default function HoldingsEditor({
                   <button
                     type="button"
                     onClick={() => removeRow(row.code)}
-                    aria-label={`${row.name} 빼기`}
+                    aria-label={`${row.name} 삭제`}
                     className="btn-remove col-span-2 justify-self-start sm:col-span-1 sm:justify-self-end"
                   >
-                    빼기
+                    삭제
                   </button>
                 </li>
               ))}
