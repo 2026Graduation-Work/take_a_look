@@ -425,6 +425,8 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
                     {headline.title}
                   </a>
                 ) : headline.title}
+                {/* 근거·출처 항상 표시(AGENTS.md HITL) — 날짜는 빼도 언론사는 남긴다 */}
+                <span className="ml-2 text-xs text-muted">{headline.press}</span>
               </li>
             ))}
           </ul>
