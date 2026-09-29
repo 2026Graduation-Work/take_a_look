@@ -72,6 +72,31 @@ const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {
   "068270": ["셀트리온"],
 };
 
+const PUBLISHER_NAME_BY_DOMAIN: Record<string, string> = {
+  "ajunews.com": "아주경제",
+  "asiae.co.kr": "아시아경제",
+  "businesspost.co.kr": "비즈니스포스트",
+  "chosun.com": "조선일보",
+  "donga.com": "동아일보",
+  "edaily.co.kr": "이데일리",
+  "etnews.com": "전자신문",
+  "fnnews.com": "파이낸셜뉴스",
+  "hani.co.kr": "한겨레",
+  "hankyung.com": "한국경제",
+  "it.donga.com": "IT동아",
+  "joongang.co.kr": "중앙일보",
+  "mk.co.kr": "매일경제",
+  "mt.co.kr": "머니투데이",
+  "newsis.com": "뉴시스",
+  "sedaily.com": "서울경제",
+  "segyebiz.com": "세계비즈",
+  "seoul.co.kr": "서울신문",
+  "yna.co.kr": "연합뉴스",
+  "zdnet.co.kr": "지디넷코리아",
+};
+const PUBLISHER_DOMAINS_BY_LENGTH = Object.keys(PUBLISHER_NAME_BY_DOMAIN)
+  .sort((left, right) => right.length - left.length);
+
 interface ArticleRow {
   title: string;
   press: string | null;
@@ -79,6 +104,7 @@ interface ArticleRow {
   article_date: string;
   published_at: string | null;
   event_id?: string | null;
+  sentiment_score?: number | null;
 }
 
 function cleanDisplayText(value: string | null | undefined): string {
@@ -92,7 +118,7 @@ function hasBrokenCharacters(value: string): boolean {
 function publisherDomain(url: string | undefined): string {
   if (!url || !/^https?:\/\//i.test(url)) return "";
   try {
-    return new URL(url).hostname.replace(/^www\./, "");
+    return new URL(url).hostname.replace(/^(?:www|m)\./, "").toLowerCase();
   } catch {
     return "";
   }
@@ -105,7 +131,10 @@ function verifiedStoredDomain(press: string | null): string {
 }
 
 function displayPublisher(url: string | undefined, press: string | null): string {
-  return publisherDomain(url) || verifiedStoredDomain(press) || "언론사 미상";
+  const domain = publisherDomain(url) || verifiedStoredDomain(press).replace(/^m\./, "");
+  const knownDomain = PUBLISHER_DOMAINS_BY_LENGTH
+    .find((candidate) => domain === candidate || domain.endsWith(`.${candidate}`));
+  return (knownDomain && PUBLISHER_NAME_BY_DOMAIN[knownDomain]) || domain || "언론사 미상";
 }
 
 function articleEventKey(article: ArticleRow): string {
@@ -114,13 +143,32 @@ function articleEventKey(article: ArticleRow): string {
   return `title:${cleanDisplayText(article.title).replace(/[^0-9A-Za-zㄱ-힝]/gu, "").toLowerCase()}`;
 }
 
-function selectRepresentativeHeadlines(code: string, rows: ArticleRow[]): Headline[] {
+function sentimentDistance(article: ArticleRow, sentimentMean: number | null | undefined): number {
+  return typeof sentimentMean === "number" && typeof article.sentiment_score === "number"
+    ? Math.abs(article.sentiment_score - sentimentMean)
+    : Number.POSITIVE_INFINITY;
+}
+
+function selectRepresentativeHeadlines(
+  code: string,
+  rows: ArticleRow[],
+  sentimentMean: number | null | undefined,
+): Headline[] {
   const terms = REPRESENTATIVE_TITLE_TERMS[code] ?? [];
   const candidates = rows
     .map((article) => ({ ...article, title: cleanDisplayText(article.title) }))
     .filter(({ title }) => title && !hasBrokenCharacters(title));
-  const direct = candidates.filter(({ title }) => terms.some((term) => title.includes(term)));
-  const indirect = candidates.filter(({ title }) => !terms.some((term) => title.includes(term)));
+  const bySentimentDistance = (left: ArticleRow, right: ArticleRow) => {
+    const leftDistance = sentimentDistance(left, sentimentMean);
+    const rightDistance = sentimentDistance(right, sentimentMean);
+    return leftDistance === rightDistance ? 0 : leftDistance - rightDistance;
+  };
+  const direct = candidates
+    .filter(({ title }) => terms.some((term) => title.includes(term)))
+    .sort(bySentimentDistance);
+  const indirect = candidates
+    .filter(({ title }) => !terms.some((term) => title.includes(term)))
+    .sort(bySentimentDistance);
   const selected: Array<ArticleRow & { press: string }> = [];
   const seenEvents = new Set<string>();
   const seenPublishers = new Set<string>();
@@ -188,7 +236,7 @@ export async function loadSupabaseSentiment(
     .limit(20) as QueryResult;
   const articleResult = await client
     .from("news_articles")
-    .select("news_id,title,press,url,article_date,published_at,event_id")
+    .select("news_id,title,press,url,article_date,published_at,event_id,sentiment_score")
     .eq("stock_code", code)
     .eq("track", "live")
     .order("published_at", { ascending: false, nullsFirst: false })
@@ -213,7 +261,7 @@ export async function loadSupabaseSentiment(
       articleCount: article_count,
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
-  const headlines = selectRepresentativeHeadlines(code, articles);
+  const headlines = selectRepresentativeHeadlines(code, articles, liveTrack?.sentiment_mean);
 
   return {
     historical: historicalTrack && days.length
