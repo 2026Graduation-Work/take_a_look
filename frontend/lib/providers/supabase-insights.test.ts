@@ -143,6 +143,9 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건�
   assert.deepEqual(result.headlines.map(({ title }) => title), ["기사 0", "기사 1", "기사 2"]);
   assert.ok(client.operations.news_sentiment_daily.some(([name, count]) => name === "limit" && count === 20));
   assert.ok(client.operations.news_articles.some(([name, count]) => name === "limit" && count === 25));
+  assert.ok(client.operations.news_articles.some(
+    ([name, columns]) => name === "select" && String(columns).includes("sentiment_score"),
+  ));
   assert.deepEqual(
     client.operations.news_articles.filter(([name]) => name === "order"),
     [
@@ -152,7 +155,7 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건�
   );
 });
 
-test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 우선한다", async () => {
+test("대표 기사는 종목명 제목·전체 감성지수와의 거리·사건과 언론사를 우선한다", async () => {
   const articles = [
     {
       news_id: "indirect-newest",
@@ -169,6 +172,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "GS칼텍스, 인도네시아서 바이오원료 생산 개시… 원료 확보부터 판매까지",
       url: "https://www.newsis.com/view/1",
       event_id: "event-subscription",
+      sentiment_score: 0.46,
       article_date: "2026-09-28",
       published_at: "2026-09-28T10:30:00+09:00",
     },
@@ -178,6 +182,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "서울신문",
       url: "https://seoul.co.kr/2",
       event_id: "event-subscription",
+      sentiment_score: 0.44,
       article_date: "2026-09-28",
       published_at: "2026-09-28T10:20:00+09:00",
     },
@@ -187,6 +192,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "�����",
       url: "https://broken.example/3",
       event_id: "event-broken",
+      sentiment_score: 0.45,
       article_date: "2026-09-28",
       published_at: "2026-09-28T10:10:00+09:00",
     },
@@ -196,6 +202,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "한국경제",
       url: "https://hankyung.com/4",
       event_id: "event-foundry",
+      sentiment_score: 0.9,
       article_date: "2026-09-28",
       published_at: "2026-09-28T10:00:00+09:00",
     },
@@ -205,6 +212,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "한국경제",
       url: "https://hankyung.com/5",
       event_id: "event-production",
+      sentiment_score: -0.7,
       article_date: "2026-09-28",
       published_at: "2026-09-28T09:50:00+09:00",
     },
@@ -214,6 +222,7 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
       press: "매일경제",
       url: "https://mk.co.kr/6",
       event_id: "event-memory",
+      sentiment_score: 0.4,
       article_date: "2026-09-28",
       published_at: "2026-09-28T09:40:00+09:00",
     },
@@ -228,10 +237,10 @@ test("대표 기사는 종목명 제목·서로 다른 사건과 언론사를 �
 
   assert.deepEqual(result.headlines.map(({ title }) => title), [
     "삼성전자, 삼성 AI 구독 새단장",
-    "삼성전자 파운드리 신규 수주",
     "삼성전자 신규 메모리 공개",
+    "삼성전자 파운드리 신규 수주",
   ]);
-  assert.equal(result.headlines[0].press, "newsis.com");
+  assert.equal(result.headlines[0].press, "뉴시스");
   assert.ok(result.headlines.every(({ title }) => !title.includes("�")));
 });
 
@@ -287,7 +296,33 @@ test("직접 관련 기사가 3건 이상이면 언론사가 겹쳐도 간접 �
     "삼성전자 파운드리 신규 수주",
     "삼성전자 신규 메모리 공개",
   ]);
-  assert.ok(result.headlines.every(({ press }) => press === "hankyung.com"));
+  assert.ok(result.headlines.every(({ press }) => press === "한국경제"));
+});
+
+test("기존 DB의 검증된 도메인은 화면에서 언론사명으로 표시한다", async () => {
+  const articles = [
+    ["m.segyebiz.com", "https://m.segyebiz.com/1"],
+    ["ajunews.com", "https://www.ajunews.com/2"],
+    ["businesspost.co.kr", "https://www.businesspost.co.kr/3"],
+  ].map(([press, url], index) => ({
+    news_id: `publisher-${index}`,
+    title: `삼성전자 관련 기사 ${index}`,
+    press,
+    url,
+    event_id: `publisher-event-${index}`,
+    sentiment_score: 0.45,
+    article_date: "2026-09-28",
+    published_at: `2026-09-28T0${9 - index}:00:00+09:00`,
+  }));
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: articles, error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.deepEqual(result.headlines.map(({ press }) => press), ["세계비즈", "아주경제", "비즈니스포스트"]);
 });
 
 test("도메인으로 검증할 수 없는 언론사 값은 본문 대신 미상으로 표시한다", async () => {
@@ -327,7 +362,7 @@ test("기사 URL이 없어도 수집 단계에서 검증한 언론사 도메인�
 
   const result = await loadSupabaseSentiment("005930", client as never);
 
-  assert.equal(result.headlines[0].press, "hankyung.com");
+  assert.equal(result.headlines[0].press, "한국경제");
 });
 
 test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 계약으로 바꾼다", async () => {
