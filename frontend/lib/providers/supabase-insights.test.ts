@@ -301,9 +301,9 @@ test("직접 관련 기사가 3건 이상이면 언론사가 겹쳐도 간접 �
 
 test("기존 DB의 검증된 도메인은 화면에서 언론사명으로 표시한다", async () => {
   const articles = [
-    ["m.segyebiz.com", "https://m.segyebiz.com/1"],
-    ["ajunews.com", "https://www.ajunews.com/2"],
-    ["businesspost.co.kr", "https://www.businesspost.co.kr/3"],
+    ["industrynews.co.kr", "https://www.industrynews.co.kr/1"],
+    ["asiatime.co.kr", "https://www.asiatime.co.kr/2"],
+    ["munhwa.com", "https://www.munhwa.com/3"],
   ].map(([press, url], index) => ({
     news_id: `publisher-${index}`,
     title: `삼성전자 관련 기사 ${index}`,
@@ -322,7 +322,28 @@ test("기존 DB의 검증된 도메인은 화면에서 언론사명으로 표시
 
   const result = await loadSupabaseSentiment("005930", client as never);
 
-  assert.deepEqual(result.headlines.map(({ press }) => press), ["세계비즈", "아주경제", "비즈니스포스트"]);
+  assert.deepEqual(result.headlines.map(({ press }) => press), ["인더스트리뉴스", "아시아타임즈", "문화일보"]);
+});
+
+test("수집 단계에서 검증한 언론사명을 도메인 대신 표시한다", async () => {
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [{ data: [], error: null }],
+    news_articles: [{ data: [{
+      news_id: "verified-publisher-name",
+      title: "삼성전자 실적 개선",
+      press: "인더스트리뉴스",
+      url: "https://new-publisher.example/news/1",
+      event_id: "verified-publisher-event",
+      sentiment_score: 0.45,
+      article_date: "2026-09-29",
+      published_at: "2026-09-29T11:00:00+09:00",
+    }], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.headlines[0].press, "인더스트리뉴스");
 });
 
 test("도메인으로 검증할 수 없는 언론사 값은 본문 대신 미상으로 표시한다", async () => {

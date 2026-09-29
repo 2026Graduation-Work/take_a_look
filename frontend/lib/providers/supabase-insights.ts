@@ -75,6 +75,7 @@ const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {
 const PUBLISHER_NAME_BY_DOMAIN: Record<string, string> = {
   "ajunews.com": "아주경제",
   "asiae.co.kr": "아시아경제",
+  "asiatime.co.kr": "아시아타임즈",
   "businesspost.co.kr": "비즈니스포스트",
   "chosun.com": "조선일보",
   "donga.com": "동아일보",
@@ -84,9 +85,11 @@ const PUBLISHER_NAME_BY_DOMAIN: Record<string, string> = {
   "hani.co.kr": "한겨레",
   "hankyung.com": "한국경제",
   "it.donga.com": "IT동아",
+  "industrynews.co.kr": "인더스트리뉴스",
   "joongang.co.kr": "중앙일보",
   "mk.co.kr": "매일경제",
   "mt.co.kr": "머니투데이",
+  "munhwa.com": "문화일보",
   "newsis.com": "뉴시스",
   "sedaily.com": "서울경제",
   "segyebiz.com": "세계비즈",
@@ -130,11 +133,22 @@ function verifiedStoredDomain(press: string | null): string {
   return new RegExp(`^${domainLabel}(?:\\.${domainLabel})+$`, "i").test(candidate) ? candidate : "";
 }
 
+function verifiedStoredPublisherName(press: string | null): string {
+  const candidate = cleanDisplayText(press);
+  if (!candidate || candidate.length > 30 || hasBrokenCharacters(candidate)) return "";
+  if (verifiedStoredDomain(candidate) || /[,\.!?…:;|/\\]/u.test(candidate)) return "";
+  const publisherHints = ["경제", "뉴스", "데일리", "방송", "비즈", "신문", "일보", "저널", "타임", "투데이", "포스트", "프레스", "미디어"];
+  return !candidate.includes(" ") || publisherHints.some((hint) => candidate.includes(hint))
+    ? candidate
+    : "";
+}
+
 function displayPublisher(url: string | undefined, press: string | null): string {
   const domain = publisherDomain(url) || verifiedStoredDomain(press).replace(/^m\./, "");
   const knownDomain = PUBLISHER_DOMAINS_BY_LENGTH
     .find((candidate) => domain === candidate || domain.endsWith(`.${candidate}`));
-  return (knownDomain && PUBLISHER_NAME_BY_DOMAIN[knownDomain]) || domain || "언론사 미상";
+  const storedName = verifiedStoredPublisherName(press);
+  return (knownDomain && PUBLISHER_NAME_BY_DOMAIN[knownDomain]) || storedName || domain || "언론사 미상";
 }
 
 function articleEventKey(article: ArticleRow): string {

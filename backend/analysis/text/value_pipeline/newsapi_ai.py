@@ -19,6 +19,21 @@ from .config import SETTINGS
 
 API_URL = "https://eventregistry.org/api/v1/article/getArticles"
 KST = ZoneInfo("Asia/Seoul")
+PUBLISHER_NAME_HINTS = (
+    "경제",
+    "뉴스",
+    "데일리",
+    "방송",
+    "비즈",
+    "신문",
+    "일보",
+    "저널",
+    "타임",
+    "투데이",
+    "포스트",
+    "프레스",
+    "미디어",
+)
 
 
 @dataclass(frozen=True)
@@ -96,7 +111,18 @@ def _publisher_domain(source_uri: object, article_url: object) -> str:
 
 
 def _publisher_name(source: dict[str, Any], article_url: object) -> str:
-    return _publisher_domain(source.get("uri"), article_url)
+    domain = _publisher_domain(source.get("uri"), article_url)
+    title = _display_text(source.get("title"))
+    if (
+        domain
+        and title
+        and len(title) <= 30
+        and not _has_broken_characters(title)
+        and not any(mark in title for mark in (",", ".", "!", "?", "…", ":", ";", "|", "/", "\\"))
+        and (" " not in title or any(hint in title for hint in PUBLISHER_NAME_HINTS))
+    ):
+        return title
+    return domain
 
 
 def _normalize_article(row: dict[str, Any]) -> dict[str, str] | None:

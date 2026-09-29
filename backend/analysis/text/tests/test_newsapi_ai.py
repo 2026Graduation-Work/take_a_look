@@ -84,7 +84,7 @@ def test_fetch_articles_encodes_korean_keyword_request() -> None:
             "title": "삼성전자 반도체 실적 개선",
             "summary": "삼성전자의 반도체 부문 실적이 개선됐다.",
             "url": "https://example.com/news/1",
-            "press": "hankyung.com",
+            "press": "한국경제",
             "date": "2026-09-18",
             "published_at": "2026-09-18T01:20:00Z",
             "event_id": "kor-event-1",
@@ -151,7 +151,12 @@ def test_article_date_is_normalized_to_kst() -> None:
         (
             {"uri": "hankyung.com", "title": "한국경제"},
             "https://www.hankyung.com/article/1",
-            "hankyung.com",
+            "한국경제",
+        ),
+        (
+            {"uri": "industrynews.co.kr", "title": "인더스트리뉴스"},
+            "https://www.industrynews.co.kr/news/articleView.html?idxno=1",
+            "인더스트리뉴스",
         ),
         (
             {"uri": "", "title": "원료 확보부터 판매까지"},
@@ -168,7 +173,7 @@ def test_article_date_is_normalized_to_kst() -> None:
 def test_fetch_articles_uses_only_display_safe_publisher_names(
     source: dict[str, str], url: str, expected_press: str
 ) -> None:
-    """본문 조각과 깨진 문자열을 언론사명으로 저장하지 않는다."""
+    """검증된 언론사명만 쓰고 본문 조각은 도메인으로 대체한다."""
     payload = _api_response()
     article = payload["articles"]["results"][0]
     article["source"] = source
