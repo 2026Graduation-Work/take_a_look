@@ -217,9 +217,10 @@ export default function HoldingsEditor({
                   <button
                     type="button"
                     onClick={() => removeRow(row.code)}
-                    className="col-span-2 min-h-11 justify-self-start text-xs font-medium text-danger hover:underline sm:col-span-1 sm:justify-self-end"
+                    aria-label={`${row.name} 빼기`}
+                    className="btn-remove col-span-2 justify-self-start sm:col-span-1 sm:justify-self-end"
                   >
-                    삭제
+                    빼기
                   </button>
                 </li>
               ))}
