@@ -133,7 +133,7 @@ export function WatchlistEditor() {
                   setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."),
                 )
               }
-              className="min-h-11 text-xs font-medium text-danger hover:underline"
+              className="btn-remove"
             >
               빼기
             </button>
