@@ -11,8 +11,13 @@ export default function SignOutButton({ className, label }: { className?: string
   const [error, setError] = useState("");
 
   async function handleSignOut() {
-    const warning = state.mode === "demo" ? "이 기기에 저장한 데모 응답과 보유 종목이 지워져요. " : "";
-    if (!window.confirm(`${warning}로그아웃할까요?`)) return;
+    // 로그인 계정은 Supabase에 남으므로 묻지 않는다. 문구는 lib/auth.ts clearSavedProfile이 실제로 지우는 것만 적는다.
+    if (
+      state.mode === "demo" &&
+      !window.confirm(
+        "데모에서 저장한 성향 진단 결과, 관심 종목, 판단 메모가 이 브라우저에서 지워져요. 계속 쓰려면 이메일로 시작해 주세요.\n\n로그아웃할까요?",
+      )
+    ) return;
     setSubmitting(true);
     setError("");
     try {
