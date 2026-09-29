@@ -18,7 +18,7 @@ async function demoReady(page: Page) {
   await expect(page).toHaveURL("/");
 }
 
-// 관심 종목 추가 → 대시보드 표시 → 편집 화면에서 빼기 → 대시보드에서 사라짐, 메모 저장 → 다시 열면 표시 → 고치기·지우기
+// 관심 종목 추가 → 대시보드 표시 → 편집 화면에서 삭제 → 대시보드에서 사라짐, 메모 저장 → 다시 열면 표시 → 고치기·지우기
 async function watchAndNote(page: Page) {
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
   await page.goto("/stocks/005930");
@@ -45,12 +45,12 @@ async function watchAndNote(page: Page) {
   await expect(page.getByText(/지난 메모/)).toHaveCount(0);
 
   await page.goto("/portfolio");
-  await page.getByRole("button", { name: "삼성전자 관심 종목에서 빼기" }).click();
+  await page.getByRole("button", { name: "삼성전자 관심 종목에서 삭제" }).click();
   await page.goto("/");
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
 }
 
-// 지우기·빼기·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
+// 지우기·삭제·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
 test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
 
 test("데모: 관심 종목·판단 메모가 브라우저에 남고 다시 읽힌다", async ({ page }) => {

@@ -214,7 +214,7 @@ summary::-webkit-details-marker {
     color: var(--color-brand-deep);
     text-decoration: underline;
   }
-  /* 목록에서 빼기. 빨강은 실패 메시지 전용이라 회색으로 둔다(DESIGN.md 1). */
+  /* 목록에서 삭제. 빨강은 실패 메시지 전용이라 회색으로 둔다(DESIGN.md 1). */
   .btn-remove {
     min-height: 2.75rem;
     font-size: var(--text-xs);

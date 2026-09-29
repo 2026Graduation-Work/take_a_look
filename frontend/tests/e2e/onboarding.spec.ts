@@ -41,7 +41,7 @@ async function startDemo(page: Page): Promise<void> {
   await expect(page.getByRole("list", { name: "시작 단계" })).toContainText("1 성향2 보유 종목3 시작");
 }
 
-// 지우기·빼기·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
+// 지우기·삭제·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
 test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
 
 test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보드 맵 -> 상세 -> logout", async ({ page }) => {
@@ -108,7 +108,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   // 보유 종목: 데모 예시를 비우고 1종목만 넣는다(평균 매입가는 비워 둠 → 현재가 기준)
   await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
   for (const name of ["삼성전자", "카카오", "셀트리온", "현대차"]) {
-    await page.getByRole("button", { name: `${name} 빼기` }).click();
+    await page.getByRole("button", { name: `${name} 삭제` }).click();
   }
   await page.getByLabel("종목 검색").fill("삼성전자");
   await page.getByLabel("수량(주)").fill("10");
