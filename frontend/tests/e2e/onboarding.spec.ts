@@ -41,7 +41,7 @@ async function startDemo(page: Page): Promise<void> {
   await expect(page.getByRole("list", { name: "시작 단계" })).toContainText("1 성향2 보유 종목3 시작");
 }
 
-// 지우기·빼기·로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
+// 지우기·빼기·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
 test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
 
 test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보드 맵 -> 상세 -> logout", async ({ page }) => {
