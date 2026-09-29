@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import SiteHeader from "../components/site-header";
@@ -73,6 +73,16 @@ export default function HoldingsEditor({
         })));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
+  const [baseline, setBaseline] = useState<SavedHolding[]>(initial); // 마지막으로 저장된 목록
+  const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
+
+  // 새로고침·탭 닫기 때만 막는다. ponytail: 앱 안 링크 이동은 못 막음, 필요해지면 라우터 가드 추가
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState(""); // 종목 추가 시트 안 오류
@@ -133,6 +143,7 @@ export default function HoldingsEditor({
     setStatus("saving");
     try {
       await saveHoldings(rows, onboardingState.mode);
+      setBaseline(rows);
       setStatus("saved");
     } catch (cause) {
       setStatus("idle");
@@ -223,9 +234,18 @@ export default function HoldingsEditor({
         )}
 
         <div className="flex flex-wrap items-center justify-end gap-3 px-1">
-          <span className="mr-auto text-xs text-muted">
-            {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
-          </span>
+          {dirty ? (
+            <span className="mr-auto flex items-center gap-2 text-xs text-body">
+              저장하지 않은 변경이 있어요
+              <button type="button" onClick={() => setRows(baseline)} className="btn-text min-h-11 text-xs">
+                되돌리기
+              </button>
+            </span>
+          ) : (
+            <span className="mr-auto text-xs text-muted">
+              {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
+            </span>
+          )}
           {status === "saved" && (
             <span role="status" className="text-sm text-body">
               저장했어요. <Link href="/">대시보드에서 보기</Link>
