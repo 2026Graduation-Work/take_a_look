@@ -420,9 +420,6 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
           <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
             {sentimentView.headlines.map((headline) => (
               <li key={`${headline.date}:${headline.title}`} className="text-sm text-ink">
-                <span className="mr-2 text-xs text-muted tabular-nums">
-                  {shortDate(headline.date)} · {headline.press}
-                </span>
                 {headline.url ? (
                   <a className="text-brand hover:underline" href={headline.url} target="_blank" rel="noreferrer">
                     {headline.title}
