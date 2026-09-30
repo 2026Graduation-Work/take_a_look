@@ -43,8 +43,7 @@ python -m experiments.comparison.runner --config experiments/comparison/config.y
 ```text
 backend/analysis/chart/
 ├── core/
-│   ├── features.py              # 서비스 추론용 161개 피처 계산
-│   ├── inference.py             # 모델 로드, class 2 스코어 추론
+│   ├── features.py              # 학습 라벨 계산(피처는 serving/internal/features.py 공통 사용)
 │   └── models/
 │       ├── registry.yaml        # profile → 모델·라벨·SHA 매핑 정본
 │       └── baseline_*.txt       # 배포용 H5/H20 LightGBM 모델
@@ -173,18 +172,30 @@ target이 아니다. `experiments/train_src/loaders.py`가 실행 config에 따�
 ### 단일 종목
 
 ```python
-from pathlib import Path
+import lightgbm as lgb
 import pandas as pd
 
-from core.inference import load_prediction_model, predict_success_probability
+from data_collectors.trading_calendar import get_krx_trading_days
+from serving.internal.features import build_feature_frame
+from serving.internal.inference import infer_batch
 
-model = load_prediction_model(
-    Path("core/models/baseline_h5_u175_d150_train2022_2024_holdout2025.txt")
+model = lgb.Booster(
+    model_file="core/models/baseline_h5_u175_d150_train2022_2024_holdout2025.txt"
 )
-prices = pd.read_parquet("data/raw/005930.parquet").sort_values("Date").tail(100)
-scores = predict_success_probability(prices, model)
-latest_score = float(scores.iloc[-1])
+prices = pd.read_parquet("data/raw/005930.parquet")
+prices["Date"] = pd.to_datetime(prices["Date"])
+prices = prices.sort_values("Date").tail(85)
+days = get_krx_trading_days(
+    prices.Date.min().strftime("%Y-%m-%d"), prices.Date.max().strftime("%Y-%m-%d")
+)
+features = build_feature_frame(prices, days)
+latest = features.loc[features.Date.eq(prices.Date.max())]
+scores, top_features, _ = infer_batch(model, latest)[0]
+latest_score = scores["up"]  # class 2 확률. 65거래일 미만이면 Sigma가 비어 추론하지 않는다
 ```
+
+chart 디렉터리에서 `PYTHONPATH=.`로 실행한다. 입력에는 거래대금 기반 `VWAP` 컬럼이 필요하다.
+저장소에 들어 있는 `data/raw/005930.parquet`는 VWAP 이전 형식이라 직접 수집한 파일로 바꿔야 한다.
 
 H20은 모델 경로만 아래 파일로 바꾼다.
 
@@ -392,15 +403,15 @@ A/B 행 정합성 검사를 통과한다.
 추가 외부 피처와 달리 다음 파일을 함께 수정한다.
 
 1. `data_collectors/preprocess_data.py`: 학습 parquet 피처 생성
-2. `core/features.py`: 서비스 추론 피처 생성
-3. `core/inference.py`의 `FEATURE_COLS`: 입력 순서
+2. `serving/internal/features.py`: 학습·서비스 공통 피처 생성
+3. `serving/internal/inference.py`의 `BASE_INFO`/`WINDOW_INFO`: 화면용 피처 이름·설명(없으면 추론이 오류로 멈춤)
 4. 관련 테스트
 5. processed 전체 재생성
 6. H5/H20 모두 재학습·재평가
 7. 모델 파일과 `core/models/registry.yaml` SHA 갱신
 
-학습 모델의 `feature_name()`과 `core.inference.FEATURE_COLS`의 이름·순서·개수가 정확히
-같아야 한다.
+입력 순서는 학습 모델의 `feature_name()`이 정한다. `build_feature_frame` 결과에 그 이름이
+모두 있어야 한다.
 
 ## 11. Baseline/Treatment 비교
 

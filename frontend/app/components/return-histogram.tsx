@@ -70,7 +70,10 @@ export default function ReturnHistogram({
   if (xMax <= xMin) return null;
 
   const maxCount = Math.max(...bins.map((bin) => bin.count));
-  const yStep = maxCount > 12 ? 5 : 2;
+  // 격자는 4줄 안팎: 1·2·5×10ⁿ 중 maxCount/4 이상인 가장 작은 값. 실제 배치 분포는 한 칸에 수천 건이다
+  const rawStep = maxCount / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(rawStep, 1)));
+  const yStep = maxCount <= 12 ? 2 : [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rawStep)!;
   const yMax = Math.max(yStep, Math.ceil(maxCount / yStep) * yStep);
 
   const plotW = VB_W - PAD.left - PAD.right;
@@ -99,7 +102,7 @@ export default function ReturnHistogram({
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`과거 유사 신호 ${caseCount}건의 실현 수익률 분포. ${ciPercent}% 구간은 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
+        aria-label={`과거 유사 신호 ${caseCount.toLocaleString("ko-KR")}건의 실현 수익률 분포. ${ciPercent}% 구간은 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
       >
         {/* 68% 구간 음영 + 경계선 */}
         <rect
@@ -146,7 +149,7 @@ export default function ReturnHistogram({
               strokeWidth={1}
             />
             <text x={PAD.left - 6} y={y(count) + 4} textAnchor="end" fontSize={11} style={{ fill: "var(--color-muted)" }}>
-              {count}
+              {count.toLocaleString("ko-KR")}
             </text>
           </g>
         ))}
@@ -188,7 +191,7 @@ export default function ReturnHistogram({
           fontWeight={600}
           style={{ fill: "var(--color-ink)" }}
         >
-          {bins[maxIndex].count}건
+          {bins[maxIndex].count.toLocaleString("ko-KR")}건
         </text>
 
         {/* 베이스라인 + x축 라벨 */}
@@ -236,7 +239,7 @@ export default function ReturnHistogram({
             {formatSigned(bins[hovered].from)} ~ {formatSigned(bins[hovered].to)}
           </span>
           <span className="ml-1.5 text-xs text-muted">
-            {bins[hovered].count}건 / {caseCount}건
+            {bins[hovered].count.toLocaleString("ko-KR")}건 / {caseCount.toLocaleString("ko-KR")}건
           </span>
         </div>
       )}
