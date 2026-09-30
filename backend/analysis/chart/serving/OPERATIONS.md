@@ -90,7 +90,7 @@ Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX �
 - 화면 연결 시험은 `python -m serving.publish_preview`로 검증하고 `--publish`로 발행한다.
   Actions 수동 실행의 `publish_preview=true`도 같은 명령이다. `previews/2026-09-21`의
   삼성전자 두 기간 snapshot만 발행한다. 기존 모델의 학습 입력 정합성 검증은 미완료다.
-- 프론트는 공개 batch ID `3eb13ecec44e6f2e507f79fbba6c5ded2d6204b5ae5ad59db098950f17fa14ca`를
+- 프론트는 공개 batch ID `18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48`를
   명시해 조회한다. `NEXT_PUBLIC_CHART_PREVIEW_BATCH_ID` 환경 변수가 없으면 이 공개 ID가
   기본값이다. 빈 문자열로 설정하고 재배포하면 시험 화면을 끈다.
   테스트 batch는 공개용 출력만 담으며 원본 가격 테이블이나 전체 유니버스를 덮어쓰지 않는다.

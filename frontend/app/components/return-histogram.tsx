@@ -91,8 +91,11 @@ export default function ReturnHistogram({
     return center >= band.low && center <= band.high;
   };
 
-  const edges = [xMin, ...bins.map((bin) => bin.to)];
-  const labelledEdges = bins.length <= 10 ? edges : edges.filter((_, i) => i % 2 === 0);
+  const rawXStep = (xMax - xMin) / 6;
+  const xMagnitude = 10 ** Math.floor(Math.log10(rawXStep));
+  const xStep = [1, 2, 5, 10].map(n => n * xMagnitude).find(n => n >= rawXStep)!;
+  const labelledEdges = [];
+  for (let tick = Math.ceil(xMin / xStep) * xStep; tick <= xMax; tick += xStep) labelledEdges.push(tick);
   const maxIndex = bins.findIndex((bin) => bin.count === maxCount);
   const ciPercent = Math.round(band.ciLevel * 100);
 
@@ -169,8 +172,10 @@ export default function ReturnHistogram({
 
         {/* 막대: 구간 안은 신호 색, 밖은 회색 */}
         {bins.map((bin, i) => {
-          const left = x(bin.from) + BAR_GAP;
-          const width = x(bin.to) - x(bin.from) - BAR_GAP * 2;
+          const bucketWidth = x(bin.to) - x(bin.from);
+          const gap = Math.min(BAR_GAP, bucketWidth / 4);
+          const left = x(bin.from) + gap;
+          const width = bucketWidth - gap * 2;
           const top = y(bin.count);
           return (
             <path
@@ -226,6 +231,9 @@ export default function ReturnHistogram({
           />
         ))}
       </svg>
+      {bins.every(bin => Math.abs(bin.to - bin.from - 2) < 1e-8) && (
+        <p className="m-0 text-2xs text-muted">막대 한 칸은 수익률 2%p 구간이에요. 68% 범위는 별도로 표시해요.</p>
+      )}
 
       {hovered !== null && (
         <div

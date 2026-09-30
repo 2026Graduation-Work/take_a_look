@@ -19,6 +19,8 @@ export interface ChartSnapshot {
     reason: string | null;
     contribution_space: "class_2_raw_margin";
     scores: { down: number; neutral: number; up: number } | null;
+    // Archived v2 snapshots may omit the whole-feature denominator.
+    contribution_abs_sum?: number;
     features: { name: string; label_ko: string; meaning_ko: string; value: number | null; contribution: number }[];
   };
   distribution: {
@@ -106,6 +108,11 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
   }
   if (history.some((point: { date: string }, i: number) => point.date > String(p.data_asof) ||
       (i > 0 && point.date <= history[i - 1].date))) throw new Error("가격 기준일이 올바르지 않습니다.");
+  if (inference.contribution_abs_sum !== undefined && (
+    !number(inference.contribution_abs_sum) || inference.contribution_abs_sum < 0 ||
+    inference.features.reduce((sum: number, f: { contribution: number }) => sum + Math.abs(f.contribution), 0)
+      > inference.contribution_abs_sum + 1e-8
+  )) throw new Error("전체 피처 기여도 기준값이 올바르지 않습니다.");
   return p as unknown as ChartSnapshot;
 }
 
@@ -115,7 +122,13 @@ export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map
   const unique = [...new Set(codes.filter((code) => /^[0-9A-Z]{6}$/.test(code)))];
   const result = new Map<string, Map<ChartHorizon, ChartSnapshot>>();
   if (!unique.length) return result;
-  const { data, error } = await client.from("chart_signal_snapshots")
+  const localPreview = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_CHART_LOCAL_PREVIEW === "1";
+  const { data, error } = localPreview
+    ? await fetch("/chart-local-preview.json", { cache: "no-store" }).then(async response => {
+      if (!response.ok) throw new Error("로컬 시안 데이터를 불러오지 못했어요.");
+      return { data: await response.json(), error: null };
+    })
+    : await client.from("chart_signal_snapshots")
     .select("batch_id,stock_code,horizon,payload").eq("batch_id", PREVIEW_BATCH_ID).in("stock_code", unique);
   if (error) throw new Error("차트를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.");
   const rows = (data ?? []) as ChartRow[];

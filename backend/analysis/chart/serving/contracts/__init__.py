@@ -13,6 +13,10 @@ V2_VALIDATOR = Draft202012Validator(V2_SCHEMA, format_checker=FormatChecker())
 def validate_snapshot(value):
     V2_VALIDATOR.validate(value)
     inference, distribution = value["inference"], value["distribution"]
+    total = inference.get("contribution_abs_sum")
+    if total is not None and (not math.isfinite(total) or total < 0 or
+                              sum(abs(f["contribution"]) for f in inference["features"]) > total + 1e-8):
+        raise ValueError("Invalid whole-feature contribution denominator")
     if (value["horizon"] == 5) != (value["profile"] == "aggressive"):
         raise ValueError("Horizon/profile mismatch")
     if inference["status"] == "available":

@@ -7,9 +7,11 @@ const rows = snapshots.map((payload: { batch_id: string; stock_code: string; hor
 }));
 
 test("public predictions retain the original detail UI and both model directions", async ({ page }) => {
+  const archivedRows = structuredClone(rows);
+  for (const row of archivedRows) delete row.payload.inference.contribution_abs_sum;
   await page.route("**/rest/v1/chart_signal_snapshots?**", route => {
     expect(new URL(route.request().url()).searchParams.get("batch_id")).toBe(`eq.${rows[0].batch_id}`);
-    return route.fulfill({ json: rows });
+    return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
   await expect(page.getByTestId("preview-provenance")).toHaveText(/연결 확인용 · 모델 검증 전 · 2026.09.21/);
@@ -19,11 +21,15 @@ test("public predictions retain the original detail UI and both model directions
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
   const expected = snapshots.find((s: { horizon: number }) => s.horizon === 20).inference.features;
+  await expect(model.getByText("계산값 보기", { exact: true })).toBeVisible();
+  await expect(model.getByText(expected[0].contribution.toFixed(4), { exact: true })).not.toBeVisible();
+  await model.locator("summary", { hasText: "계산값 보기" }).click();
   await expect(model.locator("[data-model-feature]")).toHaveCount(expected.length);
   for (const feature of expected) {
     const row = model.locator(`[data-model-feature="${feature.name}"]`);
     await expect(row).toContainText(feature.label_ko);
-    await expect(row).toContainText(feature.contribution.toFixed(4));
+    await expect(row).toContainText("기여도 미제공");
+    await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
   await expect(model).not.toContainText(/비율 합 100%|뉴스 분위기|회사 체력|사고판 주체/);
   await page.locator("summary", { hasText: "더 알아보기" }).click();
@@ -51,6 +57,27 @@ test("failed public reads show retry, without restoring demo predictions", async
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
 });
 
+test("feature shares use the whole-model denominator and raw values are collapsed", async ({ page }) => {
+  const wholeModel = structuredClone(rows);
+  for (const row of wholeModel) row.payload.inference.contribution_abs_sum = 1;
+  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: wholeModel }));
+  await page.goto("/stocks/005930");
+  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+  const model = page.getByRole("tabpanel");
+  const features = wholeModel.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features;
+  await expect(model.locator("[data-model-feature]")).toHaveCount(5);
+  for (const feature of features) {
+    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(
+      `기여도 ${(Math.abs(feature.contribution) * 100).toFixed(1)}%`);
+  }
+  await expect(model.locator("details")).not.toHaveAttribute("open", "");
+  await model.locator("summary", { hasText: "계산값 보기" }).click();
+  await expect(model.locator("dd").first()).toHaveText(features[0].contribution.toFixed(4));
+  await expect(model).toContainText("5개 합은 100%가 아닐 수 있어요");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
 test("observed prices remain visible when no historical distribution is available", async ({ page }) => {
   const withoutCases = structuredClone(rows);
   for (const row of withoutCases) row.payload.distribution = {
@@ -61,4 +88,23 @@ test("observed prices remain visible when no historical distribution is availabl
   await page.goto("/stocks/005930");
   await expect(page.getByRole("img", { name: "최근 60거래일 주가 흐름. 수익률 범위 미제공" })).toBeVisible();
   await expect(page.getByText("최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.")).toHaveCount(0);
+});
+
+test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
+  const denseRows = structuredClone(rows);
+  for (const row of denseRows) row.payload.distribution.histogram.bins = Array.from({ length: 1030 }, (_, i) => ({
+    left: -60 + i * 2, right: -58 + i * 2, count: i === 30 ? row.payload.distribution.sample_count : 0,
+  }));
+  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: denseRows }));
+  await page.goto("/stocks/005930");
+  await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
+  await page.locator("summary", { hasText: "더 알아보기" }).click();
+  const histogram = page.getByRole("img", { name: /과거 유사 신호 .*건의 실현 수익률 분포/ });
+  await expect(histogram.locator("path")).toHaveCount(1030);
+  expect(await histogram.locator("path").evaluateAll(paths => paths.every(path => {
+    const d = path.getAttribute("d")!;
+    const left = Number(d.match(/^M([^,]+),/)![1]);
+    const right = Number(d.match(/H([^\s]+)/)![1]);
+    return Number.isFinite(left) && right >= left;
+  }))).toBe(true);
 });

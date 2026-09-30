@@ -25,6 +25,9 @@ test("mixed identity, invalid prices and inconsistent distribution are rejected"
     (p: typeof original) => { p.distribution.histogram.central_68 = null; },
     (p: typeof original) => { p.inference.features[0].contribution = Infinity; },
     (p: typeof original) => { p.inference.scores.up = 2; },
+    (p: typeof original) => { p.inference.contribution_abs_sum = -1; },
+    (p: typeof original) => { p.inference.contribution_abs_sum = 0; },
+    (p: typeof original) => { p.inference.contribution_abs_sum = NaN; },
   ]) {
     const payload = structuredClone(original);
     change(payload);

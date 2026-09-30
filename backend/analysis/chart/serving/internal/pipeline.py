@@ -131,6 +131,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
     names = dict(zip(universe.Code, universe.Name))
     codes = sorted(names)
     batch_id = canonical_hash({"as_of": as_of, "pack_id": pack["pack_id"],
+                               "output_policy": "whole_feature_contribution_hist2_v1",
                                "builder": pack["feature_builder_id"], "names": names,
                                "raw_hashes": raw_hashes, "unavailable": unavailable})
     snapshots = []
@@ -152,14 +153,15 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                     samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack)))
                 continue
             raw, row = frames[code]
-            scores, contributions, features_hash = by_code[code]
+            scores, contributions, features_hash, contribution_total = by_code[code]
             sigma, close = float(row["Sigma"]), float(row["Close"])
             up, down = (item["label_barriers"][key] for key in ("up_mult", "down_mult"))
             inference = {"status": "available", "reason": None, "scores": scores,
                          "score_event": "class_2_upper_barrier_first", "close": close,
                          "sigma": sigma, "barriers": {"up": close * (1 + up * sigma),
                                                        "down": close * (1 - down * sigma)},
-                         "contribution_space": "class_2_raw_margin", "features": contributions}
+                         "contribution_space": "class_2_raw_margin", "features": contributions,
+                         "contribution_abs_sum": contribution_total}
             price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
