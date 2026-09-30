@@ -20,7 +20,9 @@ def _calendar_path() -> Path:
 
 def refresh_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     """Fetch official KOSPI index sessions and atomically store a coverage artifact."""
-    from pykrx import stock
+    from .krx import authenticated_stock
+
+    stock = authenticated_stock()
 
     start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
     if start > end:

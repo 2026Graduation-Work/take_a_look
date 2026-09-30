@@ -51,7 +51,7 @@ python -m serving.run_daily --dry-run
 python -m serving.run_daily --publish
 ```
 
-`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. `KRX_ID`, `KRX_PW`가 있으면 pykrx가 KRX 로그인을 시도한다. 계정이 없어도 인증 없는 조회를 시도하므로 필수 입력으로 막지 않는다. 로그인 실패 메시지만으로 성공·실패를 판단하지 말고 실제 거래일·가격 데이터와 실행 결과를 확인한다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
+`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. `KRX_ID`, `KRX_PW`가 있으면 pykrx가 KRX 로그인을 시도한다. 계정이 없어도 인증 없는 조회를 시도하므로 필수 입력으로 막지 않는다. 로그인 실패 메시지만으로 성공·실패를 판단하지 말고 실제 거래일·가격 데이터와 실행 결과를 확인한다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. `--as-of YYYY-MM-DD`는 해당 날짜까지 새로 수집한다. `--replay`를 함께 쓰면 그날의 종목 목록과 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
 
 지난 거래일의 실제 가격으로 수집·피처·추론·히스토그램을 시험할 때는 **로컬 Supabase**에서만 아래 옵션을 쓴다. `--code`를 빼면 KRX의 지정일 KOSPI 목록 전체를 수집하므로 먼저 한 종목으로 확인한다. 단일 종목 테스트는 현재 KRX 종목명을 쓰며, 지정일 가격이 있어야 진행한다. 결과는 `serving/data/batches/<batch-id>/`에 쓰고, 새로 받은 가격·피처는 로컬 Supabase에 저장한다. 기존 종목 목록은 덮어쓰지 않고 공개 batch도 발행하지 않는다.
 
@@ -76,3 +76,25 @@ python -m serving.pack validate --path serving/data/packs/PACK_ID
 ```
 
 Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX 인증이 필요한 조회가 있으면 `KRX_ID`, `KRX_PW`도 설정한다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+
+## 2026-09-30: 인증 점검과 화면 연결 시험
+
+- 저장소 secrets는 `KRX_ID`, `KRX_PW`다. 로컬 `.env`의 `_1` 계정을 사용할 때는
+  두 값을 각각 이 환경 변수로 전달한 뒤 실행한다. 파일 자체는 커밋하지 않는다.
+- `python -m serving.run_daily --diagnose`: 로그인·공식 거래일·KOSPI 유니버스·삼성전자
+  수정/비수정 가격과 거래대금만 검사한다. DB에는 쓰지 않는다.
+- 예약 실행은 `--dry-run`으로 가격·피처를 보관하고 추론 결과를 검증한다.
+  결과는 14일간 Actions artifact에 보관한다. 공개 배치를 교체하지 않는다.
+- 자정 이후 지연 실행도 전날 확정 입력을 새로 수집한다. 저장된 입력만 재사용하려면
+  `--as-of YYYY-MM-DD --replay`를 명시한다. 휴장일에는 새 배치를 만들지 않는다.
+- 화면 연결 시험은 `python -m serving.publish_preview`로 검증하고 `--publish`로 발행한다.
+  Actions 수동 실행의 `publish_preview=true`도 같은 명령이다. `previews/2026-09-21`의
+  삼성전자 두 기간 snapshot만 발행한다. 기존 모델의 학습 입력 정합성 검증은 미완료다.
+- 프론트는 공개 batch ID `3eb13ecec44e6f2e507f79fbba6c5ded2d6204b5ae5ad59db098950f17fa14ca`를
+  명시해 조회한다. `NEXT_PUBLIC_CHART_PREVIEW_BATCH_ID` 환경 변수가 없으면 이 공개 ID가
+  기본값이다. 빈 문자열로 설정하고 재배포하면 시험 화면을 끈다.
+  테스트 batch는 공개용 출력만 담으며 원본 가격 테이블이나 전체 유니버스를 덮어쓰지 않는다.
+- 시험 화면: 목록 20거래일, 상세 5/20거래일 선택. 기간을 실제 거래일 수와 함께 표시하고
+  모든 시험 결과에 모델 검증 전·기준일을 적는다. 순위·신호등·10거래일 값은 만들지 않는다.
+- 재학습(#107)은 별도 작업이다. 계산 공유(#169)는 serving 피처·추론을 사용하며
+  실험 CLI의 기존 출력 열과 모델 경로 옵션을 유지한다.

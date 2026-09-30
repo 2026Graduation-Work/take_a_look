@@ -10,6 +10,18 @@ on:
         description: "Confirmed KRX date (YYYY-MM-DD); leave empty for latest"
         required: false
         type: string
+      diagnose:
+        description: "Check KRX login and reads only (no database writes)"
+        type: boolean
+        default: false
+      publish_preview:
+        description: "Publish the recorded 2026-09-21 display-test batch only"
+        type: boolean
+        default: false
+      replay:
+        description: "Use archived inputs; requires as_of"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -31,8 +43,7 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       KRX_ID: ${{ secrets.KRX_ID }}
-      # 저장소 secret 이름은 KRX_WD다(2026-09-27 등록). pykrx는 KRX_PW 환경 변수를 읽는다
-      KRX_PW: ${{ secrets.KRX_WD }}
+      KRX_PW: ${{ secrets.KRX_PW }}
     steps:
       - uses: actions/checkout@v7
 
@@ -45,20 +56,54 @@ jobs:
       - name: Install serving dependencies
         run: python -m pip install -r serving/requirements.txt
 
-      - name: Check publishing secrets
+      - name: Validate execution mode
+        env:
+          DIAGNOSE: ${{ inputs.diagnose }}
+          PREVIEW: ${{ inputs.publish_preview }}
+          REPLAY: ${{ inputs.replay }}
+          AS_OF: ${{ inputs.as_of }}
         run: |
+          if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ -n "$AS_OF" ]; }; then
+            echo "Preview cannot combine with diagnose, replay or as_of"; exit 1
+          fi
+
+      - name: Check required secrets
+        run: |
+          test -n "$KRX_ID" || { echo "KRX_ID secret is missing"; exit 1; }
+          test -n "$KRX_PW" || { echo "KRX_PW secret is missing"; exit 1; }
           test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
           test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
 
+      - name: Diagnose KRX authentication and reads
+        if: ${{ inputs.diagnose == true }}
+        run: python -m serving.run_daily --diagnose
+
       - name: Validate committed model pack
+        if: ${{ inputs.diagnose != true }}
         run: python -m serving.pack validate
 
-      - name: Collect, infer, and publish
+      - name: Publish recorded display-test batch
+        if: ${{ inputs.publish_preview == true }}
+        run: python -m serving.publish_preview --publish
+
+      - name: Collect and validate without publishing
+        if: ${{ inputs.diagnose != true && inputs.publish_preview != true }}
         env:
+          REPLAY: ${{ inputs.replay }}
           REQUESTED_AS_OF: ${{ inputs.as_of }}
         run: |
-          args=(--publish)
+          args=(--dry-run)
+          if [ "$REPLAY" = "true" ]; then args+=(--replay); fi
           if [ -n "$REQUESTED_AS_OF" ]; then
             args+=(--as-of "$REQUESTED_AS_OF")
           fi
           python -m serving.run_daily "${args[@]}"
+
+      - name: Save validation outputs
+        if: ${{ always() && inputs.diagnose != true }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: chart-validation-${{ github.run_id }}
+          path: backend/analysis/chart/serving/data/batches/
+          retention-days: 14
+          if-no-files-found: ignore

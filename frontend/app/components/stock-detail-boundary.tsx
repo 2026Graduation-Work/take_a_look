@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import StockDetailView from "./stock-detail";
+import ChartPreviewDetail from "./chart-preview";
+import { isChartPreview } from "@/lib/chart-preview-config";
 import { useOnboarding } from "./onboarding-provider";
 import { summaryFromProfilingOutput } from "@/lib/profiling-rules";
 import type { StockInsights } from "@/lib/providers";
@@ -91,6 +93,9 @@ export default function StockDetailBoundary({
     setAuthenticatedResult(null);
     setRequestVersion((version) => version + 1);
   }
+
+  if (isChartPreview(code)) return <ChartPreviewDetail code={code} name={data.detail.name}
+    profile={data.profile} marketStatus={data.marketStatus} insights={insights} />;
 
   return (
     <StockDetailView
