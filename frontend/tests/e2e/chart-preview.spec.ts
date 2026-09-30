@@ -27,7 +27,8 @@ test("failed public reads show retry, without restoring demo predictions", async
   await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill(fail
     ? { status: 503, json: { message: "unavailable" } } : { json: rows }));
   await page.goto("/stocks/005930");
-  await expect(page.getByRole("alert")).toContainText("차트를 불러오지 못했어요");
+  // PostgREST retries transient 503 responses before exposing the error.
+  await expect(page.getByText("차트를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.", { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("heading", { name: /후 과거 수익률/ })).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "다시 시도" }).click();
