@@ -27,6 +27,23 @@ profiling + analysis 블록의 결과를 통합하여 사용자에게 보여주�
 
 ## 개발 환경 (Next.js)
 
+### 로컬 화면 확인 후 PR
+
+기능을 추가하거나 수정할 때는 기존 UI를 유지하고 로컬에서 먼저 확인합니다.
+
+```bash
+cd frontend
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+브라우저에서 [http://localhost:3000](http://localhost:3000)을 엽니다. 실제 공개 DB의 시험 결과를
+보려면 `.env.example`을 참고해 `.env.local`에 Supabase URL과 anon 키를 설정합니다.
+환경 변수가 없으면 데모 데이터로 동작합니다. `.env.local`은 Git에 포함되지 않습니다.
+
+에이전트는 로컬 확인 주소·작업 브랜치·변경 요약·검증 결과를 먼저 전달합니다.
+화면 확인 후 사용자가 PR을 만드는 것이 기본이며, 명시적인 요청 전에는 push·PR 생성·머지·배포하지 않습니다.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ### Getting Started

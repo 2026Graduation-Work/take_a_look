@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import { isChartPreview } from "@/lib/chart-preview-config";
-import { PreviewStockRow } from "./chart-preview";
+import { usePublicCharts } from "@/lib/use-public-charts";
+import { chartDirection } from "@/lib/chart-detail";
 import { SIGNAL_META } from "@/lib/display";
 import { DIRECTION_WORD, topPercentLabel } from "@/lib/copy-glossary";
 import type { RecommendedStock } from "@/lib/types";
@@ -16,8 +19,11 @@ export function oneLineReason(stock: RecommendedStock): string {
 
 // 주식 앱처럼 한 줄: 종목명 · 한 줄 이유 · 신호. 밴드·상승 비율·기간별 일치는 상세로 보낸다.
 export default function StockRow({ stock }: { stock: RecommendedStock }) {
-  if (isChartPreview(stock.code)) return <PreviewStockRow code={stock.code} name={stock.name} />;
-  const signal = SIGNAL_META[stock.signalLight];
+  const preview = isChartPreview(stock.code);
+  const { charts, loading, error } = usePublicCharts(preview ? [stock.code] : []);
+  const chart = charts?.get(stock.code)?.get(20);
+  const direction = chartDirection(chart);
+  const signal = SIGNAL_META[preview ? direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral" : stock.signalLight];
   return (
     <Link
       href={`/stocks/${stock.code}`}
@@ -35,13 +41,16 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
             </span>
           )}
         </span>
-        <span className="truncate text-xs text-muted">{oneLineReason(stock)}</span>
+        <span className="truncate text-xs text-muted">{preview
+          ? loading ? "시험 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
+            : chart ? `연결 확인용 · 모델 검증 전 · ${chart.data_asof} 기준 · 4주·20거래일` : "시험 결과가 아직 준비되지 않았어요."
+          : oneLineReason(stock)}</span>
       </div>
       <div className="flex flex-none flex-col items-end gap-0.5">
         <span className="text-sm font-semibold" style={{ color: signal.ink }}>
-          {signal.label}
+          {preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : direction === "flat" ? "중립" : "신호 미제공" : signal.label}
         </span>
-        <span className="text-2xs text-muted tabular-nums">{topPercentLabel(stock.rankPercentile)}</span>
+        <span className="text-2xs text-muted tabular-nums">{preview ? "순위 미제공" : topPercentLabel(stock.rankPercentile)}</span>
       </div>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>

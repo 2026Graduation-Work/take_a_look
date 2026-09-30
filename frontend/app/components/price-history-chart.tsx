@@ -39,7 +39,7 @@ function niceStep(rough: number) {
 
 interface PriceHistoryChartProps {
   prices: number[];
-  band: ReturnBand;
+  band?: ReturnBand;
   signal: SignalMeta;
   asOfLabel: string; // 예: 07.07
   horizonLabel: string; // 예: 2주 뒤
@@ -58,16 +58,14 @@ export default function PriceHistoryChart({
   if (
     prices.length < 2 ||
     prices.some((price) => !Number.isFinite(price)) ||
-    !Number.isFinite(band.low) ||
-    !Number.isFinite(band.high) ||
-    band.low > band.high
+    (band && (!Number.isFinite(band.low) || !Number.isFinite(band.high) || band.low > band.high))
   ) {
     return null;
   }
 
   const last = prices[prices.length - 1];
-  const bandHighPrice = last * (1 + band.high / 100);
-  const bandLowPrice = last * (1 + band.low / 100);
+  const bandHighPrice = band ? last * (1 + band.high / 100) : last;
+  const bandLowPrice = band ? last * (1 + band.low / 100) : last;
   const rawMin = Math.min(...prices, bandLowPrice);
   const rawMax = Math.max(...prices, bandHighPrice);
   const rawRange = rawMax - rawMin;
@@ -107,7 +105,7 @@ export default function PriceHistoryChart({
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`최근 60거래일 주가 흐름. ${horizonLabel} 수익률 범위 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
+        aria-label={`최근 60거래일 주가 흐름. ${band ? `${horizonLabel} 수익률 범위 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지` : "수익률 범위 미제공"}`}
         onMouseMove={handleMove}
         onMouseLeave={() => setHovered(null)}
       >
@@ -142,6 +140,7 @@ export default function PriceHistoryChart({
 
         {/* 오늘 종가 → H10 범위 양 끝 보조선. 가늘고 점선이라 경로가 아니라
             "여기서 나온 값"이라는 연결 표시로 읽힌다. 사이는 채우지 않는다. */}
+        {band && <>
         <g style={{ stroke: signal.ink }} strokeWidth={1} strokeDasharray="3 4" opacity={0.45}>
           <line x1={X1} y1={y(last)} x2={XH - 11} y2={yHigh} />
           <line x1={X1} y1={y(last)} x2={XH - 11} y2={yLow} />
@@ -199,6 +198,7 @@ export default function PriceHistoryChart({
         <text x={XH} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
           {horizonLabel}
         </text>
+        </>}
 
         {/* 호버 크로스헤어 */}
         {hovered !== null && (

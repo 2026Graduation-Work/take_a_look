@@ -18,6 +18,7 @@ export interface ChartSnapshot {
     status: "available" | "unavailable";
     reason: string | null;
     contribution_space: "class_2_raw_margin";
+    scores: { down: number; neutral: number; up: number } | null;
     features: { name: string; label_ko: string; meaning_ko: string; value: number | null; contribution: number }[];
   };
   distribution: {
@@ -58,6 +59,7 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
     throw new Error("차트 응답 구조가 올바르지 않습니다.");
   }
   const inference = p.inference;
+  const scores = inference.scores;
   const distribution = p.distribution;
   const prices = p.prices;
   const histogram = distribution.histogram;
@@ -74,6 +76,9 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
     typeof p.pack_id !== "string" || !p.pack_id ||
     !["available", "unavailable"].includes(String(inference.status)) ||
     inference.contribution_space !== "class_2_raw_margin" ||
+    (inference.status === "available" && (!record(scores) ||
+      ![scores.down, scores.neutral, scores.up].every(s => number(s) && s >= 0 && s <= 1) ||
+      Math.abs(Number(scores.down) + Number(scores.neutral) + Number(scores.up) - 1) > 1e-6)) ||
     !Array.isArray(inference.features) ||
     !inference.features.every((feature: unknown) => record(feature) &&
       typeof feature.name === "string" && typeof feature.label_ko === "string" &&

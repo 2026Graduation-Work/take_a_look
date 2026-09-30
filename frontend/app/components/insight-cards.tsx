@@ -49,8 +49,6 @@ import {
   riskSnapshot,
   sentimentPeriod,
   toNudgeMarket,
-  type ContributionCategory,
-  type ContributionSignal,
   type FinancialSnapshot,
   type HoldingWeight,
   type SentimentData,
@@ -59,6 +57,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
+import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import SourceChip from "./source-chip";
 
@@ -116,14 +115,6 @@ const TAB_META: Record<TabId, { label: string; question: string; why: string }> 
     question: "모델은 무엇을 보고 이 신호를 냈나요?",
     why: "모델 신호가 한 가지 근거에 쏠려 있는지 확인할 수 있어요. 그 근거가 내 판단과 맞는지 비교해 보세요.",
   },
-};
-
-// 범주는 색이 아니라 라벨로 구분한다. 색은 방향(적 = 오르는 쪽, 청 = 내리는 쪽)에만 쓴다.
-const CATEGORY_LABEL: Record<ContributionCategory, string> = {
-  technical: "가격 흐름",
-  financial: "회사 체력",
-  sentiment: "뉴스 분위기",
-  supply: "사고판 주체",
 };
 
 const SUPPLY_SERIES = [
@@ -274,10 +265,12 @@ export default function EvidenceTabs({
   detail,
   insights,
   demo,
+  modelFeatures,
 }: {
   detail: StockDetail;
   insights: StockInsights;
   demo: DemoStyleAxes;
+  modelFeatures?: ChartSnapshot["inference"]["features"];
 }) {
   const order = demo.bit?.cardOrder ?? DEFAULT_CARD_ORDER;
   const tabs = [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
@@ -344,9 +337,9 @@ export default function EvidenceTabs({
         )}
         {active === "contribution" && (
           <ContributionPanel
-            contributions={insights.contributions}
-            reasons={detail.reasons}
-            provenance={insights.contributions ? insights.provenance.contributions : detail.provenance}
+            features={modelFeatures}
+            reasons={detail.reasons.filter(reason => reason.source === "chart")}
+            provenance={detail.provenance}
           />
         )}
         <Why>{TAB_META[active].why}</Why>
@@ -624,15 +617,15 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
 
 // 부호 막대: 가운데 0에서 오른쪽(적)은 오르는 쪽으로 기여, 왼쪽(청)은 내리는 쪽으로 기여.
 function ContributionPanel({
-  contributions,
+  features,
   reasons,
   provenance,
 }: {
-  contributions: ContributionSignal[] | null;
+  features?: ChartSnapshot["inference"]["features"];
   reasons: PredictionReason[];
   provenance: DataProvenance;
 }) {
-  if (!contributions?.length) {
+  if (!features?.length) {
     if (!reasons.length) return <Unavailable>이 예측에 연결된 근거 데이터가 없어요.</Unavailable>;
     return (
       <>
@@ -656,25 +649,25 @@ function ContributionPanel({
       </>
     );
   }
-  const max = Math.max(...contributions.map(({ share }) => share), 1);
-  const top = contributions[0];
+  const max = Math.max(...features.map(f => Math.abs(f.contribution))) || 1;
+  const top = features[0];
   return (
     <>
       <Conclusion>
-        모델이 가장 크게 본 근거는 <strong className="font-semibold">&lsquo;{top.label}&rsquo;</strong>(
-        {Math.round(top.share)}%)예요.
+        LGBM의 상방 원점수에 가장 크게 기여한 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>(
+        {signed(top.contribution, 4)})예요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
-        {contributions.map((signal) => {
-          const up = signal.direction > 0;
-          const color = up ? "var(--color-up)" : "var(--color-down)";
+        {features.map((feature) => {
+          const up = feature.contribution > 0;
+          const color = feature.contribution === 0 ? "var(--color-muted)" : up ? "var(--color-up)" : "var(--color-down)";
           return (
-            <li key={signal.signal} className="flex flex-col gap-1.5">
+            <li key={feature.name} className="flex flex-col gap-1.5" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
-                <span className="text-sm font-medium text-ink">{signal.label}</span>
-                <span className="text-xs text-muted">{CATEGORY_LABEL[signal.category]}</span>
+                <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
+                <span className="text-xs text-muted">LGBM 피처</span>
                 <span className="ml-auto flex-none text-sm font-semibold tabular-nums" style={{ color }}>
-                  {up ? "▲" : "▼"} {Math.round(signal.share)}%
+                  {feature.contribution === 0 ? "—" : up ? "▲" : "▼"} {signed(feature.contribution, 4)}
                 </span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
@@ -683,18 +676,18 @@ function ContributionPanel({
                   className="absolute inset-y-0 rounded-full"
                   style={{
                     [up ? "left" : "right"]: "50%",
-                    width: `${(signal.share / max) * 50}%`,
+                    width: `${(Math.abs(feature.contribution) / max) * 50}%`,
                     backgroundColor: color,
                   }}
                 />
               </div>
-              <span className="text-xs text-muted">{signal.description}</span>
+              <span className="text-xs text-muted">{feature.meaning_ko} · 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
             </li>
           );
         })}
       </ul>
       <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>▲ 오르는 쪽으로 본 근거 · ▼ 내리는 쪽으로 본 근거 · 비율 합 100%</span>
+        <span>▲ 상방 원점수를 높이는 기여 · ▼ 낮추는 기여 · 0 기준 · 수익률 변화량 아님</span>
         <SourceChip provenance={provenance} />
       </p>
     </>
@@ -793,7 +786,7 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
       {rows.map(([label, provenance]) => (
         <div key={label} className="contents">
           <dt className="text-body">{label}</dt>
-          <dd className="m-0">
+          <dd className="m-0 min-w-0 [overflow-wrap:anywhere] [&>span]:max-w-full [&>span]:whitespace-normal">
             <SourceChip provenance={provenance} />
           </dd>
         </div>
