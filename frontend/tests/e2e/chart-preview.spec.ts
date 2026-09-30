@@ -89,3 +89,22 @@ test("observed prices remain visible when no historical distribution is availabl
   await expect(page.getByRole("img", { name: "최근 60거래일 주가 흐름. 수익률 범위 미제공" })).toBeVisible();
   await expect(page.getByText("최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.")).toHaveCount(0);
 });
+
+test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
+  const denseRows = structuredClone(rows);
+  for (const row of denseRows) row.payload.distribution.histogram.bins = Array.from({ length: 1030 }, (_, i) => ({
+    left: -60 + i * 2, right: -58 + i * 2, count: i === 30 ? row.payload.distribution.sample_count : 0,
+  }));
+  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: denseRows }));
+  await page.goto("/stocks/005930");
+  await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
+  await page.locator("summary", { hasText: "더 알아보기" }).click();
+  const histogram = page.getByRole("img", { name: /과거 유사 신호 .*건의 실현 수익률 분포/ });
+  await expect(histogram.locator("path")).toHaveCount(1030);
+  expect(await histogram.locator("path").evaluateAll(paths => paths.every(path => {
+    const d = path.getAttribute("d")!;
+    const left = Number(d.match(/^M([^,]+),/)![1]);
+    const right = Number(d.match(/H([^\s]+)/)![1]);
+    return Number.isFinite(left) && right >= left;
+  }))).toBe(true);
+});

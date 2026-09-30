@@ -172,8 +172,10 @@ export default function ReturnHistogram({
 
         {/* 막대: 구간 안은 신호 색, 밖은 회색 */}
         {bins.map((bin, i) => {
-          const left = x(bin.from) + BAR_GAP;
-          const width = x(bin.to) - x(bin.from) - BAR_GAP * 2;
+          const bucketWidth = x(bin.to) - x(bin.from);
+          const gap = Math.min(BAR_GAP, bucketWidth / 4);
+          const left = x(bin.from) + gap;
+          const width = bucketWidth - gap * 2;
           const top = y(bin.count);
           return (
             <path
