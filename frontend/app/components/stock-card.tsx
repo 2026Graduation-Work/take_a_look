@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { isChartPreview } from "@/lib/chart-preview-config";
+import { PreviewStockRow } from "./chart-preview";
 import { SIGNAL_META } from "@/lib/display";
 import { DIRECTION_WORD, topPercentLabel } from "@/lib/copy-glossary";
 import type { RecommendedStock } from "@/lib/types";
@@ -14,6 +16,7 @@ export function oneLineReason(stock: RecommendedStock): string {
 
 // 주식 앱처럼 한 줄: 종목명 · 한 줄 이유 · 신호. 밴드·상승 비율·기간별 일치는 상세로 보낸다.
 export default function StockRow({ stock }: { stock: RecommendedStock }) {
+  if (isChartPreview(stock.code)) return <PreviewStockRow code={stock.code} name={stock.name} />;
   const signal = SIGNAL_META[stock.signalLight];
   return (
     <Link

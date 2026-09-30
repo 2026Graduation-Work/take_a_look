@@ -18,6 +18,7 @@ import {
   type OnboardingState,
 } from "@/lib/auth";
 import Wordmark from "@/components/brand/Wordmark";
+import { isChartPreview } from "@/lib/chart-preview-config";
 
 interface OnboardingContextValue {
   state: OnboardingState;
@@ -130,6 +131,7 @@ function onboardingDestination(
   status: OnboardingState["status"],
 ): string | null {
   if (status === "loading" || status === "error") return null;
+  if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";

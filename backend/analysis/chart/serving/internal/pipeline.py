@@ -15,6 +15,7 @@ import lightgbm as lgb
 import pandas as pd
 import yaml
 
+from ..contracts import validate_snapshot
 from .calendar import refresh_krx_trading_days
 from .distribution import SampleIndex
 from .features import build_feature_frame
@@ -204,7 +205,7 @@ def run(args):
             raise ValueError("--historical-test requires a past date")
     pack, paths = active_pack(root)
     store = SupabaseStore()
-    replay = pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test
+    replay = getattr(args, "replay", False)
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:
@@ -213,6 +214,9 @@ def run(args):
     batch, snapshots = build_batch(as_of, pack, paths, *collected)
     if historical_test:
         batch["result"]["historical_test"] = True
+    for snapshot in snapshots:
+        validate_snapshot(snapshot)
+    batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
     write_batch(root, batch, snapshots)
     if args.publish:
         store.publish(batch, snapshots, pack)
