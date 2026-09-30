@@ -94,8 +94,7 @@ export default function StockDetailBoundary({
     setRequestVersion((version) => version + 1);
   }
 
-  if (isChartPreview(code)) return <ChartPreviewDetail code={code} name={data.detail.name}
-    profile={data.profile} marketStatus={data.marketStatus} insights={insights} />;
+  if (isChartPreview(code)) return <ChartPreviewDetail data={data} insights={insights} />;
 
   return (
     <StockDetailView

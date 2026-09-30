@@ -24,6 +24,7 @@ test("mixed identity, invalid prices and inconsistent distribution are rejected"
     (p: typeof original) => { p.distribution.sample_count += 1; },
     (p: typeof original) => { p.distribution.histogram.central_68 = null; },
     (p: typeof original) => { p.inference.features[0].contribution = Infinity; },
+    (p: typeof original) => { p.inference.scores.up = 2; },
   ]) {
     const payload = structuredClone(original);
     change(payload);

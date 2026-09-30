@@ -141,10 +141,10 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(header.getByRole("button", { name: "로그아웃" })).toBeVisible();
   await accountMenu.click();
 
-  // 성향별 근거 정렬은 시험 예측을 붙이지 않은 종목에서 계속 검증한다.
-  await page.locator('[data-stock-row]:not([data-stock-row="005930"])').first().click();
+  // 시험 결과도 기존 상세 UI와 성향별 근거 탭 순서를 사용한다.
+  await page.locator("[data-stock-row]").first().click();
   await expect(page).toHaveURL(/\/stocks\/(005930|005380|068270)$/);
-  await expect(page.getByText(/과거 비슷한 경우, 2주 뒤 수익률은 10번 중 \d번 이 범위였어요/)).toBeVisible();
+  await expect(page.getByText(/과거 비슷한 경우, (2주|4주) 뒤 수익률은 10번 중 \d번 이 범위였어요/)).toBeVisible();
   await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
   // 판단 근거 탭 순서 = 유형의 카드 순서(연구 문항 ②). 적극 축적형: 모델이 본 이유가 첫 탭
   await expect(page.getByRole("tablist", { name: "판단 근거" })).toHaveAttribute(
