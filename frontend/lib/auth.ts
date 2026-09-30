@@ -183,7 +183,8 @@ export function koreanAuthError(message: string): string {
 
 export async function signOut(): Promise<void> {
   // 데모 계정은 Supabase 세션이 없으므로 로컬만 지운다.
-  const client = readDemoSession() ? null : getSupabaseClient();
+  const demo = readDemoSession() !== null;
+  const client = demo ? null : getSupabaseClient();
   let signOutError: Error | null = null;
   if (client) {
     const { error } = await client.auth.signOut({ scope: "local" });
@@ -191,6 +192,8 @@ export async function signOut(): Promise<void> {
   }
 
   window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+  // 데모 보유 종목은 이 브라우저가 원본이라 다음 참가자에게 남지 않게 지운다. 로그인 계정 것은 Supabase 사본이라 둔다.
+  if (demo) window.localStorage.removeItem(STORAGE_KEYS.holdings);
   clearSavedProfile();
   window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
 

@@ -113,3 +113,22 @@ test("로그인 + stock_notes 테이블 적용 전: 메모는 브라우저에 �
   await expect(page.getByText("테이블 없어도 남는 메모")).toBeVisible();
 });
 
+
+// 사용성 평가는 한 브라우저로 여러 참가자를 받는다. 데모 로그아웃 뒤 앞사람 보유 종목이 남으면 안 된다.
+test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예시부터 시작한다", async ({ page }) => {
+  await demoReady(page);
+  const holdings = () => page.evaluate(() => localStorage.getItem("takealook.holdings.v1"));
+  expect(await holdings()).not.toBeNull();
+
+  await page.locator("header summary", { hasText: "김민지" }).click();
+  await page.getByRole("button", { name: "로그아웃" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await holdings()).toBeNull();
+
+  await page.getByRole("button", { name: "데모로 둘러보기" }).click();
+  await page.getByRole("button", { name: "시작하기" }).click();
+  await page.getByRole("button", { name: /데모 응답/ }).click();
+  await page.getByRole("button", { name: "완료" }).click();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
+  await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
+});
