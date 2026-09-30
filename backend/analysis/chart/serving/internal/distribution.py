@@ -7,6 +7,7 @@ import pandas as pd
 
 POLICY_ID = "multi_stock_up_sigma_001_005_v1"
 TOLERANCES = {"up_absolute": 0.01, "sigma_relative": 0.05}
+HISTOGRAM_STEP_PCT = 2
 
 
 class SampleIndex:
@@ -61,14 +62,12 @@ class SampleIndex:
             return dict(base, histogram={"bins": [], "central_68": None})
         returns = selected.return_pct.to_numpy(dtype=float)
         band = np.quantile(returns, [.16, .84])
-        if returns.min() == returns.max():
-            value = float(returns[0])
-            width = max(abs(value) * .01, .01)
-            bins = [{"left": value - width / 2, "right": value + width / 2, "count": len(returns)}]
-        else:
-            counts, edges = np.histogram(returns, bins=12)
-            bins = [{"left": float(a), "right": float(b), "count": int(n)}
-                    for a, b, n in zip(edges[:-1], edges[1:], counts)]
+        step = HISTOGRAM_STEP_PCT
+        left = math.floor(float(returns.min()) / step) * step
+        right = max(left + step, math.ceil(float(returns.max()) / step) * step)
+        counts, edges = np.histogram(returns, bins=np.arange(left, right + step, step))
+        bins = [{"left": float(a), "right": float(b), "count": int(n)}
+                for a, b, n in zip(edges[:-1], edges[1:], counts)]
         if sum(item["count"] for item in bins) != len(selected):
             raise ValueError("Histogram count mismatch")
         return dict(base, histogram={"bins": bins,

@@ -34,6 +34,10 @@ def test_distribution_boundaries_and_small_samples():
     assert result["sample_count"] == 3
     assert result["stock_count"] == 3
     assert sum(bucket["count"] for bucket in result["histogram"]["bins"]) == 3
+    assert all(bucket["right"] - bucket["left"] == 2 for bucket in result["histogram"]["bins"])
+    assert all(bucket["left"] % 2 == 0 for bucket in result["histogram"]["bins"])
+    assert next(bucket for bucket in result["histogram"]["bins"] if bucket["left"] == -10)["count"] == 1
+    assert result["histogram"]["bins"][-1]["count"] == 1  # Rightmost edge (20%) is included.
     assert result["histogram"]["central_68"]["low"] < 5
     assert index.distribution(horizon=5, score=.63, sigma=0, as_of="2021-01-01")["status"] == "no_cases"
     one = index.distribution(horizon=5, score=.62, sigma=.019, as_of="2021-01-01")

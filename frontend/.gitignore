@@ -44,3 +44,4 @@ next-env.d.ts
 # 로컬 임시 스크립트·Supabase CLI 캐시
 *.tmp.mjs
 supabase/.temp/
+public/chart-local-preview.json

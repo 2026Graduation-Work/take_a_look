@@ -158,6 +158,11 @@
         "contribution_space": {
           "const": "class_2_raw_margin"
         },
+        "contribution_abs_sum": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of absolute class-2 raw-margin contributions over every feature, excluding the expected-value column. Optional for archived v2 snapshots."
+        },
         "features": {
           "type": "array",
           "maxItems": 5,

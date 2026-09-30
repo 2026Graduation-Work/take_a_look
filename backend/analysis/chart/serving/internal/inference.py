@@ -102,6 +102,6 @@ def infer_batch(model, features):
         feature_hash = hashlib.sha256(canonical.encode()).hexdigest()
         result.append(({"down": float(scores[row_index, 0]),
                         "neutral": float(scores[row_index, 1]),
-                        "up": float(scores[row_index, 2])}, features_top, feature_hash))
+                        "up": float(scores[row_index, 2])}, features_top, feature_hash,
+                       float(np.abs(row_contrib[:-1]).sum())))
     return result
-

@@ -217,6 +217,7 @@ export default function StockDetailView({
 
         {/* 4. 판단 근거 4가지 */}
         <EvidenceTabs detail={detail} insights={insights} demo={demo}
+          contributionTotal={chart?.inference.contribution_abs_sum}
           modelFeatures={preview ? chart?.inference.features ?? [] : undefined} />
 
         {/* 5. 더 알아보기 */}

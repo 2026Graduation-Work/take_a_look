@@ -266,11 +266,13 @@ export default function EvidenceTabs({
   insights,
   demo,
   modelFeatures,
+  contributionTotal,
 }: {
   detail: StockDetail;
   insights: StockInsights;
   demo: DemoStyleAxes;
   modelFeatures?: ChartSnapshot["inference"]["features"];
+  contributionTotal?: number;
 }) {
   const order = demo.bit?.cardOrder ?? DEFAULT_CARD_ORDER;
   const tabs = [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
@@ -337,6 +339,7 @@ export default function EvidenceTabs({
         )}
         {active === "contribution" && (
           <ContributionPanel
+            total={contributionTotal}
             features={modelFeatures}
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
             provenance={detail.provenance}
@@ -618,10 +621,12 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
 // 부호 막대: 가운데 0에서 오른쪽(적)은 오르는 쪽으로 기여, 왼쪽(청)은 내리는 쪽으로 기여.
 function ContributionPanel({
   features,
+  total,
   reasons,
   provenance,
 }: {
   features?: ChartSnapshot["inference"]["features"];
+  total?: number;
   reasons: PredictionReason[];
   provenance: DataProvenance;
 }) {
@@ -651,11 +656,11 @@ function ContributionPanel({
   }
   const max = Math.max(...features.map(f => Math.abs(f.contribution))) || 1;
   const top = features[0];
+  const share = (value: number) => total === undefined ? null : total === 0 ? 0 : Math.abs(value) / total * 100;
   return (
     <>
       <Conclusion>
-        LGBM의 상방 원점수에 가장 크게 기여한 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>(
-        {signed(top.contribution, 4)})예요.
+        LGBM의 상방 점수에 가장 크게 영향을 준 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>예요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {features.map((feature) => {
@@ -667,7 +672,7 @@ function ContributionPanel({
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
                 <span className="text-xs text-muted">LGBM 피처</span>
                 <span className="ml-auto flex-none text-sm font-semibold tabular-nums" style={{ color }}>
-                  {feature.contribution === 0 ? "—" : up ? "▲" : "▼"} {signed(feature.contribution, 4)}
+                  {feature.contribution === 0 ? "—" : up ? "▲" : "▼"} 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
                 </span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
@@ -681,13 +686,26 @@ function ContributionPanel({
                   }}
                 />
               </div>
+              <span className="text-xs text-muted">상방 점수를 {feature.contribution === 0 ? "바꾸지 않음" : up ? "높이는 방향" : "낮추는 방향"}</span>
               <span className="text-xs text-muted">{feature.meaning_ko} · 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
             </li>
           );
         })}
       </ul>
+      <details className="disclosure">
+        <summary className="text-xs text-body">계산값 보기</summary>
+        <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-xs">
+          {features.map(feature => (
+            <div key={feature.name} className="contents">
+              <dt>{feature.label_ko}</dt>
+              <dd className="m-0 tabular-nums">{signed(feature.contribution, 4)}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-xs text-muted">기여도 = 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 표시된 5개 중 가장 큰 기여를 기준으로 비교해요.</p>
+      </details>
       <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>▲ 상방 원점수를 높이는 기여 · ▼ 낮추는 기여 · 0 기준 · 수익률 변화량 아님</span>
+        <span>{total === undefined ? "전체 피처 기준값이 없어 %는 미제공해요." : "전체 피처 기준 기여도 · 상위 5개만 표시 · 5개 합은 100%가 아닐 수 있어요."} ▲ 상방 점수를 높임 · ▼ 낮춤 · 상승 확률·수익률 아님</span>
         <SourceChip provenance={provenance} />
       </p>
     </>
