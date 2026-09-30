@@ -66,8 +66,7 @@ def init_worker(model_path):
 
 def process_ticker(file_path, target_date, threshold):
     """
-    개별 종목 데이터를 로드하여 core.inference.predict_success_probability를 수행합니다.
-    전처리 및 피처 생성은 core.inference에 위임합니다.
+    개별 종목의 과거 입력으로 serving의 공통 피처·추론을 수행합니다.
     """
     global _model
     ticker = os.path.basename(file_path).replace(".parquet", "")
@@ -90,16 +89,17 @@ def process_ticker(file_path, target_date, threshold):
         if len(df_slice) < 65:
             return None
 
-        # core.inference에 전처리 및 예측을 위임 — 중복 로직 없음
-        from core.inference import predict_success_probability
+        from data_collectors.trading_calendar import get_krx_trading_days
+        from serving.internal.features import build_feature_frame
+        from serving.internal.inference import infer_batch
 
-        prob_series = predict_success_probability(df_slice, _model)
-
-        if prob_series.empty:
+        days = get_krx_trading_days(
+            df_slice.Date.min().strftime("%Y-%m-%d"), df_slice.Date.max().strftime("%Y-%m-%d"))
+        features = build_feature_frame(df_slice, days)
+        current = features.loc[features.Date.eq(df_slice.Date.max())]
+        if len(current) != 1 or pd.isna(current.iloc[0].Sigma):
             return None
-
-        # class 2 모델 스코어. 미래 상승을 보장하는 확률이 아닙니다.
-        model_score = float(prob_series.iloc[-1])
+        model_score = infer_batch(_model, current)[0][0]["up"]
         last_row = df_slice.iloc[-1]
 
         return {
