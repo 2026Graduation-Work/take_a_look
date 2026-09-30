@@ -786,7 +786,7 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
       {rows.map(([label, provenance]) => (
         <div key={label} className="contents">
           <dt className="text-body">{label}</dt>
-          <dd className="m-0 min-w-0 [&>span]:max-w-full [&>span]:whitespace-normal">
+          <dd className="m-0 min-w-0 [overflow-wrap:anywhere] [&>span]:max-w-full [&>span]:whitespace-normal">
             <SourceChip provenance={provenance} />
           </dd>
         </div>
