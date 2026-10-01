@@ -7,10 +7,10 @@ pandas>=2.3.3
 openpyxl>=3.1.5
 
 # ── 파이프라인 핵심 (필수) ───────────────────────────────────
-langgraph>=1.2.11
-langchain-core>=1.6.3
+langgraph>=1.2.12
+langchain-core>=1.6.5
 pydantic>=2.13.5
-requests>=2.32.0
+requests>=2.34.2
 
 # ── 감성 분석 (필수) ─────────────────────────────────────────
 # 한국어 금융 감성 (KR-FinBERT, snunlp/KR-FinBert-SC).
@@ -27,7 +27,7 @@ transformers>=5.17.0
 # 인덱스 메타데이터와 휠 메타데이터가 어긋나 CI(3.12)의 pip가 하드 에러로 죽는다.
 # 이름 변경이 정상 반영된 첫 릴리스는 0.3.0이지만 3.12에선 설치 불가 → Python 버전별로 갈라 고정한다.
 # 대문자/소문자 모듈명 차이는 value_pipeline/collectors.py의 import 폴백이 흡수한다. (#135)
-opendartreader>=0.3; python_version >= "3.13"
+opendartreader>=0.3.3; python_version >= "3.13"
 opendartreader<0.2.3; python_version < "3.13"
 # 한국 시세/상장정보 (키 불필요)
 finance-datareader>=0.9.202
