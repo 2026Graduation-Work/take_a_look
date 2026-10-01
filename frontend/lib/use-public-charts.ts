@@ -13,6 +13,21 @@ export function usePublicCharts(codes: string[]) {
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
+    if (!key) return;
+    const refresh = () => {
+      if (document.visibilityState === "visible") setVersion(value => value + 1);
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, 5 * 60 * 1000);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
+  }, [key]);
+
+  useEffect(() => {
     let active = true;
     loadPublicCharts(key ? key.split(",") : [])
       .then((charts) => {

@@ -63,11 +63,13 @@ def test_daily_universe_uses_requested_krx_date(monkeypatch):
 
     def listing(date, market):
         assert date == "20260921" and market == "KOSPI"
-        return [f"{number:06d}" for number in range(500)]
+        return [f"{number:06d}" for number in range(499)] + ["00104K"]
 
     monkeypatch.setattr(stock, "get_market_ticker_list", listing)
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: f"stock-{code}")
-    assert len(pipeline.fetch_universe("2026-09-21")) == 500
+    universe = pipeline.fetch_universe("2026-09-21")
+    assert len(universe) == 500
+    assert "00104K" in universe.Code.to_list()
 
 
 def test_historical_test_rejects_remote_supabase(monkeypatch, tmp_path):

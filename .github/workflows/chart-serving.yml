@@ -22,6 +22,10 @@ on:
         description: "Use archived inputs; requires as_of"
         type: boolean
         default: false
+      dry_run:
+        description: "Store price/feature inputs and validate results without publishing a new batch"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -62,9 +66,10 @@ jobs:
           PREVIEW: ${{ inputs.publish_preview }}
           REPLAY: ${{ inputs.replay }}
           AS_OF: ${{ inputs.as_of }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ -n "$AS_OF" ]; }; then
-            echo "Preview cannot combine with diagnose, replay or as_of"; exit 1
+          if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ -n "$AS_OF" ]; }; then
+            echo "Preview cannot combine with diagnose, replay, dry_run or as_of"; exit 1
           fi
 
       - name: Check required secrets
@@ -86,13 +91,15 @@ jobs:
         if: ${{ inputs.publish_preview == true }}
         run: python -m serving.publish_preview --publish
 
-      - name: Collect and validate without publishing
+      - name: Collect, archive and publish confirmed daily results
         if: ${{ inputs.diagnose != true && inputs.publish_preview != true }}
         env:
           REPLAY: ${{ inputs.replay }}
           REQUESTED_AS_OF: ${{ inputs.as_of }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          args=(--dry-run)
+          args=(--publish)
+          if [ "$DRY_RUN" = "true" ]; then args=(--dry-run); fi
           if [ "$REPLAY" = "true" ]; then args+=(--replay); fi
           if [ -n "$REQUESTED_AS_OF" ]; then
             args+=(--as-of "$REQUESTED_AS_OF")

@@ -39,7 +39,7 @@ select horizon, payload->'distribution'->>'sample_count' as cases,
 from public.latest_chart_signal_snapshots where stock_code = '005930' order by horizon;
 ```
 
-검증 당시 가격 162행, 피처 1건, 공개 snapshot 2행이었고 H5/H20 사례 수는 각각 699/615건이었다. `main` 프론트는 아직 이 공개 view를 읽지 않으므로 DB에 보이는 것과 화면에 보이는 것을 구분한다. 작업 후 저장소 루트에서 `npx --yes supabase@latest stop`으로 서비스를 종료할 수 있다.
+검증 당시 가격 162행, 피처 1건, 공개 snapshot 2행이었고 H5/H20 사례 수는 각각 699/615건이었다. 프론트의 최신 게시 배치 조회 연결을 반영하면 이 공개 view를 화면에서도 읽는다. 작업 후 저장소 루트에서 `npx --yes supabase@latest stop`으로 서비스를 종료할 수 있다.
 
 ## 2. 최신 거래일 수집·추론
 
@@ -75,7 +75,7 @@ python -m serving.build_pack --pack-id PACK_ID --output serving/data/packs \
 python -m serving.pack validate --path serving/data/packs/PACK_ID
 ```
 
-Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX 인증이 필요한 조회가 있으면 `KRX_ID`, `KRX_PW`도 설정한다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX 인증이 필요한 조회가 있으면 `KRX_ID`, `KRX_PW`도 설정한다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 운영 migration 0007과 기록된 시험 배치 게시 성공은 확인했다. 일일 자동 게시 활성화 후에는 수동 실행으로 최신 batch ID, H5/H20 snapshot, 기준일을 확인한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
 
 ## 2026-09-30: 인증 점검과 화면 연결 시험
 
@@ -83,20 +83,19 @@ Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX �
   두 값을 각각 이 환경 변수로 전달한 뒤 실행한다. 파일 자체는 커밋하지 않는다.
 - `python -m serving.run_daily --diagnose`: 로그인·공식 거래일·KOSPI 유니버스·삼성전자
   수정/비수정 가격과 거래대금만 검사한다. DB에는 쓰지 않는다.
-- 예약 실행은 `--dry-run`으로 가격·피처를 보관하고 추론 결과를 검증한다.
-  결과는 14일간 Actions artifact에 보관한다. 공개 배치를 교체하지 않는다.
+- 예약 실행은 `--publish`로 가격·피처·추론 결과를 날짜별로 보관하고 완성 배치를 게시한다.
+  결과는 DB에 누적하며 Actions artifact도 14일간 보관한다. 수동 `dry_run=true`는 공개 배치를 교체하지 않는다.
 - 자정 이후 지연 실행도 전날 확정 입력을 새로 수집한다. 저장된 입력만 재사용하려면
   `--as-of YYYY-MM-DD --replay`를 명시한다. 휴장일에는 새 배치를 만들지 않는다.
 - 화면 연결 시험은 `python -m serving.publish_preview`로 검증하고 `--publish`로 발행한다.
   Actions 수동 실행의 `publish_preview=true`도 같은 명령이다. `previews/2026-09-21`의
   삼성전자 두 기간 snapshot만 발행한다. 기존 모델의 학습 입력 정합성 검증은 미완료다.
-- 프론트는 공개 batch ID `18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48`를
-  명시해 조회한다. `NEXT_PUBLIC_CHART_PREVIEW_BATCH_ID` 환경 변수가 없으면 이 공개 ID가
-  기본값이다. 빈 문자열로 설정하고 재배포하면 시험 화면을 끈다.
-  테스트 batch는 공개용 출력만 담으며 원본 가격 테이블이나 전체 유니버스를 덮어쓰지 않는다.
+- 프론트는 `latest_chart_signal_snapshots`에서 최신 게시 배치를 조회한다. 기존
+  `NEXT_PUBLIC_CHART_PREVIEW_BATCH_ID`는 더 이상 사용하지 않는다. 최신 view는 전체 배치의
+  H5/H20 결과가 모두 준비된 뒤 바뀐다. 페이지 복귀와 5분 간격에 다시 읽는다.
 - 시험 화면은 기존 종목 목록·상세 UI를 유지한다. 목록은 20거래일, 상세의 기존 기간
   비교 칸에는 5/20거래일 모델에서 가장 높은 분류 점수의 방향을 표시한다.
-  모델 근거 탭에는 LGBM의 피처별 상방 원점수 기여값만 표시하며 뉴스·재무·성향을 섞지 않는다.
+  모델 근거 탭에는 LGBM의 최종 방향 원점수에 대한 피처별 기여값만 표시하며 뉴스·재무·성향을 섞지 않는다.
   모든 시험 결과에 모델 검증 전·기준일을 적는다. 순위·10거래일 값은 만들지 않는다.
 - 재학습(#107)은 별도 작업이다. 계산 공유(#169)는 serving 피처·추론을 사용하며
   실험 CLI의 기존 출력 열과 모델 경로 옵션을 유지한다.

@@ -267,12 +267,14 @@ export default function EvidenceTabs({
   demo,
   modelFeatures,
   contributionTotal,
+  contributionSpace,
 }: {
   detail: StockDetail;
   insights: StockInsights;
   demo: DemoStyleAxes;
   modelFeatures?: ChartSnapshot["inference"]["features"];
   contributionTotal?: number;
+  contributionSpace?: ChartSnapshot["inference"]["contribution_space"];
 }) {
   const order = demo.bit?.cardOrder ?? DEFAULT_CARD_ORDER;
   const tabs = [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
@@ -339,6 +341,7 @@ export default function EvidenceTabs({
         )}
         {active === "contribution" && (
           <ContributionPanel
+            space={contributionSpace}
             total={contributionTotal}
             features={modelFeatures}
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
@@ -618,14 +621,16 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
   );
 }
 
-// 부호 막대: 가운데 0에서 오른쪽(적)은 오르는 쪽으로 기여, 왼쪽(청)은 내리는 쪽으로 기여.
+// 부호 막대: 선택한 분류 점수의 강화는 오른쪽, 완화는 왼쪽. 방향과 부호는 별개다.
 function ContributionPanel({
+  space,
   features,
   total,
   reasons,
   provenance,
 }: {
   features?: ChartSnapshot["inference"]["features"];
+  space?: ChartSnapshot["inference"]["contribution_space"];
   total?: number;
   reasons: PredictionReason[];
   provenance: DataProvenance;
@@ -654,25 +659,26 @@ function ContributionPanel({
       </>
     );
   }
+  const target = space === "class_0_raw_margin" ? "하방" : space === "class_1_raw_margin" ? "중립" : "상방";
   const max = Math.max(...features.map(f => Math.abs(f.contribution))) || 1;
   const top = features[0];
   const share = (value: number) => total === undefined ? null : total === 0 ? 0 : Math.abs(value) / total * 100;
   return (
     <>
       <Conclusion>
-        LGBM의 상방 점수에 가장 크게 영향을 준 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>예요.
+        LGBM의 {target} 점수에 가장 크게 영향을 준 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>예요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {features.map((feature) => {
           const up = feature.contribution > 0;
-          const color = feature.contribution === 0 ? "var(--color-muted)" : up ? "var(--color-up)" : "var(--color-down)";
+          const color = !up || target === "중립" ? "var(--color-muted)" : target === "하방" ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-1.5" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
                 <span className="text-xs text-muted">LGBM 피처</span>
                 <span className="ml-auto flex-none text-sm font-semibold tabular-nums" style={{ color }}>
-                  {feature.contribution === 0 ? "—" : up ? "▲" : "▼"} 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
+                  {target} {feature.contribution === 0 ? "영향 없음" : up ? "강화" : "완화"} · 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
                 </span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
@@ -686,7 +692,7 @@ function ContributionPanel({
                   }}
                 />
               </div>
-              <span className="text-xs text-muted">상방 점수를 {feature.contribution === 0 ? "바꾸지 않음" : up ? "높이는 방향" : "낮추는 방향"}</span>
+              <span className="text-xs text-muted">{target} 점수를 {feature.contribution === 0 ? "바꾸지 않음" : up ? "높이는 방향" : "낮추는 방향"}</span>
               <span className="text-xs text-muted">{feature.meaning_ko} · 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
             </li>
           );
@@ -702,10 +708,10 @@ function ContributionPanel({
             </div>
           ))}
         </dl>
-        <p className="text-xs text-muted">기여도 = 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 표시된 5개 중 가장 큰 기여를 기준으로 비교해요.</p>
+        <p className="text-xs text-muted">기여도 = {target} 점수에 대한 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 표시된 5개 중 가장 큰 기여를 기준으로 비교해요.</p>
       </details>
       <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>{total === undefined ? "전체 피처 기준값이 없어 %는 미제공해요." : "전체 피처 기준 기여도 · 상위 5개만 표시 · 5개 합은 100%가 아닐 수 있어요."} ▲ 상방 점수를 높임 · ▼ 낮춤 · 상승 확률·수익률 아님</span>
+        <span>{total === undefined ? "전체 피처 기준값이 없어 %는 미제공해요." : "전체 피처 기준 기여도 · 상위 5개만 표시 · 5개 합은 100%가 아닐 수 있어요."} {target} 강화 = 점수를 높임 · 완화 = 낮춤 · 예측 확률·수익률 아님</span>
         <SourceChip provenance={provenance} />
       </p>
     </>

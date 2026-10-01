@@ -206,7 +206,7 @@ export default function StockDetailView({
             </p>
           )}
           <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `연결 확인용 · 모델 검증 전${detail.asOf ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
+            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
             <span>주가: <SourceChip provenance={detail.priceProvenance ?? detail.provenance} /></span>
             <span>신호·범위: <SourceChip provenance={detail.provenance} /></span>
           </p>
@@ -217,6 +217,7 @@ export default function StockDetailView({
 
         {/* 4. 판단 근거 4가지 */}
         <EvidenceTabs detail={detail} insights={insights} demo={demo}
+          contributionSpace={chart?.inference.contribution_space}
           contributionTotal={chart?.inference.contribution_abs_sum}
           modelFeatures={preview ? chart?.inference.features ?? [] : undefined} />
 

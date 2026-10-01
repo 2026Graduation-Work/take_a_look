@@ -63,3 +63,18 @@ def test_price_history_uses_observed_dates_and_rejects_duplicates():
     assert len(row["history"]) == 2
     with pytest.raises(ValueError, match="duplicate"):
         price_snapshot(pd.concat([frame, frame]), "005930", "2026-01-06", "test")
+
+
+@pytest.mark.parametrize("code", ["005930", "00104K", "0126Z0"])
+def test_krx_prices_accept_valid_alphanumeric_codes(monkeypatch, code):
+    from pykrx import stock
+    from serving.internal.prices import fetch_prices
+
+    dates = pd.to_datetime(["2026-09-30"])
+    source = pd.DataFrame({"시가": [100], "고가": [102], "저가": [99], "종가": [101],
+                           "거래량": [1000], "등락률": [1], "거래대금": [101000]}, index=dates)
+    def prices(start, end, ticker, adjusted):
+        assert ticker == code
+        return source.copy()
+    monkeypatch.setattr(stock, "get_market_ohlcv_by_date", prices)
+    assert fetch_prices(code, "2026-09-01", "2026-09-30").VWAP.iloc[0] == 101
