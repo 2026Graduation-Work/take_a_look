@@ -30,7 +30,7 @@ def main(argv=None):
         if len(current) != 1:
             raise ValueError("Expected exactly one archived input row on the preview date")
         model = lgb.Booster(model_file=str(paths[horizon][0]))
-        scores, features, digest, total = infer_batch(model, current)[0]
+        scores, features, digest, total = infer_batch(model, current, class_index=2)[0]
         old = snapshot["inference"]
         if (not all(np.isclose(scores[k], old["scores"][k], rtol=0, atol=1e-10) for k in scores)
                 or features != old["features"]):

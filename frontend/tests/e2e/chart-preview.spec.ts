@@ -9,12 +9,12 @@ const rows = snapshots.map((payload: { batch_id: string; stock_code: string; hor
 test("public predictions retain the original detail UI and both model directions", async ({ page }) => {
   const archivedRows = structuredClone(rows);
   for (const row of archivedRows) delete row.payload.inference.contribution_abs_sum;
-  await page.route("**/rest/v1/chart_signal_snapshots?**", route => {
-    expect(new URL(route.request().url()).searchParams.get("batch_id")).toBe(`eq.${rows[0].batch_id}`);
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => {
+    expect(new URL(route.request().url()).searchParams.get("batch_id")).toBeNull();
     return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
-  await expect(page.getByTestId("preview-provenance")).toHaveText(/연결 확인용 · 모델 검증 전 · 2026.09.21/);
+  await expect(page.getByTestId("preview-provenance")).toHaveText(/모델 검증 전 · 2026.09.21/);
   await expect(page.getByRole("heading", { name: /모델 신호 하방\s*순위 미제공/ })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
   await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
@@ -45,7 +45,7 @@ test("public predictions retain the original detail UI and both model directions
 
 test("failed public reads show retry, without restoring demo predictions", async ({ page }) => {
   let fail = true;
-  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill(fail
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill(fail
     ? { status: 503, json: { message: "unavailable" } } : { json: rows }));
   await page.goto("/stocks/005930");
   // PostgREST retries transient 503 responses before exposing the error.
@@ -60,7 +60,7 @@ test("failed public reads show retry, without restoring demo predictions", async
 test("feature shares use the whole-model denominator and raw values are collapsed", async ({ page }) => {
   const wholeModel = structuredClone(rows);
   for (const row of wholeModel) row.payload.inference.contribution_abs_sum = 1;
-  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: wholeModel }));
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: wholeModel }));
   await page.goto("/stocks/005930");
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
@@ -84,7 +84,7 @@ test("observed prices remain visible when no historical distribution is availabl
     ...row.payload.distribution, status: "no_cases", sample_count: 0, stock_count: 0,
     period_start: null, period_end: null, histogram: { bins: [], central_68: null },
   };
-  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: withoutCases }));
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: withoutCases }));
   await page.goto("/stocks/005930");
   await expect(page.getByRole("img", { name: "최근 60거래일 주가 흐름. 수익률 범위 미제공" })).toBeVisible();
   await expect(page.getByText("최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.")).toHaveCount(0);
@@ -95,7 +95,7 @@ test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
   for (const row of denseRows) row.payload.distribution.histogram.bins = Array.from({ length: 1030 }, (_, i) => ({
     left: -60 + i * 2, right: -58 + i * 2, count: i === 30 ? row.payload.distribution.sample_count : 0,
   }));
-  await page.route("**/rest/v1/chart_signal_snapshots?**", route => route.fulfill({ json: denseRows }));
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: denseRows }));
   await page.goto("/stocks/005930");
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
   await page.locator("summary", { hasText: "더 알아보기" }).click();
@@ -108,3 +108,61 @@ test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
     return Number.isFinite(left) && right >= left;
   }))).toBe(true);
 });
+
+test("another stock reads the latest batch and refreshes after returning to the page", async ({ page }) => {
+  let latest = structuredClone(rows);
+  for (const row of latest) {
+    row.stock_code = row.payload.stock_code = "005380";
+    row.payload.stock_name = "현대차";
+  }
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => {
+    const query = new URL(route.request().url()).searchParams;
+    expect(query.get("batch_id")).toBeNull();
+    expect(query.get("stock_code")).toContain("005380");
+    return route.fulfill({ json: latest });
+  });
+  await page.goto("/stocks/005380");
+  await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
+  latest = structuredClone(latest);
+  for (const row of latest) {
+    row.batch_id = row.payload.batch_id = "new-daily-batch";
+    row.payload.data_asof = "2026-09-22";
+    row.payload.inference.scores = { down: .1, neutral: .2, up: .7 };
+  }
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.22");
+  await expect(page.getByRole("heading", { name: /모델 신호 상방/ })).toBeVisible();
+  await page.locator("summary", { hasText: "더 알아보기" }).click();
+  for (const h of [5, 20]) await expect(page.locator('section[aria-labelledby="more-horizons"]')
+    .getByRole("listitem").filter({ hasText: `${h}거래일` })).toContainText("↑ 상방");
+});
+
+for (const [space, target, scores, color] of [
+  ["class_0_raw_margin", "하방", { down: .7, neutral: .2, up: .1 }, "var(--color-down)"],
+  ["class_1_raw_margin", "중립", { down: .2, neutral: .7, up: .1 }, "var(--color-muted)"],
+  ["class_2_raw_margin", "상방", { down: .1, neutral: .2, up: .7 }, "var(--color-up)"],
+] as const) {
+  test(`contributions explain ${target} with strengthening and weakening factors`, async ({ page }) => {
+    const selected = structuredClone(rows);
+    for (const row of selected) {
+      row.payload.inference.scores = scores;
+      row.payload.inference.contribution_space = space;
+      row.payload.inference.contribution_abs_sum = 1;
+      row.payload.inference.features[0].contribution = .12;
+      row.payload.inference.features[1].contribution = -.10;
+    }
+    await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
+    await page.goto("/stocks/005930");
+    await expect(page.getByRole("heading", { name: new RegExp(`모델 신호 ${target}`) })).toBeVisible();
+    await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+    const panel = page.getByRole("tabpanel");
+    await expect(panel).toContainText(`LGBM의 ${target} 점수`);
+    await expect(panel.locator("[data-model-feature]")).toHaveCount(5);
+    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 강화 · 기여도 12.0%`);
+    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 완화 · 기여도 10.0%`);
+    await expect(panel.locator("[data-model-feature]").nth(0).locator("span[style]").first()).toHaveAttribute("style", `color: ${color};`);
+    await expect(panel.locator("[data-model-feature]").nth(1).locator("span[style]").first()).toHaveAttribute("style", "color: var(--color-muted);");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

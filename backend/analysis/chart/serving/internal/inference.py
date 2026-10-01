@@ -1,4 +1,4 @@
-"""H5/H20 inference and signed class-2 raw-margin explanations."""
+"""H5/H20 inference and signed explanations of the highest-scoring class."""
 
 import hashlib
 import json
@@ -67,7 +67,7 @@ def feature_info(name):
     raise ValueError(f"Unreviewed feature name: {name}")
 
 
-def infer_batch(model, features):
+def infer_batch(model, features, *, class_index=None):
     """One model call per horizon for all valid current stock rows."""
     names = model.feature_name()
     if features.empty or set(names) - set(features):
@@ -84,12 +84,14 @@ def infer_batch(model, features):
         or not np.isfinite(scores).all() or not np.isfinite(raw).all()
         or not np.isfinite(contributions).all() or not np.allclose(scores.sum(axis=1), 1)):
         raise ValueError("Invalid multiclass output")
-    up_contrib = contributions.reshape(len(frame), 3, len(names) + 1)[:, 2]
+    all_contrib = contributions.reshape(len(frame), 3, len(names) + 1)
     result = []
-    for row_index, (row_values, row_contrib) in enumerate(zip(values, up_contrib)):
-        if not math.isclose(float(row_contrib.sum()), float(raw[row_index, 2]),
+    for row_index, row_values in enumerate(values):
+        target = int(np.argmax(scores[row_index])) if class_index is None else class_index
+        row_contrib = all_contrib[row_index, target]
+        if not math.isclose(float(row_contrib.sum()), float(raw[row_index, target]),
                             rel_tol=1e-6, abs_tol=1e-8):
-            raise ValueError("Class-2 contributions do not sum to raw score")
+            raise ValueError("Selected-class contributions do not sum to raw score")
         ordered = sorted(range(len(names)), key=lambda i: (-abs(row_contrib[i]), names[i]))[:5]
         features_top = []
         for index in ordered:

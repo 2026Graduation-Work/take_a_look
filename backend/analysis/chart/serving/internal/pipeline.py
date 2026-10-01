@@ -41,15 +41,15 @@ def fetch_universe(as_of, code=None):
     from pykrx import stock
 
     if code:
-        if not re.fullmatch(r"[0-9]{6}", code):
-            raise ValueError("Stock code must be six digits")
+        if not re.fullmatch(r"[0-9A-Z]{6}", code):
+            raise ValueError("Stock code must be six uppercase alphanumeric characters")
         codes = [code]
     else:
         codes = stock.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI")
         if not 500 <= len(codes) <= 1200:
             raise ValueError("Invalid KOSPI universe size")
     rows = pd.DataFrame({"Code": codes, "Name": [stock.get_market_ticker_name(item) for item in codes]})
-    if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9]{6}").all()
+    if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all()
             or rows.Name.isna().any() or not rows.Name.astype(str).str.strip().all()):
         raise ValueError("Invalid KOSPI universe")
     return rows.sort_values("Code").reset_index(drop=True)
@@ -131,7 +131,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
     names = dict(zip(universe.Code, universe.Name))
     codes = sorted(names)
     batch_id = canonical_hash({"as_of": as_of, "pack_id": pack["pack_id"],
-                               "output_policy": "whole_feature_contribution_hist2_v1",
+                               "output_policy": "winning_class_contribution_hist2_v2",
                                "builder": pack["feature_builder_id"], "names": names,
                                "raw_hashes": raw_hashes, "unavailable": unavailable})
     snapshots = []
@@ -154,13 +154,14 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                 continue
             raw, row = frames[code]
             scores, contributions, features_hash, contribution_total = by_code[code]
+            target = max(range(3), key=lambda i: scores[("down", "neutral", "up")[i]])
             sigma, close = float(row["Sigma"]), float(row["Close"])
             up, down = (item["label_barriers"][key] for key in ("up_mult", "down_mult"))
             inference = {"status": "available", "reason": None, "scores": scores,
                          "score_event": "class_2_upper_barrier_first", "close": close,
                          "sigma": sigma, "barriers": {"up": close * (1 + up * sigma),
                                                        "down": close * (1 - down * sigma)},
-                         "contribution_space": "class_2_raw_margin", "features": contributions,
+                         "contribution_space": f"class_{target}_raw_margin", "features": contributions,
                          "contribution_abs_sum": contribution_total}
             price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
             if price["status"] != "available":
@@ -234,8 +235,8 @@ def require_local_url(url):
 
 
 def load_cached_input(data_root, code, requested_date=None):
-    if not re.fullmatch(r"[0-9]{6}", code):
-        raise ValueError("Stock code must have six digits")
+    if not re.fullmatch(r"[0-9A-Z]{6}", code):
+        raise ValueError("Stock code must have six uppercase alphanumeric characters")
     path = data_root / "raw" / f"{code}.parquet"
     raw = pd.read_parquet(path)
     processed = pd.read_parquet(data_root / "processed" / f"{code}.parquet")

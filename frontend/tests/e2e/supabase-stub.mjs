@@ -22,6 +22,6 @@ createServer((request, response) => {
     return;
   }
   response.writeHead(rest ? 200 : 404, headers);
-  const chart = request.url?.startsWith("/rest/v1/chart_signal_snapshots?");
+  const chart = request.url?.startsWith("/rest/v1/latest_chart_signal_snapshots?");
   response.end(rest && request.method === "GET" ? JSON.stringify(chart ? chartRows : []) : "{}");
 }).listen(54321, "127.0.0.1");

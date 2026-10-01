@@ -1,5 +1,7 @@
 """Adjusted KRX OHLCV with actual turnover-derived adjusted VWAP."""
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -33,8 +35,8 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch both price bases from KRX; imports pykrx only when collection runs."""
     from pykrx import stock
 
-    if len(code) != 6 or not code.isdigit():
-        raise ValueError("Stock code must be six digits")
+    if not re.fullmatch(r"[0-9A-Z]{6}", code):
+        raise ValueError("Stock code must be six uppercase alphanumeric characters")
     start, end = start_date.replace("-", ""), end_date.replace("-", "")
     adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
     raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)

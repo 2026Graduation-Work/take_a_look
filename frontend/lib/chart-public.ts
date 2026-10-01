@@ -1,4 +1,3 @@
-import { PREVIEW_BATCH_ID } from "./chart-preview-config.ts";
 import { getSupabaseClient } from "./supabase.ts";
 
 export type ChartProfile = "stable" | "aggressive";
@@ -17,7 +16,7 @@ export interface ChartSnapshot {
   inference: {
     status: "available" | "unavailable";
     reason: string | null;
-    contribution_space: "class_2_raw_margin";
+    contribution_space: "class_0_raw_margin" | "class_1_raw_margin" | "class_2_raw_margin";
     scores: { down: number; neutral: number; up: number } | null;
     // Archived v2 snapshots may omit the whole-feature denominator.
     contribution_abs_sum?: number;
@@ -77,7 +76,7 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
     typeof p.release_id !== "string" || !p.release_id ||
     typeof p.pack_id !== "string" || !p.pack_id ||
     !["available", "unavailable"].includes(String(inference.status)) ||
-    inference.contribution_space !== "class_2_raw_margin" ||
+    !["class_0_raw_margin", "class_1_raw_margin", "class_2_raw_margin"].includes(String(inference.contribution_space)) ||
     (inference.status === "available" && (!record(scores) ||
       ![scores.down, scores.neutral, scores.up].every(s => number(s) && s >= 0 && s <= 1) ||
       Math.abs(Number(scores.down) + Number(scores.neutral) + Number(scores.up) - 1) > 1e-6)) ||
@@ -128,14 +127,15 @@ export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map
       if (!response.ok) throw new Error("로컬 시안 데이터를 불러오지 못했어요.");
       return { data: await response.json(), error: null };
     })
-    : await client.from("chart_signal_snapshots")
-    .select("batch_id,stock_code,horizon,payload").eq("batch_id", PREVIEW_BATCH_ID).in("stock_code", unique);
+    : await client.from("latest_chart_signal_snapshots")
+    .select("batch_id,stock_code,horizon,payload").in("stock_code", unique);
   if (error) throw new Error("차트를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.");
   const rows = (data ?? []) as ChartRow[];
   const batchIds = new Set(rows.map((row) => row.batch_id));
   const asOfDates = new Set<string>();
   if (batchIds.size > 1) throw new Error("서로 다른 차트 배치가 섞였습니다.");
   for (const row of rows) {
+    if (!unique.includes(row.stock_code)) continue;
     const snapshot = parseChartSnapshot(row);
     asOfDates.add(snapshot.data_asof);
     const byHorizon = result.get(row.stock_code) ?? new Map<ChartHorizon, ChartSnapshot>();

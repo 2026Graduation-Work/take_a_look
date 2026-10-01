@@ -42,8 +42,8 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
           )}
         </span>
         <span className="truncate text-xs text-muted">{preview
-          ? loading ? "시험 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
-            : chart ? `연결 확인용 · 모델 검증 전 · ${chart.data_asof} 기준 · 4주·20거래일` : "시험 결과가 아직 준비되지 않았어요."
+          ? loading ? "최신 게시 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
+            : chart ? `모델 검증 전 · ${chart.data_asof} 기준 · 4주·20거래일` : "게시된 예측 결과가 아직 없어요."
           : oneLineReason(stock)}</span>
       </div>
       <div className="flex flex-none flex-col items-end gap-0.5">
