@@ -1,6 +1,6 @@
 # ── 데이터 수집 및 전처리 ───────────────────────
 finance-datareader>=0.9.202
-pykrx>=1.2.8
+pykrx>=1.2.9
 pandas>=1.5.3
 numpy>=2.5.3
 pyarrow>=25.0.1
@@ -9,7 +9,7 @@ tqdm>=4.70.1
 # ── 머신러닝 모델링 (DT 계열) ───────────────────
 scikit-learn>=1.9.1
 lightgbm>=4.7.0
-jsonschema>=4.0  # serving snapshot validation
+jsonschema>=4.26.0  # serving snapshot validation
 pyyaml>=6.0.3
 
 # ── 백테스트 및 시뮬레이션 ─────────────────────
@@ -17,10 +17,10 @@ pyyaml>=6.0.3
 vectorbt>=0.28.5
 matplotlib>=3.11.2
 yfinance>=1.7.0
-quantstats>=0.0.81
+quantstats>=0.0.86
 
 # ── 실험 분석 대시보드 ─────────────────────────
-streamlit>=1.63.0
+streamlit>=1.64.0
 # plotly 7.0.0(2026-08-25)이 layout template에서 scattermapbox를 제거했다.
 # vectorbt 1.0.0은 import 시 테마 템플릿에 scattermapbox를 등록하므로 ValueError로 죽는다.
 # 해제 조건: vectorbt가 plotly 7을 지원하거나 vectorbt를 걷어낼 때. (dependabot.yml ignore와 함께 푼다)
