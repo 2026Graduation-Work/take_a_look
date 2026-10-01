@@ -29,7 +29,7 @@ def normalize_trading_halts(df: pd.DataFrame, trading_days=None) -> pd.DataFrame
         raise ValueError(
             "실제 VWAP 컬럼이 없습니다. 거래대금 기반 VWAP을 포함한 입력이 필요합니다."
         )
-    traded_without_vwap = df["Close"].notna() & df["Close"].ne(0) & (
+    traded_without_vwap = df["Volume"].fillna(0).gt(0) & (
         df["VWAP"].isna() | df["VWAP"].le(0)
     )
     if traded_without_vwap.any():
