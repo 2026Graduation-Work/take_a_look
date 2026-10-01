@@ -78,3 +78,18 @@ def test_krx_prices_accept_valid_alphanumeric_codes(monkeypatch, code):
         return source.copy()
     monkeypatch.setattr(stock, "get_market_ohlcv_by_date", prices)
     assert fetch_prices(code, "2026-09-01", "2026-09-30").VWAP.iloc[0] == 101
+
+
+@pytest.mark.parametrize("volume", [0, 10])
+def test_missing_vwap_is_allowed_only_on_no_trade_days(volume):
+    from serving.internal.features import normalize_trading_halts
+
+    raw = pd.DataFrame({"Date": pd.to_datetime(["2026-09-30"]), "Open": [100], "High": [100],
+                        "Low": [100], "Close": [100], "Volume": [volume], "VWAP": [float("nan")]})
+    if volume:
+        with pytest.raises(ValueError, match="실제 VWAP"):
+            normalize_trading_halts(raw, {"2026-09-30"})
+    else:
+        normalized = normalize_trading_halts(raw, {"2026-09-30"})
+        assert normalized.VWAP.iloc[0] == normalized.Close.iloc[0] == 100
+        assert normalized.Volume.iloc[0] == 0
