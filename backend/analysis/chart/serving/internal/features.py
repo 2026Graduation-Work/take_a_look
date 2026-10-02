@@ -229,10 +229,12 @@ def generate_full_alpha158_features(df: pd.DataFrame) -> pd.DataFrame:
         # SUMD: 상승 이동 비중과 하락 이동 비중의 차이. 가격 방향 에너지
         new_cols[f"sumd_{w}"] = sump - sumn
 
+        # A zero-variance window has no defined correlation. pandas can emit inf
+        # after floating-point cancellation; keep it missing for LightGBM.
         # CORR: W일 종가 수준과 거래량 수준의 상관. 가격·활동량 동행 여부
-        new_cols[f"corr_{w}"] = close_p.rolling(w).corr(vol)
+        new_cols[f"corr_{w}"] = close_p.rolling(w).corr(vol).replace([np.inf, -np.inf], np.nan)
         # CORD: W일 가격 수익률과 거래량 변화율의 상관. 변동 시 거래량 반응
-        new_cols[f"cord_{w}"] = ret.rolling(w).corr(v_ret)
+        new_cols[f"cord_{w}"] = ret.rolling(w).corr(v_ret).replace([np.inf, -np.inf], np.nan)
 
         # VMA: 현재 거래량 대비 W일 평균 거래량. 1 미만이면 현재 거래량이 평균 이상
         new_cols[f"vma_{w}"] = vol.rolling(w).mean() / (vol + epsilon)

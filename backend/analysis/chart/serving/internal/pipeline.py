@@ -68,10 +68,12 @@ def frame_hash(frame):
     return hashlib.sha256(buffer.getvalue()).hexdigest()
 
 
-def _retry_fetch(code, start, as_of):
+def _retry_fetch(code, start, as_of, *, stored=None, daily=None):
     for attempt in range(3):
         try:
-            return fetch_prices(code, start, as_of)
+            if daily is None:
+                return fetch_prices(code, start, as_of)
+            return fetch_incremental_prices(code, start, as_of, stored, daily)
         except (OSError, TimeoutError, ConnectionError):
             if attempt == 2:
                 raise
@@ -119,7 +121,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 raw = stored
             else:
                 fresh = (_retry_fetch(code, start, as_of) if historical_test else
-                         fetch_incremental_prices(code, start, as_of, stored, daily))
+                         _retry_fetch(code, start, as_of, stored=stored, daily=daily))
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
