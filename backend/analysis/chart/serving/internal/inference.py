@@ -6,6 +6,8 @@ import math
 
 import numpy as np
 
+from .progress import stage
+
 BASE_INFO = {
     "Change": ("전일 대비 등락", "수정종가의 전일 대비 변화율"),
     "kmid": ("장중 종가 이동", "시가 대비 종가 이동 비율"),
@@ -76,9 +78,12 @@ def infer_batch(model, features, *, class_index=None):
     values = frame.to_numpy()
     if np.isinf(values).any():
         raise ValueError("Infinite feature input")
-    scores = np.asarray(model.predict(frame, num_threads=2), dtype=float)
-    raw = np.asarray(model.predict(frame, raw_score=True, num_threads=2), dtype=float)
-    contributions = np.asarray(model.predict(frame, pred_contrib=True, num_threads=2), dtype=float)
+    with stage("prediction_scores", rows=len(frame)):
+        scores = np.asarray(model.predict(frame, num_threads=2), dtype=float)
+    with stage("prediction_raw_scores", rows=len(frame)):
+        raw = np.asarray(model.predict(frame, raw_score=True, num_threads=2), dtype=float)
+    with stage("prediction_contributions", rows=len(frame)):
+        contributions = np.asarray(model.predict(frame, pred_contrib=True, num_threads=2), dtype=float)
     if (scores.shape != (len(frame), 3) or raw.shape != (len(frame), 3)
         or contributions.shape != (len(frame), 3 * (len(names) + 1))
         or not np.isfinite(scores).all() or not np.isfinite(raw).all()

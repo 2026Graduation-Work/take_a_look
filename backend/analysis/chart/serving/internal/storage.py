@@ -4,7 +4,8 @@ import hashlib
 import io
 import json
 import os
-from urllib.error import HTTPError
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -13,6 +14,7 @@ import pandas as pd
 from ..contracts import validate_snapshot
 from .distribution import POLICY_ID
 from .hashing import canonical_hash
+from .progress import report
 
 
 def service_headers(key):
@@ -51,12 +53,26 @@ class SupabaseStore:
         if body is not None and not isinstance(body, bytes):
             body = json.dumps(body, allow_nan=False).encode()
         request = Request(self.url + path, data=body, headers=headers, method=method)
-        try:
-            with urlopen(request, timeout=60) as response:
-                data = response.read()
-                return json.loads(data) if data and "json" in response.headers.get("Content-Type", "") else data
-        except HTTPError as exc:
-            raise RuntimeError(f"Supabase {method} {path.split('?')[0]} failed: HTTP {exc.code}") from None
+        # Retry only reads and idempotent writes; never repeat a publish RPC.
+        retryable = method == "GET" or (
+            method == "POST" and ("resolution=merge-duplicates" in (prefer or "")
+                                  or headers.get("x-upsert") == "true"))
+        for attempt in range(3):
+            try:
+                with urlopen(request, timeout=60) as response:
+                    data = response.read()
+                    return json.loads(data) if data and "json" in response.headers.get("Content-Type", "") else data
+            except (HTTPError, URLError, TimeoutError) as exc:
+                status = exc.code if isinstance(exc, HTTPError) else None
+                transient = status is None or status in {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
+                if isinstance(exc, HTTPError):
+                    exc.close()
+                if not retryable or not transient or attempt == 2:
+                    detail = f"HTTP {status}" if status else type(exc).__name__
+                    raise RuntimeError(f"Supabase {method} {path.split('?')[0]} failed: {detail}") from None
+                report("supabase_retry", method=method, resource=path.split("?")[0],
+                       attempt=attempt + 1, http_status=status)
+                time.sleep(2 * (attempt + 1))
 
     def save_universe(self, as_of, rows):
         values = [{"as_of": as_of, "stock_code": str(row["Code"]).zfill(6),
