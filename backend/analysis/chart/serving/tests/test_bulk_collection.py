@@ -116,3 +116,18 @@ def test_bulk_archive_uses_all_pages_and_retains_alphanumeric_stock_codes(monkey
     panel = store.load_price_panel('2026-09-30', '2026-10-01')
     assert len(panel) == 1001 and '00104K' in panel
     assert 'offset=1000' in calls[1]
+
+
+def test_db_decimal_roundtrip_does_not_rewrite_history_but_real_changes_do():
+    fresh = source_frame()
+    fresh['Change'] = 1.234567890123456
+    fresh['AdjustmentFactor'] = 1.0037243947858474
+    fresh['VWAP'] = 271453.1620996132
+    stored = fresh.copy()
+    for column in ('Change', 'AdjustmentFactor', 'VWAP'):
+        stored[column] = stored[column].map(lambda value: float(format(value, '.15g')))
+    assert prices.changed_price_rows(fresh, stored).empty
+    for column, delta in [('Close', 1), ('Volume', 1), ('Amount', 1), ('VWAP', .01)]:
+        corrected = fresh.copy()
+        corrected.loc[0, column] += delta
+        assert len(prices.changed_price_rows(corrected, stored)) == 1

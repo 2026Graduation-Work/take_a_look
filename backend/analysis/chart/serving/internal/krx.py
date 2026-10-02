@@ -104,8 +104,9 @@ def diagnose():
                 unequal = ~((left == right) | (np.isnan(left) & np.isnan(right)))
                 if unequal.any():
                     delta = np.abs(left[unequal] - right[unequal])
+                    finite = delta[np.isfinite(delta)]
                     fields[column] = {"rows": int(unequal.sum()),
-                                      "max_abs_difference": float(np.nanmax(delta))}
+                                      "max_abs_difference": float(finite.max()) if len(finite) else None}
             print(json.dumps({"event": "incremental_price_check", "stock_code": "005930",
                               "changed_rows": len(changed_price_rows(fresh, stored)),
                               "fields": fields}, allow_nan=False), flush=True)

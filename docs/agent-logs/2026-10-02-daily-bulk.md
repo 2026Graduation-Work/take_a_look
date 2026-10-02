@@ -28,3 +28,13 @@
 
 위 normal dry-run 결과부터 확인. 성공한 경우 PR #185 최신 CI 완료 후 merge, main --as-of 2026-10-01 --publish 실행 후 latest view 1884개/날짜 및 4종목 production UI 확인.
 Copilot 및 유료 기능 제외. 원본 dirty checkout은 보존하고 /tmp/take-a-look-chart-fix worktree만 사용.
+
+## 전체 검증 완료 및 DB 정밀도 비교
+
+- normal daily dry-run 36954970350 성공: 11분6초, 942종목/1884 snapshots, unavailable 0. 기존 실패 실행 약 80분 대비 약 7배 단축.
+- raw daily market 1회 0.541초, 묶음 피처 업로드 3.14초. 수정주가 조회 194.3초, 피처 계산 144.6초, DB 가격 패널 96.1초.
+- 가격 쓰기 146178행/110.7초는 실제 가격 변화가 아닌 DB double round-trip 차이로 확인됨. 읽기 전용 diagnose 36956146193: 005930 Change 최대 4.62e-14, AdjustmentFactor 4.44e-15, VWAP 5.24e-10 차이.
+- 가격/거래량/거래대금은 exact 비교 유지. 위 세 파생값만 rtol=1e-14, atol=1e-12 적용해 허위 재저장을 막음. 실제 보정과 1원/1주 변화는 테스트로 계속 검출.
+- 최종 chart 테스트 197개 / ruff 통과. 진단은 신규 날짜의 missing 값을 JSON null로 기록하도록 보완.
+- 가격 출처는 설치된 pykrx의 실제 경로에 맞춰 NAVER 수정주가·KRX 거래대금으로 표기. UI 구조 변경 없음.
+- 다음: 최신 PR 검사 후 merge, main 게시 실행 및 latest view/UI 확인.

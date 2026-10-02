@@ -204,7 +204,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                                                        "down": close * (1 - down * sigma)},
                          "contribution_space": f"class_{target}_raw_margin", "features": contributions,
                          "contribution_abs_sum": contribution_total}
-            price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
+            price = price_snapshot(raw, code, as_of, "NAVER 수정주가·KRX 거래대금 (pykrx)")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
             with stage("historical_distribution", stock_code=code, horizon=horizon):

@@ -116,8 +116,13 @@ def changed_price_rows(fresh, stored):
     previous.index = fresh.index
     values = fresh.drop(columns="Date")
     previous = previous[values.columns]
-    unchanged = (values.eq(previous) | (values.isna() & previous.isna())).all(axis=1)
-    return fresh.loc[~unchanged]
+    equal = values.eq(previous) | (values.isna() & previous.isna())
+    # PostgREST round-trips derived doubles with tiny decimal differences.
+    # Observed prices, volumes and turnover still require exact equality.
+    for column in ("Change", "AdjustmentFactor", "VWAP"):
+        equal[column] = np.isclose(values[column].to_numpy(float), previous[column].to_numpy(float),
+                                   rtol=1e-14, atol=1e-12, equal_nan=True)
+    return fresh.loc[~equal.all(axis=1)]
 
 
 
