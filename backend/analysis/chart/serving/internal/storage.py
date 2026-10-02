@@ -90,20 +90,24 @@ class SupabaseStore:
                               "AsOf": as_of} for row in rows])
 
     def upsert_prices(self, code, frame):
-        missing = set(PRICE_COLUMNS) - set(frame)
-        if missing:
-            raise ValueError(f"Raw prices missing: {sorted(missing)}")
-        dates = pd.to_datetime(frame["Date"], errors="raise")
-        if dates.isna().any() or dates.duplicated().any():
-            raise ValueError("Invalid or duplicate price dates")
+        self.upsert_price_panel({code: frame})
+
+    def upsert_price_panel(self, frames):
         values = []
-        for row in frame.to_dict("records"):
-            item = {"stock_code": code}
-            for source, target in PRICE_COLUMNS.items():
-                value = row[source]
-                item[target] = pd.Timestamp(value).date().isoformat() if source == "Date" else (
-                    None if pd.isna(value) else float(value))
-            values.append(item)
+        for code, frame in frames.items():
+            missing = set(PRICE_COLUMNS) - set(frame)
+            if missing:
+                raise ValueError(f"Raw prices missing: {sorted(missing)}")
+            dates = pd.to_datetime(frame["Date"], errors="raise")
+            if dates.isna().any() or dates.duplicated().any():
+                raise ValueError("Invalid or duplicate price dates")
+            for row in frame.to_dict("records"):
+                item = {"stock_code": code}
+                for source, target in PRICE_COLUMNS.items():
+                    value = row[source]
+                    item[target] = pd.Timestamp(value).date().isoformat() if source == "Date" else (
+                        None if pd.isna(value) else float(value))
+                values.append(item)
         for offset in range(0, len(values), 500):
             self._request("POST", "/rest/v1/chart_prices?on_conflict=stock_code,trade_date",
                           values[offset:offset + 500], prefer="resolution=merge-duplicates,return=minimal")
@@ -125,6 +129,41 @@ class SupabaseStore:
         if not frame.empty:
             frame["Date"] = pd.to_datetime(frame["Date"])
         return frame
+
+    def load_price_panel(self, start, end):
+        rows = []
+        while True:
+            page = self._request("GET", "/rest/v1/chart_prices?trade_date=gte." + quote(start) +
+                                 "&trade_date=lte." + quote(end) +
+                                 "&select=*&order=stock_code,trade_date&limit=1000&offset=" + str(len(rows)))
+            rows.extend(page)
+            if len(page) < 1000:
+                break
+        if not rows:
+            return {}
+        panel = pd.DataFrame(rows).rename(columns={target: source for source, target in PRICE_COLUMNS.items()})
+        panel["Date"] = pd.to_datetime(panel["Date"])
+        return {code: frame[list(PRICE_COLUMNS)].reset_index(drop=True)
+                for code, frame in panel.groupby("stock_code", sort=True)}
+
+    def upload_feature_panel(self, as_of, builder_id, raw_hashes, frames):
+        """Archive current model inputs in one file; raw history remains in chart_prices."""
+        if not frames or set(frames) != set(raw_hashes):
+            raise ValueError("Feature panel/input identities mismatch")
+        frame = pd.DataFrame([dict(frames[code][1], stock_code=code) for code in sorted(frames)])
+        data = io.BytesIO()
+        frame.to_parquet(data, index=False)
+        key = f"{builder_id}/{as_of}/{canonical_hash(raw_hashes)}/batch.parquet"
+        self._request("POST", "/storage/v1/object/chart-features/" + quote(key, safe="/"),
+                      data.getvalue(), content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
+        digest = hashlib.sha256(data.getvalue()).hexdigest()
+        rows = [{"stock_code": code, "as_of": as_of, "builder_id": builder_id,
+                 "input_sha256": raw_hashes[code], "storage_path": key,
+                 "feature_sha256": digest} for code in sorted(frames)]
+        for offset in range(0, len(rows), 500):
+            self._request("POST", "/rest/v1/chart_feature_snapshots?on_conflict=stock_code,as_of,builder_id,input_sha256",
+                          rows[offset:offset + 500], prefer="resolution=merge-duplicates,return=minimal")
+
 
     def upload_features(self, code, as_of, builder_id, input_hash, frame):
         if not code or not builder_id or len(input_hash) != 64:

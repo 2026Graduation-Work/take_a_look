@@ -77,7 +77,8 @@ def infer_batch(model, features, *, class_index=None):
     frame = features[names].astype(float)
     values = frame.to_numpy()
     if np.isinf(values).any():
-        raise ValueError("Infinite feature input")
+        bad = [(str(frame.index[row]), names[column]) for row, column in zip(*np.where(np.isinf(values)))]
+        raise ValueError(f"Infinite feature input (stock, feature): {bad[:20]}")
     with stage("prediction_scores", rows=len(frame)):
         scores = np.asarray(model.predict(frame, num_threads=2), dtype=float)
     with stage("prediction_raw_scores", rows=len(frame)):
