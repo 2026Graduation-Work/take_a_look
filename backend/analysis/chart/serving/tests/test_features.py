@@ -93,3 +93,23 @@ def test_missing_vwap_is_allowed_only_on_no_trade_days(volume):
         normalized = normalize_trading_halts(raw, {"2026-09-30"})
         assert normalized.VWAP.iloc[0] == normalized.Close.iloc[0] == 100
         assert normalized.Volume.iloc[0] == 0
+
+
+def test_constant_price_windows_do_not_produce_infinite_correlations():
+    import numpy as np
+    from serving.internal.features import generate_full_alpha158_features
+
+    rng = np.random.default_rng(42)
+    for trailing in (5, 10, 20, 30, 60):
+        close = rng.integers(100, 1000, 100).astype(float)
+        close[-trailing:] = 333.
+        volume = rng.integers(1, 10000, 100).astype(float)
+        source = pd.DataFrame({'Open': close, 'High': close+1, 'Low': close-1,
+                               'Close': close, 'Volume': volume, 'VWAP': close})
+        features = generate_full_alpha158_features(source)
+        correlations = features.filter(regex=r'^cor[rd]_')
+        assert not np.isinf(correlations.to_numpy(dtype=float)).any()
+        assert pd.isna(features.corr_5.iloc[-1])
+        # Defined windows retain pandas' original result.
+        expected = source.Close.rolling(5).corr(source.Volume).iloc[10]
+        assert features.corr_5.iloc[10] == pytest.approx(expected)

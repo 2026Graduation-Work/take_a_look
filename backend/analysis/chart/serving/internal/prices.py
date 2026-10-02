@@ -40,11 +40,21 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     if not re.fullmatch(r"[0-9A-Z]{6}", code):
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
     start, end = start_date.replace("-", ""), end_date.replace("-", "")
-    with stage("krx_adjusted_prices", stock_code=code):
-        adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
+    adjusted = fetch_adjusted_prices(code, start_date, end_date)
     with stage("krx_raw_prices", stock_code=code):
         raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
-    if adjusted.empty or raw.empty:
+    if raw.empty:
+        raise ValueError(f"KRX prices unavailable for {code}")
+    return attach_actual_vwap(adjusted, raw).reset_index()
+
+
+def fetch_adjusted_prices(code, start_date, end_date):
+    from pykrx import stock
+
+    with stage("adjusted_price_history", stock_code=code):
+        adjusted = stock.get_market_ohlcv_by_date(
+            start_date.replace("-", ""), end_date.replace("-", ""), code, adjusted=True)
+    if adjusted.empty:
         raise ValueError(f"KRX prices unavailable for {code}")
     adjusted = adjusted.rename(columns={"시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "등락률": "Change"})
     required = ["Open", "High", "Low", "Close", "Volume", "Change"]
@@ -53,7 +63,66 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     adjusted = adjusted[required].copy()
     adjusted["Change"] = adjusted["Change"].fillna(0.0)
     adjusted.index.name = "Date"
+    return adjusted
+
+
+def fetch_daily_prices(as_of):
+    """One KRX market read for every stock's raw prices and actual turnover."""
+    from pykrx import stock
+
+    with stage("krx_daily_market", as_of=as_of):
+        frame = stock.get_market_ohlcv_by_ticker(as_of.replace("-", ""), market="KOSPI")
+    required = {"종가", "거래량", "거래대금"}
+    if (not 500 <= len(frame) <= 1200 or not required.issubset(frame)
+            or frame.index.duplicated().any()):
+        raise ValueError(f"Invalid KRX daily market data for {as_of}")
+    return frame
+
+
+def fetch_incremental_prices(code, start, as_of, stored, daily):
+    """Refresh adjusted bases, while reusing archived raw prices and daily market reads."""
+    adjusted = fetch_adjusted_prices(code, start, as_of)
+    parts = []
+    if not stored.empty:
+        parts.append(stored.set_index("Date")[["RawClose", "RawVolume", "Amount"]].rename(
+            columns={"RawClose": "종가", "RawVolume": "거래량", "Amount": "거래대금"}))
+    for day, market in daily.items():
+        if code in market.index:
+            parts.append(pd.DataFrame([market.loc[code, ["종가", "거래량", "거래대금"]]],
+                                      index=pd.DatetimeIndex([day])))
+    raw = pd.concat(parts) if parts else pd.DataFrame(columns=["종가", "거래량", "거래대금"])
+    raw = raw.loc[~raw.index.duplicated(keep="last")].reindex(adjusted.index)
+    # Per-stock raw history is needed only for a newly listed/missing archive.
+    traded = adjusted.Volume.gt(0)
+    missing = raw[["종가", "거래량", "거래대금"]].isna().any(axis=1) | raw[["종가", "거래량", "거래대금"]].le(0).any(axis=1)
+    if (traded & missing).any():
+        from pykrx import stock
+
+        with stage("krx_raw_history_backfill", stock_code=code):
+            raw = stock.get_market_ohlcv_by_date(start.replace("-", ""), as_of.replace("-", ""), code, adjusted=False)
+        if raw.empty:
+            raise ValueError(f"KRX prices unavailable for {code}")
+    else:
+        # Market-wide data can show zero quotes for halts; preserve the last raw close.
+        raw["종가"] = raw["종가"].replace(0, np.nan).ffill()
     return attach_actual_vwap(adjusted, raw).reset_index()
+
+
+def changed_price_rows(fresh, stored):
+    """Write only new dates or corrections, including historical split adjustments."""
+    if stored.empty:
+        return fresh
+    previous = stored.set_index("Date").reindex(pd.to_datetime(fresh.Date))
+    previous.index = fresh.index
+    values = fresh.drop(columns="Date")
+    previous = previous[values.columns]
+    equal = values.eq(previous) | (values.isna() & previous.isna())
+    # PostgREST round-trips derived doubles with tiny decimal differences.
+    # Observed prices, volumes and turnover still require exact equality.
+    for column in ("Change", "AdjustmentFactor", "VWAP"):
+        equal[column] = np.isclose(values[column].to_numpy(float), previous[column].to_numpy(float),
+                                   rtol=1e-14, atol=1e-12, equal_nan=True)
+    return fresh.loc[~equal.all(axis=1)]
 
 
 

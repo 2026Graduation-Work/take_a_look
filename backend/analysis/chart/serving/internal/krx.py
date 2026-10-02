@@ -84,3 +84,29 @@ def diagnose():
     if prices.empty or prices.Date.max().strftime("%Y%m%d") != day:
         raise ValueError("KRX prices do not include the confirmed session")
     print(json.dumps({"event": "krx_check", "stage": "prices_and_turnover", "rows": len(prices), "status": "ok"}))
+
+    if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SECRET_KEY"):
+        import numpy as np
+
+        from .prices import changed_price_rows, fetch_daily_prices, fetch_incremental_prices
+        from .storage import SupabaseStore
+
+        as_of = index.index.max().date().isoformat()
+        history_start = (index.index.max() - timedelta(days=240)).date().isoformat()
+        stored = SupabaseStore().load_prices("005930", history_start, as_of)
+        if not stored.empty:
+            fresh = fetch_incremental_prices("005930", history_start, as_of, stored,
+                                             {as_of: fetch_daily_prices(as_of)})
+            before = stored.set_index("Date").reindex(fresh.Date).reset_index(drop=True)
+            fields = {}
+            for column in fresh.columns.drop("Date"):
+                left, right = fresh[column].to_numpy(float), before[column].to_numpy(float)
+                unequal = ~((left == right) | (np.isnan(left) & np.isnan(right)))
+                if unequal.any():
+                    delta = np.abs(left[unequal] - right[unequal])
+                    finite = delta[np.isfinite(delta)]
+                    fields[column] = {"rows": int(unequal.sum()),
+                                      "max_abs_difference": float(finite.max()) if len(finite) else None}
+            print(json.dumps({"event": "incremental_price_check", "stock_code": "005930",
+                              "changed_rows": len(changed_price_rows(fresh, stored)),
+                              "fields": fields}, allow_nan=False), flush=True)

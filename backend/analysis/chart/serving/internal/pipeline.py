@@ -22,7 +22,13 @@ from .features import build_feature_frame
 from .hashing import canonical_hash
 from .inference import infer_batch
 from .pack import load_pack
-from .prices import fetch_prices, price_snapshot
+from .prices import (
+    changed_price_rows,
+    fetch_daily_prices,
+    fetch_incremental_prices,
+    fetch_prices,
+    price_snapshot,
+)
 from .progress import report, stage
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
@@ -62,10 +68,12 @@ def frame_hash(frame):
     return hashlib.sha256(buffer.getvalue()).hexdigest()
 
 
-def _retry_fetch(code, start, as_of):
+def _retry_fetch(code, start, as_of, *, stored=None, daily=None):
     for attempt in range(3):
         try:
-            return fetch_prices(code, start, as_of)
+            if daily is None:
+                return fetch_prices(code, start, as_of)
+            return fetch_incremental_prices(code, start, as_of, stored, daily)
         except (OSError, TimeoutError, ConnectionError):
             if attempt == 2:
                 raise
@@ -90,27 +98,38 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
+    stored_panel, daily, updates = {}, {}, {}
+    if not historical_test:
+        with stage("load_saved_price_panel", as_of=as_of):
+            stored_panel = store.load_price_panel(start, as_of)
+        if not replay:
+            archived_days = {pd.Timestamp(day).date() for code in universe.Code
+                             for day in stored_panel.get(code, pd.DataFrame(columns=["Date"])).Date}
+            for day in sorted((days - archived_days) | {pd.Timestamp(as_of).date()}):
+                date = day.isoformat()
+                daily[date] = fetch_daily_prices(date)
     frames, unavailable, raw_hashes = {}, {}, {}
     for index, row in enumerate(universe.itertuples(), 1):
         code = row.Code
         started = time.perf_counter()
         report("stock_start", stock_code=code, index=index, total=len(universe))
         try:
-            with stage("load_saved_prices", stock_code=code):
-                stored = pd.DataFrame() if historical_test else store.load_prices(code, start, as_of)
+            stored = pd.DataFrame() if historical_test else stored_panel.get(code, pd.DataFrame())
             if replay:
                 if stored.empty or stored.Date.max().date().isoformat() != as_of:
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
                 raw = stored
             else:
-                fresh = _retry_fetch(code, start, as_of)
+                fresh = (_retry_fetch(code, start, as_of) if historical_test else
+                         _retry_fetch(code, start, as_of, stored=stored, daily=daily))
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
-                # Requery the entire feature window: adjusted past prices can change.
-                with stage("save_prices", stock_code=code, rows=len(fresh)):
+                if historical_test:
                     store.upsert_prices(code, fresh)
-                raw = pd.concat([stored, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+                else:
+                    updates[code] = changed_price_rows(fresh, stored)
+                raw = fresh
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"
@@ -122,7 +141,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 unavailable[code] = "feature_row_missing"
                 continue
             digest = frame_hash(raw)
-            with stage("upload_features", stock_code=code):
+            if historical_test:
                 store.upload_features(code, as_of, "alpha158_actual_vwap_v1", digest, features)
             frames[code] = (raw, current.iloc[0].to_dict())
             raw_hashes[code] = digest
@@ -138,6 +157,12 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                    seconds=round(time.perf_counter() - started, 3))
     if not frames:
         raise ValueError("No confirmed stock inputs; previous batch retained")
+    if not historical_test:
+        if updates:
+            with stage("save_price_updates", rows=sum(len(frame) for frame in updates.values())):
+                store.upsert_price_panel(updates)
+        with stage("upload_feature_panel", stocks=len(frames)):
+            store.upload_feature_panel(as_of, "alpha158_actual_vwap_v1", raw_hashes, frames)
     return universe, frames, unavailable, raw_hashes
 
 
@@ -154,7 +179,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
         model_path, samples_path = paths[horizon]
         model = lgb.Booster(model_file=str(model_path))
         selected = list(frames)
-        current = pd.DataFrame([frames[code][1] for code in selected])
+        current = pd.DataFrame([frames[code][1] for code in selected], index=selected)
         with stage("model_inference", horizon=horizon, stocks=len(selected)):
             predictions = infer_batch(model, current)
         by_code = dict(zip(selected, predictions))
@@ -179,7 +204,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                                                        "down": close * (1 - down * sigma)},
                          "contribution_space": f"class_{target}_raw_margin", "features": contributions,
                          "contribution_abs_sum": contribution_total}
-            price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
+            price = price_snapshot(raw, code, as_of, "NAVER 수정주가·KRX 거래대금 (pykrx)")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
             with stage("historical_distribution", stock_code=code, horizon=horizon):
