@@ -5,6 +5,8 @@ import re
 import numpy as np
 import pandas as pd
 
+from .progress import stage
+
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
     """Use KRX unadjusted turnover and volume, scaled to adjusted close."""
@@ -38,8 +40,10 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     if not re.fullmatch(r"[0-9A-Z]{6}", code):
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
     start, end = start_date.replace("-", ""), end_date.replace("-", "")
-    adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
-    raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
+    with stage("krx_adjusted_prices", stock_code=code):
+        adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
+    with stage("krx_raw_prices", stock_code=code):
+        raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
     if adjusted.empty or raw.empty:
         raise ValueError(f"KRX prices unavailable for {code}")
     adjusted = adjusted.rename(columns={"시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "등락률": "Change"})

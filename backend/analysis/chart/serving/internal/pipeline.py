@@ -23,6 +23,7 @@ from .hashing import canonical_hash
 from .inference import infer_batch
 from .pack import load_pack
 from .prices import fetch_prices, price_snapshot
+from .progress import report, stage
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
@@ -73,7 +74,8 @@ def _retry_fetch(code, start, as_of):
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
-    days = refresh_krx_trading_days(start, as_of)
+    with stage("krx_calendar", as_of=as_of):
+        days = refresh_krx_trading_days(start, as_of)
     if pd.Timestamp(as_of).date() not in days:
         return None
     if replay:
@@ -81,16 +83,21 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         if universe.empty:
             raise ValueError("Historical date lacks an archived universe")
     else:
-        universe = fetch_universe(as_of, code=code)
+        with stage("krx_universe", as_of=as_of):
+            universe = fetch_universe(as_of, code=code)
         if not historical_test:
-            store.save_universe(as_of, universe)
+            with stage("save_universe", as_of=as_of, stocks=len(universe)):
+                store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
     frames, unavailable, raw_hashes = {}, {}, {}
-    for row in universe.itertuples():
+    for index, row in enumerate(universe.itertuples(), 1):
         code = row.Code
+        started = time.perf_counter()
+        report("stock_start", stock_code=code, index=index, total=len(universe))
         try:
-            stored = pd.DataFrame() if historical_test else store.load_prices(code, start, as_of)
+            with stage("load_saved_prices", stock_code=code):
+                stored = pd.DataFrame() if historical_test else store.load_prices(code, start, as_of)
             if replay:
                 if stored.empty or stored.Date.max().date().isoformat() != as_of:
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
@@ -101,19 +108,22 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
                 # Requery the entire feature window: adjusted past prices can change.
-                store.upsert_prices(code, fresh)
+                with stage("save_prices", stock_code=code, rows=len(fresh)):
+                    store.upsert_prices(code, fresh)
                 raw = pd.concat([stored, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"
                 continue
-            features = build_feature_frame(raw, days)
+            with stage("build_features", stock_code=code, rows=len(raw)):
+                features = build_feature_frame(raw, days)
             current = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
             if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
                 unavailable[code] = "feature_row_missing"
                 continue
             digest = frame_hash(raw)
-            store.upload_features(code, as_of, "alpha158_actual_vwap_v1", digest, features)
+            with stage("upload_features", stock_code=code):
+                store.upload_features(code, as_of, "alpha158_actual_vwap_v1", digest, features)
             frames[code] = (raw, current.iloc[0].to_dict())
             raw_hashes[code] = digest
         except ValueError as exc:
@@ -122,6 +132,10 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             if "KRX prices unavailable" not in str(exc):
                 raise
             unavailable[code] = "price_source_unavailable"
+        finally:
+            report("stock_complete", stock_code=code, index=index, total=len(universe),
+                   status="available" if code in frames else unavailable.get(code, "failed"),
+                   seconds=round(time.perf_counter() - started, 3))
     if not frames:
         raise ValueError("No confirmed stock inputs; previous batch retained")
     return universe, frames, unavailable, raw_hashes
@@ -141,9 +155,11 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
         model = lgb.Booster(model_file=str(model_path))
         selected = list(frames)
         current = pd.DataFrame([frames[code][1] for code in selected])
-        predictions = infer_batch(model, current)
+        with stage("model_inference", horizon=horizon, stocks=len(selected)):
+            predictions = infer_batch(model, current)
         by_code = dict(zip(selected, predictions))
-        history = SampleIndex(pd.read_parquet(samples_path))
+        with stage("load_historical_samples", horizon=horizon):
+            history = SampleIndex(pd.read_parquet(samples_path))
         for code in codes:
             if code in unavailable:
                 snapshots.append(unavailable_snapshot(
@@ -166,7 +182,8 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
             price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
-            distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
+            with stage("historical_distribution", stock_code=code, horizon=horizon):
+                distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
             snapshots.append(build_snapshot(
                 code=code, stock_name=names[code], as_of=as_of, horizon=horizon,
                 pack_id=pack["pack_id"], batch_id=batch_id, inference=inference,
@@ -222,7 +239,8 @@ def run(args):
     batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
     write_batch(root, batch, snapshots)
     if args.publish:
-        store.publish(batch, snapshots, pack)
+        with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
+            store.publish(batch, snapshots, pack)
     print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
                       "pack_id": pack["pack_id"], "stock_count": len(batch["expected_stock_codes"]),
                       "batch_id": batch["id"], **batch["result"]}))
@@ -280,7 +298,8 @@ def run_preview(args):
     batch, snapshots = build_batch(as_of, pack, paths, universe, frames, {}, {args.code: digest})
     write_batch(root, batch, snapshots)
     if args.publish:
-        store.publish(batch, snapshots, pack)
+        with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
+            store.publish(batch, snapshots, pack)
     event = "local_preview_published" if args.publish else (
         "local_preview_computed" if args.compute_only else "local_preview_staged")
     print(json.dumps({"event": event,

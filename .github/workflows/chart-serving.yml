@@ -43,6 +43,7 @@ jobs:
       run:
         working-directory: backend/analysis/chart
     env:
+      PYTHONUNBUFFERED: "1"
       CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/serving/data
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
