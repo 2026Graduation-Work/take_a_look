@@ -43,6 +43,29 @@ export interface SentimentDay {
   score: number; // -1(부정) ~ +1(긍정)
   articleCount: number;
 }
+export type SentimentPeriod = "day" | "month" | "year";
+
+export function aggregateSentimentPeriods(
+  days: SentimentDay[],
+  period: SentimentPeriod,
+): SentimentDay[] {
+  if (period === "day") return days.map((day) => ({ ...day }));
+  const length = period === "month" ? 7 : 4;
+  const grouped = new Map<string, { weightedScore: number; articleCount: number }>();
+  for (const { date, score, articleCount } of days) {
+    if (articleCount <= 0) continue;
+    const key = date.slice(0, length);
+    const current = grouped.get(key) ?? { weightedScore: 0, articleCount: 0 };
+    current.weightedScore += score * articleCount;
+    current.articleCount += articleCount;
+    grouped.set(key, current);
+  }
+  return [...grouped.entries()].map(([date, value]) => ({
+    date,
+    score: value.weightedScore / value.articleCount,
+    articleCount: value.articleCount,
+  }));
+}
 export interface Headline {
   date: string;
   title: string;
@@ -258,7 +281,14 @@ export async function loadStockInsights(
             ? remoteSentiment.headlines
             : historical.headlines,
       }
-    : null;
+    : remoteSentiment.live
+      ? {
+          days: [],
+          headlines: remoteSentiment.headlines,
+          source: "real" as const,
+          track: "live" as const,
+        }
+      : null;
   const financial = remoteFinancial ?? fallbackFinancial;
   const psychology = STOCK_SNAPSHOT[code]?.psychology;
   return {

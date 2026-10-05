@@ -119,17 +119,34 @@ Repository secret 세 개를 직접 등록한다. 값은 채팅·이슈·커밋�
 - `SUPABASE_SECRET_KEY`
 
 workflow 이름은 `News Supabase Sync`다. 평일 09:00 KST 예약 실행은 `live`로
-네 종목의 직전 24시간 뉴스를 적재한다. Actions 화면의 **Run workflow**에서는
+6종목의 직전 24시간 뉴스를 적재한다. Actions 화면의 **Run workflow**에서는
 다음 세 모드를 선택한다.
 
 - `live`: NewsAPI.ai 수집 → KR-FinBERT 분석 → 최신 뉴스 upsert
 - `live-samsung`: 삼성전자(`005930`) 한 종목만 재실행. 적재 실패 진단·복구에 사용
+- `reset-live`: 각 종목의 새 Live 수집·검증이 성공한 경우에만 그 종목의 이전 Live 행을 교체
 - `backfill`: 저장소의 4종목 BigKinds 과거 JSON과 DART 재무 JSON upsert
 
 Secret 등록 후 운영 전에 수동 `backfill`과 `live`를 각각 한 번 실행한다. 로그와
 Supabase 행을 확인한 뒤 평일 자동 실행을 유지한다.
 적재 실패 로그는 응답 본문과 인증값을 출력하지 않고,
 실패한 테이블·HTTP 상태 또는 내부 검증 항목만 표시한다.
+
+### 2026 BigKinds 과거 뉴스 적재
+
+`data/`는 GitHub Actions에 올리지 않는 로컬 원본이므로, 2026-01-01부터 2026-10-04까지의
+BigKinds 적재는 해당 파일이 있는 개발 환경에서 한 번 실행한다. 이 명령은 6종목의
+`historical` track을 upsert하며, `live` track을 지우지 않는다.
+
+```bash
+cd backend/analysis/text
+python -m value_pipeline.supabase_sync backfill-historical \
+  --start 2026-01-01 --end 2026-10-04
+```
+
+실행 전 Supabase의 `stocks`에 `035420`(네이버)과 `247540`(에코프로비엠)이 있어야 한다.
+새 환경이면 `supabase/seed.sql`을 먼저 적용한다. 과거 적재가 끝난 뒤 Actions에서
+`reset-live`를 한 번 실행하면, 과거와 중복되지 않는 새 Live 행부터 자동 수집을 이어간다.
 
 ## DART 재무 적재용 JSON
 

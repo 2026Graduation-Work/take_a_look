@@ -20,7 +20,7 @@ def _track(kind: str, ticker: str = "005930") -> dict[str, Any]:
     }
 
 
-def test_live_parser_defaults_to_exact_four_supported_stocks_and_accepts_repeats() -> None:
+def test_live_parser_defaults_to_six_supported_stocks_and_accepts_repeats() -> None:
     parser = supabase_sync.build_parser()
 
     defaults = supabase_sync.targets_from_args(parser.parse_args(["live"]))
@@ -35,6 +35,8 @@ def test_live_parser_defaults_to_exact_four_supported_stocks_and_accepts_repeats
         "005380": "현대차",
         "035720": "카카오",
         "068270": "셀트리온",
+        "035420": "네이버",
+        "247540": "에코프로비엠",
     }
     assert explicit == {"005930": "삼성전자", "035720": "카카오"}
 
@@ -109,9 +111,9 @@ def test_live_sync_keeps_three_successes_when_second_stock_fails(
         fetcher=object(),
     )
 
-    assert attempted == ["005930", "005380", "035720", "068270"]
-    assert written == ["005930", "035720", "068270"]
-    assert result.succeeded == ["005930", "035720", "068270"]
+    assert attempted == ["005930", "005380", "035720", "068270", "035420", "247540"]
+    assert written == ["005930", "035720", "068270", "035420", "247540"]
+    assert result.succeeded == ["005930", "035720", "068270", "035420", "247540"]
     assert list(result.failures) == ["005380"]
     assert result.exit_code == 1
 
@@ -212,3 +214,44 @@ def test_live_sync_prints_safe_internal_validation_detail(
 
     assert "supabase_write_error" in output
     assert "article.date 날짜가 올바르지 않습니다" in output
+
+
+def test_reset_live_collects_and_validates_before_replacing_each_stock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, object]] = []
+
+    class Client:
+        def delete(self, table: str, *, params: dict[str, str]) -> None:
+            calls.append((table, params))
+
+    monkeypatch.setattr(
+        supabase_sync.news_run,
+        "run_live_cycle",
+        lambda targets, **kwargs: calls.append(("collect", dict(targets))) or {
+            next(iter(targets)): _track("live", next(iter(targets)))
+        },
+    )
+    monkeypatch.setattr(
+        supabase_sync.supabase_store,
+        "persist_news_track",
+        lambda client, track: calls.append(("persist", track["scope"]["ticker"])),
+    )
+
+    result = supabase_sync.reset_live_sync(
+        {"005930": "삼성전자", "035420": "네이버"}, client=Client(), fetcher=object(),
+    )
+
+    assert calls == [
+        ("collect", {"005930": "삼성전자"}),
+        ("news_articles", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("news_sentiment_daily", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("news_sentiment_tracks", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("persist", "005930"),
+        ("collect", {"035420": "네이버"}),
+        ("news_articles", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("news_sentiment_daily", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("news_sentiment_tracks", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("persist", "035420"),
+    ]
+    assert result.succeeded == ["005930", "035420"]

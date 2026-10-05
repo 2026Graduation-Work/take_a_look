@@ -24,6 +24,10 @@ class _Session:
         self.calls.append({"url": url, **kwargs})
         return self.response
 
+    def delete(self, url: str, **kwargs: Any) -> _Response:
+        self.calls.append({"method": "delete", "url": url, **kwargs})
+        return self.response
+
 
 class _SequenceSession(_Session):
     def __init__(self, responses: list[_Response]) -> None:
@@ -208,6 +212,32 @@ def test_client_retries_server_errors_and_redacts_secret(
     assert "secret-value" not in str(caught.value)
     assert caught.value.code == "supabase_news_articles_http_401"
     assert "news_articles" in str(caught.value)
+
+
+def test_client_deletes_only_explicitly_filtered_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "secret-value")
+    session = _Session(_Response({}, 204))
+    client = supabase_store.SupabaseRestClient.from_env(session=session)
+
+    client.delete(
+        "news_articles",
+        params={"stock_code": "in.(005930,035420)", "track": "eq.live"},
+    )
+
+    assert session.calls == [{
+        "method": "delete",
+        "url": "https://project.supabase.co/rest/v1/news_articles",
+        "params": {"stock_code": "in.(005930,035420)", "track": "eq.live"},
+        "headers": {
+            "apikey": "secret-value",
+            "Authorization": "Bearer secret-value",
+            "Prefer": "return=minimal",
+        },
+        "timeout": 30,
+    }]
 
 
 def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:

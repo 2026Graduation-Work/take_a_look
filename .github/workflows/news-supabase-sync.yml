@@ -14,6 +14,7 @@ on:
         options:
           - live
           - live-samsung
+          - reset-live
           - backfill
 
 permissions:
@@ -58,18 +59,32 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      - name: Collect, analyze, and persist four stocks
+      - name: Collect, analyze, and persist six stocks
         if: github.event_name == 'schedule' || inputs.mode == 'live'
         run: |
           python -m value_pipeline.supabase_sync live \
             --target 005930:삼성전자 \
             --target 005380:현대차 \
             --target 035720:카카오 \
-            --target 068270:셀트리온
+            --target 068270:셀트리온 \
+            --target 035420:네이버 \
+            --target 247540:에코프로비엠
+
 
       - name: Retry Samsung live sync with safe diagnostics
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'live-samsung'
         run: python -m value_pipeline.supabase_sync live --target 005930:삼성전자
+
+      - name: Reset live rows, then collect all six stocks
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'reset-live'
+        run: |
+          python -m value_pipeline.supabase_sync reset-live \
+            --target 005930:삼성전자 \
+            --target 005380:현대차 \
+            --target 035720:카카오 \
+            --target 068270:셀트리온 \
+            --target 035420:네이버 \
+            --target 247540:에코프로비엠
 
       - name: Backfill four-stock historical news and DART snapshots
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'

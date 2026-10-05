@@ -92,7 +92,7 @@ const trackRows = [
   },
 ];
 
-test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건을 분리한다", async () => {
+test("Supabase 감성은 전체 과거 일별값과 live 요약·대표 기사 3건을 분리한다", async () => {
   const daily = Array.from({ length: 22 }, (_, index) => ({
     sentiment_date: `2025-11-${String(index + 1).padStart(2, "0")}`,
     status: "ok",
@@ -116,8 +116,8 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건�
 
   const result = await loadSupabaseSentiment("005930", client as never);
 
-  assert.equal(result.historical?.days.length, 20);
-  assert.equal(result.historical?.days[0].date, "2025-11-03");
+  assert.equal(result.historical?.days.length, 21);
+  assert.equal(result.historical?.days[0].date, "2025-11-02");
   assert.equal(result.historical?.days.at(-1)?.date, "2025-11-22");
   assert.deepEqual(result.live, {
     score: 0.45,
@@ -141,7 +141,7 @@ test("Supabase 감성은 최신 과거 20일과 live 요약·대표 기사 3건�
     },
   });
   assert.deepEqual(result.headlines.map(({ title }) => title), ["기사 0", "기사 1", "기사 2"]);
-  assert.ok(client.operations.news_sentiment_daily.some(([name, count]) => name === "limit" && count === 20));
+  assert.ok(!client.operations.news_sentiment_daily.some(([name]) => name === "limit"));
   assert.ok(client.operations.news_articles.some(([name, count]) => name === "limit" && count === 25));
   assert.ok(client.operations.news_articles.some(
     ([name, columns]) => name === "select" && String(columns).includes("sentiment_score"),

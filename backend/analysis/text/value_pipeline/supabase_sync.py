@@ -17,6 +17,8 @@ DEFAULT_TARGETS: dict[str, str] = {
     "005380": "현대차",
     "035720": "카카오",
     "068270": "셀트리온",
+    "035420": "네이버",
+    "247540": "에코프로비엠",
 }
 
 
@@ -67,6 +69,50 @@ def run_live_sync(
     return result
 
 
+def clear_live_news(targets: Mapping[str, str], *, client: Any) -> None:
+    """Remove only live-news rows for the requested stocks, child-first.
+
+    Historical BigKinds rows are deliberately excluded, so the reset can be
+    used before the first new NewsAPI.ai collection without losing history.
+    """
+    codes = ",".join(targets)
+    filters = {"stock_code": f"in.({codes})", "track": "eq.live"}
+    for table in ("news_articles", "news_sentiment_daily", "news_sentiment_tracks"):
+        client.delete(table, params=filters)
+
+
+def reset_live_sync(
+    targets: Mapping[str, str], *, client: Any,
+    fetcher: Any = newsapi_ai.fetch_article_batch, as_of: datetime | None = None,
+) -> SyncResult:
+    """Replace each stock's live rows only after its replacement is ready.
+
+    A provider failure or a zero-result window leaves that stock's last usable
+    live view intact. Historical rows are never selected by ``clear_live_news``.
+    """
+    result = SyncResult()
+    for ticker, company_name in targets.items():
+        try:
+            output = news_run.run_live_cycle(
+                {ticker: company_name},
+                fetcher=fetcher,
+                as_of=as_of,
+                page_size=100,
+                require_finbert=True,
+            )[ticker]
+            # Validate before deleting any persisted live rows.
+            supabase_store._require_news_track(output)
+            clear_live_news({ticker: company_name}, client=client)
+            supabase_store.persist_news_track(client, output)
+        except supabase_store.SupabaseNoDataError as exc:
+            result.skipped[ticker] = exc.code
+        except Exception as exc:
+            result.failures[ticker] = _failure_name(exc)
+        else:
+            result.succeeded.append(ticker)
+    return result
+
+
 def _read_track(path: Path, expected: set[str]) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -97,15 +143,38 @@ def backfill_financial(paths: Sequence[Path], *, client: Any) -> SyncResult:
     return _backfill(paths, {"financial"}, supabase_store.persist_financial_track, client)
 
 
+def backfill_historical(
+    targets: Mapping[str, str], *, date_start: str, date_end: str, client: Any,
+) -> SyncResult:
+    result = SyncResult()
+    for ticker, company_name in targets.items():
+        try:
+            track = news_run.run_historical_cycle(ticker, company_name, date_start, date_end)
+            supabase_store.persist_news_track(client, track)
+        except Exception as exc:
+            result.failures[ticker] = _failure_name(exc)
+        else:
+            result.succeeded.append(ticker)
+    return result
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="분석 트랙 Supabase 적재")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    live = subparsers.add_parser("live", help="4종목 최근 24시간 뉴스를 수집·적재")
+    live = subparsers.add_parser("live", help="6종목 최근 24시간 뉴스를 수집·적재")
     live.add_argument("--target", type=_parse_target, action="append")
+    reset_live = subparsers.add_parser(
+        "reset-live", help="지정 종목의 live 행만 지운 뒤 최근 24시간 뉴스를 다시 적재"
+    )
+    reset_live.add_argument("--target", type=_parse_target, action="append")
     news = subparsers.add_parser("backfill-news", help="뉴스 track JSON 적재")
     news.add_argument("paths", type=Path, nargs="+")
     financial = subparsers.add_parser("backfill-financial", help="재무 track JSON 적재")
     financial.add_argument("paths", type=Path, nargs="+")
+    historical = subparsers.add_parser("backfill-historical", help="BigKinds 과거 뉴스 수집·적재")
+    historical.add_argument("--target", type=_parse_target, action="append")
+    historical.add_argument("--start", required=True)
+    historical.add_argument("--end", required=True)
     return parser
 
 
@@ -127,8 +196,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     client = supabase_store.SupabaseRestClient.from_env()
     if args.command == "live":
         result = run_live_sync(targets_from_args(args), client=client)
+    elif args.command == "reset-live":
+        result = reset_live_sync(targets_from_args(args), client=client)
     elif args.command == "backfill-news":
         result = backfill_news(args.paths, client=client)
+    elif args.command == "backfill-historical":
+        result = backfill_historical(targets_from_args(args), date_start=args.start, date_end=args.end, client=client)
     else:
         result = backfill_financial(args.paths, client=client)
     _print_result(result)
