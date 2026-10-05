@@ -17,6 +17,8 @@ values
   ('035720', '카카오', 'KOSPI', 3, '{}'),
   ('068270', '셀트리온', 'KOSDAQ', 2, array['high_volatility']),
   ('005380', '현대차', 'KOSPI', 5, '{}'),
+  ('035420', '네이버', 'KOSPI', 3, '{}'),
+  ('247540', '에코프로비엠', 'KOSDAQ', 3, '{}'),
   ('418250', '미래에셋비전스팩3호', 'KOSDAQ', 1, array['spac'])
 on conflict (code) do update set
   name = excluded.name,

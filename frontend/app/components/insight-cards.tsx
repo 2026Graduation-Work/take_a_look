@@ -43,6 +43,7 @@ import {
 import { SCREEN_GUIDE_NOTICE, selectNudges } from "@/lib/profiling/nudges";
 import {
   combinedProvenance,
+  aggregateSentimentPeriods,
   marketSentimentView,
   periodsOverlap,
   pricePeriod,
@@ -51,8 +52,8 @@ import {
   toNudgeMarket,
   type FinancialSnapshot,
   type HoldingWeight,
-  type SentimentData,
   type SentimentDay,
+  type SentimentPeriod,
   type StockInsights,
   type SupplyDemandDay,
 } from "@/lib/providers";
@@ -131,6 +132,11 @@ const signedPercent = (ratio: number) => `${ratio > 0 ? "+" : ""}${(ratio * 100)
 const shares = (value: number) =>
   `${value > 0 ? "+" : value < 0 ? "-" : ""}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
 const shortDate = (iso: string) => iso.slice(5).replace("-", ".");
+const sentimentDateLabel = (date: string) => {
+  if (date.length === 4) return date;
+  if (date.length === 7) return `${date.slice(5)}월`;
+  return shortDate(date);
+};
 
 // 감성 점수(-1~+1) → 구간 말. 경계는 점수 분포가 아니라 읽기 쉬운 고정 구간이다.
 function moodWord(score: number): string {
@@ -360,6 +366,7 @@ function Conclusion({ children }: { children: ReactNode }) {
 
 function MarketPanel({ detail, insights }: { detail: StockDetail; insights: StockInsights }) {
   const { sentiment, provenance, psychology } = insights;
+  const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentView = marketSentimentView(insights);
   const risk = riskSnapshot(detail);
   const prices = pricePeriod(detail);
@@ -397,7 +404,29 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
           <span className="text-muted"> — {psychology.explain}</span>
         </p>
       )}
-      {sentiment?.days.length ? <SentimentChart sentiment={sentiment} /> : null}
+      {sentiment?.days.length ? (
+        <>
+          <div className="segmented self-start" role="tablist" aria-label="뉴스 분위기 기간">
+            {(["day", "month", "year"] as const).map((period) => {
+              const label: Record<SentimentPeriod, string> = { day: "일별", month: "월별", year: "연별" };
+              return (
+                <button
+                  key={period}
+                  role="tab"
+                  aria-selected={selectedSentimentPeriod === period}
+                  onClick={() => setSelectedSentimentPeriod(period)}
+                >
+                  {label[period]}
+                </button>
+              );
+            })}
+          </div>
+          <SentimentChart
+            days={aggregateSentimentPeriods(sentiment.days, selectedSentimentPeriod)}
+            live={sentimentView?.basis === "live" ? sentimentView : null}
+          />
+        </>
+      ) : null}
       {periodMismatch && (
         <p data-period-mismatch className="m-0 flex items-center gap-2 text-xs text-body">
           <span className="size-1.5 rounded-full bg-caution-mark" aria-hidden />
@@ -437,8 +466,6 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
             provenance={sentimentView.basis === "live" ? provenance.liveSentiment : provenance.sentiment}
           />
         )}
-        {psychology && <SourceChip provenance={psychology.provenance} />}
-        {risk && <SourceChip provenance={detail.priceProvenance ?? detail.provenance} />}
       </p>
     </>
   );
@@ -453,12 +480,16 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SentimentChart({ sentiment }: { sentiment: SentimentData }) {
+function SentimentChart({ days, live }: { days: SentimentDay[]; live: ReturnType<typeof marketSentimentView> }) {
+  const data = [
+    ...days.map((day) => ({ ...day, label: sentimentDateLabel(day.date), liveScore: null as number | null })),
+    ...(live ? [{ date: live.asOf, label: "오늘 Live", score: null, liveScore: live.score, articleCount: live.articleCount }] : []),
+  ];
   return (
     <div className="h-[180px] min-w-0">
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={{ width: 860, height: 180 }}>
         <LineChart
-          data={sentiment.days.map((day) => ({ ...day, label: shortDate(day.date) }))}
+          data={data}
           margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
         >
           <XAxis dataKey="label" tick={{ fill: CHART.muted, fontSize: 12 }} axisLine={false} tickLine={false} interval={4} />
@@ -508,6 +539,18 @@ function SentimentChart({ sentiment }: { sentiment: SentimentData }) {
             }}
             isAnimationActive={false}
           />
+          {live && (
+            <Line
+              dataKey="liveScore"
+              name="오늘 Live"
+              stroke="transparent"
+              dot={({ cx, cy }) => (
+                <circle cx={cx} cy={cy} r={5} fill={CHART.page} stroke={CHART.priceLine} strokeWidth={2} />
+              )}
+              activeDot={{ r: 6 }}
+              isAnimationActive={false}
+            />
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>

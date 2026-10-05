@@ -113,6 +113,44 @@ class SupabaseRestClient:
             )
         return payload
 
+    def delete(self, table: str, *, params: Mapping[str, str]) -> None:
+        """Delete rows selected by explicit PostgREST filters.
+
+        This is intentionally separate from upsert: the only caller is the
+        operator-triggered live-track reset, which removes the dependent rows
+        before the parent track row.
+        """
+        headers = {
+            "apikey": self.secret_key,
+            "Authorization": f"Bearer {self.secret_key}",
+            "Prefer": "return=minimal",
+        }
+        url = f"{self.base_url}/rest/v1/{table}"
+        response = None
+        for attempt in range(3):
+            try:
+                response = self.session.delete(
+                    url, params=dict(params), headers=headers, timeout=self.timeout
+                )
+            except requests.RequestException as exc:
+                if attempt == 2:
+                    raise SupabaseWriteError(
+                        "Supabase 삭제 요청에 실패했습니다",
+                        code="supabase_network_error",
+                    ) from exc
+                time.sleep(float(2**attempt))
+                continue
+            if response.status_code < 500 or attempt == 2:
+                break
+            time.sleep(float(2**attempt))
+
+        if response is None or not 200 <= response.status_code < 300:
+            status = getattr(response, "status_code", "unknown")
+            raise SupabaseWriteError(
+                f"Supabase {table} 삭제에 실패했습니다 (HTTP {status})",
+                code=f"supabase_{table}_delete_http_{status}",
+            )
+
 
 def _iso_date(value: object, *, field: str) -> str:
     raw = str(value or "").strip()[:10]

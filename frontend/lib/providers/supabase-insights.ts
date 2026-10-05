@@ -232,8 +232,7 @@ export async function loadSupabaseSentiment(
     .eq("stock_code", code)
     .eq("track", "historical")
     .not("sentiment_mean", "is", null)
-    .order("sentiment_date", { ascending: false })
-    .limit(20) as QueryResult;
+    .order("sentiment_date", { ascending: false }) as QueryResult;
   const articleResult = await client
     .from("news_articles")
     .select("news_id,title,press,url,article_date,published_at,event_id,sentiment_score")
@@ -254,7 +253,6 @@ export async function loadSupabaseSentiment(
   const liveTrack = tracks.find(({ track }) => track === "live");
   const days = daily
     .filter(({ sentiment_mean }) => sentiment_mean !== null)
-    .slice(0, 20)
     .map(({ sentiment_date, sentiment_mean, article_count }) => ({
       date: sentiment_date,
       score: sentiment_mean as number,
