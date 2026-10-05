@@ -49,6 +49,7 @@ import {
   pricePeriod,
   riskSnapshot,
   sentimentPeriod,
+  sentimentWindow,
   toNudgeMarket,
   type FinancialSnapshot,
   type HoldingWeight,
@@ -369,8 +370,9 @@ export function NewsSentimentPanel({ insights }: { insights: StockInsights }) {
 }
 
 function MarketPanel({ detail, insights }: { detail: StockDetail | null; insights: StockInsights }) {
-  const { sentiment, provenance, psychology } = insights;
+  const { sentiment, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
+  const [selectedSentimentDate, setSelectedSentimentDate] = useState<string | null>(null);
   const sentimentTabRefs = useRef<Record<SentimentPeriod, HTMLButtonElement | null>>({
     day: null,
     month: null,
@@ -382,6 +384,12 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
   const sentimentDates = sentiment ? sentimentPeriod(sentiment) : null;
   const periodMismatch = Boolean(prices && sentimentDates && !periodsOverlap(prices, sentimentDates));
   const sentimentTabs: SentimentPeriod[] = ["day", "month", "year"];
+  const periodDays = aggregateSentimentPeriods(sentiment?.days ?? [], selectedSentimentPeriod);
+  const selectedIndex = Math.max(
+    0,
+    selectedSentimentDate ? periodDays.findIndex(({ date }) => date === selectedSentimentDate) : periodDays.length - 1,
+  );
+  const visibleDays = sentimentWindow(periodDays, selectedIndex);
 
   function onSentimentTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -420,13 +428,10 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
         </p>
       )}
       {psychology && (
-        <div className="flex flex-col gap-1">
-          <p className="m-0 text-sm text-body">
-            가격 흐름으로 본 분위기: <strong className="font-semibold text-ink">{psychology.word}</strong>
-            <span className="text-muted"> — {psychology.explain}</span>
-          </p>
-          <SourceChip provenance={psychology.provenance} />
-        </div>
+        <p className="m-0 text-sm text-body">
+          가격 흐름으로 본 분위기: <strong className="font-semibold text-ink">{psychology.word}</strong>
+          <span className="text-muted"> — {psychology.explain}</span>
+        </p>
       )}
       {(sentiment?.days.length || sentimentView?.basis === "live") ? (
         <>
@@ -449,7 +454,10 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
                   aria-selected={selectedSentimentPeriod === period}
                   aria-controls="sentiment-panel"
                   tabIndex={selectedSentimentPeriod === period ? 0 : -1}
-                  onClick={() => setSelectedSentimentPeriod(period)}
+                  onClick={() => {
+                    setSelectedSentimentPeriod(period);
+                    setSelectedSentimentDate(null);
+                  }}
                 >
                   {label[period]}
                 </button>
@@ -462,9 +470,30 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
           >
             <SentimentChart
-              days={aggregateSentimentPeriods(sentiment?.days ?? [], selectedSentimentPeriod)}
-              live={sentimentView?.basis === "live" ? sentimentView : null}
+              days={visibleDays}
+              live={
+                selectedIndex === periodDays.length - 1 && sentimentView?.basis === "live"
+                  ? sentimentView
+                  : null
+              }
             />
+            {periodDays.length > 0 && (
+              <div className="mt-3 overflow-x-auto pb-1 [scrollbar-width:thin]" aria-label="감성 시점 탐색">
+                <div className="flex min-w-max gap-1.5">
+                  {periodDays.map((day, index) => (
+                    <button
+                      key={day.date}
+                      type="button"
+                      className={`min-h-9 rounded-md px-2.5 text-xs tabular-nums ${index === selectedIndex ? "bg-ink text-page" : "bg-field text-body"}`}
+                      aria-current={index === selectedIndex ? "date" : undefined}
+                      onClick={() => setSelectedSentimentDate(day.date)}
+                    >
+                      {sentimentDateLabel(day.date)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </>
       ) : null}
@@ -475,14 +504,11 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
         </p>
       )}
       {risk && (
-        <div className="flex flex-col gap-1">
-          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Stat label={`${TERM.volatility}(1년 기준)`} value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`} />
-            <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
-            <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
-          </dl>
-          <SourceChip provenance={detail!.priceProvenance ?? detail!.provenance} />
-        </div>
+        <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Stat label={`${TERM.volatility}(1년 기준)`} value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`} />
+          <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
+          <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
+        </dl>
       )}
       {sentimentView?.headlines.length ? (
         <details className="disclosure text-sm">
@@ -504,13 +530,6 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           </ul>
         </details>
       ) : null}
-      <p className="m-0 flex flex-wrap gap-x-3 gap-y-1">
-        {sentimentView && (
-          <SourceChip
-            provenance={sentimentView.basis === "live" ? provenance.liveSentiment : provenance.sentiment}
-          />
-        )}
-      </p>
     </>
   );
 }

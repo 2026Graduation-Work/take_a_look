@@ -66,6 +66,16 @@ export function aggregateSentimentPeriods(
     articleCount: value.articleCount,
   }));
 }
+
+export function sentimentWindow(
+  days: SentimentDay[],
+  endIndex: number,
+  maxPoints = 8,
+): SentimentDay[] {
+  if (endIndex < 0 || maxPoints < 1) return [];
+  const end = Math.min(endIndex, days.length - 1);
+  return days.slice(Math.max(0, end - maxPoints + 1), end + 1);
+}
 export interface Headline {
   date: string;
   title: string;

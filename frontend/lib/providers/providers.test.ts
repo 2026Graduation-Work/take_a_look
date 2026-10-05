@@ -14,6 +14,7 @@ import {
   financialProvider,
   loadStockInsights,
   marketSentimentView,
+  sentimentWindow,
   sentimentProvider,
   supplyDemandProvider,
   toNudgeMarket,
@@ -36,6 +37,22 @@ test("감성 기간 집계: 일별은 유지하고 월·년별은 기사 수 가
   assert.equal(yearly[0].date, "2026");
   assert.equal(yearly[0].articleCount, 15);
   assert.ok(Math.abs(yearly[0].score - (3.1 / 15)) < 1e-12);
+});
+
+test("감성 차트 창: 선택한 시점을 끝으로 최대 8개 값만 보여 준다", () => {
+  const days = Array.from({ length: 12 }, (_, index) => ({
+    date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+    score: index / 10,
+    articleCount: 1,
+  }));
+
+  assert.deepEqual(sentimentWindow(days, 11).map(({ date }) => date), [
+    "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08",
+    "2026-01-09", "2026-01-10", "2026-01-11", "2026-01-12",
+  ]);
+  assert.deepEqual(sentimentWindow(days, 2).map(({ date }) => date), [
+    "2026-01-01", "2026-01-02", "2026-01-03",
+  ]);
 });
 
 const CODES = ["005930", "005380"];
