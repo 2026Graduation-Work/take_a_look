@@ -281,7 +281,14 @@ export async function loadStockInsights(
             ? remoteSentiment.headlines
             : historical.headlines,
       }
-    : null;
+    : remoteSentiment.live
+      ? {
+          days: [],
+          headlines: remoteSentiment.headlines,
+          source: "real" as const,
+          track: "live" as const,
+        }
+      : null;
   const financial = remoteFinancial ?? fallbackFinancial;
   const psychology = STOCK_SNAPSHOT[code]?.psychology;
   return {

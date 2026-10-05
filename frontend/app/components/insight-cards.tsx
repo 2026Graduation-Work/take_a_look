@@ -364,7 +364,11 @@ function Conclusion({ children }: { children: ReactNode }) {
   return <p className="m-0 text-base text-ink">{children}</p>;
 }
 
-function MarketPanel({ detail, insights }: { detail: StockDetail; insights: StockInsights }) {
+export function NewsSentimentPanel({ insights }: { insights: StockInsights }) {
+  return <MarketPanel detail={null} insights={insights} />;
+}
+
+function MarketPanel({ detail, insights }: { detail: StockDetail | null; insights: StockInsights }) {
   const { sentiment, provenance, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentTabRefs = useRef<Record<SentimentPeriod, HTMLButtonElement | null>>({
@@ -373,8 +377,8 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
     year: null,
   });
   const sentimentView = marketSentimentView(insights);
-  const risk = riskSnapshot(detail);
-  const prices = pricePeriod(detail);
+  const risk = detail ? riskSnapshot(detail) : null;
+  const prices = detail ? pricePeriod(detail) : null;
   const sentimentDates = sentiment ? sentimentPeriod(sentiment) : null;
   const periodMismatch = Boolean(prices && sentimentDates && !periodsOverlap(prices, sentimentDates));
   const sentimentTabs: SentimentPeriod[] = ["day", "month", "year"];
@@ -424,7 +428,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
           <SourceChip provenance={psychology.provenance} />
         </div>
       )}
-      {sentiment?.days.length ? (
+      {(sentiment?.days.length || sentimentView?.basis === "live") ? (
         <>
           <div
             className="segmented self-start"
@@ -443,7 +447,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
                   role="tab"
                   id={`sentiment-tab-${period}`}
                   aria-selected={selectedSentimentPeriod === period}
-                  aria-controls={`sentiment-panel-${period}`}
+                  aria-controls="sentiment-panel"
                   tabIndex={selectedSentimentPeriod === period ? 0 : -1}
                   onClick={() => setSelectedSentimentPeriod(period)}
                 >
@@ -454,11 +458,11 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
           </div>
           <div
             role="tabpanel"
-            id={`sentiment-panel-${selectedSentimentPeriod}`}
+            id="sentiment-panel"
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
           >
             <SentimentChart
-              days={aggregateSentimentPeriods(sentiment.days, selectedSentimentPeriod)}
+              days={aggregateSentimentPeriods(sentiment?.days ?? [], selectedSentimentPeriod)}
               live={sentimentView?.basis === "live" ? sentimentView : null}
             />
           </div>
@@ -477,7 +481,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail; insights: Stoc
             <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
             <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
           </dl>
-          <SourceChip provenance={detail.priceProvenance ?? detail.provenance} />
+          <SourceChip provenance={detail!.priceProvenance ?? detail!.provenance} />
         </div>
       )}
       {sentimentView?.headlines.length ? (
