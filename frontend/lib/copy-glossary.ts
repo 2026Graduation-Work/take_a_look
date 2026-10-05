@@ -85,11 +85,10 @@ export const BIAS_MODE_WORD = {
 export const PSYCHOLOGY_RULE =
   "최근 20거래일 수익을 그동안의 흔들림으로 나눈 값과, 최근 60거래일 동안 사람들이 평균적으로 산 가격 대비 지금 가격의 위치를 평균했어요.";
 
-// 뉴스 분위기: 하루 기사가 이보다 적은 날은 차트 점을 흐리게, 툴팁에 "참고만"
+// 뉴스 분위기: 하루 기사가 이보다 적은 날은 툴팁과 계산 근거에 주의 안내
 export const FEW_ARTICLES = 3;
-export const FEW_ARTICLES_RULE = `하루 기사가 ${FEW_ARTICLES}건 미만인 날은 한두 기사의 말투가 그날 분위기를 정해 버려서, 차트에 흐린 점으로 그리고 참고만 하도록 적었어요.`;
+export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 한두 기사의 말투가 그날 점수를 크게 움직일 수 있어요. 이 값은 참고만 해 주세요.`;
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
 export const STYLE_TYPE_SOURCE = "행동재무학의 투자자 유형 연구(Pompian)에서 착안해 설문으로 가늠한 분류예요.";
-

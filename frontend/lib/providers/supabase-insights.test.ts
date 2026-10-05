@@ -21,6 +21,7 @@ class FakeQuery implements PromiseLike<Response> {
   not(...args: unknown[]) { this.operations.push(["not", ...args]); return this; }
   order(...args: unknown[]) { this.operations.push(["order", ...args]); return this; }
   limit(...args: unknown[]) { this.operations.push(["limit", ...args]); return this; }
+  range(...args: unknown[]) { this.operations.push(["range", ...args]); return this; }
   maybeSingle() { this.operations.push(["maybeSingle"]); return Promise.resolve(this.response); }
   then<TResult1 = Response, TResult2 = never>(
     onfulfilled?: ((value: Response) => TResult1 | PromiseLike<TResult1>) | null,
@@ -152,6 +153,36 @@ test("Supabase 감성은 전체 과거 일별값과 live 요약·대표 기사 3
       ["order", "published_at", { ascending: false, nullsFirst: false }],
       ["order", "news_id", { ascending: true }],
     ],
+  );
+});
+
+test("과거 감성 일별값이 1000건을 넘으면 다음 페이지까지 읽는다", async () => {
+  const firstPage = Array.from({ length: 1000 }, (_, index) => ({
+    sentiment_date: new Date(Date.UTC(2020, 0, index + 1)).toISOString().slice(0, 10),
+    sentiment_mean: 0.2,
+    article_count: 1,
+  })).reverse();
+  const olderPage = [{
+    sentiment_date: "2019-12-31",
+    sentiment_mean: -0.1,
+    article_count: 2,
+  }];
+  const client = new FakeClient({
+    news_sentiment_tracks: [{ data: trackRows, error: null }],
+    news_sentiment_daily: [
+      { data: firstPage, error: null },
+      { data: olderPage, error: null },
+    ],
+    news_articles: [{ data: [], error: null }],
+  });
+
+  const result = await loadSupabaseSentiment("005930", client as never);
+
+  assert.equal(result.historical?.days.length, 1001);
+  assert.equal(result.historical?.days[0].date, "2019-12-31");
+  assert.deepEqual(
+    client.operations.news_sentiment_daily.filter(([name]) => name === "range"),
+    [["range", 0, 999], ["range", 1000, 1999]],
   );
 });
 

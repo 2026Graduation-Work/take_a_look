@@ -228,13 +228,21 @@ export async function loadSupabaseSentiment(
     .from("news_sentiment_tracks")
     .select("*")
     .eq("stock_code", code) as QueryResult;
-  const dailyResult = await client
-    .from("news_sentiment_daily")
-    .select("sentiment_date,status,sentiment_mean,sentiment_std,article_count,publisher_count")
-    .eq("stock_code", code)
-    .eq("track", "historical")
-    .not("sentiment_mean", "is", null)
-    .order("sentiment_date", { ascending: false }) as QueryResult;
+  const dailyRows: unknown[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const pageResult = await client
+      .from("news_sentiment_daily")
+      .select("sentiment_date,status,sentiment_mean,sentiment_std,article_count,publisher_count")
+      .eq("stock_code", code)
+      .eq("track", "historical")
+      .not("sentiment_mean", "is", null)
+      .order("sentiment_date", { ascending: false })
+      .range(offset, offset + pageSize - 1) as QueryResult;
+    const page = (unwrap(pageResult, "news_sentiment_daily") ?? []) as unknown[];
+    dailyRows.push(...page);
+    if (page.length < pageSize) break;
+  }
   const articleResult = await client
     .from("news_articles")
     .select("news_id,title,press,url,article_date,published_at,event_id,sentiment_score")
@@ -245,7 +253,7 @@ export async function loadSupabaseSentiment(
     .limit(25) as QueryResult;
 
   const tracks = (unwrap(tracksResult, "news_sentiment_tracks") ?? []) as TrackRow[];
-  const daily = (unwrap(dailyResult, "news_sentiment_daily") ?? []) as Array<{
+  const daily = dailyRows as Array<{
     sentiment_date: string;
     sentiment_mean: number | null;
     article_count: number;
