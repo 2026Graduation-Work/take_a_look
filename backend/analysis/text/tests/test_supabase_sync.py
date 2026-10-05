@@ -216,7 +216,7 @@ def test_live_sync_prints_safe_internal_validation_detail(
     assert "article.date 날짜가 올바르지 않습니다" in output
 
 
-def test_reset_live_deletes_only_live_rows_before_collecting(
+def test_reset_live_collects_and_validates_before_replacing_each_stock(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[str, object]] = []
@@ -226,9 +226,16 @@ def test_reset_live_deletes_only_live_rows_before_collecting(
             calls.append((table, params))
 
     monkeypatch.setattr(
-        supabase_sync,
-        "run_live_sync",
-        lambda targets, **kwargs: calls.append(("sync", dict(targets))) or supabase_sync.SyncResult(succeeded=list(targets)),
+        supabase_sync.news_run,
+        "run_live_cycle",
+        lambda targets, **kwargs: calls.append(("collect", dict(targets))) or {
+            next(iter(targets)): _track("live", next(iter(targets)))
+        },
+    )
+    monkeypatch.setattr(
+        supabase_sync.supabase_store,
+        "persist_news_track",
+        lambda client, track: calls.append(("persist", track["scope"]["ticker"])),
     )
 
     result = supabase_sync.reset_live_sync(
@@ -236,9 +243,15 @@ def test_reset_live_deletes_only_live_rows_before_collecting(
     )
 
     assert calls == [
-        ("news_articles", {"stock_code": "in.(005930,035420)", "track": "eq.live"}),
-        ("news_sentiment_daily", {"stock_code": "in.(005930,035420)", "track": "eq.live"}),
-        ("news_sentiment_tracks", {"stock_code": "in.(005930,035420)", "track": "eq.live"}),
-        ("sync", {"005930": "삼성전자", "035420": "네이버"}),
+        ("collect", {"005930": "삼성전자"}),
+        ("news_articles", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("news_sentiment_daily", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("news_sentiment_tracks", {"stock_code": "in.(005930)", "track": "eq.live"}),
+        ("persist", "005930"),
+        ("collect", {"035420": "네이버"}),
+        ("news_articles", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("news_sentiment_daily", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("news_sentiment_tracks", {"stock_code": "in.(035420)", "track": "eq.live"}),
+        ("persist", "035420"),
     ]
     assert result.succeeded == ["005930", "035420"]

@@ -293,6 +293,31 @@ export const stockDetails: Record<string, StockDetail> = {
 // 카카오는 예측 근거·분포 예시가 없다. 시세만 실데이터로 두고 나머지는 "없음"으로 보인다.
 stockDetails[kakao.code] = { ...kakao, ...realPrice(kakao.code), reasons: [] };
 
+// NAVER·에코프로비엠은 뉴스 수집·감성 화면을 먼저 열어 둔다. 예측·시세 스냅샷은
+// 해당 블록 산출물이 연결되기 전까지 예시값으로 꾸며 내지 않는다.
+function liveNewsOnlyDetail(code: string, name: string, market: "KOSPI" | "KOSDAQ"): StockDetail {
+  return {
+    code,
+    name,
+    market,
+    riskGrade: 3,
+    riskFlags: [],
+    signalLight: "neutral",
+    rankPercentile: 0.5,
+    returnBand: { low: 0, high: 0, ciLevel: 0.68 },
+    hitRate: 0,
+    similarCaseCount: 0,
+    horizonAgreement: { h5: "flat", h10: "flat", h20: "flat", agreement: "mixed" },
+    reason: "예측·시세 스냅샷을 연결하는 중",
+    provenance: DEMO,
+    asOf: SNAPSHOT_AS_OF,
+    reasons: [],
+  };
+}
+
+stockDetails["035420"] = liveNewsOnlyDetail("035420", "네이버", "KOSPI");
+stockDetails["247540"] = liveNewsOnlyDetail("247540", "에코프로비엠", "KOSDAQ");
+
 // 데모 모드에서 보유 종목을 고를 때 쓰는 종목 목록.
 // 로그인 사용자는 Supabase stocks 테이블을 직접 검색한다.
 export const KNOWN_STOCKS: { code: string; name: string }[] = [
@@ -300,6 +325,8 @@ export const KNOWN_STOCKS: { code: string; name: string }[] = [
   hyundaiMotor,
   celltrion,
   kakao,
+  stockDetails["035420"],
+  stockDetails["247540"],
 ].map(({ code, name }) => ({ code, name }));
 
 // 코드 → 이름. 로그인 사용자의 관심 종목(Supabase에는 코드만 있다)에 이름을 붙일 때 쓴다.

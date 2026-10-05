@@ -70,6 +70,8 @@ const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {
   "005380": ["현대차", "현대자동차"],
   "035720": ["카카오"],
   "068270": ["셀트리온"],
+  "035420": ["네이버", "NAVER"],
+  "247540": ["에코프로비엠", "에코프로 BM"],
 };
 
 const PUBLISHER_NAME_BY_DOMAIN: Record<string, string> = {

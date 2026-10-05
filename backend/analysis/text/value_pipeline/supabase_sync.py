@@ -85,8 +85,32 @@ def reset_live_sync(
     targets: Mapping[str, str], *, client: Any,
     fetcher: Any = newsapi_ai.fetch_article_batch, as_of: datetime | None = None,
 ) -> SyncResult:
-    clear_live_news(targets, client=client)
-    return run_live_sync(targets, client=client, fetcher=fetcher, as_of=as_of)
+    """Replace each stock's live rows only after its replacement is ready.
+
+    A provider failure or a zero-result window leaves that stock's last usable
+    live view intact. Historical rows are never selected by ``clear_live_news``.
+    """
+    result = SyncResult()
+    for ticker, company_name in targets.items():
+        try:
+            output = news_run.run_live_cycle(
+                {ticker: company_name},
+                fetcher=fetcher,
+                as_of=as_of,
+                page_size=100,
+                require_finbert=True,
+            )[ticker]
+            # Validate before deleting any persisted live rows.
+            supabase_store._require_news_track(output)
+            clear_live_news({ticker: company_name}, client=client)
+            supabase_store.persist_news_track(client, output)
+        except supabase_store.SupabaseNoDataError as exc:
+            result.skipped[ticker] = exc.code
+        except Exception as exc:
+            result.failures[ticker] = _failure_name(exc)
+        else:
+            result.succeeded.append(ticker)
+    return result
 
 
 def _read_track(path: Path, expected: set[str]) -> dict[str, Any]:
