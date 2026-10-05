@@ -151,7 +151,9 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
     "data-card-order",
     "nudge,contribution,sentiment,supply,risk,financial",
   );
-  await expect(page.getByRole("tab", { selected: true })).toHaveText("모델이 본 이유");
+  await expect(
+    page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab", { selected: true }),
+  ).toHaveText("모델이 본 이유");
   await expect(page.getByText("데모 계정 · 예시 데이터")).toBeVisible();
 
   // 다른 유형이라면?: 이 화면만 바뀌고 저장된 결과는 그대로
@@ -159,7 +161,9 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await page.getByRole("button", { name: "자산 보존형" }).click();
   await expect(page.locator('[data-bit-type="PRESERVER"]')).toBeVisible();
   await expect(page.getByText("시선으로 보는 중", { exact: false })).toBeVisible();
-  await expect(page.getByRole("tab", { selected: true })).toHaveText("시장 분위기");
+  await expect(
+    page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab", { selected: true }),
+  ).toHaveText("시장 분위기");
   await page.getByRole("button", { name: "내 성향" }).click();
   await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
 
