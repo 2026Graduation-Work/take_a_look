@@ -9,6 +9,7 @@ import KAKAO_NEWS_TRACK from "./sentiment-035720.json" with { type: "json" };
 import HYUNDAI_NEWS_TRACK from "./sentiment-005380.json" with { type: "json" };
 import CELLTRION_NEWS_TRACK from "./sentiment-068270.json" with { type: "json" };
 import {
+  aggregateSentimentPeriods,
   contributionProvider,
   financialProvider,
   loadStockInsights,
@@ -17,6 +18,25 @@ import {
   supplyDemandProvider,
   toNudgeMarket,
 } from "./index.ts";
+
+test("감성 기간 집계: 일별은 유지하고 월·년별은 기사 수 가중평균을 쓴다", () => {
+  const days = [
+    { date: "2026-01-02", score: 0.8, articleCount: 8 },
+    { date: "2026-01-03", score: -0.4, articleCount: 2 },
+    { date: "2026-02-01", score: -0.5, articleCount: 5 },
+    { date: "2026-02-02", score: 0.9, articleCount: 0 },
+  ];
+
+  assert.deepEqual(aggregateSentimentPeriods(days, "day"), days);
+  assert.deepEqual(aggregateSentimentPeriods(days, "month"), [
+    { date: "2026-01", score: 0.56, articleCount: 10 },
+    { date: "2026-02", score: -0.5, articleCount: 5 },
+  ]);
+  const yearly = aggregateSentimentPeriods(days, "year");
+  assert.equal(yearly[0].date, "2026");
+  assert.equal(yearly[0].articleCount, 15);
+  assert.ok(Math.abs(yearly[0].score - (3.1 / 15)) < 1e-12);
+});
 
 const CODES = ["005930", "005380"];
 
