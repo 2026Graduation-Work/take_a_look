@@ -68,8 +68,8 @@ def test_daily_universe_uses_requested_krx_date(monkeypatch):
     monkeypatch.setattr(stock, "get_market_ticker_list", listing)
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: f"stock-{code}")
     universe = pipeline.fetch_universe("2026-09-21")
-    assert len(universe) == 500
-    assert "00104K" in universe.Code.to_list()
+    assert len(universe) == 500 + len(pipeline.EXTRA_CODES)
+    assert {"00104K", "247540"} <= set(universe.Code)
 
 
 def test_historical_test_rejects_remote_supabase(monkeypatch, tmp_path):

@@ -150,8 +150,8 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
   };
 }
 
-export function getMockStockDetailData(code: string): StockDetailData | null {
-  const detail = stockDetails[code];
+export function getMockStockDetailData(code: string, fallback?: StockDetail): StockDetailData | null {
+  const detail = stockDetails[code] ?? fallback;
   if (!detail) return null;
   return {
     detail,
