@@ -8,11 +8,6 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import {
   Line,
   LineChart,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -399,7 +394,8 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
     const timeline = sentimentTimelineRef.current;
     const active = timeline?.querySelector<HTMLElement>('[aria-pressed="true"]');
     if (!timeline || !active) return;
-    timeline.scrollLeft = active.offsetLeft - timeline.offsetLeft - timeline.clientWidth + active.clientWidth + 16;
+    // offsetLeft는 offsetParent(바깥 면) 기준이라 환경에 따라 어긋난다. 화면 좌표 차이로 선택 항목을 오른쪽 끝에 붙인다.
+    timeline.scrollLeft += active.getBoundingClientRect().right - timeline.getBoundingClientRect().right + 16;
   }, [selectedSentimentPeriod, selectedSentimentDate, periodDays.length]);
 
   function onSentimentTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -882,23 +878,12 @@ export function CalculationBasis({
           rule={`${STYLE_TYPE_RULE} ${BIAS_MODE_WORD[bit.biasMode]}이에요.`}>
           <Scale value={bit.composite} zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
         </BasisTile>
-        <div className="flex flex-col items-center rounded-md bg-field px-4 py-3">
-          <span className="self-start text-xs text-muted">설문 8가지 답의 모양</span>
-          <RadarChart
-            width={280}
-            height={200}
-            data={STYLE_AXIS_IDS.map((axisId) => ({
-              axis: AXIS_META[axisId].positive,
-              ratio: styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0,
-            }))}
-            outerRadius={66}
-          >
-            <PolarGrid stroke={CHART.line} />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: CHART.muted, fontSize: 13 }} />
-            <PolarRadiusAxis domain={[-1, 1]} tick={false} axisLine={false} />
-            <Radar dataKey="ratio" stroke={CHART.accent} fill={CHART.accent} fillOpacity={0.25} isAnimationActive={false} />
-          </RadarChart>
-          <span className="text-2xs text-muted">바깥으로 갈수록 그 항목 쪽으로 강해요</span>
+        <div className="flex flex-col gap-3 rounded-md bg-field px-4 py-3">
+          <span className="text-xs text-muted">설문 8가지 답 · 가운데가 0(어느 쪽도 아님)</span>
+          {STYLE_AXIS_IDS.map((axisId) => (
+            <Scale key={axisId} value={styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0}
+              left={AXIS_META[axisId].negative} right={AXIS_META[axisId].positive} />
+          ))}
         </div>
         {insights.psychology && (
           <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} sub={signed(insights.psychology.axis)} rule={PSYCHOLOGY_RULE}>
@@ -952,6 +937,7 @@ function Scale({ value, left, right, zones, current }: { value: number; left?: s
   return (
     <div role="img" aria-label={`-1부터 +1 사이에서 ${signed(value)} 위치`} className="flex flex-col gap-1.5">
       <div className="relative h-2 rounded-full bg-track">
+        {!zones && <span className="absolute inset-y-0 left-1/2 w-0.5 bg-field" />}
         {zones?.slice(1).map((_, index) => (
           <span key={index} className="absolute inset-y-0 w-0.5 bg-field" style={{ left: `${((index + 1) / zones.length) * 100}%` }} />
         ))}

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { isChartPreview } from "@/lib/chart-preview-config";
 import { usePublicCharts } from "@/lib/use-public-charts";
 import { chartDirection } from "@/lib/chart-detail";
-import { SIGNAL_META } from "@/lib/display";
+import { formatKstDateTime, SIGNAL_META } from "@/lib/display";
 import { DIRECTION_WORD, topPercentLabel } from "@/lib/copy-glossary";
 import type { RecommendedStock } from "@/lib/types";
 
@@ -43,7 +43,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
         </span>
         <span className="truncate text-xs text-muted">{preview
           ? loading ? "최신 게시 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
-            : chart ? `모델 검증 전 · ${chart.data_asof} 기준 · 4주·20거래일` : "게시된 예측 결과가 아직 없어요."
+            : chart ? `모델 검증 전 · ${formatKstDateTime(chart.data_asof)} 기준 · 4주·20거래일` : "게시된 예측 결과가 아직 없어요."
           : oneLineReason(stock)}</span>
       </div>
       <div className="flex flex-none flex-col items-end gap-0.5">

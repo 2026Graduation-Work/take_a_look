@@ -47,7 +47,7 @@ async function watchAndNote(page: Page) {
 
   await page.goto("/portfolio");
   await page.getByRole("button", { name: "삼성전자 관심 종목에서 삭제" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "관심 종목 삭제" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "관심 종목에서 삭제" }).click();
   await page.goto("/");
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
 }

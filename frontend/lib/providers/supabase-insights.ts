@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { kstDay } from "../display.ts";
 import type {
   FinancialMetric,
   FinancialSnapshot,
@@ -226,7 +227,7 @@ function coverage(row: TrackRow): NewsTrackCoverage {
 function articleDay(article: ArticleRow): string {
   const timestamp = article.published_at ? Date.parse(article.published_at) : NaN;
   return Number.isFinite(timestamp)
-    ? new Date(timestamp + 9 * 3_600_000).toISOString().slice(0, 10)
+    ? kstDay(timestamp)
     : article.article_date;
 }
 
@@ -318,9 +319,8 @@ export async function loadSupabaseSentiment(
   const liveTrack = tracks.find(({ track }) => track === "live");
   const liveEnd = liveTrack ? Date.parse(liveTrack.as_of) : NaN;
   const liveStart = liveEnd - 24 * 3_600_000;
-  const koreanDay = (timestamp: number) => new Date(timestamp + 9 * 3_600_000).toISOString().slice(0,10);
-  const liveDateStart = Number.isFinite(liveStart) ? koreanDay(liveStart) : "";
-  const liveDateEnd = Number.isFinite(liveEnd) ? koreanDay(liveEnd) : "";
+  const liveDateStart = Number.isFinite(liveStart) ? kstDay(liveStart) : "";
+  const liveDateEnd = Number.isFinite(liveEnd) ? kstDay(liveEnd) : "";
   const liveDailyResult = liveTrack && liveDateStart && liveDateEnd
     ? await client.from("news_sentiment_daily")
       .select("sentiment_date,sentiment_mean,article_count")

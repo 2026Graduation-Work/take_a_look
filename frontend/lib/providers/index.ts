@@ -2,6 +2,7 @@
 // 시세·수급·재무·감성은 데모 4종목, 모델 기여도 픽스처는 삼성전자·현대차를 지원한다.
 
 import type { NudgeMarket } from "../profiling/nudges";
+import { kstDay } from "../display.ts";
 import { getSupabaseClient } from "../supabase.ts";
 import type { DataProvenance, PortfolioHolding, RiskGrade, StockDetail } from "../types";
 import {
@@ -327,7 +328,7 @@ export async function loadStockInsights(
                   ? `${sentiment.provider === "bigkinds" ? "BigKinds" : "NewsAPI.ai"} · ${sentiment.backend === "kr-finbert" ? "KR-FinBERT" : sentiment.backend}`
                     + " · 저장된 데이터"
                   : "BigKinds · KR-FinBERT · 저장된 데이터",
-              asOf: sentiment.asOf?.slice(0, 10) ?? sentiment.days.at(-1)?.date,
+              asOf: (sentiment.asOf && kstDay(Date.parse(sentiment.asOf))) || sentiment.days.at(-1)?.date,
             }
           : FIXTURE,
       liveSentiment: remoteSentiment.live
@@ -402,8 +403,7 @@ export function todayLiveSentimentView(
   const view = marketSentimentView(insights, now);
   if (view?.basis !== "live") return null;
   const asOf = Date.parse(view.asOf);
-  const koreanDay = (timestamp: number) => new Date(timestamp + 9 * 3_600_000).toISOString().slice(0, 10);
-  return Number.isFinite(asOf) && asOf <= now && koreanDay(asOf) === koreanDay(now) ? view : null;
+  return Number.isFinite(asOf) && asOf <= now && kstDay(asOf) === kstDay(now) ? view : null;
 }
 
 export function sentimentDaysIncludingLive(insights: StockInsights, now: number = Date.now()): SentimentDay[] {
