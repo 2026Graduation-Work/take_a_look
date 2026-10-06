@@ -89,6 +89,10 @@ class SupabaseStore:
         return pd.DataFrame([{"Code": row["stock_code"], "Name": row["stock_name"],
                               "AsOf": as_of} for row in rows])
 
+    def upsert_market_status(self, row):
+        self._request("POST", "/rest/v1/market_status?on_conflict=status_date", [row],
+                      prefer="resolution=merge-duplicates,return=minimal")
+
     def upsert_prices(self, code, frame):
         self.upsert_price_panel({code: frame})
 

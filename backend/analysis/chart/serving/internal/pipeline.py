@@ -266,6 +266,14 @@ def run(args):
     if args.publish:
         with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
             store.publish(batch, snapshots, pack)
+        # 시장 바 지수. 예측 게시와 별개라 실패해도 게시는 유지하고, 화면은 마지막 기준일과 "N일 전"을 보인다.
+        try:
+            from .krx import authenticated_stock
+            from .market import market_status_row
+            store.upsert_market_status(market_status_row(authenticated_stock(), as_of))
+            report("market_status", as_of=as_of, status="ok")
+        except Exception as exc:  # noqa: BLE001
+            report("market_status", as_of=as_of, status="failed", error_type=type(exc).__name__)
     print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
                       "pack_id": pack["pack_id"], "stock_count": len(batch["expected_stock_codes"]),
                       "batch_id": batch["id"], **batch["result"]}))
