@@ -193,8 +193,9 @@ export async function signOut(): Promise<void> {
   }
 
   window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
-  // 데모 보유 종목은 이 브라우저가 원본이라 다음 참가자에게 남지 않게 지운다. 로그인 계정 것은 Supabase 사본이라 둔다.
-  if (demo) window.localStorage.removeItem(STORAGE_KEYS.holdings);
+  // 보유 종목은 개인 금융 정보라 계정과 관계없이 지운다. 공용 PC에서 다음 사람에게 남지 않게.
+  // 로그인 계정은 다시 로그인하면 Supabase에서 읽어 온다.
+  window.localStorage.removeItem(STORAGE_KEYS.holdings);
   clearSavedProfile();
   window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
 
