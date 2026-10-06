@@ -3,16 +3,30 @@ import Link from "next/link";
 import { NewsSentimentPanel } from "@/app/components/insight-cards";
 import StockDetailBoundary from "@/app/components/stock-detail-boundary";
 import { stockDetails } from "@/lib/mock-data";
+import { loadPublicCharts } from "@/lib/chart-public";
 import { loadStockInsights } from "@/lib/providers";
 import { getMockStockDetailData } from "@/lib/queries";
+import type { StockDetail } from "@/lib/types";
 
 // GitHub Actions가 매일 적재한 뉴스가 재배포 없이 화면에 반영되도록 한다.
 export const revalidate = 3600;
 
-const NEWS_ONLY_STOCKS: Record<string, { name: string; market: "KOSPI" | "KOSDAQ" }> = {
-  "035420": { name: "네이버", market: "KOSPI" },
-  "247540": { name: "에코프로비엠", market: "KOSDAQ" },
+// 데모 예시가 없는 종목. 게시된 차트 스냅샷이 있으면 다른 종목과 같은 상세 화면, 없으면 뉴스만 보인다.
+// riskGrade는 supabase/seed.sql stocks 값.
+const NEWS_ONLY_STOCKS: Record<string, Pick<StockDetail, "name" | "market" | "riskGrade">> = {
+  "035420": { name: "네이버", market: "KOSPI", riskGrade: 3 },
+  "247540": { name: "에코프로비엠", market: "KOSDAQ", riskGrade: 3 },
 };
+
+// 예측·시세 칸은 ChartPreviewDetail이 스냅샷 값으로 덮는다(chartDetail).
+function chartOnlyDetail(code: string, stock: (typeof NEWS_ONLY_STOCKS)[string]): StockDetail {
+  return {
+    code, ...stock, signalLight: "neutral", rankPercentile: 0,
+    returnBand: { low: 0, high: 0, ciLevel: 0.68 }, hitRate: 0, similarCaseCount: 0,
+    horizonAgreement: { h5: "flat", h10: "flat", h20: "flat", agreement: "mixed" },
+    riskFlags: [], provenance: { kind: "real", source: "LGBM · 20거래일 · 검증 전" }, asOf: "", reasons: [],
+  };
+}
 
 export function generateStaticParams() {
   return [...Object.keys(stockDetails), ...Object.keys(NEWS_ONLY_STOCKS)].map((code) => ({ code }));
@@ -20,10 +34,13 @@ export function generateStaticParams() {
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
   const { code } = await params;
-  const initialData = getMockStockDetailData(code);
-  const insights = await loadStockInsights(code);
+  const stock = NEWS_ONLY_STOCKS[code];
+  const [insights, charts] = await Promise.all([
+    loadStockInsights(code),
+    stock ? loadPublicCharts([code]).catch(() => null) : null,
+  ]);
+  const initialData = getMockStockDetailData(code, stock && charts?.has(code) ? chartOnlyDetail(code, stock) : undefined);
   if (!initialData) {
-    const stock = NEWS_ONLY_STOCKS[code];
     if (!stock) notFound();
     return (
       <main className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-4 pb-12 pt-5 sm:px-8">

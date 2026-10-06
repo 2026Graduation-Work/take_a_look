@@ -34,6 +34,8 @@ from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
+# Service stocks outside KOSPI. Outside the training universe: shown as "모델 검증 전".
+EXTRA_CODES = ("247540",)  # 에코프로비엠 (KOSDAQ)
 
 
 def official_day(requested=None):
@@ -55,6 +57,7 @@ def fetch_universe(as_of, code=None):
         codes = stock.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI")
         if not 500 <= len(codes) <= 1200:
             raise ValueError("Invalid KOSPI universe size")
+        codes = [*codes, *(item for item in EXTRA_CODES if item not in codes)]
     rows = pd.DataFrame({"Code": codes, "Name": [stock.get_market_ticker_name(item) for item in codes]})
     if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all()
             or rows.Name.isna().any() or not rows.Name.astype(str).str.strip().all()):
