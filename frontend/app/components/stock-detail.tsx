@@ -116,7 +116,10 @@ export default function StockDetailView({
     detail.riskGrade < safeMaxRiskTier
       ? `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요. 설문에서 답한 위험 감수 정도(${profile.riskTolerance})보다 가격이 크게 흔들릴 수 있어요.`
       : null;
-  const horizons = (["h5", "h10", "h20"] as const).map((key) => [key, detail.horizonAgreement[key]] as const);
+  // #170: 공개 모델은 1주·4주 둘. 하락 시 이탈 쪽으로 답한 성향(체크포인트와 같은 0.3 기준)은 단기 흔들림보다 4주를 먼저 본다.
+  const drawdownFirst = (demo.styleAxes?.axes.find(({ axis_id }) => axis_id === "drawdown_reaction")?.ratio ?? 0) > 0.3;
+  const horizonKeys = preview ? (drawdownFirst ? (["h20", "h5"] as const) : (["h5", "h20"] as const)) : (["h5", "h10", "h20"] as const);
+  const horizons = horizonKeys.map((key) => [key, detail.horizonAgreement[key]] as const);
   return (
     <div className="w-full">
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} />
@@ -259,12 +262,12 @@ export default function StockDetailView({
               <p className="m-0 text-sm text-body">{preview
                 ? "각 모델에서 가장 높은 분류 점수의 방향이에요. 미래 상승·하락 확률을 뜻하지 않아요."
                 : AGREEMENT_ANSWER[detail.horizonAgreement.agreement]}</p>
-              <ul className="m-0 grid list-none grid-cols-3 gap-3 p-0">
+              <ul className={`m-0 grid list-none gap-3 p-0 ${preview ? "grid-cols-2" : "grid-cols-3"}`}>
                 {horizons.map(([key, legacyDirection]) => {
-                  const direction = preview ? key === "h10" ? null : chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
+                  const direction = preview ? chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
                   return (
                   <li key={key} className="flex flex-col gap-0.5 rounded-md bg-field px-4 py-3">
-                    <span className="text-xs text-muted">{preview && key !== "h10" ? key === "h5" ? "1주 · 5거래일" : "4주 · 20거래일" : HORIZON_LABEL[key]}</span>
+                    <span className="text-xs text-muted">{preview ? key === "h5" ? "1주 · 5거래일" : "4주 · 20거래일" : HORIZON_LABEL[key]}</span>
                     <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
                       {direction ? `${HORIZON_META[direction].arrow} ${preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : "중립" : DIRECTION_WORD[direction]}` : "미제공"}
                     </span>
@@ -273,7 +276,7 @@ export default function StockDetailView({
                 })}
               </ul>
               <p className="m-0 text-xs text-muted tabular-nums">
-                {preview ? "과거 상승 비율은 제공하지 않아요." : `과거 비슷한 신호 ${detail.similarCaseCount}건 중 ${Math.round(detail.hitRate * 100)}%가 실제로 올랐어요.`}
+                {preview ? `과거 상승 비율은 제공하지 않아요.${drawdownFirst ? " 하락 때 정리하는 편이라고 답해 4주를 먼저 놓았어요." : ""}` : `과거 비슷한 신호 ${detail.similarCaseCount}건 중 ${Math.round(detail.hitRate * 100)}%가 실제로 올랐어요.`}
               </p>
             </section>
 

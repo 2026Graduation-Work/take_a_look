@@ -34,10 +34,9 @@ test("public predictions retain the original detail UI and both model directions
   await expect(model).not.toContainText(/비율 합 100%|뉴스 분위기|회사 체력|사고판 주체/);
   await page.locator("summary", { hasText: "더 알아보기" }).click();
   const horizons = page.locator('section[aria-labelledby="more-horizons"]');
-  await expect(horizons.getByRole("listitem")).toHaveCount(3);
+  await expect(horizons.getByRole("listitem")).toHaveCount(2);
   await expect(horizons.getByRole("listitem").filter({ hasText: "5거래일" })).toContainText("↓ 하방");
   await expect(horizons.getByRole("listitem").filter({ hasText: "20거래일" })).toContainText("↓ 하방");
-  await expect(horizons.getByRole("listitem").filter({ hasText: "2주 뒤" })).toContainText("미제공");
   await expect(page.getByText(/상위 \d+%/)).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
