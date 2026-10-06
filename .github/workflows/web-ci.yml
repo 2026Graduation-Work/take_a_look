@@ -52,6 +52,9 @@ jobs:
       - name: Lint (eslint)
         run: pnpm lint
 
+      - name: Unit tests (node --test)
+        run: pnpm test:unit
+
       - name: Build (next build)
         run: pnpm build
 

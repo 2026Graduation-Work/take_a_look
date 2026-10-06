@@ -1,5 +1,6 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
 import type { ProfilingOutput } from "./types";
 import { isRecord, isStyleAxes, threeAxisSummary } from "./profiling-rules";
 import { assertOk, getSupabaseClient } from "./supabase";
@@ -26,11 +27,7 @@ export async function saveProfile(
   if (!data.user) throw new Error("로그인 후 설문 결과를 저장할 수 있습니다.");
 
   const now = new Date().toISOString();
-  const metadata = data.user.user_metadata;
-  const displayName =
-    typeof metadata.full_name === "string" && metadata.full_name.trim()
-      ? metadata.full_name.trim()
-      : data.user.email?.split("@")[0] || "사용자";
+  const displayName = displayNameFor(data.user);
   const avatarLabel = Array.from(displayName)[0] ?? "";
 
   const authUserId = data.user.id;
@@ -211,4 +208,13 @@ function isProfilingOutput(value: unknown): value is ProfilingOutput {
     (meta.schema_version === "1.0.0" || meta.schema_version === "1.1.0") &&
     (value.style_axes === undefined || isStyleAxes(value.style_axes))
   );
+}
+
+// 헤더 이름: 저장된 이름 → 가입 때 받은 이름 → 이메일 앞부분.
+export function displayNameFor(user: User, storedName?: string | null): string {
+  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다. 그 값은 건너뛴다.
+  if (storedName?.trim() && storedName !== "u_minji_001") return storedName.trim();
+  const fullName = user.user_metadata.full_name;
+  if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
+  return user.email?.split("@")[0] || "사용자";
 }
