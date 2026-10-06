@@ -1,4 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { MARKET_CONDITION_META } from "@/lib/display";
+import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
 import SourceChip from "./source-chip";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
@@ -29,7 +33,18 @@ function Quote({ quote }: { quote: MarketIndexQuote }) {
 // 백분위(0~100) → 구간 말. 산식: frontend/scripts/build_demo_snapshot.py
 const level = (score: number) => (score < 100 / 3 ? "낮음" : score < 200 / 3 ? "보통" : "높음");
 
-export default function MarketStatusBar({ status }: { status: MarketStatus }) {
+export default function MarketStatusBar({ status: snapshot }: { status: MarketStatus }) {
+  const [status, setStatus] = useState(snapshot);
+  useEffect(() => {
+    let alive = true;
+    void loadLatestMarketStatus()
+      .then((latest) => alive && latest && latest.date > snapshot.date && setStatus(latest))
+      .catch(() => undefined); // 읽기 실패면 스냅샷 + "N일 전" 표시로 남는다
+    return () => {
+      alive = false;
+    };
+  }, [snapshot.date]);
+  const stale = staleLabel(status.date);
   const meta = MARKET_CONDITION_META[status.condition];
   const real = status.provenance.kind === "real";
   const quotes = status.indexQuotes.filter(({ symbol }) => SHOWN.has(symbol));
@@ -38,7 +53,9 @@ export default function MarketStatusBar({ status }: { status: MarketStatus }) {
     <section aria-label="시장 브리핑" className="border-t border-line/60">
       <div className="mx-auto flex min-h-10 w-full max-w-[1200px] items-center gap-5 overflow-x-auto px-4 py-2 [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
         {/* 연도까지 보인다: 스냅샷이 오래되면 "12.30"만으로는 오늘 값처럼 읽힌다. */}
-        <span className="flex-none text-xs text-muted tabular-nums">{status.date.replaceAll("-", ".")} 기준</span>
+        <span className="flex-none text-xs text-muted tabular-nums">
+          {status.date.replaceAll("-", ".")} 기준{stale && <strong className="ml-1 font-medium text-ink">· {stale}</strong>}
+        </span>
         {quotes.length > 0 ? (
           quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)
         ) : (
