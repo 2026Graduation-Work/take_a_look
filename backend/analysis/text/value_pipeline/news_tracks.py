@@ -40,6 +40,7 @@ def _score_relevant(
     *,
     relevance_key_override: str | None = None,
     require_finbert: bool = False,
+    inference_batch_size: int = 16,
 ) -> tuple[list[tuple[dict[str, Any], float]], str]:
     relevant = [
         items[index]
@@ -48,7 +49,7 @@ def _score_relevant(
         )
     ]
     scores, backend = sentiment.score_texts(
-        [_article_text(item) for item in relevant], require_finbert=require_finbert
+        [_article_text(item) for item in relevant], require_finbert=require_finbert, batch_size=inference_batch_size
     )
     return list(zip(relevant, scores, strict=False)), backend
 
@@ -222,6 +223,8 @@ def build_historical_track(
     *,
     date_start: str,
     date_end: str,
+    require_finbert: bool = False,
+    inference_batch_size: int = 16,
 ) -> dict[str, Any]:
     """BigKinds 수동 다운로드 기사로 일별 심리지수를 만든다."""
     start = date.fromisoformat(date_start)
@@ -233,7 +236,7 @@ def build_historical_track(
         for item in items
         if (day := _article_date(item)) is not None and start <= day <= end
     ]
-    scored, backend = _score_relevant(bounded, company_name)
+    scored, backend = _score_relevant(bounded, company_name, require_finbert=require_finbert, inference_batch_size=inference_batch_size)
     return {
         "schema_version": "1.0",
         "track": "historical",

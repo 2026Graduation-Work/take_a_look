@@ -2,6 +2,7 @@
 // 브라우저 쪽 Auth 흐름은 각 테스트가 page.route로 따로 흉내 낸다(supabase-mock.ts).
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+import { sentimentHistoryFixture } from "./sentiment-history-fixture.mjs";
 
 const snapshots = JSON.parse(readFileSync("../backend/analysis/chart/serving/previews/2026-09-21/snapshots.json", "utf8"));
 const chartRows = snapshots.map(payload => ({
@@ -23,5 +24,6 @@ createServer((request, response) => {
   }
   response.writeHead(rest ? 200 : 404, headers);
   const chart = request.url?.startsWith("/rest/v1/latest_chart_signal_snapshots?");
-  response.end(rest && request.method === "GET" ? JSON.stringify(chart ? chartRows : []) : "{}");
+  const sentiment = sentimentHistoryFixture(new URL(request.url || "/", "http://localhost"));
+  response.end(rest && request.method === "GET" ? JSON.stringify(sentiment ?? (chart ? chartRows : [])) : "{}");
 }).listen(54321, "127.0.0.1");

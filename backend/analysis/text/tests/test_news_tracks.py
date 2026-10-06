@@ -444,3 +444,15 @@ def test_historical_cycle_loads_bigkinds_days_and_builds_one_track(
     assert out["track"] == "historical"
     assert out["coverage"]["fetched_count"] == 3
     assert out["coverage"]["relevant_count"] == 2
+
+
+def test_historical_inference_batch_size_is_forwarded_without_changing_scores(monkeypatch):
+    sizes = []
+    def score(texts, **kwargs):
+        sizes.append(kwargs['batch_size'])
+        return [0.25] * len(texts), 'kr-finbert'
+    monkeypatch.setattr(news_tracks.sentiment, 'score_texts', score)
+    output = news_run.run_historical_cycle('005930','삼성전자','2026-09-18','2026-09-18',
+        loader=lambda *args, **kwargs: _articles(), require_finbert=True, inference_batch_size=32)
+    assert sizes == [32]
+    assert output['window']['sentiment_mean'] == 0.25

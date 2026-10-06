@@ -6,11 +6,13 @@ import type {
   NewsTrackCoverage,
   NewsTrackStatus,
   SentimentData,
+  SentimentDay,
 } from "./index.ts";
 
 export type InsightQueryClient = Pick<SupabaseClient, "from">;
 
 export interface LiveSentimentSummary {
+  periodDays?: SentimentDay[];
   score: number;
   scoreStd: number | null;
   articleCount: number;
@@ -100,6 +102,7 @@ const PUBLISHER_DOMAINS_BY_LENGTH = Object.keys(PUBLISHER_NAME_BY_DOMAIN)
   .sort((left, right) => right.length - left.length);
 
 interface ArticleRow {
+  news_id?: string;
   title: string;
   press: string | null;
   url?: string;
@@ -220,6 +223,67 @@ function coverage(row: TrackRow): NewsTrackCoverage {
   };
 }
 
+function articleDay(article: ArticleRow): string {
+  const timestamp = article.published_at ? Date.parse(article.published_at) : NaN;
+  return Number.isFinite(timestamp)
+    ? new Date(timestamp + 9 * 3_600_000).toISOString().slice(0, 10)
+    : article.article_date;
+}
+
+function articleKeys(article: ArticleRow): string[] {
+  const keys = article.news_id ? [`id:${article.news_id}`] : [];
+  if (article.url) {
+    try {
+      const url = new URL(article.url);
+      url.hash = "";
+      for (const key of [...url.searchParams.keys()]) {
+        if (key.startsWith("utm_") || key === "fbclid" || key === "gclid") url.searchParams.delete(key);
+      }
+      url.searchParams.sort();
+      keys.push(`url:${url.toString()}`);
+    } catch { /* A missing or malformed URL still permits title/ID matching. */ }
+  }
+  if (article.title && article.press) {
+    keys.push(`title:${articleDay(article)}:${article.press.trim()}:${article.title.replace(/\s+/g, " ").trim()}`);
+  }
+  return keys;
+}
+
+export function liveArticlePeriodDays(live: ArticleRow[], historical: ArticleRow[]): SentimentDay[] {
+  const seen = new Set(historical.flatMap(articleKeys));
+  const groups = new Map<string, { sum: number; count: number }>();
+  for (const article of live) {
+    const score = article.sentiment_score;
+    if (typeof score !== "number" || !Number.isFinite(score) || score < -1 || score > 1) continue;
+    const keys = articleKeys(article);
+    if (keys.some((key) => seen.has(key))) continue;
+    keys.forEach((key) => seen.add(key));
+    const date = articleDay(article);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const group = groups.get(date) ?? { sum: 0, count: 0 };
+    group.sum += score;
+    group.count++;
+    groups.set(date, group);
+  }
+  return [...groups].sort(([left], [right]) => left.localeCompare(right))
+    .map(([date, group]) => ({date, score: group.sum / group.count, articleCount: group.count}));
+}
+
+async function sentimentArticles(client: InsightQueryClient, code: string, track: string, dates?: string[]): Promise<ArticleRow[]> {
+  const rows: ArticleRow[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    let query = client.from("news_articles")
+      .select("news_id,title,press,url,article_date,published_at,event_id,sentiment_score")
+      .eq("stock_code", code).eq("track", track);
+    if (dates) query = query.in("article_date", dates);
+    const result = await query.order("published_at", { ascending: false, nullsFirst: false })
+      .order("news_id", { ascending: true }).range(offset, offset + 999) as QueryResult;
+    const page = (unwrap(result, "news_articles") ?? []) as ArticleRow[];
+    rows.push(...page);
+    if (page.length < 1000) return rows;
+  }
+}
+
 export async function loadSupabaseSentiment(
   code: string,
   client: InsightQueryClient,
@@ -228,31 +292,50 @@ export async function loadSupabaseSentiment(
     .from("news_sentiment_tracks")
     .select("*")
     .eq("stock_code", code) as QueryResult;
-  const dailyResult = await client
-    .from("news_sentiment_daily")
-    .select("sentiment_date,status,sentiment_mean,sentiment_std,article_count,publisher_count")
-    .eq("stock_code", code)
-    .eq("track", "historical")
-    .not("sentiment_mean", "is", null)
-    .order("sentiment_date", { ascending: false }) as QueryResult;
-  const articleResult = await client
-    .from("news_articles")
+  const dailyRows: unknown[] = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const pageResult = await client
+      .from("news_sentiment_daily")
+      .select("sentiment_date,status,sentiment_mean,sentiment_std,article_count,publisher_count")
+      .eq("stock_code", code)
+      .eq("track", "historical")
+      .not("sentiment_mean", "is", null)
+      .order("sentiment_date", { ascending: false })
+      .range(offset, offset + pageSize - 1) as QueryResult;
+    const page = (unwrap(pageResult, "news_sentiment_daily") ?? []) as unknown[];
+    dailyRows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  const articleResult = await client.from("news_articles")
     .select("news_id,title,press,url,article_date,published_at,event_id,sentiment_score")
-    .eq("stock_code", code)
-    .eq("track", "live")
+    .eq("stock_code", code).eq("track", "live")
     .order("published_at", { ascending: false, nullsFirst: false })
-    .order("news_id", { ascending: true })
-    .limit(25) as QueryResult;
-
+    .order("news_id", { ascending: true }).limit(25) as QueryResult;
+  const articles = (unwrap(articleResult, "news_articles") ?? []) as ArticleRow[];
   const tracks = (unwrap(tracksResult, "news_sentiment_tracks") ?? []) as TrackRow[];
-  const daily = (unwrap(dailyResult, "news_sentiment_daily") ?? []) as Array<{
+  const historicalTrack = tracks.find(({ track }) => track === "historical");
+  const liveTrack = tracks.find(({ track }) => track === "live");
+  const liveEnd = liveTrack ? Date.parse(liveTrack.as_of) : NaN;
+  const liveStart = liveEnd - 24 * 3_600_000;
+  const koreanDay = (timestamp: number) => new Date(timestamp + 9 * 3_600_000).toISOString().slice(0,10);
+  const liveDateStart = Number.isFinite(liveStart) ? koreanDay(liveStart) : "";
+  const liveDateEnd = Number.isFinite(liveEnd) ? koreanDay(liveEnd) : "";
+  const liveDailyResult = liveTrack && liveDateStart && liveDateEnd
+    ? await client.from("news_sentiment_daily")
+      .select("sentiment_date,sentiment_mean,article_count")
+      .eq("stock_code", code).eq("track", "live")
+      .gte("sentiment_date", liveDateStart).lte("sentiment_date", liveDateEnd)
+      .order("sentiment_date", { ascending: true }) as QueryResult
+    : {data: [], error: null};
+  const liveDaily = (unwrap(liveDailyResult, "news_sentiment_daily") ?? []) as Array<{
+    sentiment_date: string; sentiment_mean: number | null; article_count: number;
+  }>;
+  const daily = dailyRows as Array<{
     sentiment_date: string;
     sentiment_mean: number | null;
     article_count: number;
   }>;
-  const articles = (unwrap(articleResult, "news_articles") ?? []) as ArticleRow[];
-  const historicalTrack = tracks.find(({ track }) => track === "historical");
-  const liveTrack = tracks.find(({ track }) => track === "live");
   const days = daily
     .filter(({ sentiment_mean }) => sentiment_mean !== null)
     .map(({ sentiment_date, sentiment_mean, article_count }) => ({
@@ -261,6 +344,29 @@ export async function loadSupabaseSentiment(
       articleCount: article_count,
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
+  const liveDays = liveDaily.filter((row) =>
+    row.sentiment_mean !== null && Number.isFinite(row.sentiment_mean) && row.article_count > 0
+    && liveTrack && row.sentiment_date >= liveDateStart
+    && row.sentiment_date <= liveDateEnd)
+    .map((row) => ({date:row.sentiment_date,score:row.sentiment_mean as number,articleCount:row.article_count}));
+  const historicalDates = new Set(days.map(({date}) => date));
+  const overlappingDates = liveDays.map(({date}) => date).filter((date) => historicalDates.has(date));
+  // Stored Live daily scores already split the rolling window by KST date.
+  // Only overlapping days need article-level deduplication against historical.
+  let periodDays = liveDays;
+  if (overlappingDates.length) {
+    const [overlappingLive, overlappingHistorical] = await Promise.all([
+      sentimentArticles(client, code, "live", overlappingDates),
+      sentimentArticles(client, code, "historical", overlappingDates),
+    ]);
+    const currentArticles = overlappingLive.filter((article) => {
+      const timestamp = article.published_at ? Date.parse(article.published_at) : NaN;
+      return Number.isFinite(timestamp) && timestamp >= liveStart && timestamp <= liveEnd;
+    });
+    periodDays = [...liveDays.filter(({date}) => !overlappingDates.includes(date)),
+      ...liveArticlePeriodDays(currentArticles, overlappingHistorical)]
+      .sort((left,right) => left.date.localeCompare(right.date));
+  }
   const headlines = selectRepresentativeHeadlines(code, articles, liveTrack?.sentiment_mean);
 
   return {
@@ -279,6 +385,7 @@ export async function loadSupabaseSentiment(
       : null,
     live: liveTrack && liveTrack.sentiment_mean !== null
       ? {
+          periodDays,
           score: liveTrack.sentiment_mean,
           scoreStd: liveTrack.sentiment_std,
           articleCount: liveTrack.article_count,

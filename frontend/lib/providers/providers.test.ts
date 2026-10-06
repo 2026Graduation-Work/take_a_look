@@ -10,10 +10,13 @@ import HYUNDAI_NEWS_TRACK from "./sentiment-005380.json" with { type: "json" };
 import CELLTRION_NEWS_TRACK from "./sentiment-068270.json" with { type: "json" };
 import {
   aggregateSentimentPeriods,
+  sentimentDaysIncludingLive,
   contributionProvider,
   financialProvider,
   loadStockInsights,
   marketSentimentView,
+  todayLiveSentimentView,
+  sentimentWindow,
   sentimentProvider,
   supplyDemandProvider,
   toNudgeMarket,
@@ -36,6 +39,22 @@ test("감성 기간 집계: 일별은 유지하고 월·년별은 기사 수 가
   assert.equal(yearly[0].date, "2026");
   assert.equal(yearly[0].articleCount, 15);
   assert.ok(Math.abs(yearly[0].score - (3.1 / 15)) < 1e-12);
+});
+
+test("감성 차트 창: 선택한 시점을 끝으로 최대 8개 값만 보여 준다", () => {
+  const days = Array.from({ length: 12 }, (_, index) => ({
+    date: `2026-01-${String(index + 1).padStart(2, "0")}`,
+    score: index / 10,
+    articleCount: 1,
+  }));
+
+  assert.deepEqual(sentimentWindow(days, 11).map(({ date }) => date), [
+    "2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08",
+    "2026-01-09", "2026-01-10", "2026-01-11", "2026-01-12",
+  ]);
+  assert.deepEqual(sentimentWindow(days, 2).map(({ date }) => date), [
+    "2026-01-01", "2026-01-02", "2026-01-03",
+  ]);
 });
 
 const CODES = ["005930", "005380"];
@@ -237,9 +256,13 @@ class StaticSupabaseQuery implements PromiseLike<SupabaseResponse> {
   constructor(response: SupabaseResponse) { this.response = response; }
   select() { return this; }
   eq() { return this; }
+  in() { return this; }
+  gte() { return this; }
+  lte() { return this; }
   not() { return this; }
   order() { return this; }
   limit() { return this; }
+  range() { return this; }
   maybeSingle() { return Promise.resolve(this.response); }
   then<TResult1 = SupabaseResponse, TResult2 = never>(
     onfulfilled?: ((value: SupabaseResponse) => TResult1 | PromiseLike<TResult1>) | null,
@@ -318,4 +341,32 @@ test("Supabase에 live만 있어도 과거 감성·재무는 정적 데이터로
     publisherCount: 3,
     headlines: insights.sentiment?.headlines,
   });
+});
+
+test("오늘 Live 표시: KST 날짜가 바뀌면 최근 Live도 오늘 점으로 표시하지 않는다", async () => {
+  const base = await loadStockInsights("005930", null);
+  const insights = { ...base, liveSentiment: {
+    score: 0.6, scoreStd: 0.1, articleCount: 8, publisherCount: 3, status: "ok" as const,
+    asOf: "2026-10-05T14:59:00Z", windowStart: "2026-10-04", windowEnd: "2026-10-05",
+    coverage: { fetched_count: 8, relevant_count: 8, publisher_count: 3, newest_published_at: null, lag_minutes: null },
+  } };
+  assert.equal(todayLiveSentimentView(insights, Date.parse("2026-10-05T14:59:30Z"))?.score, 0.6);
+  assert.equal(todayLiveSentimentView(insights, Date.parse("2026-10-05T15:00:00Z")), null);
+  assert.equal(todayLiveSentimentView(insights, Date.parse("2026-10-05T14:58:00Z")), null);
+});
+
+ test("월·연 입력은 오늘 Live의 기사 날짜별 점수·기사 수를 추가하며 일별 원본을 바꾸지 않는다", async () => {
+  const base = await loadStockInsights("005930", null);
+  const insights = { ...base, sentiment: { ...base.sentiment!, days: [{date:"2025-12-31",score:0.2,articleCount:10}] },
+    liveSentiment: {score:0.1,scoreStd:0,articleCount:3,publisherCount:1,status:"ok" as const,
+      asOf:"2026-01-01T09:00:00+09:00",windowStart:"",windowEnd:"",coverage:base.sentiment!.coverage!,
+      periodDays:[{date:"2025-12-31",score:-0.4,articleCount:2},{date:"2026-01-01",score:1,articleCount:1}]}};
+  const days = sentimentDaysIncludingLive(insights, Date.parse("2026-01-01T10:00:00+09:00"));
+  const months = aggregateSentimentPeriods(days,"month");
+  assert.equal(months[0].articleCount,12);
+  assert.ok(Math.abs(months[0].score-0.1)<1e-12);
+  assert.deepEqual(months[1],{date:"2026-01",score:1,articleCount:1});
+  assert.equal(aggregateSentimentPeriods(days,"year")[0].date,"2025");
+  assert.equal(insights.sentiment.days[0].articleCount,10);
+  assert.deepEqual(sentimentDaysIncludingLive(insights,Date.parse("2026-01-02T10:00:00+09:00")),insights.sentiment.days);
 });

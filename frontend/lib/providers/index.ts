@@ -66,6 +66,16 @@ export function aggregateSentimentPeriods(
     articleCount: value.articleCount,
   }));
 }
+
+export function sentimentWindow(
+  days: SentimentDay[],
+  endIndex: number,
+  maxPoints = 8,
+): SentimentDay[] {
+  if (endIndex < 0 || maxPoints < 1) return [];
+  const end = Math.min(endIndex, days.length - 1);
+  return days.slice(Math.max(0, end - maxPoints + 1), end + 1);
+}
 export interface Headline {
   date: string;
   title: string;
@@ -382,6 +392,25 @@ export function marketSentimentView(
     publisherCount: insights.sentiment?.coverage?.publisher_count ?? 0,
     headlines: insights.sentiment?.headlines.slice(0, 3) ?? [],
   };
+}
+
+// A recent collection can remain usable for 72h, but only a current KST day is "오늘".
+export function todayLiveSentimentView(
+  insights: StockInsights,
+  now: number = Date.now(),
+): MarketSentimentView | null {
+  const view = marketSentimentView(insights, now);
+  if (view?.basis !== "live") return null;
+  const asOf = Date.parse(view.asOf);
+  const koreanDay = (timestamp: number) => new Date(timestamp + 9 * 3_600_000).toISOString().slice(0, 10);
+  return Number.isFinite(asOf) && asOf <= now && koreanDay(asOf) === koreanDay(now) ? view : null;
+}
+
+export function sentimentDaysIncludingLive(insights: StockInsights, now: number = Date.now()): SentimentDay[] {
+  const days = (insights.sentiment?.days ?? []).map((day) => ({...day}));
+  if (!todayLiveSentimentView(insights, now)) return days;
+  return [...days, ...(insights.liveSentiment?.periodDays ?? [])]
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
 
 // 여러 입력에서 파생된 수치(넛지 등)는 입력이 모두 실데이터일 때만 실데이터다.
