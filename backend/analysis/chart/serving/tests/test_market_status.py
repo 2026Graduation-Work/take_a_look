@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-
 from serving.internal.market import market_status_row, percentile_of_last
 
 
