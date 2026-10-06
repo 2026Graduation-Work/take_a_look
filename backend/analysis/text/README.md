@@ -196,3 +196,50 @@ python -m analysis.text.preprocess --ticker 005930 --out news_corpus.csv
 
 - [BigKinds 뉴스 수집 방식 결정](../../../docs/decisions/bigkinds-acquisition.md)
 - HuggingFace FinBERT (사전학습 금융 감성 모델)
+
+### 2016~2026 전체 기간 추가 적재·재시작·검증
+
+PR #186 이후 전체 기간은 아래 추가 적재 명령을 쓴다. 이미 준비된 6종목의
+`historical` 부모 트랙(BigKinds/KR-FinBERT)이 필요하다. 부모 트랙이 없으면
+placeholder를 생성하지 않고 해당 종목을 실패로 표시한다. 초기 트랙 등록은 위의 기존 2026 `backfill-historical` 명령 또는 검증된
+`historical` JSON을 `backfill-news`로 적재하는 초기화 절차를 사용한다.
+전체 기간 명령은 기존 부모의 **최근 정상 수집 창 요약**을 그대로 보존한다.
+전체 기간의 시작·종료일과 연도별 행 수는 일별 테이블을 재조회한 `coverage.json`이 정본이다.
+
+```bash
+# 저장소 루트에서 .env의 Supabase 환경변수를 주입한 환경으로 실행
+PYTHONPATH=backend .venv/bin/python -m analysis.text.value_pipeline.historical_backfill \
+  --start 2016-01-01 --end 2026-10-04 --cache-dir backend/out/historical_backfill
+
+# 적재 없이 실제 DB와 원본 범위만 재검증
+PYTHONPATH=backend .venv/bin/python -m analysis.text.value_pipeline.historical_backfill \
+  --start 2016-01-01 --end 2026-10-04 --cache-dir backend/out/historical_backfill --audit-only
+```
+
+동일한 명령을 재실행하면 DB의 완료 날짜와 월별 분석 캐시를 재사용한다.
+`supabase_sync backfill-historical`는 신규 트랙 초기화용 기존 수집·upsert 동작을 유지한다.
+기존 값 보존·재시작이 필요한 전체 기간 추가 적재에는 위 `historical_backfill` 명령을 쓴다.
+로그는 종목/연도/월별 시작·성공·실패를 즉시 출력한다. 과거 추가 계산은
+배치 크기 32를 고정한다(기존 트랙 수집 기본 16 유지). 분석 캐시는 원본 내용과
+기존 CSV·모델명을 fingerprint로 확인하며, 기사 본문은 저장하지 않는다.
+고유키 `(stock_code,track,sentiment_date)`·`(stock_code,track,news_id)`에
+`ignore-duplicates`로 500행씩 추가한다. articles를 먼저 저장한 뒤 daily 행을
+완료 표식으로 저장하고 DB에서 확인하므로 네트워크 실패 후에도 이어서 실행한다.
+기존 historical 값·Live 전체는 덮어쓰거나 삭제하지 않는다.
+
+재사용 순서는 DB 완료 날짜 → 기존 `data/processed/news_sentiment_daily*.csv`의
+KR-FinBERT 일별 점수 → 없는 날짜만 기존 관련성 규칙과 KR-FinBERT로 계산이다.
+기존 CSV는 2025년 말 일부만 있으며 당시의 관련 기사 수·평균을 그대로 쓴다.
+CSV에 없는 표준편차는 null, 언론사 수는 0(기존 파일에 정보 없음)이며 임의로 추정하지 않는다.
+CSV 재사용 날짜는 월별 캐시의 `reused_csv_dates`에 기록한다.
+
+`coverage.json`은 아래를 분리한다.
+
+- `source_missing_dates`: 파일명 다운로드 범위 밖. 원본 누락이지 0기사라고 판단하지 않는다.
+- `database_missing_dates`: 원본 범위 안인데 DB 일별 행이 없음. 실제 적재 누락이다.
+- `no_relevant_article_dates`: DB 일별 행이 있고 관련 기사 0건. 평균은 null이며 0점으로 만들지 않는다.
+- `scored_days`·`article_count`: 점수 있는 날짜 수·채점 관련 기사 수. 원본 전체 기사 수가 아니다.
+
+원본 범위는 파일명 규약으로 판정하므로 공급자 다운로드가 실제로 전수인지 보장하지 않는다.
+삼성전자 2022년 파일은 `data/005930/삼성전자_20220101-20221231.xlsx` 위치에
+추가하고 같은 명령을 재실행하면 된다. 2026년 현재 원본 종료일은 10월 4일이다.

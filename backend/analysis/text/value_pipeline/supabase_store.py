@@ -60,13 +60,15 @@ class SupabaseRestClient:
         *,
         on_conflict: str,
         return_rows: bool = False,
+        ignore_duplicates: bool = False,
     ) -> list[dict[str, Any]]:
         prefer_return = "representation" if return_rows else "minimal"
+        resolution = "ignore-duplicates" if ignore_duplicates else "merge-duplicates"
         headers = {
             "apikey": self.secret_key,
             "Authorization": f"Bearer {self.secret_key}",
             "Content-Type": "application/json",
-            "Prefer": f"resolution=merge-duplicates,return={prefer_return}",
+            "Prefer": f"resolution={resolution},return={prefer_return}",
         }
         url = f"{self.base_url}/rest/v1/{table}"
         response = None
@@ -112,6 +114,44 @@ class SupabaseRestClient:
                 code="supabase_invalid_rows",
             )
         return payload
+
+    def select(
+        self, table: str, *, params: Mapping[str, str], page_size: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Read all pages, including when the server caps pages below our limit."""
+        if page_size <= 0 or "order" not in params:
+            raise ValueError("positive page_size and stable order are required")
+        rows: list[dict[str, Any]] = []
+        headers = {"apikey": self.secret_key, "Authorization": f"Bearer {self.secret_key}"}
+        while True:
+            response = None
+            for attempt in range(3):
+                try:
+                    response = self.session.get(
+                        f"{self.base_url}/rest/v1/{table}", headers=headers,
+                        params={**params, "offset": len(rows), "limit": page_size},
+                        timeout=self.timeout,
+                    )
+                except requests.RequestException as exc:
+                    if attempt == 2:
+                        raise SupabaseWriteError("Supabase 읽기 실패", code="supabase_network_error") from exc
+                    time.sleep(float(2**attempt))
+                    continue
+                if response.status_code < 500 or attempt == 2:
+                    break
+                time.sleep(float(2**attempt))
+            if response is None or not 200 <= response.status_code < 300:
+                status = getattr(response, "status_code", "unknown")
+                raise SupabaseWriteError("Supabase 읽기 실패", code=f"supabase_{table}_http_{status}")
+            try:
+                page = response.json()
+            except ValueError as exc:
+                raise SupabaseWriteError("Supabase 응답 JSON 오류", code="supabase_invalid_json") from exc
+            if not isinstance(page, list) or not all(isinstance(row, dict) for row in page):
+                raise SupabaseWriteError("Supabase 응답 행 오류", code="supabase_invalid_rows")
+            if not page:
+                return rows
+            rows.extend(page)
 
     def delete(self, table: str, *, params: Mapping[str, str]) -> None:
         """Delete rows selected by explicit PostgREST filters.

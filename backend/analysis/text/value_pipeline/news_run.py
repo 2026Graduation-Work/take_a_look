@@ -89,6 +89,8 @@ def run_historical_cycle(
     *,
     loader: Loader = collectors.preprocess.load_news_range,
     data_dir: Path = collectors.DATA_DIR,
+    require_finbert: bool = False,
+    inference_batch_size: int = 16,
 ) -> dict[str, Any]:
     """BigKinds 워크북에서 기간 기사를 읽어 과거 트랙을 만든다."""
     start = date.fromisoformat(date_start)
@@ -108,6 +110,8 @@ def run_historical_cycle(
         company_name,
         date_start=date_start,
         date_end=date_end,
+        require_finbert=require_finbert,
+        inference_batch_size=inference_batch_size,
     )
 
 

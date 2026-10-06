@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  liveArticlePeriodDays,
   loadSupabaseFinancial,
   loadSupabaseSentiment,
 } from "./supabase-insights.ts";
@@ -17,6 +18,9 @@ class FakeQuery implements PromiseLike<Response> {
   }
 
   select(...args: unknown[]) { this.operations.push(["select", ...args]); return this; }
+  gte(...args: unknown[]) { this.operations.push(["gte", ...args]); return this; }
+  lte(...args: unknown[]) { this.operations.push(["lte", ...args]); return this; }
+  in(...args: unknown[]) { this.operations.push(["in", ...args]); return this; }
   eq(...args: unknown[]) { this.operations.push(["eq", ...args]); return this; }
   not(...args: unknown[]) { this.operations.push(["not", ...args]); return this; }
   order(...args: unknown[]) { this.operations.push(["order", ...args]); return this; }
@@ -121,6 +125,7 @@ test("Supabase 감성은 전체 과거 일별값과 live 요약·대표 기사 3
   assert.equal(result.historical?.days[0].date, "2025-11-02");
   assert.equal(result.historical?.days.at(-1)?.date, "2025-11-22");
   assert.deepEqual(result.live, {
+    periodDays: [],
     score: 0.45,
     scoreStd: 0.2,
     articleCount: 12,
@@ -432,4 +437,41 @@ test("Supabase 조회 오류는 호출자에게 전달해 섹션별 폴백을 �
   });
 
   await assert.rejects(() => loadSupabaseSentiment("005930", client as never), /unavailable/);
+});
+
+test("Live 기간 집계는 KST 기사 날짜로 나누고 ID·URL·제목 중복을 제외한다", () => {
+  const historical=[{news_id:"old",title:"공통 뉴스",press:"언론",url:"https://news.test/a",article_date:"2025-12-31",published_at:null,sentiment_score:0.2}];
+  const common={press:"언론",published_at:null};
+  const articles=[
+    {...common,news_id:"live-duplicate",title:"공통 뉴스",url:"https://news.test/a?utm_source=live",article_date:"2025-12-31",sentiment_score:0.8},
+    {...common,news_id:"b",title:"이전 해 뉴스",url:"https://news.test/b",article_date:"2025-12-31",sentiment_score:-0.4},
+    {...common,news_id:"b",title:"이전 해 뉴스",url:"https://news.test/b",article_date:"2025-12-31",sentiment_score:-0.4},
+    {...common,news_id:"c",title:"새해 뉴스",url:"https://news.test/c",article_date:"2025-12-31",published_at:"2025-12-31T16:00:00Z",sentiment_score:1},
+  ];
+  assert.deepEqual(liveArticlePeriodDays(articles,historical),[
+    {date:"2025-12-31",score:-0.4,articleCount:1},
+    {date:"2026-01-01",score:1,articleCount:1},
+  ]);
+});
+
+test("월·연에 쓰는 Live 일별 점수는 DB 결과를 그대로 재사용한다", async () => {
+  const client=new FakeClient({
+    news_sentiment_tracks:[{data:trackRows,error:null}],
+    news_sentiment_daily:[{data:[],error:null},{data:[{sentiment_date:"2026-09-25",sentiment_mean:0.3,article_count:9},{sentiment_date:"2026-09-26",sentiment_mean:-0.2,article_count:3},{sentiment_date:"2026-09-01",sentiment_mean:1,article_count:99}],error:null}],
+    news_articles:[{data:[],error:null}],
+  });
+  const result=await loadSupabaseSentiment("005930",client as never);
+  assert.deepEqual(result.live?.periodDays,[{date:"2026-09-25",score:0.3,articleCount:9},{date:"2026-09-26",score:-0.2,articleCount:3}]);
+  assert.equal(client.operations.news_articles.filter(([op])=>op==="select").length,1);
+});
+
+test("날짜만 저장된 Live 창도 overlap 기사 집계는 기준시각 직전 24시간으로 제한한다", async () => {
+  const article=(id:string,published_at:string)=>({news_id:id,title:id,press:"언론",url:"https://news.test/"+id,article_date:"2026-09-25",published_at,sentiment_score:0.5});
+  const client=new FakeClient({
+    news_sentiment_tracks:[{data:trackRows,error:null}],
+    news_sentiment_daily:[{data:[{sentiment_date:"2026-09-25",sentiment_mean:0.2,article_count:2}],error:null},{data:[{sentiment_date:"2026-09-25",sentiment_mean:0.5,article_count:1}],error:null}],
+    news_articles:[{data:[],error:null},{data:[article("old","2026-09-25T08:00:00+09:00"),article("current","2026-09-25T12:00:00+09:00")],error:null},{data:[],error:null}],
+  });
+  const result=await loadSupabaseSentiment("005930",client as never);
+  assert.deepEqual(result.live?.periodDays,[{date:"2026-09-25",score:0.5,articleCount:1}]);
 });

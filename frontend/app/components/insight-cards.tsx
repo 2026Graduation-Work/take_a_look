@@ -44,7 +44,9 @@ import { SCREEN_GUIDE_NOTICE, selectNudges } from "@/lib/profiling/nudges";
 import {
   combinedProvenance,
   aggregateSentimentPeriods,
+  sentimentDaysIncludingLive,
   marketSentimentView,
+  todayLiveSentimentView,
   periodsOverlap,
   pricePeriod,
   riskSnapshot,
@@ -133,7 +135,6 @@ const signedPercent = (ratio: number) => `${ratio > 0 ? "+" : ""}${(ratio * 100)
 const shares = (value: number) =>
   `${value > 0 ? "+" : value < 0 ? "-" : ""}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
 const sentimentDateLabel = (date: string) => date.replaceAll("-", ".");
-
 // 감성 점수(-1~+1) → 구간 말. 경계는 점수 분포가 아니라 읽기 쉬운 고정 구간이다.
 function moodWord(score: number): string {
   if (score >= 0.3) return "긍정적인 편";
@@ -375,12 +376,18 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
     year: null,
   });
   const sentimentView = marketSentimentView(insights);
+  const todayLive = todayLiveSentimentView(insights);
+  const chartLive = selectedSentimentPeriod === "day" ? todayLive : null;
   const risk = detail ? riskSnapshot(detail) : null;
   const prices = detail ? pricePeriod(detail) : null;
   const sentimentDates = sentiment ? sentimentPeriod(sentiment) : null;
   const periodMismatch = Boolean(prices && sentimentDates && !periodsOverlap(prices, sentimentDates));
   const sentimentTabs: SentimentPeriod[] = ["day", "month", "year"];
-  const periodDays = aggregateSentimentPeriods(sentiment?.days ?? [], selectedSentimentPeriod);
+  const periodInput = selectedSentimentPeriod === "day"
+    ? sentiment?.days ?? [] : sentimentDaysIncludingLive(insights);
+  const periodDays = aggregateSentimentPeriods(periodInput, selectedSentimentPeriod);
+  const chartDates = periodInput.length ? {start: periodInput[0].date, end: periodInput.at(-1)!.date} : null;
+  const includesLive = selectedSentimentPeriod !== "day" && Boolean(todayLive) && Boolean(insights.liveSentiment?.periodDays?.length);
   const selectedIndex = Math.max(
     0,
     selectedSentimentDate ? periodDays.findIndex(({ date }) => date === selectedSentimentDate) : periodDays.length - 1,
@@ -402,6 +409,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       (sentimentTabs.indexOf(selectedSentimentPeriod) + step + sentimentTabs.length) % sentimentTabs.length
     ];
     setSelectedSentimentPeriod(next);
+    setSelectedSentimentDate(null);
     sentimentTabRefs.current[next]?.focus();
   }
 
@@ -422,7 +430,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       {sentimentView?.basis === "live" && (
         <p className="m-0 text-xs text-muted tabular-nums">
           기준시각 {sentimentView.asOf.slice(0, 16).replace("T", " ")} · 직전 24시간 · 관련 기사{" "}
-          {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳
+          {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳 · NewsAPI.ai · KR-FinBERT
         </p>
       )}
       {sentimentView?.status === "partial" && (
@@ -436,7 +444,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           <span className="text-muted"> — {psychology.explain}</span>
         </p>
       )}
-      {(sentiment?.days.length || sentimentView?.basis === "live") ? (
+      {(sentiment?.days.length || Boolean(todayLive)) ? (
         <>
           <div
             className="segmented self-start"
@@ -467,6 +475,12 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
               );
             })}
           </div>
+          <p className="m-0 text-2xs text-muted tabular-nums">
+            -1 부정 ~ +1 긍정 · {selectedSentimentPeriod === "day" ? "일별 관련 기사 평균" : `${selectedSentimentPeriod === "month" ? "월별" : "연별"} 뉴스 감성 · 기사 수 가중평균`}
+            {chartDates && ` · ${sentimentDateLabel(chartDates.start)} ~ ${sentimentDateLabel(chartDates.end)}`}
+            {sentiment && ` · ${insights.provenance.sentiment.source}`}
+            {includesLive && " + NewsAPI.ai · 오늘 Live 반영"}
+          </p>
           <div
             role="tabpanel"
             id="sentiment-panel"
@@ -474,27 +488,28 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           >
             <SentimentChart
               days={visibleDays}
+              connectLive={selectedSentimentPeriod === "day"}
               live={
-                selectedSentimentDate === null && sentimentView?.basis === "live"
-                  ? sentimentView
+                selectedSentimentDate === null && Boolean(chartLive)
+                  ? chartLive
                   : null
               }
             />
-            {(periodDays.length > 0 || sentimentView?.basis === "live") && (
+            {(periodDays.length > 0 || Boolean(chartLive)) && (
               <div ref={sentimentTimelineRef} className="mt-1 overflow-x-auto pb-2 [scrollbar-width:thin]" aria-label="감성 시점 탐색">
                 <div className="flex min-w-max items-center gap-5">
                   {periodDays.map((day, index) => (
                     <button
                       key={day.date}
                       type="button"
-                      className={`min-h-9 whitespace-nowrap text-xs tabular-nums ${index === selectedIndex && (selectedSentimentDate !== null || sentimentView?.basis !== "live") ? "font-semibold text-ink underline underline-offset-4" : "text-muted"}`}
-                      aria-pressed={index === selectedIndex && (selectedSentimentDate !== null || sentimentView?.basis !== "live")}
+                      className={`min-h-9 whitespace-nowrap text-xs tabular-nums ${index === selectedIndex && (selectedSentimentDate !== null || !chartLive) ? "font-semibold text-ink underline underline-offset-4" : "text-muted"}`}
+                      aria-pressed={index === selectedIndex && (selectedSentimentDate !== null || !chartLive)}
                       onClick={() => setSelectedSentimentDate(day.date)}
                     >
                       {sentimentDateLabel(day.date)}
                     </button>
                   ))}
-                  {sentimentView?.basis === "live" && (
+                  {Boolean(chartLive) && (
                     <button
                       type="button"
                       className={`min-h-9 whitespace-nowrap text-xs ${selectedSentimentDate === null ? "font-semibold text-ink underline underline-offset-4" : "text-muted"}`}
@@ -506,6 +521,11 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
                   )}
                 </div>
               </div>
+            )}
+            {selectedSentimentPeriod !== "day" && (
+              <p className="mt-2 mb-0 text-2xs text-muted">
+                월·연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영합니다.
+              </p>
             )}
           </div>
         </>
@@ -556,10 +576,15 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SentimentChart({ days, live }: { days: SentimentDay[]; live: ReturnType<typeof marketSentimentView> }) {
+function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabel }: {
+  days: SentimentDay[];
+  live: ReturnType<typeof marketSentimentView>;
+  connectLive: boolean;
+  dateLabel?: (date: string) => string;
+}) {
   const data = [
-    ...days.map((day) => ({ ...day, label: sentimentDateLabel(day.date), liveScore: null as number | null })),
-    ...(live ? [{ date: live.asOf, label: "오늘 Live", score: null, liveScore: live.score, articleCount: live.articleCount }] : []),
+    ...days.map((day) => ({ ...day, label: dateLabel(day.date), liveScore: null as number | null })),
+    ...(live ? [{ date: live.asOf, label: "오늘 Live", score: connectLive ? live.score : null, liveScore: live.score, articleCount: live.articleCount }] : []),
   ];
   return (
     <div className="h-[180px] min-w-0">
@@ -607,10 +632,11 @@ function SentimentChart({ days, live }: { days: SentimentDay[]; live: ReturnType
             <Line
               dataKey="liveScore"
               name="오늘 Live"
+              tooltipType={connectLive ? "none" : undefined}
               stroke="transparent"
               dot={({ cx, cy, payload }) =>
                 typeof payload.liveScore === "number" ? (
-                  <circle cx={cx} cy={cy} r={5} fill={CHART.priceLine} stroke={CHART.priceLine} strokeWidth={2} />
+                  <circle data-sentiment-live="today" cx={cx} cy={cy} r={5} fill={CHART.priceLine} stroke={CHART.priceLine} strokeWidth={2} />
                 ) : <g />
               }
               activeDot={false}

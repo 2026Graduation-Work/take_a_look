@@ -321,3 +321,25 @@ def test_persist_financial_track_stops_when_upsert_returns_no_uuid() -> None:
         supabase_store.persist_financial_track(client, _financial_track())
 
     assert [call["table"] for call in client.calls] == ["financial_snapshots"]
+
+
+def test_ignore_duplicate_upsert_keeps_existing_scores() -> None:
+    session = _Session()
+    client = supabase_store.SupabaseRestClient('https://example.test', 'secret', session=session)
+    client.upsert('news_sentiment_daily', [{'stock_code': '005930'}],
+                  on_conflict='stock_code,track,sentiment_date', ignore_duplicates=True)
+    assert session.calls[0]['headers']['Prefer'] == 'resolution=ignore-duplicates,return=minimal'
+
+
+def test_select_paginates_until_server_returns_empty_page() -> None:
+    class ReadSession:
+        def __init__(self):
+            self.calls = []
+        def get(self, url, **kwargs):
+            self.calls.append(kwargs)
+            offset = kwargs['params']['offset']
+            return _Response([{'sentiment_date': str(offset)}] if offset < 2 else [], 200)
+    session = ReadSession()
+    client = supabase_store.SupabaseRestClient('https://example.test', 'secret', session=session)
+    assert len(client.select('news_sentiment_daily', params={'order':'sentiment_date.asc'}, page_size=1000)) == 2
+    assert [c['params']['offset'] for c in session.calls] == [0, 1, 2]
