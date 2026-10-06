@@ -6,6 +6,7 @@ import { useSyncExternalStore } from "react";
 import { ResultView } from "../survey/survey-flow";
 import SiteHeader from "../components/site-header";
 import DisclaimerFooter from "../components/disclaimer-footer";
+import DeleteAccountButton from "../components/delete-account-button";
 import { getDashboardData } from "@/lib/queries";
 import { summaryFromProfilingOutput } from "@/lib/profiling-rules";
 import {
@@ -27,7 +28,7 @@ export default function ProfileView() {
   return (
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} />
-      <main className="mx-auto flex w-full max-w-[720px] flex-col px-4 py-8 sm:px-8">
+      <main className="mx-auto flex w-full max-w-[720px] flex-col gap-8 px-4 py-8 sm:px-8">
         {saved?.style_axes ? (
           <ResultView
             result={saved}
@@ -44,6 +45,7 @@ export default function ProfileView() {
             </Link>
           </section>
         )}
+        <DeleteAccountButton />
       </main>
       <DisclaimerFooter fixed={false} />
     </div>

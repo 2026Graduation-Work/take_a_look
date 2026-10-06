@@ -183,6 +183,14 @@ export function koreanAuthError(message: string): string {
   return message;
 }
 
+// 계정과 Supabase에 저장된 성향·보유·관심·메모를 모두 지운다(0008 delete_my_account, cascade).
+export async function deleteAccount(): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
+  const { error } = await client.rpc("delete_my_account");
+  if (error) throw new Error(`계정 삭제 실패: ${error.message}`);
+}
+
 export async function signOut(): Promise<void> {
   // 데모 계정은 Supabase 세션이 없으므로 로컬만 지운다.
   const demo = readDemoSession() !== null;
