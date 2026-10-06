@@ -111,6 +111,8 @@ test("로그인 + stock_notes 테이블 적용 전: 메모는 브라우저에 �
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("테이블 없어도 남는 메모");
   await page.getByRole("button", { name: "저장", exact: true }).click();
+  // 저장이 끝나 "지난 메모" 카드로 바뀐 뒤 새로고침한다(저장 중 새로고침하면 메모가 사라지는 경쟁).
+  await expect(page.getByText(/지난 메모/)).toBeVisible();
   await expect(page.locator("p[role=alert]")).toHaveCount(0);
   await page.reload();
   await expect(page.getByText("테이블 없어도 남는 메모")).toBeVisible();
