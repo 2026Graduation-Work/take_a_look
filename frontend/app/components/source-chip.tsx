@@ -1,3 +1,4 @@
+import { formatKstDateTime } from "@/lib/display";
 import type { DataProvenance } from "@/lib/types";
 
 // 수치 옆에 붙이는 출처 표시. 실데이터가 기본이라 "출처 · 기준일"만 쓰고,
@@ -9,7 +10,7 @@ import type { DataProvenance } from "@/lib/types";
 export default function SourceChip({ provenance }: { provenance: DataProvenance }) {
   const real = provenance.kind === "real";
   const label = real
-    ? [provenance.source, provenance.asOf?.replaceAll("-", ".")]
+    ? [provenance.source, provenance.asOf && formatKstDateTime(provenance.asOf)]
         .filter(Boolean)
         .join(" · ")
     : "예시 데이터";

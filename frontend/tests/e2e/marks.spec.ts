@@ -42,17 +42,17 @@ async function watchAndNote(page: Page) {
   await page.reload();
   await expect(page.getByText("10월 말 실적 발표 뒤에 다시 보기")).toBeVisible();
   await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "메모 지우기" }).click();
   await expect(page.getByText(/지난 메모/)).toHaveCount(0);
 
   await page.goto("/portfolio");
   await page.getByRole("button", { name: "삼성전자 관심 종목에서 삭제" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "관심 종목 삭제" }).click();
   await page.goto("/");
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
 }
 
-// 지우기·삭제·데모 로그아웃은 확인 창을 띄운다(DESIGN.md 0-1 ④). 테스트는 늘 "확인"을 누른다.
-test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
-
+// 지우기·삭제·데모 로그아웃은 확인 창(confirm-button.tsx)을 띄운다(DESIGN.md 0-1 ④). 테스트는 창의 행동 버튼을 누른다.
 test("데모: 관심 종목·판단 메모가 브라우저에 남고 다시 읽힌다", async ({ page }) => {
   await demoReady(page);
   await watchAndNote(page);
@@ -87,6 +87,7 @@ test("로그인: 관심 종목·판단 메모가 Supabase에 저장되고 다시
   await expect(page.getByText("DB에 남는 메모")).toBeVisible();
 
   await page.getByRole("button", { name: "지우기" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "메모 지우기" }).click();
   await expect.poll(() => tables.stock_notes.has("005930")).toBe(false);
   await page.getByRole("button", { name: /관심 종목 ✓/ }).click();
   await expect.poll(() => tables.watchlist.get("005930")?.is_active).toBe(false);
@@ -122,6 +123,7 @@ test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예
 
   await page.locator("header summary", { hasText: "김민지" }).click();
   await page.getByRole("button", { name: "로그아웃" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "로그아웃" }).click();
   await expect(page).toHaveURL(/\/login$/);
   expect(await holdings()).toBeNull();
 

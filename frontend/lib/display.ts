@@ -85,3 +85,12 @@ export const MARKET_CONDITION_META: Record<
     comment: "시장 흔들림이 평소보다 크게 커진 구간이에요",
   },
 };
+
+// 시각이 붙은 ISO(UTC 등)를 한국 시각 "2026.10.06 12:53"으로. 날짜만 있으면 그대로 점 표기.
+const KST_DATE_TIME = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+});
+export function formatKstDateTime(iso: string) {
+  const time = iso.includes("T") ? Date.parse(iso) : NaN;
+  return (Number.isNaN(time) ? iso : KST_DATE_TIME.format(time)).replaceAll("-", ".");
+}

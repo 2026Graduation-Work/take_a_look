@@ -61,6 +61,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
+import { formatKstDateTime } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import SourceChip from "./source-chip";
@@ -429,7 +430,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       ) : null}
       {sentimentView?.basis === "live" && (
         <p className="m-0 text-xs text-muted tabular-nums">
-          기준시각 {sentimentView.asOf.slice(0, 16).replace("T", " ")} · 직전 24시간 · 관련 기사{" "}
+          기준시각 {formatKstDateTime(sentimentView.asOf)} · 직전 24시간 · 관련 기사{" "}
           {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳 · NewsAPI.ai · KR-FinBERT
         </p>
       )}
@@ -875,52 +876,99 @@ export function CalculationBasis({
   }
   const tabs = [...new Set(bit.cardOrder.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
   return (
-    <div className="flex flex-col gap-4 md:flex-row md:items-start">
-      <ul className="m-0 flex min-w-0 flex-1 list-none flex-col gap-2.5 p-0 text-sm text-body">
-        <li className="tabular-nums">
-          <strong className="font-semibold text-ink">투자 유형 {BIT_LABEL[bit.type]}</strong>: {STYLE_TYPE_RULE} 이번 값{" "}
-          {signed(bit.composite)}({BIAS_MODE_WORD[bit.biasMode]}), 답끼리 맞는 정도 {Math.round(bit.confidence * 100)}%.
-        </li>
-        <li>
-          <strong className="font-semibold text-ink">판단 근거 탭 순서</strong>: {BIT_LABEL[bit.type]}이 먼저 보면 좋은 것부터 놓았어요.
-          이번 순서 {tabs.map((id) => TAB_META[id].label).join(" → ")}.
-        </li>
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <BasisTile title="내 투자 유형" value={BIT_LABEL[bit.type]} sub={`${signed(bit.composite)} · 답끼리 맞는 정도 ${Math.round(bit.confidence * 100)}%`}
+          rule={`${STYLE_TYPE_RULE} ${BIAS_MODE_WORD[bit.biasMode]}이에요.`}>
+          <Scale value={bit.composite} zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
+        </BasisTile>
+        <div className="flex flex-col items-center rounded-md bg-field px-4 py-3">
+          <span className="self-start text-xs text-muted">설문 8가지 답의 모양</span>
+          <RadarChart
+            width={280}
+            height={200}
+            data={STYLE_AXIS_IDS.map((axisId) => ({
+              axis: AXIS_META[axisId].positive,
+              ratio: styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0,
+            }))}
+            outerRadius={66}
+          >
+            <PolarGrid stroke={CHART.line} />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: CHART.muted, fontSize: 13 }} />
+            <PolarRadiusAxis domain={[-1, 1]} tick={false} axisLine={false} />
+            <Radar dataKey="ratio" stroke={CHART.accent} fill={CHART.accent} fillOpacity={0.25} isAnimationActive={false} />
+          </RadarChart>
+          <span className="text-2xs text-muted">바깥으로 갈수록 그 항목 쪽으로 강해요</span>
+        </div>
         {insights.psychology && (
-          <li className="tabular-nums">
-            <strong className="font-semibold text-ink">가격 흐름 분위기</strong>: {PSYCHOLOGY_RULE} -1은 움츠러듦, +1은 들뜸. 이번 값{" "}
-            {signed(insights.psychology.axis)}({insights.psychology.word}).
-          </li>
+          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} sub={signed(insights.psychology.axis)} rule={PSYCHOLOGY_RULE}>
+            <Scale value={insights.psychology.axis} left="움츠러듦" right="들뜸" />
+          </BasisTile>
         )}
-        {insights.sentiment?.days.length ? (
-          <li>
-            <strong className="font-semibold text-ink">기사 수가 적은 날</strong>: {FEW_ARTICLES_RULE}
-          </li>
-        ) : null}
         {nudges.map((nudge) => (
-          <li key={nudge.id} className="tabular-nums">
-            <strong className="font-semibold text-ink">체크포인트가 뜬 이유</strong>: 설문의 &lsquo;{AXIS_META[nudge.axis].name}&rsquo;
-            답이 {signed(nudge.ratio)}(-1 {AXIS_META[nudge.axis].negative} ~ +1 {AXIS_META[nudge.axis].positive})예요. {CHECKPOINT_RULE}
-          </li>
+          <BasisTile key={nudge.id} title="체크포인트가 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`} sub={signed(nudge.ratio)}>
+            <Scale value={nudge.ratio} left={AXIS_META[nudge.axis].negative} right={AXIS_META[nudge.axis].positive} />
+          </BasisTile>
         ))}
-        <li className="text-xs text-muted">{STYLE_TYPE_SOURCE}</li>
-      </ul>
-      <div className="flex-none self-center">
-        <RadarChart
-          width={280}
-          height={220}
-          data={STYLE_AXIS_IDS.map((axisId) => ({
-            axis: AXIS_META[axisId].positive,
-            ratio: styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0,
-          }))}
-          outerRadius={72}
-        >
-          <PolarGrid stroke={CHART.line} />
-          <PolarAngleAxis dataKey="axis" tick={{ fill: CHART.muted, fontSize: 13 }} />
-          <PolarRadiusAxis domain={[-1, 1]} tick={false} axisLine={false} />
-          <Radar dataKey="ratio" stroke={CHART.accent} fill={CHART.accent} fillOpacity={0.25} isAnimationActive={false} />
-        </RadarChart>
-        <span className="block text-center text-2xs text-muted">바깥으로 갈수록 그 항목 쪽으로 강해요</span>
+        <div className="flex flex-col gap-2 rounded-md bg-field px-4 py-3 md:col-span-2">
+          <span className="text-xs text-muted">판단 근거 탭 순서 · {BIT_LABEL[bit.type]}이 먼저 보면 좋은 것부터</span>
+          <ol className="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 text-sm text-ink">
+            {tabs.map((id, index) => (
+              <li key={id} className="flex items-center gap-2">
+                {index > 0 && <span aria-hidden className="text-ghost">›</span>}
+                <span className="tabular-nums text-muted">{index + 1}</span>
+                <span className="font-medium">{TAB_META[id].label}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
+      {insights.sentiment?.days.length ? <p className="m-0 text-xs text-muted">기사 수가 적은 날: {FEW_ARTICLES_RULE}</p> : null}
+      {nudges.length > 0 && <p className="m-0 text-xs text-muted">체크포인트: {CHECKPOINT_RULE}</p>}
+      <p className="m-0 text-xs text-muted">{STYLE_TYPE_SOURCE}</p>
+    </div>
+  );
+}
+
+// 계산 근거 한 칸: 결론(값) → -1~+1 위치 → 계산식 한 줄. 줄글 대신 위치로 먼저 읽힌다.
+function BasisTile({ title, value, sub, rule, children }: { title: string; value: string; sub: string; rule?: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md bg-field px-4 py-3">
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs text-muted">{title}</span>
+        <span className="text-base font-semibold text-ink">
+          {value} <span className="text-sm font-normal tabular-nums text-muted">{sub}</span>
+        </span>
+      </div>
+      {children}
+      {rule && <p className="m-0 text-2xs text-muted">{rule}</p>}
+    </div>
+  );
+}
+
+// -1~+1 위치 막대. 색 없이 점 하나로 위치만 보인다(신호가 아니라 사실). zones가 있으면 같은 폭 구간으로 나눈다.
+function Scale({ value, left, right, zones, current }: { value: number; left?: string; right?: string; zones?: string[]; current?: number }) {
+  const position = `${((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100}%`;
+  return (
+    <div role="img" aria-label={`-1부터 +1 사이에서 ${signed(value)} 위치`} className="flex flex-col gap-1.5">
+      <div className="relative h-2 rounded-full bg-track">
+        {zones?.slice(1).map((_, index) => (
+          <span key={index} className="absolute inset-y-0 w-0.5 bg-field" style={{ left: `${((index + 1) / zones.length) * 100}%` }} />
+        ))}
+        <span className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-field bg-ink" style={{ left: position }} />
+      </div>
+      {zones ? (
+        <div className="grid text-center text-2xs" style={{ gridTemplateColumns: `repeat(${zones.length}, minmax(0, 1fr))` }}>
+          {zones.map((zone, index) => (
+            <span key={zone} className={index === current ? "font-semibold text-ink" : "text-muted"}>{zone}</span>
+          ))}
+        </div>
+      ) : (
+        <div className="flex justify-between text-2xs text-muted">
+          <span>-1 {left}</span>
+          <span>+1 {right}</span>
+        </div>
+      )}
     </div>
   );
 }

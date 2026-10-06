@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { saveNote, setWatched, syncMarks, useMarks } from "@/lib/stock-marks";
 import { STOCK_NAMES } from "@/lib/mock-data";
 import { useOnboarding } from "./onboarding-provider";
+import ConfirmButton from "./confirm-button";
 import StepNav from "./step-nav";
 
 // ISO(UTC) → 이 기기 기준 날짜 2026.09.27
@@ -62,13 +63,15 @@ export default function StockMarks({ code, name }: { code: string; name: string 
             <button type="button" onClick={() => setDraft(note.text)} className="btn-text text-sm">
               고치기
             </button>
-            <button
-              type="button"
-              onClick={() => window.confirm("이 메모를 지울까요? 지우면 되돌릴 수 없어요.") && void run(() => saveNote(code, "", mode))}
+            <ConfirmButton
+              title="이 메모를 지울까요?"
+              message="지운 메모는 되돌릴 수 없어요."
+              confirmLabel="메모 지우기"
+              onConfirm={() => void run(() => saveNote(code, "", mode))}
               className="btn-text text-sm"
             >
               지우기
-            </button>
+            </ConfirmButton>
           </div>
         </div>
       )}
@@ -124,11 +127,12 @@ export function WatchlistEditor() {
           <li key={stock.code} className="flex items-center gap-3 px-5 py-3.5">
             <span className="min-w-0 flex-1 truncate text-base font-medium">{stock.name}</span>
             <span className="text-xs text-muted tabular-nums">{stock.code}</span>
-            <button
-              type="button"
+            <ConfirmButton
               aria-label={`${stock.name} 관심 종목에서 삭제`}
-              onClick={() =>
-                window.confirm(`${stock.name}을(를) 관심 종목에서 삭제할까요?`) &&
+              title={`${stock.name}을(를) 관심 종목에서 삭제할까요?`}
+              message="종목 화면에서 언제든 다시 추가할 수 있어요."
+              confirmLabel="관심 종목 삭제"
+              onConfirm={() =>
                 void setWatched(stock, false, mode).catch((cause: unknown) =>
                   setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."),
                 )
@@ -136,7 +140,7 @@ export function WatchlistEditor() {
               className="btn-remove"
             >
               삭제
-            </button>
+            </ConfirmButton>
           </li>
         ))}
       </ul>
