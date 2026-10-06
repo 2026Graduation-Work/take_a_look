@@ -6,6 +6,7 @@ export const SUPABASE_URL = "http://127.0.0.1:54321";
 
 interface MockUser {
   id: string;
+  name?: string;
   email: string;
   password: string;
 }
@@ -29,7 +30,7 @@ function authUser(user: MockUser) {
     role: "authenticated",
     email: user.email,
     app_metadata: { provider: "email" },
-    user_metadata: {},
+    user_metadata: user.name ? { full_name: user.name } : {},
     created_at: new Date().toISOString(),
   };
 }
@@ -53,8 +54,8 @@ export async function mockSupabaseAuth(
     const url = new URL(request.url());
     calls.push(`${request.method()} ${url.pathname}`);
     if (url.pathname === "/auth/v1/signup") {
-      const { email, password } = request.postDataJSON() as { email: string; password: string };
-      const user = { id: `user-${users.size + 1}`, email, password };
+      const { email, password, data } = request.postDataJSON() as { email: string; password: string; data?: { full_name?: string } };
+      const user = { id: `user-${users.size + 1}`, email, password, name: data?.full_name };
       users.set(email, user);
       current = user;
       return json(route, session(user));

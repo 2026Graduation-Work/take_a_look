@@ -37,7 +37,8 @@ export default function MarketStatusBar({ status }: { status: MarketStatus }) {
   return (
     <section aria-label="시장 브리핑" className="border-t border-line/60">
       <div className="mx-auto flex min-h-10 w-full max-w-[1200px] items-center gap-5 overflow-x-auto px-4 py-2 [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
-        <span className="flex-none text-xs text-muted tabular-nums">시장 · {status.date.slice(5).replace("-", ".")}</span>
+        {/* 연도까지 보인다: 스냅샷이 오래되면 "12.30"만으로는 오늘 값처럼 읽힌다. */}
+        <span className="flex-none text-xs text-muted tabular-nums">{status.date.replaceAll("-", ".")} 기준</span>
         {quotes.length > 0 ? (
           quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)
         ) : (
@@ -58,11 +59,12 @@ export default function MarketStatusBar({ status }: { status: MarketStatus }) {
             </p>
             <p className="m-0 mt-1">거래: 최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">3등분해 낮음·보통·높음으로 불러요. {meta.comment}.</p>
+            <p className="m-0 mt-2 text-muted">출처 {status.provenance.source}</p>
           </MarketDetail>
         ) : (
           <span className="flex-none whitespace-nowrap text-xs text-body lg:ml-auto">{meta.comment}</span>
         )}
-        <SourceChip provenance={status.provenance} />
+        {!real && <SourceChip provenance={status.provenance} />}
       </div>
     </section>
   );

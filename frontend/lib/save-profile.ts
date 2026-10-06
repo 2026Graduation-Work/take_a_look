@@ -30,7 +30,7 @@ export async function saveProfile(
   const displayName =
     typeof metadata.full_name === "string" && metadata.full_name.trim()
       ? metadata.full_name.trim()
-      : profile.user_id;
+      : data.user.email?.split("@")[0] || "사용자";
   const avatarLabel = Array.from(displayName)[0] ?? "";
 
   const authUserId = data.user.id;

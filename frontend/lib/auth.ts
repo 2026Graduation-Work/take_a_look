@@ -147,13 +147,14 @@ export function startDemoSession(): void {
 export async function signUpWithPassword(
   email: string,
   password: string,
+  name: string,
 ): Promise<{ needsEmailConfirmation: boolean }> {
   const client = getSupabaseClient();
   if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
   const { data, error } = await client.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${window.location.origin}/login` },
+    options: { emailRedirectTo: `${window.location.origin}/login`, data: { full_name: name } },
   });
   if (error) throw new Error(`가입 실패: ${koreanAuthError(error.message)}`);
   return { needsEmailConfirmation: !data.session };
@@ -253,7 +254,8 @@ function readDemoSession(): DemoSession | null {
 }
 
 function displayNameFor(user: User, storedName?: string | null): string {
-  if (storedName?.trim()) return storedName.trim();
+  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다. 그 값은 건너뛴다.
+  if (storedName?.trim() && storedName !== "u_minji_001") return storedName.trim();
   const fullName = user.user_metadata.full_name;
   if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
   return user.email?.split("@")[0] || "사용자";

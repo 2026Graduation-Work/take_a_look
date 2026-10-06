@@ -63,6 +63,7 @@ test("로그인: 관심 종목·판단 메모가 Supabase에 저장되고 다시
   await page.goto("/login");
   await page.getByRole("button", { name: "이메일로 시작" }).click();
   await page.getByRole("tab", { name: "회원가입" }).click();
+  await page.getByLabel("이름").fill("메모 사용자");
   await page.getByLabel("이메일").fill("marks@example.com");
   await page.getByLabel("비밀번호").fill("secret123");
   await page.getByRole("button", { name: "가입하고 시작" }).click();
@@ -100,6 +101,7 @@ test("로그인 + stock_notes 테이블 적용 전: 메모는 브라우저에 �
   await page.goto("/login");
   await page.getByRole("button", { name: "이메일로 시작" }).click();
   await page.getByRole("tab", { name: "회원가입" }).click();
+  await page.getByLabel("이름").fill("메모 사용자");
   await page.getByLabel("이메일").fill("fallback@example.com");
   await page.getByLabel("비밀번호").fill("secret123");
   await page.getByRole("button", { name: "가입하고 시작" }).click();
