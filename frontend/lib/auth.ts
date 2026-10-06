@@ -4,6 +4,7 @@ import type { User } from "@supabase/supabase-js";
 import {
   PROFILE_STORAGE_KEY,
   PROFILE_UPDATED_EVENT,
+  displayNameFor,
   parseSavedProfile,
 } from "./save-profile";
 import { isRecord } from "./profiling-rules";
@@ -254,13 +255,6 @@ function readDemoSession(): DemoSession | null {
   }
 }
 
-function displayNameFor(user: User, storedName?: string | null): string {
-  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다. 그 값은 건너뛴다.
-  if (storedName?.trim() && storedName !== "u_minji_001") return storedName.trim();
-  const fullName = user.user_metadata.full_name;
-  if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
-  return user.email?.split("@")[0] || "사용자";
-}
 
 function syncSavedProfile(value: unknown): void {
   const serialized = JSON.stringify(value);
