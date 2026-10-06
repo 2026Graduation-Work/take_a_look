@@ -126,6 +126,8 @@ backend/analysis/chart/experiments/configs/*
 !backend/analysis/chart/data/raw/005930.parquet
 !backend/analysis/chart/data/processed/005930.parquet
 !backend/analysis/chart/data/ticker_metadata.csv
+# 팀 공유 드라이브에서 받은 전체 processed 묶음(2GB)은 로컬 전용
+backend/analysis/chart/data/processed/*.tar.gz
 backend/analysis/chart/data/krx_trading_calendar.json
 backend/analysis/chart/data/raw/corp_code_mapping.json
 !backend/analysis/chart/core/models/
