@@ -76,6 +76,11 @@ export async function mockSupabaseAuth(
       current = null;
       return route.fulfill({ status: 204 });
     }
+    if (url.pathname === "/rest/v1/rpc/delete_my_account") {
+      if (current) users.delete(current.email);
+      current = null;
+      return route.fulfill({ status: 204 });
+    }
     if (url.pathname.startsWith("/rest/v1/")) {
       const table = url.pathname.slice("/rest/v1/".length);
       const method = request.method();
