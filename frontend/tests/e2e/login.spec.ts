@@ -21,6 +21,7 @@ test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로
 
   await page.getByRole("tab", { name: "회원가입" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("회원가입");
+  await page.getByLabel("이름").fill("최중현");
   await page.getByLabel("이메일").fill(email);
   await page.getByLabel("비밀번호").fill(password);
   await page.getByRole("button", { name: "가입하고 시작" }).click();

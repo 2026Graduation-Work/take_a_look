@@ -20,6 +20,7 @@ export default function LoginForm() {
   const accountAvailable = isSupabaseConfigured();
   const [tab, setTab] = useState<AccountTab>("signin");
   const [emailOpen, setEmailOpen] = useState(false);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +48,7 @@ export default function LoginForm() {
         await refresh(true);
         return;
       }
-      const { needsEmailConfirmation } = await signUpWithPassword(email.trim(), password);
+      const { needsEmailConfirmation } = await signUpWithPassword(email.trim(), password, name.trim());
       if (needsEmailConfirmation) {
         setNotice(`${email.trim()}로 확인 메일을 보냈어요. 메일의 링크를 누르면 로그인됩니다.`);
         return;
@@ -111,6 +112,21 @@ export default function LoginForm() {
                 </button>
               ))}
             </div>
+            {tab === "signup" && (
+              <label className="flex flex-col gap-1.5 text-xs text-muted">
+                이름
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="화면 오른쪽 위에 보일 이름"
+                  autoComplete="name"
+                  maxLength={20}
+                  required
+                  autoFocus
+                  className={field}
+                />
+              </label>
+            )}
             <label className="flex flex-col gap-1.5 text-xs text-muted">
               이메일
               <input
@@ -120,7 +136,7 @@ export default function LoginForm() {
                 placeholder="name@example.com"
                 autoComplete="email"
                 required
-                autoFocus
+                autoFocus={tab === "signin"}
                 className={field}
               />
             </label>

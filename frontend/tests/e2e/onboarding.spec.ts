@@ -170,8 +170,8 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   // 모델 성적표는 내비가 아니라 푸터의 작은 링크
   await page.locator("footer").getByRole("link", { name: "모델 성적표" }).click();
   await expect(page).toHaveURL(/\/performance$/);
-  await expect(page.getByRole("heading", { name: /판별력\(AUC\)/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "심리 지표를 더하면 나아지나요?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "A · B 지표 비교" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "심리 피처를 더하면 예측이 나아지나요?" })).toBeVisible();
 
   await page.locator("header summary", { hasText: "김민지" }).click();
   await page.getByRole("button", { name: "로그아웃" }).click();
