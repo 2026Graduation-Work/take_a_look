@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { saveNote, setWatched, syncMarks, useMarks } from "@/lib/stock-marks";
 import { STOCK_NAMES } from "@/lib/mock-data";
+import { formatKstDateTime } from "@/lib/display";
 import { useOnboarding } from "./onboarding-provider";
 import ConfirmButton from "./confirm-button";
 import StepNav from "./step-nav";
 
-// ISO(UTC) → 이 기기 기준 날짜 2026.09.27
-const localDate = (iso: string) => new Date(iso).toLocaleDateString("sv-SE").replaceAll("-", ".");
+// ISO(UTC) → 한국 날짜 2026.09.27
+const localDate = (iso: string) => formatKstDateTime(iso).slice(0, 10);
 
 // 관심 종목·메모 + 로그인 사용자면 열 때 Supabase 값으로 한 번 맞춘다(조회 실패면 브라우저 값 그대로).
 export function useStockMarks() {
@@ -131,7 +132,7 @@ export function WatchlistEditor() {
               aria-label={`${stock.name} 관심 종목에서 삭제`}
               title={`${stock.name}을(를) 관심 종목에서 삭제할까요?`}
               message="종목 화면에서 언제든 다시 추가할 수 있어요."
-              confirmLabel="관심 종목 삭제"
+              confirmLabel="관심 종목에서 삭제"
               onConfirm={() =>
                 void setWatched(stock, false, mode).catch((cause: unknown) =>
                   setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."),

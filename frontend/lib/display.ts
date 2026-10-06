@@ -90,6 +90,9 @@ export const MARKET_CONDITION_META: Record<
 const KST_DATE_TIME = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
 });
+// 한국 날짜 키 "2026-10-06". 월·연 경계와 "오늘" 판정을 한국 날짜로 나눈다.
+export const kstDay = (timestamp: number) => new Date(timestamp + 9 * 3_600_000).toISOString().slice(0, 10);
+
 export function formatKstDateTime(iso: string) {
   const time = iso.includes("T") ? Date.parse(iso) : NaN;
   return (Number.isNaN(time) ? iso : KST_DATE_TIME.format(time)).replaceAll("-", ".");

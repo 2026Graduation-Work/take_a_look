@@ -26,7 +26,9 @@ test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page.getByRole("heading", { name: "Take a Look은 이렇게 도와줘요" })).toBeVisible();
 
+  // 로그인 계정은 Supabase에 남으므로 확인 창 없이 바로 나간다(confirm-button ask=false).
   await page.getByRole("button", { name: /로그아웃|나가기/ }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(/\/login$/);
 
   await page.getByRole("button", { name: "이메일로 시작" }).click();
