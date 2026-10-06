@@ -1,4 +1,4 @@
 # 개발/CI 전용 의존성 (런타임 의존성은 requirements.txt).
 # CI 재현성을 위해 린터 버전을 고정한다.
 -r requirements.txt
-ruff==0.16.7
+ruff==0.16.9
