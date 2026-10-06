@@ -146,13 +146,19 @@ export default function LoginForm() {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder={tab === "signup" ? "6자 이상" : ""}
+                placeholder={tab === "signup" ? "8자 이상" : ""}
                 autoComplete={tab === "signup" ? "new-password" : "current-password"}
-                minLength={6}
+                minLength={tab === "signup" ? 8 : undefined}
                 required
                 className={field}
               />
             </label>
+            {tab === "signup" && (
+              <p className="m-0 text-2xs leading-5 text-muted">
+                가입하면 이메일·이름, 성향 진단 결과, 보유·관심 종목, 판단 메모를 Supabase(서울)에 저장해요. 내 계정으로만
+                읽고 쓸 수 있고, 판단 근거를 보여 주는 데에만 써요.
+              </p>
+            )}
             <Messages notice={notice} error={error} />
             <StepNav
               className="pt-2"
