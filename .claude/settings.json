@@ -1,5 +1,13 @@
 {
   "permissions": {
-    "ask": ["Edit(/schema/**)", "Write(/schema/**)"]
+    "ask": [
+      "Edit(/schema/**)",
+      "Write(/schema/**)"
+    ],
+    "allow": [
+      "Bash(supabase migration list:*)",
+      "Bash(supabase db diff:*)",
+      "Bash(supabase projects list:*)"
+    ]
   }
 }
