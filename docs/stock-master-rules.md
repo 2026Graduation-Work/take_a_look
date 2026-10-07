@@ -1,0 +1,17 @@
+# 종목 마스터 위험 표시 규칙
+
+`backend/analysis/chart/stock_master.py`가 차트 서빙 universe(코스피 전 종목 + 에코프로비엠)로 `stocks`를 넣고 고칩니다. 차트 서빙 워크플로의 마지막 step(`python -m stock_master`)에서 매일 돌고, 행은 지우지 않습니다. 가격은 `chart_prices`(수정주가·거래대금)를 씁니다.
+
+| 표시 | 규칙 | 상수 |
+|---|---|---|
+| `spac` | 이름에 "스팩" | — |
+| `preferred_stock` | 코드 끝자리가 0이 아니고, 이름이 `우`·`우B`·`우(전환)` 등으로 끝남 | `PREFERRED_NAME` |
+| `penny_stock` | 최근 종가 1,000원 미만 | `PENNY_CLOSE = 1000` |
+| `low_liquidity` | 20거래일 평균 거래대금이 전 종목 하위 10% | `LIQUIDITY_DAYS = 20`, `LOW_LIQUIDITY_QUANTILE = 0.10` |
+| `high_volatility` | 연 환산 변동성(최근 250거래일, 일간 로그수익률 표준편차 × √252)이 상위 10% | `VOLATILITY_DAYS = 250`, `HIGH_VOLATILITY_QUANTILE = 0.90` |
+| `managed_stock` | KRX KIND 관리종목 목록(공개 페이지)과 종목명이 같음 | `KIND_URL` |
+| `risk_grade` | 변동성 5분위: 가장 낮은 20% → 5(매우 안전) … 가장 높은 20% → 1(매우 위험). 변동성 데이터가 60거래일 미만이거나 가격이 한 번도 움직이지 않았거나(거래정지 등) `spac`·`managed_stock`이면 1 | `MIN_VOLATILITY_DAYS = 60` |
+
+- KIND 목록을 받지 못하면 아무것도 쓰지 않고 실패합니다. 관리종목 여부가 확인되지 않은 종목이 "관리종목 회피"를 통과하지 않게 하려는 것입니다(하드 제약은 보수적으로). 이 경우 전날 값이 그대로 남습니다.
+- 분위·하위 구간은 그날 universe 전체 기준이라, 종목 수가 바뀌면 같은 값이어도 표시가 달라질 수 있습니다.
+- `chart_prices`는 2026-02부터 쌓여 있어, 지금은 "1년" 변동성이 실제로는 약 8개월치입니다.

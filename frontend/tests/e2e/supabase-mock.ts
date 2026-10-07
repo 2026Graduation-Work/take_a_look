@@ -88,6 +88,8 @@ export async function mockSupabaseAuth(
         return json(route, profile && current ? [{ id: `app-${current.id}`, display_name: "테스터" }] : []);
       }
       if (table === "ips_profiles" && method === "GET") return json(route, profile ? [{ profile_payload: profile }] : []);
+      // 종목 마스터 검색(보유 종목 추가). 데모 4종목 밖 종목도 고를 수 있어야 한다.
+      if (table === "stocks" && method === "GET") return json(route, [{ code: "005935", name: "삼성전자우" }, { code: "000660", name: "SK하이닉스" }]);
       // 0006 마이그레이션 적용 전 DB: PostgREST가 모르는 테이블
       if (table === "stock_notes" && notesTableMissing) {
         return json(route, { code: "PGRST205", message: "Could not find the table 'public.stock_notes'" }, 404);
