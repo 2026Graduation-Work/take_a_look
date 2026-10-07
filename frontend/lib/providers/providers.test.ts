@@ -12,7 +12,6 @@ import {
   aggregateSentimentPeriods,
   sentimentDaysIncludingLive,
   contributionProvider,
-  financialProvider,
   loadStockInsights,
   marketSentimentView,
   todayLiveSentimentView,
@@ -94,8 +93,6 @@ for (const code of CODES) {
     );
     assert.ok(contributions?.every(({ description }) => description.length > 0));
 
-    const financial = await financialProvider(code);
-    assert.ok((financial?.metrics.length ?? 0) > 0);
   });
 }
 
@@ -152,51 +149,6 @@ test("가격 흐름 분위기: 데모 4종목은 실데이터 스냅샷에서 �
   assert.equal((await loadStockInsights("000660")).psychology, null);
 });
 
-// 기준일(2025-12-30) 시점에 이미 공시된 사업보고서만 쓰고(룩어헤드 방지), 지표는 상식 범위 안이다.
-// 범위는 backend value_pipeline agents._PLAUSIBLE과 같다(화면 단위로 환산).
-const FINANCIAL_RANGE: Record<string, [number, number]> = {
-  per: [0.5, 500],
-  pbr: [0.1, 100],
-  roe: [-100, 200],
-  operating_margin: [-100, 100],
-  debt_ratio: [0, 5000],
-  revenue_growth: [-100, 1000],
-};
-
-test("재무: 데모 4종목은 기준일 전에 공시된 FY2024 사업보고서의 6지표, 값은 상식 범위", async () => {
-  for (const code of ["005930", "005380", "035720", "068270"]) {
-    const { financial, provenance } = await loadStockInsights(code);
-    assert.ok(financial, code);
-    assert.deepEqual(provenance.financial, {
-      kind: "real",
-      source: "DART 사업보고서 · 저장된 데이터",
-      asOf: "2025-12-30",
-    });
-    assert.match(financial.period, /^2024 사업연도 · 연결재무제표 · 사업보고서 2025-0[1-9]-\d{2} 공시/);
-    const filedAt = financial.period.match(/사업보고서 (\d{4}-\d{2}-\d{2}) 공시/)?.[1] ?? "";
-    assert.ok(filedAt <= "2025-12-30", `${code} 공시일 ${filedAt}`);
-    assert.deepEqual(financial.metrics.map(({ key }) => key), Object.keys(FINANCIAL_RANGE));
-    for (const { key, value, note, basis } of financial.metrics) {
-      assert.ok(basis.length > 0, `${code} ${key} 계산 근거`);
-      if (value === null) {
-        assert.ok(note, `${code} ${key}: 확인 불가면 이유가 있다`);
-        continue;
-      }
-      const [low, high] = FINANCIAL_RANGE[key];
-      assert.ok(value >= low && value <= high, `${code} ${key}=${value}`);
-    }
-  }
-  // 카카오 FY2024는 순손실 → PER은 계산하지 않는다(0이나 음수로 채우지 않음)
-  const kakao = await financialProvider("035720");
-  assert.deepEqual(kakao?.metrics.find(({ key }) => key === "per"), {
-    key: "per",
-    label: "PER",
-    unit: "배",
-    value: null,
-    note: "순손실이라 계산하지 않음",
-    basis: kakao?.metrics.find(({ key }) => key === "per")?.basis,
-  });
-});
 
 function minjiWith(overrides: Record<string, number>): StyleAxes {
   return {
@@ -266,7 +218,7 @@ class StaticSupabaseClient {
   }
 }
 
-test("Supabase에 live만 있어도 과거 감성·재무는 정적 데이터로 각각 폴백한다", async () => {
+test("Supabase에 live만 있으면 과거 감성은 정적 데이터로 폴백하고, 재무는 대체값 없이 비운다", async () => {
   const live = {
     track: "live",
     source: "newsapi_ai",
@@ -310,7 +262,7 @@ test("Supabase에 live만 있어도 과거 감성·재무는 정적 데이터로
   assert.equal(insights.sentiment?.days.length, 20);
   assert.equal(insights.liveSentiment?.score, 0.6);
   assert.equal(insights.sentiment?.headlines.length, 3);
-  assert.equal(insights.financial?.metrics.length, 6);
+  assert.equal(insights.financial, null); // 고정 재무 대체값은 두지 않는다(최신 정기보고서만)
   assert.equal(insights.provenance.liveSentiment.source, "NewsAPI.ai · KR-FinBERT");
   assert.equal(insights.provenance.sentiment.source, "BigKinds · KR-FinBERT · 저장된 데이터");
   const collectedAt = Date.parse("2026-09-26T09:00:00+09:00");

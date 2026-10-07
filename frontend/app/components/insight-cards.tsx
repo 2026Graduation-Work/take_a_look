@@ -726,7 +726,7 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
 }
 
 function FinancialPanel({ financial, provenance }: { financial: FinancialSnapshot | null; provenance: DataProvenance }) {
-  if (!financial) return <Unavailable>이 종목은 재무 데이터가 아직 연결되지 않았어요.</Unavailable>;
+  if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 보유·관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");

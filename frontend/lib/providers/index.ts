@@ -15,10 +15,8 @@ import KAKAO_SENTIMENT from "./sentiment-035720.json" with { type: "json" };
 import CELLTRION_SENTIMENT from "./sentiment-068270.json" with { type: "json" };
 import { SAMSUNG_SENTIMENT } from "./sentiment-fixture.ts";
 import {
-  FINANCIAL_SNAPSHOT,
   FINANCIAL_SOURCE,
   PRICE_PROVENANCE,
-  SNAPSHOT_AS_OF,
   STOCK_SNAPSHOT,
   SUPPLY_PROVENANCE,
   SUPPLY_SNAPSHOT,
@@ -186,15 +184,6 @@ export interface FinancialSnapshot {
   asOf?: string;
 }
 
-const FINANCIAL_LABEL: Record<string, string> = {
-  per: "PER",
-  pbr: "PBR",
-  roe: "ROE",
-  operating_margin: "영업이익률",
-  debt_ratio: "부채비율",
-  revenue_growth: "매출 증가율(전년 대비)",
-};
-
 export const supplyDemandProvider = async (code: string): Promise<SupplyDemandDay[] | null> =>
   SUPPLY_SNAPSHOT[code] ?? null;
 
@@ -218,15 +207,6 @@ export const contributionProvider = async (code: string): Promise<ContributionSi
       share: (Math.abs(weight) / total) * 100,
     }))
     .sort((left, right) => right.share - left.share);
-};
-
-export const financialProvider = async (code: string): Promise<FinancialSnapshot | null> => {
-  const row = FINANCIAL_SNAPSHOT[code];
-  if (!row) return null;
-  return {
-    period: `${row.fiscalYear} 사업연도 · ${row.statement}재무제표 · 사업보고서 ${row.filedAt} 공시(접수번호 ${row.receiptNo}) · 주식수 ${row.sharesBasis} · 주가 ${SNAPSHOT_AS_OF} 종가`,
-    metrics: row.metrics.map((metric) => ({ ...metric, label: FINANCIAL_LABEL[metric.key] ?? metric.key })),
-  };
 };
 
 export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuyPrice">;
@@ -259,11 +239,10 @@ export async function loadStockInsights(
   code: string,
   queryClient: InsightQueryClient | null = getSupabaseClient(),
 ): Promise<StockInsights> {
-  const [supply, fallbackSentiment, contributions, fallbackFinancial] = await Promise.all([
+  const [supply, fallbackSentiment, contributions] = await Promise.all([
     supplyDemandProvider(code),
     sentimentProvider(code),
     contributionProvider(code),
-    financialProvider(code),
   ]);
   const emptySentiment: SupabaseSentimentResult = {
     historical: null,
@@ -295,7 +274,8 @@ export async function loadStockInsights(
           track: "live" as const,
         }
       : null;
-  const financial = remoteFinancial ?? fallbackFinancial;
+  // 재무는 DB(최신 정기보고서)만 쓴다. 고정 대체값은 두지 않는다.
+  const financial = remoteFinancial;
   const psychology = STOCK_SNAPSHOT[code]?.psychology;
   return {
     psychology: psychology
@@ -338,10 +318,8 @@ export async function loadStockInsights(
       financial: financial
         ? {
             kind: "real",
-            source: remoteFinancial
-              ? `${FINANCIAL_SOURCE} · DB 조회`
-              : `${FINANCIAL_SOURCE} · 저장된 데이터`,
-            asOf: remoteFinancial?.asOf ?? SNAPSHOT_AS_OF,
+            source: `${FINANCIAL_SOURCE} · DB 조회`,
+            asOf: financial.asOf,
           }
         : FIXTURE,
     },

@@ -321,6 +321,8 @@ def persist_financial_track(
         "price_source": price.get("source") if price.get("value") is not None else None,
         "validation_errors": list(validation.get("errors") or []),
     }
+    if filing.get("report_code"):  # 0012: 정기보고서 종류(없으면 사업보고서)
+        snapshot["report_code"] = str(filing["report_code"])
     rows = client.upsert(
         "financial_snapshots",
         [snapshot],

@@ -51,3 +51,19 @@ def test_dynamic_targets_cap_and_rotation():
     assert len(first) == NEWSAPI_DAILY_CALLS and set(DEFAULT_TARGETS) <= set(first)
     assert "000660" in first and "000660" in second  # 가장 최근 등록은 매일 포함
     assert set(first) != set(second)  # 남는 종목은 순환
+
+
+def test_interim_report_is_annualized_from_cumulative():
+    import pandas as pd
+    from analysis.text.value_pipeline.latest_financials import parse_report
+
+    frame = pd.DataFrame([
+        {"sj_div": "BS", "account_id": "ifrs-full_Equity", "account_nm": "자본총계", "thstrm_amount": "1000"},
+        {"sj_div": "IS", "account_id": "ifrs-full_Revenue", "account_nm": "매출", "thstrm_amount": "60",
+         "thstrm_add_amount": "100", "frmtrm_q_amount": "50", "frmtrm_add_amount": "80"},
+        {"sj_div": "CIS", "account_id": "-표준계정코드 미사용-", "account_nm": "반기순이익(손실)", "thstrm_amount": "5",
+         "thstrm_add_amount": "10", "frmtrm_add_amount": "8"},
+    ])
+    raw = parse_report(frame, 6)
+    assert raw["revenue"] == 200 and raw["revenue_prev"] == 160  # 반기 누적 × 2
+    assert raw["net_income"] == 20 and raw["total_equity"] == 1000
