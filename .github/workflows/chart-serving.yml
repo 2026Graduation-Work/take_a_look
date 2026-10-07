@@ -119,4 +119,6 @@ jobs:
       # 종목 마스터(stocks)를 오늘 universe로 넣고 고친다(지우지 않음). 서빙 결과와 별개 step이라 실패해도 게시는 그대로다.
       - name: Sync stock master from universe
         if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
-        run: python -m stock_master
+        run: |
+          python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
+          python -m stock_master
