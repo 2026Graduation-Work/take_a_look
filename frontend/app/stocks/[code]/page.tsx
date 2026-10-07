@@ -6,7 +6,7 @@ import { stockDetails } from "@/lib/mock-data";
 import { loadPublicCharts } from "@/lib/chart-public";
 import { loadStockInsights } from "@/lib/providers";
 import { getMockStockDetailData } from "@/lib/queries";
-import { toRiskFlags, toRiskGrade } from "@/lib/mappers";
+import { masterVolatility, toRiskFlags, toRiskGrade } from "@/lib/mappers";
 import { getSupabaseClient } from "@/lib/supabase";
 import type { StockDetail } from "@/lib/types";
 
@@ -15,19 +15,22 @@ export const revalidate = 3600;
 
 // 데모 예시가 없는 종목은 종목 마스터(stocks, 차트 서빙 universe로 매일 갱신)에서 찾는다.
 // 게시된 차트 스냅샷이 있으면 다른 종목과 같은 상세 화면, 없으면 뉴스만 보인다.
-type MasterStock = Pick<StockDetail, "name" | "market" | "riskGrade" | "riskFlags">;
+type MasterStock = Pick<StockDetail, "name" | "market" | "riskGrade" | "riskFlags" | "volatilityAnnual" | "volatilityPercentile" | "riskAsOf">;
 
 async function loadMasterStock(code: string): Promise<MasterStock | null> {
   const client = getSupabaseClient();
   if (!client || !/^[0-9A-Z]{6}$/.test(code)) return null;
   const { data } = await client
     .from("stocks")
-    .select("name,market,risk_grade,risk_flags")
+    .select("code,name,market,risk_grade,risk_flags,volatility_annual,volatility_percentile,risk_as_of")
     .eq("code", code)
     .eq("is_active", true)
     .maybeSingle();
   if (!data) return null;
-  return { name: data.name, market: data.market, riskGrade: toRiskGrade(data.risk_grade), riskFlags: toRiskFlags(data.risk_flags) };
+  return {
+    name: data.name, market: data.market, riskGrade: toRiskGrade(data.risk_grade), riskFlags: toRiskFlags(data.risk_flags),
+    ...masterVolatility(data),
+  };
 }
 
 // 예측·시세 칸은 ChartPreviewDetail이 스냅샷 값으로 덮는다(chartDetail).
@@ -46,12 +49,14 @@ export function generateStaticParams() {
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
   const { code } = await params;
-  const stock = stockDetails[code] ? null : await loadMasterStock(code);
-  const [insights, charts] = await Promise.all([
-    loadStockInsights(code),
-    stock ? loadPublicCharts([code]).catch(() => null) : null,
-  ]);
-  const initialData = getMockStockDetailData(code, stock && charts?.has(code) ? chartOnlyDetail(code, stock) : undefined);
+  const [master, insights] = await Promise.all([loadMasterStock(code), loadStockInsights(code)]);
+  // 데모 예시 종목도 1년 변동성·백분위는 종목 마스터(실데이터)를 쓴다
+  const stock = stockDetails[code] ? null : master;
+  const charts = stock ? await loadPublicCharts([code]).catch(() => null) : null;
+  const mockData = getMockStockDetailData(code, stock && charts?.has(code) ? chartOnlyDetail(code, stock) : undefined);
+  const initialData = mockData && master
+    ? { ...mockData, detail: { ...mockData.detail, volatilityAnnual: master.volatilityAnnual, volatilityPercentile: master.volatilityPercentile, riskAsOf: master.riskAsOf } }
+    : mockData;
   if (!initialData) {
     if (!stock) notFound();
     return (

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CLOSING_PRICE } from "./closing-prices.ts";
+import { loadLatestCloses } from "./latest-closes.ts";
 import { snapshotPrice } from "./providers/demo-snapshot.ts";
 import { costBasis } from "./holdings-rules.ts";
 import {
@@ -93,7 +93,7 @@ const DETAIL_PREDICTION_COLUMNS =
 const PREDICTION_FEATURE_COLUMNS =
   "feature,label_ko,contribution,display_order" as const;
 
-const STOCK_COLUMNS = "code,name,market,risk_grade,risk_flags";
+const STOCK_COLUMNS = "code,name,market,risk_grade,risk_flags,volatility_annual,volatility_percentile,risk_as_of";
 
 // 첫 화면(서버 렌더)은 데모 계정 데이터로 그린다. 개인 테이블은 RLS로 본인만 읽을 수 있어
 // 서버의 비로그인 조회로는 얻을 수 없다. 로그인한 사용자는 브라우저에서
@@ -274,7 +274,7 @@ async function queryPortfolio(
   if (!holdings.length) return [];
 
   const codes = holdings.map(({ stock_code }) => stock_code);
-  const [stocks, predictionResult] = await Promise.all([
+  const [stocks, predictionResult, closes] = await Promise.all([
     loadStocks(client, codes),
     client
       .from("predictions")
@@ -282,6 +282,7 @@ async function queryPortfolio(
       .eq("model_type", settings.profileType)
       .in("stock_code", codes)
       .order("prediction_date", { ascending: false }),
+    loadLatestCloses(client, codes),
   ]);
   assertOk(predictionResult.error, "포트폴리오 예측 조회");
 
@@ -295,7 +296,7 @@ async function queryPortfolio(
   return holdings.flatMap((holding) => {
     const stock = stockByCode.get(holding.stock_code);
     return stock
-      ? [mapPortfolioHolding(holding, stock, predictionByCode.get(holding.stock_code))]
+      ? [mapPortfolioHolding(holding, stock, predictionByCode.get(holding.stock_code), closes)]
       : [];
   });
 }
@@ -352,6 +353,7 @@ async function queryStockDetail(
   }
 
   const prediction = predictionData as PredictionDetailRow;
+  const closes = await loadLatestCloses(client, holdingRows.map(({ stock_code }) => stock_code));
   const { data: featureData, error: featureError } = await client
     .from("prediction_features")
     .select(PREDICTION_FEATURE_COLUMNS)
@@ -376,7 +378,7 @@ async function queryStockDetail(
     holdings: holdingRows.map(({ stock_code, quantity, avg_buy_price }) => ({
       code: stock_code,
       quantity,
-      avgBuyPrice: costBasis(avg_buy_price, CLOSING_PRICE[stock_code]).price,
+      avgBuyPrice: costBasis(avg_buy_price, closes.get(stock_code)?.close).price,
     })),
     source: "supabase",
   };

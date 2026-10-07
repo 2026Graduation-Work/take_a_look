@@ -30,9 +30,9 @@ function splitIntoColumns(holdings: PortfolioHolding[]): WeightedHolding[][] {
   return columns.filter((column) => column.length > 0);
 }
 
-// 매입금액(수량 × 평균 매입가) 기준. 평균 매입가가 없으면 상위에서 기준일 종가로 채워 넘긴다.
+// 평가금액(수량 × 최신 종가). 종가가 없는 종목은 상위에서 매입금액(수량 × 평균 매입가)으로 채워 넘긴다.
 function amountLabel(holding: PortfolioHolding): string {
-  return holding.priceBasis === "close" ? "현재가 기준 금액" : "매입금액";
+  return holding.priceBasis === "close" ? "평가금액" : "매입금액";
 }
 
 function formatAmount(amount: number): string {
@@ -49,6 +49,7 @@ export default function PortfolioHeatmap({
   emptyAction?: React.ReactNode;
 }) {
   const columns = splitIntoColumns(holdings);
+  const closeAsOf = holdings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1);
   const columnTotals = columns.map((column) =>
     column.reduce((sum, item) => sum + item.amount, 0),
   );
@@ -110,8 +111,9 @@ export default function PortfolioHeatmap({
       </div>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <span>
-          색은 오늘 모델 신호(적 긍정 · 회색 중립 · 청 부정), 넓이는 매입금액 기준
-          {holdings.some(({ priceBasis }) => priceBasis === "close") && " · 평균 매입가를 비운 종목은 현재가 기준"}
+          색은 오늘 모델 신호(적 긍정 · 회색 중립 · 청 부정), 넓이는 평가금액 기준
+          {closeAsOf && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
+          {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
         </span>
         {provenance && <SourceChip provenance={provenance} />}
       </p>

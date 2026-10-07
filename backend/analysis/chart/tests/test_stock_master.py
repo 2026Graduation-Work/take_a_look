@@ -35,6 +35,8 @@ def test_rules():
     assert rows["000050"]["risk_grade"] == 1  # 가격이 안 움직임 → 변동성 미확인
     assert rows["247540"]["risk_grade"] == 1 and rows["247540"]["market"] == "KOSDAQ"
     assert rows["000010"]["market"] == "KOSPI"
+    assert rows["000020"]["volatility_percentile"] == 1.0 and rows["247540"]["volatility_percentile"] is None
+    assert rows["000010"]["volatility_annual"] < rows["000020"]["volatility_annual"]
 
 
 def test_preferred_and_kind_parsing():

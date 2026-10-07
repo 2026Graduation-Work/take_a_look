@@ -40,12 +40,12 @@ export function parseSavedHoldings(serialized: string | null): SavedHolding[] | 
   }
 }
 
-// 비중 계산용 단가. 평균 매입가가 있으면 매입금액, 없으면 기준일 종가("현재가 기준")로 센다.
+// 비중 계산용 단가. 최신 종가가 있으면 평가금액(수량 × 종가), 없으면 평균 매입가(매입금액)로 센다.
 export function costBasis(
   avgBuyPrice: number | null,
   close: number | undefined,
 ): { price: number; basis: "avg_buy" | "close" } {
-  return avgBuyPrice === null
-    ? { price: close ?? 0, basis: "close" }
-    : { price: avgBuyPrice, basis: "avg_buy" };
+  return close !== undefined
+    ? { price: close, basis: "close" }
+    : { price: avgBuyPrice ?? 0, basis: "avg_buy" };
 }

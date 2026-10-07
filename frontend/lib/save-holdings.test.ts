@@ -31,10 +31,11 @@ test("저장본 파싱: 깨진 값은 버리고 빈 배열과 없음을 구분�
   assert.deepEqual(parseSavedHoldings(mixed), [ok], "모양이 맞는 항목만 남는다");
 });
 
-test("비중 단가: 평균 매입가가 없으면 기준일 종가로 센다", () => {
-  assert.deepEqual(costBasis(71_200, 92_300), { price: 71_200, basis: "avg_buy" });
+test("비중 단가: 최신 종가가 있으면 평가금액, 없으면 매입금액으로 센다", () => {
+  assert.deepEqual(costBasis(71_200, 92_300), { price: 92_300, basis: "close" });
   assert.deepEqual(costBasis(null, 92_300), { price: 92_300, basis: "close" });
-  assert.deepEqual(costBasis(null, undefined), { price: 0, basis: "close" });
+  assert.deepEqual(costBasis(71_200, undefined), { price: 71_200, basis: "avg_buy" });
+  assert.deepEqual(costBasis(null, undefined), { price: 0, basis: "avg_buy" });
   const withNull = JSON.stringify([{ ...ok, avgBuyPrice: null }]);
   assert.deepEqual(parseSavedHoldings(withNull), [{ ...ok, avgBuyPrice: null }]);
 });

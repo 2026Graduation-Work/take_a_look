@@ -107,11 +107,3 @@ export const CONTRIBUTION_FIXTURE: Record<string, ContributionSignalInput[]> = {
     },
   ],
 };
-
-// 실제 공시값이 아니다. DART 재무 연동 시 교체한다.
-// 시장 전체 종목 중 최근 60거래일 변동성 백분위(1 = 가장 큼). 시장 분포 데이터가 없어 정한 값이다.
-// 대형주는 소형주를 포함한 시장 전체 기준으로 중간 부근이다. 넛지 발화와 무관하게 정했다.
-export const VOLATILITY_PERCENTILE_FIXTURE: Record<string, number> = {
-  "005930": 0.48,
-  "005380": 0.35,
-};
