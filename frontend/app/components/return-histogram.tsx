@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SignalMeta } from "@/lib/display";
+import { clipReturnBins } from "@/lib/chart-detail";
 import type { ReturnBand, ReturnBin } from "@/lib/types";
 
 // 과거 유사 신호 N건의 실현 수익률 분포. 부채꼴(미래 경로) 대신 쓰는 핵심 근거 시각화 —
@@ -40,7 +41,7 @@ interface ReturnHistogramProps {
 }
 
 export default function ReturnHistogram({
-  bins,
+  bins: rawBins,
   band,
   caseCount,
   signal,
@@ -49,8 +50,8 @@ export default function ReturnHistogram({
   const [hovered, setHovered] = useState<number | null>(null);
 
   if (
-    bins.length === 0 ||
-    bins.some(
+    rawBins.length === 0 ||
+    rawBins.some(
       (bin) =>
         !Number.isFinite(bin.from) ||
         !Number.isFinite(bin.to) ||
@@ -65,6 +66,8 @@ export default function ReturnHistogram({
     return null;
   }
 
+  // x축은 분포의 1~99% 구간. 밖은 양 끝 "이하"·"이상" 칸으로 묶는다.
+  const bins = clipReturnBins(rawBins);
   const xMin = bins[0].from;
   const xMax = bins[bins.length - 1].to;
   if (xMax <= xMin) return null;
@@ -94,8 +97,12 @@ export default function ReturnHistogram({
   const rawXStep = (xMax - xMin) / 6;
   const xMagnitude = 10 ** Math.floor(Math.log10(rawXStep));
   const xStep = [1, 2, 5, 10].map(n => n * xMagnitude).find(n => n >= rawXStep)!;
+  const keptMin = bins[0].tail ? bins[0].to : xMin;
+  const keptMax = bins[bins.length - 1].tail ? bins[bins.length - 1].from : xMax;
   const labelledEdges = [];
-  for (let tick = Math.ceil(xMin / xStep) * xStep; tick <= xMax; tick += xStep) labelledEdges.push(tick);
+  for (let tick = Math.ceil(keptMin / xStep) * xStep; tick <= keptMax; tick += xStep) labelledEdges.push(tick);
+  const binLabel = (bin: (typeof bins)[number]) =>
+    bin.tail === "low" ? `${formatSigned(bin.to)} 이하` : bin.tail === "high" ? `${formatSigned(bin.from)} 이상` : `${formatSigned(bin.from)} ~ ${formatSigned(bin.to)}`;
   const maxIndex = bins.findIndex((bin) => bin.count === maxCount);
   const ciPercent = Math.round(band.ciLevel * 100);
 
@@ -213,6 +220,18 @@ export default function ReturnHistogram({
             {formatSigned(edge)}
           </text>
         ))}
+        {bins.filter((bin) => bin.tail).map((bin) => (
+          <text
+            key={bin.tail}
+            x={(x(bin.from) + x(bin.to)) / 2}
+            y={baseline + 16}
+            textAnchor="middle"
+            fontSize={11}
+            style={{ fill: "var(--color-muted)" }}
+          >
+            {bin.tail === "low" ? "이하" : "이상"}
+          </text>
+        ))}
         <text x={VB_W - PAD.right} y={baseline + 30} textAnchor="end" fontSize={11} style={{ fill: "var(--color-muted)" }}>
           실제 수익률 ({horizonLabel})
         </text>
@@ -232,7 +251,10 @@ export default function ReturnHistogram({
         ))}
       </svg>
       {bins.every(bin => Math.abs(bin.to - bin.from - 2) < 1e-8) && (
-        <p className="m-0 text-2xs text-muted">막대 한 칸은 수익률 2%p 구간이에요. 68% 범위는 별도로 표시해요.</p>
+        <p className="m-0 text-2xs text-muted">
+          막대 한 칸은 수익률 2%p 구간이에요. 68% 범위는 별도로 표시해요.
+          {bins.some((bin) => bin.tail) && " 양 끝 칸은 그 바깥을 모두 묶었어요."}
+        </p>
       )}
 
       {hovered !== null && (
@@ -243,9 +265,7 @@ export default function ReturnHistogram({
             top: `${((y(bins[hovered].count) - 8) / VB_H) * 100}%`,
           }}
         >
-          <span className="text-xs font-medium tabular-nums">
-            {formatSigned(bins[hovered].from)} ~ {formatSigned(bins[hovered].to)}
-          </span>
+          <span className="text-xs font-medium tabular-nums">{binLabel(bins[hovered])}</span>
           <span className="ml-1.5 text-xs text-muted">
             {bins[hovered].count.toLocaleString("ko-KR")}건 / {caseCount.toLocaleString("ko-KR")}건
           </span>

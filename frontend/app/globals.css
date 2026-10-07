@@ -17,6 +17,7 @@
   --color-logo-face: #ffffff; /* 고양이 얼굴 */
   --color-logo-eye: #8dc63f; /* 눈동자 — 연두는 여기 한 곳에만 */
   --color-caution-mark: #ff6c0f; /* 성균 주황 — 주의 점·아이콘만. 글자는 본문색(2.8:1) */
+  --color-caution-soft: #f2b705; /* 노랑 — 시장 바 "보통" 점만. 글자 금지(1.9:1) */
 
   /* ── 글자 (진한 순). 흰 배경·#f5f5f7 모두 4.5:1 이상 ── */
   --color-ink: #1d1d1f; /* 제목·수치 16.8:1 */

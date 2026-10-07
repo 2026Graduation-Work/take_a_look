@@ -99,7 +99,8 @@ test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
   await page.locator("summary", { hasText: "더 알아보기" }).click();
   const histogram = page.getByRole("img", { name: /과거 유사 신호 .*건의 실현 수익률 분포/ });
-  await expect(histogram.locator("path")).toHaveCount(1030);
+  // 빈 칸은 1~99% 구간 밖이라 버려지고, 건수가 있는 한 칸만 폭을 채운다
+  await expect(histogram.locator("path")).toHaveCount(1);
   expect(await histogram.locator("path").evaluateAll(paths => paths.every(path => {
     const d = path.getAttribute("d")!;
     const left = Number(d.match(/^M([^,]+),/)![1]);
@@ -159,8 +160,9 @@ for (const [space, target, scores, color] of [
     await expect(panel.locator("[data-model-feature]")).toHaveCount(5);
     await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 강화 · 기여도 12.0%`);
     await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 완화 · 기여도 10.0%`);
-    await expect(panel.locator("[data-model-feature]").nth(0).locator("span[style]").first()).toHaveAttribute("style", `color: ${color};`);
-    await expect(panel.locator("[data-model-feature]").nth(1).locator("span[style]").first()).toHaveAttribute("style", "color: var(--color-muted);");
+    // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
+    expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
+    expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });

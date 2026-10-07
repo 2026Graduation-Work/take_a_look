@@ -1,5 +1,5 @@
 import { chartChange, type ChartSnapshot } from "./chart-public.ts";
-import type { HorizonDirection, StockDetail } from "./types.ts";
+import type { HorizonDirection, ReturnBin, StockDetail } from "./types.ts";
 
 export function chartDirection(chart: ChartSnapshot | undefined): HorizonDirection | null {
   if (chart?.inference.status !== "available" || !chart.inference.scores) return null;
@@ -27,4 +27,27 @@ export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefine
     reasons: [],
     aiAdvice: undefined,
   };
+}
+
+export type ClippedBin = ReturnBin & { tail?: "low" | "high" };
+
+// 분포 양 끝 tail(기본 각 1%)을 "그 이하"·"그 이상" 한 칸씩으로 묶어, 막대가 1~99% 구간 폭을 채우게 한다.
+// 묶은 칸은 바로 옆 칸과 같은 폭으로 붙인다(그리는 자리일 뿐 실제 수익률 범위는 아니다).
+export function clipReturnBins(bins: readonly ReturnBin[], tail = 0.01): ClippedBin[] {
+  const total = bins.reduce((sum, bin) => sum + bin.count, 0);
+  if (!total) return [...bins];
+  let lo = 0;
+  let below = 0;
+  while (lo < bins.length - 1 && below + bins[lo].count <= total * tail) below += bins[lo++].count;
+  let hi = bins.length - 1;
+  let above = 0;
+  while (hi > lo && above + bins[hi].count <= total * tail) above += bins[hi--].count;
+  const kept: ClippedBin[] = bins.slice(lo, hi + 1);
+  const first = kept[0];
+  const last = kept[kept.length - 1];
+  return [
+    ...(below ? [{ from: first.from - (first.to - first.from), to: first.from, count: below, tail: "low" as const }] : []),
+    ...kept,
+    ...(above ? [{ from: last.to, to: last.to + (last.to - last.from), count: above, tail: "high" as const }] : []),
+  ];
 }

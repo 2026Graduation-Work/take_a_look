@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { chartDetail, chartDirection } from "./chart-detail.ts";
+import { chartDetail, chartDirection, clipReturnBins } from "./chart-detail.ts";
 import { stockDetails } from "./mock-data.ts";
 import { parseChartSnapshot } from "./chart-public.ts";
 
@@ -30,4 +30,20 @@ test("missing public data does not retain demo chart values or invent a directio
   assert.deepEqual(detail.priceHistory, []);
   assert.deepEqual(detail.realizedReturns, []);
   assert.deepEqual(detail.reasons, []);
+});
+
+test("수익률 분포: 1% 미만 tail은 양 끝 한 칸으로 묶고, 빈 칸은 버린다", () => {
+  const bins = [
+    { from: -30, to: -28, count: 0 },
+    { from: -28, to: -26, count: 1 },
+    ...Array.from({ length: 10 }, (_, i) => ({ from: -10 + i * 2, to: -8 + i * 2, count: 20 })),
+    { from: 40, to: 42, count: 1 },
+    { from: 42, to: 44, count: 0 },
+  ];
+  const clipped = clipReturnBins(bins);
+  assert.equal(clipped.length, 12);
+  assert.deepEqual(clipped[0], { from: -12, to: -10, count: 1, tail: "low" });
+  assert.deepEqual(clipped.at(-1), { from: 10, to: 12, count: 1, tail: "high" });
+  assert.equal(clipped.reduce((sum, bin) => sum + bin.count, 0), 202);
+  assert.deepEqual(clipReturnBins([{ from: 0, to: 2, count: 0 }]), [{ from: 0, to: 2, count: 0 }]);
 });
