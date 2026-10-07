@@ -107,6 +107,12 @@ jobs:
           fi
           python -m serving.run_daily "${args[@]}"
 
+      # 무료 한도 보존 정리(요약 로그 적재, 게시 배치 5개, 입력 파일 30일, 뉴스 원문 90일). 실패해도 게시는 그대로다.
+      - name: Retention (prediction log, batches, inputs, articles)
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        continue-on-error: true
+        run: python -m retention
+
       - name: Save validation outputs
         if: ${{ always() && inputs.diagnose != true }}
         uses: actions/upload-artifact@v7
