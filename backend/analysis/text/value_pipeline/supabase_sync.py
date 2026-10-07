@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from . import disclosures, news_run, newsapi_ai, supabase_store
+from . import disclosures, latest_financials, news_run, newsapi_ai, supabase_store
 from .config import SETTINGS
 from .news_run import _parse_target
 
@@ -200,6 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("--target", type=_parse_target, action="append")
     live.add_argument("--dynamic", action="store_true", help="기본 6 + 보유·관심 종목(하루 20회 상한)")
     subparsers.add_parser("disclosures", help="DART 하루 전체 공시를 받아 종목에 맞춰 적재")
+    subparsers.add_parser("financial-latest", help="기본 6 + 보유·관심 종목의 최신 정기보고서 재무(바뀐 종목만)")
     reset_live = subparsers.add_parser(
         "reset-live", help="지정 종목의 live 행만 지운 뒤 최근 24시간 뉴스를 다시 적재"
     )
@@ -237,6 +238,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "disclosures":
         disclosures.sync(client)
         return 0
+    if args.command == "financial-latest":
+        results = latest_financials.sync(client, dynamic_targets(client))
+        return 1 if any(value.startswith("failed") for value in results.values()) else 0
     if args.command == "live":
         targets = targets_from_args(args, client)
         print(json.dumps({"event": "newsapi_targets", "count": len(targets), "codes": sorted(targets),

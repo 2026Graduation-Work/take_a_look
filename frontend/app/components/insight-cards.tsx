@@ -725,8 +725,10 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
   );
 }
 
+const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+
 function FinancialPanel({ financial, provenance }: { financial: FinancialSnapshot | null; provenance: DataProvenance }) {
-  if (!financial) return <Unavailable>이 종목은 재무 데이터가 아직 연결되지 않았어요.</Unavailable>;
+  if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 보유·관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");
@@ -734,9 +736,9 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
     <>
       {roe != null && debt != null && (
         <Conclusion>
-          자기 돈 대비 1년에 <strong className="font-semibold">{Math.abs(roe)}%</strong>를 {roe < 0 ? "잃었고" : "벌었고"}, 빚은
+          자기 돈 대비 1년에 <strong className="font-semibold">{oneDecimal(Math.abs(roe))}%</strong>를 {roe < 0 ? "잃었고" : "벌었고"}, 빚은
           자기 돈의{" "}
-          <strong className="font-semibold">{debt}%</strong> 수준이에요.
+          <strong className="font-semibold">{oneDecimal(debt)}%</strong> 수준이에요.
         </Conclusion>
       )}
       <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -751,7 +753,7 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
                 </>
               ) : (
                 <>
-                  {metric.value.toLocaleString("ko-KR")}
+                  {oneDecimal(metric.value)}
                   {metric.unit}
                 </>
               )}

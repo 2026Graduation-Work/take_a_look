@@ -66,6 +66,8 @@ const FINANCIAL_LABEL: Record<string, string> = {
 
 // DART fs_div 코드 → 화면 말. 정적 스냅샷(demo-snapshot.ts)은 이미 "연결"·"별도"로 저장돼 있다.
 const STATEMENT_LABEL: Record<string, string> = { CFS: "연결", OFS: "별도" };
+// DART 정기보고서 종류(financial_snapshots.report_code, 0012). 분기·반기는 누적을 12개월로 환산한 값이다
+const REPORT_LABEL: Record<string, string> = { "11013": "1분기", "11012": "반기", "11014": "3분기", "11011": "사업보고서" };
 
 const METRIC_KEYS = Object.keys(FINANCIAL_LABEL);
 const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {
@@ -407,7 +409,7 @@ export async function loadSupabaseFinancial(
 ): Promise<FinancialSnapshot | null> {
   const snapshotResult = await client
     .from("financial_snapshots")
-    .select("id,as_of,fiscal_year,statement,receipt_no,filed_at,shares_basis,price_as_of")
+    .select("id,as_of,fiscal_year,report_code,statement,receipt_no,filed_at,shares_basis,price_as_of")
     .eq("stock_code", code)
     .order("as_of", { ascending: false })
     .limit(1)
@@ -416,6 +418,7 @@ export async function loadSupabaseFinancial(
     id: string;
     as_of?: string;
     fiscal_year: number;
+    report_code: string | null;
     statement: string;
     receipt_no: string;
     filed_at: string;
@@ -451,7 +454,7 @@ export async function loadSupabaseFinancial(
   });
   const priceLabel = snapshot.price_as_of ? ` · 주가 ${snapshot.price_as_of} 종가` : "";
   return {
-    period: `${snapshot.fiscal_year} 사업연도 · ${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · 사업보고서 ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
+    period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준 · ${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
     metrics,
     asOf: snapshot.as_of,
   };

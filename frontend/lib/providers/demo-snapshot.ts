@@ -28,17 +28,6 @@ export const SUPPLY_SNAPSHOT = snapshot.supply.stocks as Record<
   { date: string; retail: number; foreign: number; institution: number }[]
 >;
 
-// 재무 6지표(DART 사업보고서, 기준일 시점). value null = 검증에 걸렸거나 계산 불가 → 화면 "확인 불가".
-export interface FinancialSnapshotRow {
-  fiscalYear: number;
-  statement: string; // 연결 | 별도
-  receiptNo: string;
-  filedAt: string;
-  sharesBasis: string;
-  metrics: { key: string; unit: "배" | "%"; value: number | null; basis: string; note: string | null }[];
-}
-export const FINANCIAL_SNAPSHOT = snapshot.financial.stocks as Record<string, FinancialSnapshotRow>;
-export const FINANCIAL_SOURCE: string = snapshot.financial.source;
 
 export const SUPPLY_PROVENANCE: DataProvenance = {
   kind: "real",
