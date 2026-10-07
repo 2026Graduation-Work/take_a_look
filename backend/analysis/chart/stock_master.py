@@ -23,7 +23,10 @@ LOW_LIQUIDITY_QUANTILE = 0.10  # 20일 평균 거래대금 하위 10% → low_li
 VOLATILITY_DAYS = 250  # 1년 변동성 기간(거래일). 데이터가 짧으면 있는 만큼
 MIN_VOLATILITY_DAYS = 60  # 이보다 짧으면 변동성 미확인 → risk_grade 1
 HIGH_VOLATILITY_QUANTILE = 0.90  # 1년 변동성 상위 10% → high_volatility
-# risk_grade(1 매우 위험 ~ 5 매우 안전): 변동성 5분위. 가장 낮은 20% → 5, 가장 높은 20% → 1. 변동성 미확인 → 1.
+# risk_grade(1 매우 위험 ~ 5 매우 안전): 연 변동성 절대 기준. 아래 임계값 미만이면 5·4·3·2, 그 이상은 1.
+# 대형주(시가총액 상위 LARGE_CAP_RANK)는 한 단계 완화. 변동성 미확인·spac·managed_stock은 1.
+GRADE_VOLATILITY_CUTS = (0.25, 0.40, 0.60, 0.90)  # → 5, 4, 3, 2
+LARGE_CAP_RANK = 100  # KRX 대형주 기준(시가총액 상위 100)
 # spac·managed_stock은 1로 내린다.
 KOSDAQ_CODES = {"247540"}  # serving/internal/pipeline.py EXTRA_CODES (코스피 밖 서비스 종목)
 PREFERRED_NAME = re.compile(r"\d?우[B-C]?(\(전환\))?$")
@@ -50,7 +53,24 @@ def fetch_managed_names():
     return names
 
 
-def classify(universe, prices, managed_names):
+def grade_for(volatility, large_cap):
+    if pd.isna(volatility):
+        return 1
+    grade = 1 + sum(bool(volatility < cut) for cut in GRADE_VOLATILITY_CUTS)
+    return min(5, grade + 1) if large_cap else grade
+
+
+def fetch_large_caps():
+    """시가총액 상위 LARGE_CAP_RANK 종목 코드(KRX 상장 목록, 로그인 불필요)."""
+    import FinanceDataReader as fdr
+
+    listing = fdr.StockListing("KRX")
+    if listing.empty or "Marcap" not in listing:
+        raise RuntimeError("KRX 상장 목록(시가총액)을 받지 못했습니다")
+    return set(listing.nlargest(LARGE_CAP_RANK, "Marcap")["Code"].astype(str))
+
+
+def classify(universe, prices, managed_names, large_caps=frozenset()):
     """universe: Code·Name, prices: Code·Date·Close·Amount → stocks 행 목록."""
     prices = prices.sort_values(["Code", "Date"])
     by_code = prices.groupby("Code")
@@ -63,7 +83,6 @@ def classify(universe, prices, managed_names):
 
     liquidity_cut = liquidity.quantile(LOW_LIQUIDITY_QUANTILE)
     volatility_cut = volatility.quantile(HIGH_VOLATILITY_QUANTILE)
-    volatility_rank = volatility.rank(pct=True)
 
     rows = []
     for code, name in zip(universe["Code"], universe["Name"], strict=True):
@@ -80,8 +99,7 @@ def classify(universe, prices, managed_names):
             flags.append("low_liquidity")
         if volatility.get(code, np.nan) >= volatility_cut:
             flags.append("high_volatility")
-        rank = volatility_rank.get(code, np.nan)
-        grade = 1 if pd.isna(rank) else 5 - min(4, int(rank * 5))
+        grade = grade_for(volatility.get(code, np.nan), code in large_caps)
         if {"spac", "managed_stock"} & set(flags):
             grade = 1
         rows.append({"code": code, "name": name, "market": "KOSDAQ" if code in KOSDAQ_CODES else "KOSPI",
@@ -101,7 +119,7 @@ def main():
     panel = store.load_price_panel(start, as_of)
     prices = pd.concat([frame.assign(Code=code) for code, frame in panel.items()], ignore_index=True)
     managed = fetch_managed_names()
-    rows = classify(universe, prices, managed)
+    rows = classify(universe, prices, managed, fetch_large_caps())
     matched = sum("managed_stock" in row["risk_flags"] for row in rows)
     print(json.dumps({"event": "stock_master", "as_of": as_of, "stocks": len(rows),
                       "managed_listed": len(managed), "managed_matched": matched}, ensure_ascii=False))
