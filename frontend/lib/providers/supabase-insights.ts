@@ -478,3 +478,18 @@ export async function loadSupabaseDisclosures(code: string, client: InsightQuery
   const rows = (unwrap(result, "disclosures") ?? []) as Array<{ rcept_no: string; title: string; kind: string; filed_on: string }>;
   return rows.map((row) => ({ rceptNo: row.rcept_no, title: row.title, kind: row.kind, filedOn: row.filed_on }));
 }
+
+// 투자자별 순매수(주, 0013). 최근 20영업일, 날짜 오름차순.
+export async function loadSupabaseSupply(code: string, client: InsightQueryClient) {
+  const result = await client.from("supply_demand")
+    .select("trade_date,retail,foreign_investor,institution")
+    .eq("stock_code", code)
+    .order("trade_date", { ascending: false })
+    .limit(20) as QueryResult;
+  const rows = (unwrap(result, "supply_demand") ?? []) as Array<{
+    trade_date: string; retail: number; foreign_investor: number; institution: number;
+  }>;
+  return rows.reverse().map((row) => ({
+    date: row.trade_date, retail: Number(row.retail), foreign: Number(row.foreign_investor), institution: Number(row.institution),
+  }));
+}
