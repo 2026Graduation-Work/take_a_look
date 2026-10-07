@@ -98,6 +98,7 @@ def sync(client: supabase_store.SupabaseRestClient, targets: dict[str, str], tod
                 statement=statement, receipt_no=receipt_no,
                 filed_at=f"{receipt_no[:4]}-{receipt_no[4:6]}-{receipt_no[6:8]}", validation_errors=[])
             track["filing"]["report_code"] = code
+            track["filing"]["shares_basis"] = "최근 공시 보통주"  # 발행주식수는 _fetch_latest_shares(최근 공시)
             if months < 12:
                 for metric in track["metrics"]:
                     metric["basis"] += f" · {year}년 {REPORT_LABEL[code]} 누적을 12개월로 환산"
