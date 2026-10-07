@@ -28,7 +28,6 @@ export const SUPPLY_SNAPSHOT = snapshot.supply.stocks as Record<
   { date: string; retail: number; foreign: number; institution: number }[]
 >;
 
-export const FINANCIAL_SOURCE: string = snapshot.financial.source;
 
 export const SUPPLY_PROVENANCE: DataProvenance = {
   kind: "real",

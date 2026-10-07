@@ -15,7 +15,6 @@ import KAKAO_SENTIMENT from "./sentiment-035720.json" with { type: "json" };
 import CELLTRION_SENTIMENT from "./sentiment-068270.json" with { type: "json" };
 import { SAMSUNG_SENTIMENT } from "./sentiment-fixture.ts";
 import {
-  FINANCIAL_SOURCE,
   PRICE_PROVENANCE,
   STOCK_SNAPSHOT,
   SUPPLY_PROVENANCE,
@@ -318,7 +317,7 @@ export async function loadStockInsights(
       financial: financial
         ? {
             kind: "real",
-            source: `${FINANCIAL_SOURCE} · DB 조회`,
+            source: "DART 정기보고서 · DB 조회",
             asOf: financial.asOf,
           }
         : FIXTURE,
