@@ -18,7 +18,7 @@ export default function SourceLine({
   if (provenance.kind !== "real") return <span className="text-2xs text-muted">예시 데이터</span>;
   const stamp = provenance.asOf ? shortStamp(provenance.asOf) : "";
   return (
-    <details className="text-2xs text-muted [&[open]>summary>span]:rotate-180">
+    <details className="text-2xs text-muted [&[open]]:basis-full [&[open]>summary>span]:rotate-180">
       <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 tabular-nums hover:text-ink">
         {label}
         {stamp && ` · ${stamp} 기준`}

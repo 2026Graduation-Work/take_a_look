@@ -426,7 +426,8 @@ test("Supabase 재무는 최신 스냅샷과 여섯 지표의 근거를 화면 �
 
   const result = await loadSupabaseFinancial("005930", client as never);
 
-  assert.match(result?.period ?? "", /2024년 사업보고서 기준 · 연결재무제표.*2025-03-11 공시/);
+  assert.match(result?.period ?? "", /^2024년 사업보고서 기준$/);
+  assert.match(result?.filing ?? "", /^연결재무제표 · 2025-03-11 공시/);
   assert.deepEqual(result?.metrics.map(({ key, basis }) => [key, basis]),
     keys.map((key) => [key, `${key} 근거`]));
 });
