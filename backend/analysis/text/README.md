@@ -112,19 +112,25 @@ python -m value_pipeline.supabase_sync backfill-financial \
 ### GitHub Actions 자동 적재
 
 저장소 관리자가 GitHub의 **Settings → Secrets and variables → Actions**에서 다음
-Repository secret 세 개를 직접 등록한다. 값은 채팅·이슈·커밋에 남기지 않는다.
+Repository secret을 직접 등록한다. 값은 채팅·이슈·커밋에 남기지 않는다.
 
 - `NEWSAPI_AI_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SECRET_KEY`
+- `DART_API_KEY` (공시·재무, 2026-10-07 등록)
 
-workflow 이름은 `News Supabase Sync`다. 평일 09:00 KST 예약 실행은 `live`로
-6종목의 직전 24시간 뉴스를 적재한다. Actions 화면의 **Run workflow**에서는
-다음 세 모드를 선택한다.
+workflow 이름은 `News Supabase Sync`다.
 
-- `live`: NewsAPI.ai 수집 → KR-FinBERT 분석 → 최신 뉴스 upsert
+- 평일 09:00 KST: `live --dynamic`으로 **기본 6종목 + 전체 사용자의 보유 ∪ 활성 관심 종목**의 직전 24시간 뉴스를 적재한다. 하루 호출 상한 20회(`NEWSAPI_DAILY_CALLS`). 넘으면 절반은 최근 등록 순, 나머지는 날마다 순환. 실행 전후 NewsAPI.ai 남은 횟수를 로그(`newsapi_targets`·`newsapi_usage`)에 남긴다.
+- 같은 실행에서 `disclosures`: DART 하루 전체 공시(최근 3일)를 종목 마스터에 맞춰 적재(제목·날짜·유형만, 유형표 `docs/disclosure-kinds.md`).
+- 매주 월 07:30 KST: `financial-latest`로 같은 대상의 **최신 정기보고서**(분기·반기·사업) 재무를 접수번호가 바뀐 종목만 갱신.
+
+Actions 화면의 **Run workflow**에서는 다음 모드를 선택한다.
+
+- `live`: NewsAPI.ai 수집 → KR-FinBERT 분석 → 최신 뉴스 upsert(+ 공시)
+- `financial`: 최신 정기보고서 재무 갱신
 - `live-samsung`: 삼성전자(`005930`) 한 종목만 재실행. 적재 실패 진단·복구에 사용
-- `reset-live`: 각 종목의 새 Live 수집·검증이 성공한 경우에만 그 종목의 이전 Live 행을 교체
+- `reset-live`: 대상 종목(동적 목록)의 새 Live 수집·검증이 성공한 경우에만 그 종목의 이전 Live 행을 교체
 - `backfill`: 저장소의 4종목 BigKinds 과거 JSON과 DART 재무 JSON upsert
 
 Secret 등록 후 운영 전에 수동 `backfill`과 `live`를 각각 한 번 실행한다. 로그와

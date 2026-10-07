@@ -20,9 +20,9 @@
 - 가입 비밀번호 8자 이상(화면), 가입 화면에 저장 항목·용도 안내.
 
 ## 남은 것
-- **계정 삭제**: 지금은 사용자가 스스로 계정과 데이터를 지울 수 없다. `delete_my_account()` 함수 마이그레이션 초안과 화면 버튼은 별도 PR(적용 전 확인 필요).
+- ~~**계정 삭제**~~ ✅ `delete_my_account()`(0008) 운영 적용, 내 성향 화면의 "계정" 카드에서 삭제(#200·#205). 헤더 계정 메뉴 "계정 관리"로 바로 간다.
 - **Supabase 대시보드 설정**(Authentication → Providers/Rate Limits, 팀 관리자가 확인):
-  - Email: Confirm email 켜기, Minimum password length 8
-  - URL Configuration: Site URL과 Redirect URLs를 `https://takealook-skku.vercel.app/**`만으로
+  - Email: Confirm email 켜기(2026-10-07 현재 꺼짐 — 시연 기간 설정), Minimum password length 8
+  - URL Configuration: Site URL과 Redirect URLs를 `https://takealook-skku.vercel.app/**`만으로(현재 값은 docs/auth-setup.md 3-3)
   - Rate limits 기본값 유지, 가입 남용이 보이면 Attack Protection의 CAPTCHA(Cloudflare Turnstile, 무료) 켜기
 - 세션 토큰은 supabase-js 기본값대로 `localStorage`에 있다. XSS가 막는 핵심이라 `dangerouslySetInnerHTML`은 쓰지 않는다.

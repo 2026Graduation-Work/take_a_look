@@ -6,13 +6,13 @@
 - 데모 계정("데모 계정으로 둘러보기")은 환경변수와 관계없이 항상 동작합니다. 설정 도중에도 교수님·심사자는 데모로 둘러볼 수 있습니다.
 - 환경변수가 없으면 로그인 화면의 "이메일로 시작"은 "계정 기능이 아직 연결되지 않았어요" 안내만 보입니다.
 
-## 현재 상태 (2026-09-22)
+## 현재 상태 (2026-10-07)
 
-공개 주소: **https://stock-prediction-v2-chi.vercel.app** (Vercel 로그인 없이 열림)
+공개 주소: **https://takealook-skku.vercel.app** (기존 주소 https://stock-prediction-v2-chi.vercel.app 도 동작, Vercel 로그인 없이 열림)
 
 | 항목 | 상태 |
 |---|---|
-| 마이그레이션 0001~0004 · seed.sql | ✅ 적용 완료(0004 평균 매입가 nullable, 2026-09-22) (Supabase 'Take a Look', ref `oaqksneegnpteextxgux`, 서울) |
+| 마이그레이션 0001~0014 · seed.sql | ✅ 적용 완료. `supabase migration list`에서 로컬·원격 일치(2026-10-07) (Supabase 'Take a Look', ref `oaqksneegnpteextxgux`, 서울) |
 | RLS | ✅ anon 키로 확인: 종목·시장 상태는 읽힘, 개인 테이블은 42501로 거부 |
 | Vercel 환경변수(4번) | ✅ Production·Preview 등록 + 프로덕션 재배포 완료. 로그인 화면에 이메일 입력칸이 보임 |
 | Auth URL 설정(3-3) | ✅ 2026-09-22 콘솔에서 입력(Site URL + Redirect 3줄), API로 확인 |
@@ -26,20 +26,31 @@
 ## 0. 준비물
 
 - Supabase 프로젝트 (Dashboard 접근 권한)
-- Vercel 프로젝트 `stock-prediction-v2` (Settings 접근 권한)
+- Vercel 프로젝트 `take-a-look` (Settings 접근 권한)
 - 이 저장소의 `supabase/migrations/*.sql`, `supabase/seed.sql`
 
-## 1. Supabase — 마이그레이션 (SQL Editor)
+## 1. Supabase — 마이그레이션 (CLI 기본, SQL Editor 대안)
 
-순서대로 실행합니다. 모두 여러 번 실행해도 안전하게 작성돼 있지만, **팀에 적용 여부를 먼저 물어보고** 실행하세요.
+2026-10-07부터 0009 이후는 CLI(`supabase db push`)로 적용합니다. 운영에 바로 들어가니 **팀에 적용 여부를 먼저 물어보고** 실행하세요. SQL Editor로 적용했다면 `migration repair`로 기록만 맞춥니다(아래 CLI 절차).
 
 | 파일 | 하는 일 | 필수 |
 |---|---|---|
 | `0001_init.sql` | 테이블 9개, RLS 정책, 권한 | 필수 |
 | `0002_market_index_quotes.sql` | `market_status.index_quotes` 컬럼 | 필수 |
 | `0003_ips_profiles_schema_v11.sql` | `ips_profiles.schema_version`에 `1.1.0` 허용 | **필수** — 새 설문은 항상 `1.1.0`으로 저장하므로, 없으면 설문 저장이 실패합니다 |
+| `0004_holdings_avg_price_nullable.sql` | 평균 매입가 비워 두기 허용 | 필수 |
+| `0005_news_financial_tracks.sql` | 뉴스 감성·재무 트랙 테이블 | 필수 |
+| `0006_stock_notes.sql` | 판단 메모 | 필수 |
+| `0007_chart_signal_detail_v2.sql` | 차트 배치·스냅샷·가격·종목 목록 | 필수 |
+| `0008_delete_my_account.sql` | 본인 계정 삭제 함수 | 필수 |
+| `0009_chart_prediction_log.sql` | 예측 요약 로그(영구) + 게시 배치 보존 함수 | 필수 |
+| `0010_budget_usage.sql` | 무료 한도 감시용 크기 조회 함수 | 필수 |
+| `0011_disclosures.sql` | DART 공시 목록(제목·날짜·유형) | 필수 |
+| `0012_financial_report_code.sql` | 재무 스냅샷의 정기보고서 종류 | 필수 |
+| `0013_supply_demand.sql` | 투자자별 순매수(60영업일) | 필수 |
+| `0014_stock_volatility.sql` | 종목 마스터 1년 변동성·백분위 | 필수 |
 
-CLI로 확인하기 (0001~0008 적용 기록 맞춤, 2026-10-07):
+CLI로 확인하기 (2026-10-07에 0001~0008 기록을 맞춘 뒤, 0009~0014는 CLI로 적용):
 
 1. 루트 `.env`에 `SUPABASE_DB_PASSWORD`·`SUPABASE_ACCESS_TOKEN`을 넣고 `set -a; . ./.env; set +a`로 불러옵니다(값을 명령에 직접 쓰지 않음).
 2. 처음 한 번 `supabase link --project-ref oaqksneegnpteextxgux` (프로젝트 "Take a Look").
@@ -78,11 +89,10 @@ Authentication 메뉴에서:
    - 끄면: 비밀번호로 가입하자마자 로그인됩니다. **발표·시연 기간에는 끄는 것을 권장합니다.** 무료 플랜의 메일 발송 한도(시간당 몇 통)에 막히지 않습니다.
    - 켜면: 가입 후 확인 메일의 링크를 눌러야 로그인됩니다. 화면에 "확인 메일을 보냈어요" 안내가 나옵니다.
 3. **URL Configuration**
-   - Site URL: `https://stock-prediction-v2-chi.vercel.app`
-   - Redirect URLs에 아래 세 줄을 추가합니다. 가입 확인 메일이 이 주소로 돌아옵니다.
-     - `https://stock-prediction-v2-chi.vercel.app/**`
-     - `http://localhost:3000/**`
-     - `https://*-choi-jung-hyeon-s-projects.vercel.app/**` (Preview 배포 주소 패턴)
+   - 현재 값(2026-10-07 Management API로 확인):
+     - Site URL: `https://take-a-look-choi-jung-hyeon-s-projects.vercel.app/`
+     - Redirect URLs: `https://takealook-skku.vercel.app/**`, `https://stock-prediction-v2-chi.vercel.app/**`, `http://localhost:3000/**`, `https://*-choi-jung-hyeon-s-projects.vercel.app/**`(Preview), `take-a-look-…` 프로젝트 주소 패턴
+   - 공개 주소(`takealook-skku`)로 Site URL을 옮길지는 docs/security.md "남은 것"에서 관리합니다.
 4. **API 키 확인**: Project Settings → API에서 `Project URL`과 `anon public` 키를 복사합니다.
    - ⚠️ `service_role` 키는 절대 Vercel 프론트 환경변수에 넣지 않습니다.
 
