@@ -14,7 +14,7 @@ import EvidenceTabs, {
   SourceList,
   useDemoStyleAxes,
 } from "./insight-cards";
-import SourceChip from "./source-chip";
+import SourceLine from "./source-line";
 import StockMarks from "./stock-marks";
 import PriceHistoryChart from "./price-history-chart";
 import ReturnHistogram from "./return-histogram";
@@ -208,11 +208,11 @@ export default function StockDetailView({
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
-          <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+          <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
             <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
-            <span>주가: <SourceChip provenance={detail.priceProvenance ?? detail.provenance} /></span>
-            <span>신호·범위: <SourceChip provenance={detail.provenance} /></span>
-          </p>
+            <SourceLine label="주가 출처" provenance={detail.priceProvenance ?? detail.provenance} />
+            <SourceLine label="신호 출처" provenance={detail.provenance} />
+          </div>
         </section>
 
         {/* 3. 나에게 맞춘 체크포인트 */}

@@ -6,7 +6,7 @@ import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
-import SourceChip from "./source-chip";
+import SourceLine from "./source-line";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -316,7 +316,7 @@ export default function Dashboard(initialData: DashboardData) {
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
-                  <SourceChip provenance={listProvenance} />
+                  <SourceLine provenance={listProvenance} />
                   <span className="text-2xs text-muted">신호는 과거 데이터로 만든 참고 정보예요</span>
                 </div>
                 {!keyword && activeExcludedStocks.length > 0 && (

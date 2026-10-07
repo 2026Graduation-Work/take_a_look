@@ -454,7 +454,8 @@ export async function loadSupabaseFinancial(
   });
   const priceLabel = snapshot.price_as_of ? ` · 주가 ${snapshot.price_as_of} 종가` : "";
   return {
-    period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준 · ${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
+    period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준`,
+    filing: `${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
     metrics,
     asOf: snapshot.as_of,
   };

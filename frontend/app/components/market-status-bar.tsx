@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MARKET_CONDITION_META } from "@/lib/display";
 import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
-import SourceChip from "./source-chip";
+import SourceLine from "./source-line";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
 
 // 헤더 아래 시장 브리핑: 지수 3개(등락 적/청) + 한 문장. 점수 숫자는 두지 않는다.
@@ -88,12 +88,12 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
             </p>
             <p className="m-0 mt-1">거래: 최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">3등분해 낮음·보통·높음으로 불러요. {meta.comment}.</p>
-            <p className="m-0 mt-2 text-muted">출처 {status.provenance.source}</p>
+            <SourceLine provenance={status.provenance} />
           </MarketDetail>
         ) : (
           <span className="flex-none whitespace-nowrap text-xs text-body lg:ml-auto">{meta.comment}</span>
         )}
-        {!real && <SourceChip provenance={status.provenance} />}
+        {!real && <SourceLine provenance={status.provenance} />}
       </div>
     </section>
   );
