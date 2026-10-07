@@ -46,7 +46,6 @@ import {
   pricePeriod,
   riskSnapshot,
   sentimentPeriod,
-  sentimentWindow,
   toNudgeMarket,
   type FinancialSnapshot,
   type HoldingWeight,
@@ -131,7 +130,14 @@ const signedPercent = (ratio: number) => `${ratio > 0 ? "+" : ""}${(ratio * 100)
 const shares = (value: number) =>
   `${value > 0 ? "+" : value < 0 ? "-" : ""}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
 const sentimentDateLabel = (date: string) => date.replaceAll("-", ".");
+const SENTIMENT_DAY_LIMIT = 365;
+const SENTIMENT_POINT_PX = 28; // 점 하나의 가로 폭. 날짜 글자는 겹치지 않게 Recharts가 건너뛴다
 // 감성 점수(-1~+1) → 구간 말. 경계는 점수 분포가 아니라 읽기 쉬운 고정 구간이다.
+// 강조 1단(판정 단어): 굵게 + 의미 색. 긍정 = 적, 부정 = 청, 그 사이 = 본문색(DESIGN.md 2-1).
+function moodColor(score: number): string {
+  return score >= 0.1 ? "var(--color-up)" : score <= -0.1 ? "var(--color-down)" : "var(--color-ink)";
+}
+
 function moodWord(score: number): string {
   if (score >= 0.3) return "긍정적인 편";
   if (score >= 0.1) return "조금 긍정적";
@@ -221,7 +227,7 @@ export function Checkpoints({
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
           {items.map((item, index) => (
             <li key={item.key} data-nudge={item.key} className="flex gap-3">
-              <span className="flex-none text-sm font-semibold text-muted tabular-nums">{index + 1}</span>
+              <span className="flex-none text-sm text-muted tabular-nums">{index + 1}</span>
               <p className="m-0 max-w-2xl text-base leading-relaxed text-ink">{item.text}</p>
             </li>
           ))}
@@ -364,7 +370,6 @@ export function NewsSentimentPanel({ insights }: { insights: StockInsights }) {
 function MarketPanel({ detail, insights }: { detail: StockDetail | null; insights: StockInsights }) {
   const { sentiment, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
-  const [selectedSentimentDate, setSelectedSentimentDate] = useState<string | null>(null);
   const sentimentTimelineRef = useRef<HTMLDivElement | null>(null);
   const sentimentTabRefs = useRef<Record<SentimentPeriod, HTMLButtonElement | null>>({
     day: null,
@@ -384,19 +389,16 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
   const periodDays = aggregateSentimentPeriods(periodInput, selectedSentimentPeriod);
   const chartDates = periodInput.length ? {start: periodInput[0].date, end: periodInput.at(-1)!.date} : null;
   const includesLive = selectedSentimentPeriod !== "day" && Boolean(todayLive) && Boolean(insights.liveSentiment?.periodDays?.length);
-  const selectedIndex = Math.max(
-    0,
-    selectedSentimentDate ? periodDays.findIndex(({ date }) => date === selectedSentimentDate) : periodDays.length - 1,
-  );
-  const visibleDays = sentimentWindow(periodDays, selectedIndex);
+  // 일별은 최근 1년만 한 줄 스크롤로 그린다. 더 긴 기간은 월별·연별에서 본다.
+  // ponytail: 점 하나당 SENTIMENT_POINT_PX 폭이라 일별 전체(10년, 약 3,700점)는 너무 넓다. 필요하면 가상 스크롤로.
+  const chartDays = selectedSentimentPeriod === "day" ? periodDays.slice(-SENTIMENT_DAY_LIMIT) : periodDays;
+  const chartPoints = chartDays.length + (chartLive ? 1 : 0);
 
   useEffect(() => {
+    // 처음 위치는 오른쪽 끝(가장 최근)
     const timeline = sentimentTimelineRef.current;
-    const active = timeline?.querySelector<HTMLElement>('[aria-pressed="true"]');
-    if (!timeline || !active) return;
-    // offsetLeft는 offsetParent(바깥 면) 기준이라 환경에 따라 어긋난다. 화면 좌표 차이로 선택 항목을 오른쪽 끝에 붙인다.
-    timeline.scrollLeft += active.getBoundingClientRect().right - timeline.getBoundingClientRect().right + 16;
-  }, [selectedSentimentPeriod, selectedSentimentDate, periodDays.length]);
+    if (timeline) timeline.scrollLeft = timeline.scrollWidth;
+  }, [selectedSentimentPeriod, chartPoints]);
 
   function onSentimentTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
@@ -406,7 +408,6 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       (sentimentTabs.indexOf(selectedSentimentPeriod) + step + sentimentTabs.length) % sentimentTabs.length
     ];
     setSelectedSentimentPeriod(next);
-    setSelectedSentimentDate(null);
     sentimentTabRefs.current[next]?.focus();
   }
 
@@ -415,7 +416,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       {sentimentView ? (
         <Conclusion>
           {sentimentView.basis === "live" ? "최근 24시간" : "과거"} {TERM.sentiment}는{" "}
-          <strong className="font-semibold">{moodWord(sentimentView.score)}</strong>이에요.
+          <strong className="font-semibold" style={{ color: moodColor(sentimentView.score) }}>{moodWord(sentimentView.score)}</strong>이에요.
         </Conclusion>
       ) : risk ? (
         <Conclusion>
@@ -437,7 +438,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       )}
       {psychology && (
         <p className="m-0 text-sm text-body">
-          가격 흐름으로 본 분위기: <strong className="font-semibold text-ink">{psychology.word}</strong>
+          가격 흐름으로 본 분위기: {psychology.word}
           <span className="text-muted"> — {psychology.explain}</span>
         </p>
       )}
@@ -462,10 +463,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
                   aria-selected={selectedSentimentPeriod === period}
                   aria-controls="sentiment-panel"
                   tabIndex={selectedSentimentPeriod === period ? 0 : -1}
-                  onClick={() => {
-                    setSelectedSentimentPeriod(period);
-                    setSelectedSentimentDate(null);
-                  }}
+                  onClick={() => setSelectedSentimentPeriod(period)}
                 >
                   {label[period]}
                 </button>
@@ -483,42 +481,21 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
             id="sentiment-panel"
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
           >
-            <SentimentChart
-              days={visibleDays}
-              connectLive={selectedSentimentPeriod === "day"}
-              live={
-                selectedSentimentDate === null && Boolean(chartLive)
-                  ? chartLive
-                  : null
-              }
-            />
-            {(periodDays.length > 0 || Boolean(chartLive)) && (
-              <div ref={sentimentTimelineRef} className="mt-1 overflow-x-auto pb-2 [scrollbar-width:thin]" aria-label="감성 시점 탐색">
-                <div className="flex min-w-max items-center gap-5">
-                  {periodDays.map((day, index) => (
-                    <button
-                      key={day.date}
-                      type="button"
-                      className={`min-h-9 whitespace-nowrap text-xs tabular-nums ${index === selectedIndex && (selectedSentimentDate !== null || !chartLive) ? "font-semibold text-ink underline underline-offset-4" : "text-muted"}`}
-                      aria-pressed={index === selectedIndex && (selectedSentimentDate !== null || !chartLive)}
-                      onClick={() => setSelectedSentimentDate(day.date)}
-                    >
-                      {sentimentDateLabel(day.date)}
-                    </button>
-                  ))}
-                  {Boolean(chartLive) && (
-                    <button
-                      type="button"
-                      className={`min-h-9 whitespace-nowrap text-xs ${selectedSentimentDate === null ? "font-semibold text-ink underline underline-offset-4" : "text-muted"}`}
-                      aria-pressed={selectedSentimentDate === null}
-                      onClick={() => setSelectedSentimentDate(null)}
-                    >
-                      오늘 Live
-                    </button>
-                  )}
-                </div>
+            {/* 그래프 전체가 하나의 가로 스크롤. 스와이프하면 선과 날짜가 함께 움직이고, 누르면 그 날 값이 보인다. */}
+            <div
+              ref={sentimentTimelineRef}
+              className="overflow-x-auto pb-2 [scrollbar-width:thin]"
+              aria-label="감성 시점 탐색"
+              tabIndex={0}
+            >
+              <div style={{ width: `max(100%, ${chartPoints * SENTIMENT_POINT_PX}px)` }}>
+                <SentimentChart
+                  days={chartDays}
+                  connectLive={selectedSentimentPeriod === "day"}
+                  live={chartLive}
+                />
               </div>
-            )}
+            </div>
             {selectedSentimentPeriod !== "day" && (
               <p className="mt-2 mb-0 text-2xs text-muted">
                 월·연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영합니다.
@@ -584,13 +561,21 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
     ...(live ? [{ date: live.asOf, label: "오늘 Live", score: connectLive ? live.score : null, liveScore: live.score, articleCount: live.articleCount }] : []),
   ];
   return (
-    <div className="h-[180px] min-w-0">
+    <div className="h-[204px] min-w-0">
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={{ width: 860, height: 180 }}>
         <LineChart
           data={data}
           margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
         >
-          <XAxis dataKey="label" tick={false} axisLine={false} tickLine={false} height={4} />
+          <XAxis
+            dataKey="label"
+            tick={{ fill: CHART.muted, fontSize: 12 }}
+            axisLine={false}
+            tickLine={false}
+            height={24}
+            interval="preserveStartEnd"
+            minTickGap={24}
+          />
           <YAxis
             domain={[-1, 1]}
             ticks={[-1, 0, 1]}
@@ -599,6 +584,7 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             axisLine={false}
             tickLine={false}
             width={36}
+            orientation="right"
           />
           <ReferenceLine y={0} stroke={CHART.line} />
           <Tooltip
@@ -660,8 +646,8 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
   return (
     <>
       <Conclusion>
-        최근 20영업일 동안 <strong className="font-semibold">{buyer.label}</strong>이 가장 많이 샀고,{" "}
-        <strong className="font-semibold">{seller.label}</strong>이 가장 많이 팔았어요.
+        최근 20영업일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
+        {seller.label}이 가장 많이 팔았어요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
         {totals.map(({ key, label, total, latest }) => {
@@ -681,7 +667,7 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
                   }}
                 />
               </div>
-              <span className="text-right text-sm font-semibold tabular-nums" style={{ color }}>
+              <span className="text-right text-sm font-semibold tabular-nums text-ink">
                 {shares(total)}
                 <span className="block whitespace-nowrap text-2xs font-normal text-muted">
                   {buy ? "순매수" : "순매도"} · 최근일 {shares(latest)}
@@ -772,12 +758,12 @@ function ContributionPanel({
     return (
       <>
         <Conclusion>
-          모델이 가장 크게 본 근거는 <strong className="font-semibold">&lsquo;{reasons[0].title}&rsquo;</strong>예요.
+          모델이 가장 크게 본 근거는 &lsquo;{reasons[0].title}&rsquo;예요.
         </Conclusion>
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
           {reasons.map((reason, index) => (
             <li key={`${reason.title}:${index}`} className="flex gap-3">
-              <span className="flex-none text-sm font-semibold text-muted tabular-nums">{index + 1}</span>
+              <span className="flex-none text-sm text-muted tabular-nums">{index + 1}</span>
               <span className="flex flex-col gap-0.5">
                 <span className="text-sm text-ink">{reason.title}</span>
                 <span className="text-xs text-muted">
@@ -798,7 +784,11 @@ function ContributionPanel({
   return (
     <>
       <Conclusion>
-        LGBM의 {target} 점수에 가장 크게 영향을 준 항목은 <strong className="font-semibold">&lsquo;{top.label_ko}&rsquo;</strong>예요.
+        LGBM의{" "}
+        <strong className="font-semibold" style={{ color: target === "하방" ? "var(--color-down)" : target === "상방" ? "var(--color-up)" : "var(--color-ink)" }}>
+          {target}
+        </strong>{" "}
+        점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;예요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {features.map((feature) => {
@@ -809,7 +799,7 @@ function ContributionPanel({
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
                 <span className="text-xs text-muted">LGBM 피처</span>
-                <span className="ml-auto flex-none text-sm font-semibold tabular-nums" style={{ color }}>
+                <span className="ml-auto flex-none text-xs text-muted tabular-nums">
                   {target} {feature.contribution === 0 ? "영향 없음" : up ? "강화" : "완화"} · 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
                 </span>
               </div>

@@ -32,6 +32,18 @@ function Quote({ quote }: { quote: MarketIndexQuote }) {
 
 // 백분위(0~100) → 구간 말. 산식: frontend/scripts/build_demo_snapshot.py
 const level = (score: number) => (score < 100 / 3 ? "낮음" : score < 200 / 3 ? "보통" : "높음");
+// 회색 → 노랑 → 주황 점 + 본문색 글자. 빨강·파랑은 상승·하락 전용이라 쓰지 않는다(DESIGN.md 1).
+const LEVEL_DOT = { 낮음: "bg-ghost", 보통: "bg-caution-soft", 높음: "bg-caution-mark" } as const;
+
+function Level({ score }: { score: number }) {
+  const word = level(score);
+  return (
+    <strong className="mx-1 inline-flex items-center gap-1 font-medium text-ink">
+      <span aria-hidden className={`size-1.5 rounded-full ${LEVEL_DOT[word]}`} />
+      {word}
+    </strong>
+  );
+}
 
 export default function MarketStatusBar({ status: snapshot }: { status: MarketStatus }) {
   const [status, setStatus] = useState(snapshot);
@@ -65,8 +77,8 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
           <MarketDetail
             label={
               <>
-                시장 흔들림 <strong className="mx-1 font-medium text-ink">{level(status.volatilityScore)}</strong> · 거래
-                <strong className="mx-1 font-medium text-ink">{level(status.volumeScore)}</strong>
+                시장 흔들림 <Level score={status.volatilityScore} /> · 거래
+                <Level score={status.volumeScore} />
                 <span className="ml-1 text-muted underline underline-offset-2">자세히</span>
               </>
             }
