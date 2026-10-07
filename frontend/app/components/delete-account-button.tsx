@@ -28,14 +28,14 @@ export default function DeleteAccountButton() {
   }
 
   return (
-    <div className="flex flex-col items-start gap-1 px-1">
+    <div className="flex flex-col items-start gap-1">
       <ConfirmButton
         title="계정을 삭제할까요?"
         message="이메일·이름, 성향 진단 결과, 보유·관심 종목, 판단 메모가 모두 지워지고 되돌릴 수 없어요."
         confirmLabel="계정 삭제"
         onConfirm={() => void handleDelete()}
         disabled={submitting}
-        className="btn-text min-h-11 text-sm"
+        className="btn-remove"
       >
         {submitting ? "삭제 중" : "계정 삭제"}
       </ConfirmButton>
