@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
-import SourceChip from "./source-chip";
+import SourceLine from "./source-line";
 
 interface WeightedHolding {
   holding: PortfolioHolding;
@@ -109,14 +109,14 @@ export default function PortfolioHeatmap({
           </div>
         ))}
       </div>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <span>
           색은 오늘 모델 신호(적 긍정 · 회색 중립 · 청 부정), 넓이는 평가금액 기준
           {closeAsOf && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
         </span>
-        {provenance && <SourceChip provenance={provenance} />}
-      </p>
+        {provenance && <SourceLine provenance={provenance} />}
+      </div>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
           등록한 종목 중 {withoutSignalCount}개는 오늘 모델 신호가 없어 맵에 넣지 않았어요.

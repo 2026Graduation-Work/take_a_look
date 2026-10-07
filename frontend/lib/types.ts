@@ -25,7 +25,7 @@ export type RiskFlag =
 
 export type RiskGrade = 1 | 2 | 3 | 4 | 5; // 5 = 매우 안전, 1 = 매우 위험
 
-// 화면 수치의 출처. 수치 데이터 타입은 이 필드를 필수로 가져 SourceChip으로 표시한다.
+// 화면 수치의 출처. 수치 데이터 타입은 이 필드를 필수로 가져 SourceLine으로 표시한다.
 // real만 "실데이터"로 표기하고, fixture(손으로 정한 값·합성값)·mock(데모 시드 포함)은 "예시 데이터"다.
 export type DataKind = "real" | "fixture" | "mock";
 export interface DataProvenance {

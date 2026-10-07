@@ -59,7 +59,7 @@ import { CHART } from "@/lib/chart-colors";
 import { formatKstDateTime } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
-import SourceChip from "./source-chip";
+import SourceLine, { sourceText } from "./source-line";
 
 // 극성은 lib/profiling/style-questions.json axes와 같다.
 const AXIS_META: Record<StyleAxisId, { name: string; negative: string; positive: string }> = {
@@ -430,7 +430,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       {sentimentView?.basis === "live" && (
         <p className="m-0 text-xs text-muted tabular-nums">
           기준시각 {formatKstDateTime(sentimentView.asOf)} · 직전 24시간 · 관련 기사{" "}
-          {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳 · NewsAPI.ai · KR-FinBERT
+          {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳
         </p>
       )}
       {sentimentView?.status === "partial" && (
@@ -475,9 +475,9 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           <p className="m-0 text-2xs text-muted tabular-nums">
             -1 부정 ~ +1 긍정 · {selectedSentimentPeriod === "day" ? "일별 관련 기사 평균" : `${selectedSentimentPeriod === "month" ? "월별" : "연별"} 뉴스 감성 · 기사 수 가중평균`}
             {chartDates && ` · ${sentimentDateLabel(chartDates.start)} ~ ${sentimentDateLabel(chartDates.end)}`}
-            {sentiment && ` · ${insights.provenance.sentiment.source}`}
-            {includesLive && " + NewsAPI.ai · 오늘 Live 반영"}
+            {includesLive && " · 오늘 Live 반영"}
           </p>
+          {sentiment && <SourceLine provenance={insights.provenance.sentiment} />}
           <div
             role="tabpanel"
             id="sentiment-panel"
@@ -581,6 +581,12 @@ function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosur
         </ul>
       ) : (
         <p className="m-0 text-sm text-muted">최근 90일 안에 올라온 공시가 없어요.</p>
+      )}
+      {disclosures.length > 0 && (
+        <SourceLine
+          provenance={{ kind: "real", source: "DART 전자공시(제목·날짜만 저장, 유형은 제목 규칙으로 분류)", asOf: disclosures[0].filedOn }}
+          href="https://dart.fss.or.kr"
+        />
       )}
     </section>
   );
@@ -722,12 +728,12 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
           );
         })}
       </ul>
-      <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
+      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
         <span>
           {supply[0].date} ~ {supply[supply.length - 1].date} · 순매수 수량(주) · 기타법인 제외
         </span>
-        <SourceChip provenance={provenance} />
-      </p>
+        <SourceLine provenance={provenance} />
+      </div>
     </>
   );
 }
@@ -778,10 +784,10 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
           ))}
         </ul>
       </details>
-      <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
+      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
         <span>{financial.period}</span>
-        <SourceChip provenance={provenance} />
-      </p>
+        <SourceLine provenance={provenance} detail={financial.filing} />
+      </div>
     </>
   );
 }
@@ -820,32 +826,34 @@ function ContributionPanel({
             </li>
           ))}
         </ol>
-        <SourceChip provenance={provenance} />
+        <SourceLine provenance={provenance} />
       </>
     );
   }
   const target = space === "class_0_raw_margin" ? "하방" : space === "class_1_raw_margin" ? "중립" : "상방";
-  const max = Math.max(...features.map(f => Math.abs(f.contribution))) || 1;
   const top = features[0];
   const share = (value: number) => total === undefined ? null : total === 0 ? 0 : Math.abs(value) / total * 100;
+  // 쉽게 보이기: 상위 3개만 막대로, 비중 10% 미만은 상위 3개 안이어도 뺀다. 나머지는 "그 밖의 N개" 한 줄
+  const shown = features.slice(0, 3).filter((feature) => (share(feature.contribution) ?? 100) >= 10);
+  const hiddenCount = features.length - shown.length;
+  const max = Math.max(...shown.map(f => Math.abs(f.contribution))) || 1;
   return (
     <>
       <Conclusion>
-        LGBM의{" "}
+        모델의{" "}
         <strong className="font-semibold" style={{ color: target === "하방" ? "var(--color-down)" : target === "상방" ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
         </strong>{" "}
         점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;예요.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
-        {features.map((feature) => {
+        {shown.map((feature) => {
           const up = feature.contribution > 0;
           const color = !up || target === "중립" ? "var(--color-muted)" : target === "하방" ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-1.5" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
-                <span className="text-xs text-muted">LGBM 피처</span>
                 <span className="ml-auto flex-none text-xs text-muted tabular-nums">
                   {target} {feature.contribution === 0 ? "영향 없음" : up ? "강화" : "완화"} · 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
                 </span>
@@ -867,6 +875,9 @@ function ContributionPanel({
           );
         })}
       </ul>
+      {hiddenCount > 0 && (
+        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 비중이 작아(10% 미만 포함) 줄였어요. 계산값 보기에서 모두 볼 수 있어요.</p>
+      )}
       <details className="disclosure">
         <summary className="text-xs text-body">계산값 보기</summary>
         <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-xs">
@@ -877,12 +888,12 @@ function ContributionPanel({
             </div>
           ))}
         </dl>
-        <p className="text-xs text-muted">기여도 = {target} 점수에 대한 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 표시된 5개 중 가장 큰 기여를 기준으로 비교해요.</p>
+        <p className="text-xs text-muted">기여도 = {target} 점수에 대한 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 막대로 보인 항목 중 가장 큰 기여를 기준으로 비교해요.</p>
       </details>
-      <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>{total === undefined ? "전체 피처 기준값이 없어 %는 미제공해요." : "전체 피처 기준 기여도 · 상위 5개만 표시 · 5개 합은 100%가 아닐 수 있어요."} {target} 강화 = 점수를 높임 · 완화 = 낮춤 · 예측 확률·수익률 아님</span>
-        <SourceChip provenance={provenance} />
-      </p>
+      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
+        <span>{total === undefined ? "전체 항목 기준값이 없어 %는 미제공해요." : "기여도 = 전체 항목 대비 비중이라 합이 100%가 아닐 수 있어요."} {target} 강화 = 점수를 높임 · 완화 = 낮춤 · 예측 확률·수익률 아님</span>
+        <SourceLine provenance={provenance} />
+      </div>
     </>
   );
 }
@@ -1017,7 +1028,7 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
         <div key={label} className="contents">
           <dt className="text-body">{label}</dt>
           <dd className="m-0 min-w-0 [overflow-wrap:anywhere] [&>span]:max-w-full [&>span]:whitespace-normal">
-            <SourceChip provenance={provenance} />
+            {sourceText(provenance)}
           </dd>
         </div>
       ))}

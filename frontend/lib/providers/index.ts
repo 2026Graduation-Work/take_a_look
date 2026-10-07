@@ -176,7 +176,8 @@ export interface FinancialMetric {
   note: string | null;
 }
 export interface FinancialSnapshot {
-  period: string;
+  period: string; // "2026년 반기 기준"
+  filing?: string; // 연결/별도·공시일·접수번호·주식수·주가 기준(출처 줄을 펼치면 보임)
   metrics: FinancialMetric[];
   asOf?: string;
 }
