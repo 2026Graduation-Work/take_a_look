@@ -26,6 +26,10 @@ on:
         description: "Store price/feature inputs and validate results without publishing a new batch"
         type: boolean
         default: false
+      supply_only:
+        description: "Collect investor net purchases only (skip serving)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -85,7 +89,7 @@ jobs:
         run: python -m serving.run_daily --diagnose
 
       - name: Validate committed model pack
-        if: ${{ inputs.diagnose != true }}
+        if: ${{ inputs.diagnose != true && inputs.supply_only != true }}
         run: python -m serving.pack validate
 
       - name: Publish recorded display-test batch
@@ -93,7 +97,7 @@ jobs:
         run: python -m serving.publish_preview --publish
 
       - name: Collect, archive and publish confirmed daily results
-        if: ${{ inputs.diagnose != true && inputs.publish_preview != true }}
+        if: ${{ inputs.diagnose != true && inputs.publish_preview != true && inputs.supply_only != true }}
         env:
           REPLAY: ${{ inputs.replay }}
           REQUESTED_AS_OF: ${{ inputs.as_of }}
@@ -109,12 +113,18 @@ jobs:
 
       # 무료 한도 보존 정리(요약 로그 적재, 게시 배치 5개, 입력 파일 30일, 뉴스 원문 90일). 실패해도 게시는 그대로다.
       - name: Retention (prediction log, batches, inputs, articles)
-        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
         continue-on-error: true
         run: python -m retention
 
+      # 투자자별 순매수(시장 전체, 하루 3회 호출). 실패해도 게시는 그대로다.
+      - name: Investor net purchases
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        continue-on-error: true
+        run: python -m supply
+
       - name: Save validation outputs
-        if: ${{ always() && inputs.diagnose != true }}
+        if: ${{ always() && inputs.diagnose != true && inputs.supply_only != true }}
         uses: actions/upload-artifact@v7
         with:
           name: chart-validation-${{ github.run_id }}
@@ -124,7 +134,7 @@ jobs:
 
       # 종목 마스터(stocks)를 오늘 universe로 넣고 고친다(지우지 않음). 서빙 결과와 별개 step이라 실패해도 게시는 그대로다.
       - name: Sync stock master from universe
-        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
         run: |
           python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
           python -m stock_master

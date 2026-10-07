@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { SUPPLY_SNAPSHOT } from "./demo-snapshot.ts";
 import { test } from "node:test";
 import { investorStyleAxes, portfolioHoldings, stockDetails } from "../mock-data.ts";
 import { classifyBit } from "../profiling/bit.ts";
@@ -16,7 +17,6 @@ import {
   marketSentimentView,
   todayLiveSentimentView,
   sentimentProvider,
-  supplyDemandProvider,
   toNudgeMarket,
 } from "./index.ts";
 
@@ -69,14 +69,6 @@ test("데모 4종목은 BigKinds 과거 감성 20개 관측치를 반환한다",
 
 for (const code of CODES) {
   test(`${code}: 4개 Provider가 값을 반환한다`, async () => {
-    const supply = await supplyDemandProvider(code);
-    assert.equal(supply?.length, 20);
-    assert.equal(supply?.at(-1)?.date, "2025-12-30"); // 데모 기준일
-    assert.deepEqual(
-      supply?.map(({ date }) => date),
-      [...(supply ?? [])].map(({ date }) => date).sort(),
-    );
-
     const sentiment = await sentimentProvider(code);
     assert.equal(sentiment?.days.length, 20);
     // 4종목 모두 실제 BigKinds 기사 집계. 기사 제목은 삼성전자(기존)만 있고 나머지는 커밋하지 않는다.
@@ -102,21 +94,6 @@ test("대상 외 종목은 null", async () => {
     { supply, sentiment, contributions, financial },
     { supply: null, sentiment: null, contributions: null, financial: null },
   );
-});
-
-test("수급: 데모 4종목은 실데이터 20영업일(기준일까지, 12-25 휴장 제외) 정수 수량", async () => {
-  for (const code of ["005930", "005380", "035720", "068270"]) {
-    const supply = (await supplyDemandProvider(code)) ?? [];
-    assert.equal(supply.length, 20, code);
-    assert.equal(supply[0].date, "2025-12-02", code);
-    assert.equal(supply.at(-1)?.date, "2025-12-30", code);
-    assert.ok(!supply.some(({ date }) => date === "2025-12-25"), code);
-    for (const day of supply) {
-      for (const value of [day.retail, day.foreign, day.institution]) assert.ok(Number.isInteger(value), `${code} ${day.date}`);
-    }
-    const { provenance } = await loadStockInsights(code);
-    assert.deepEqual(provenance.supply, { kind: "real", source: "네이버 금융 투자자별 매매동향", asOf: "2025-12-30" });
-  }
 });
 
 test("출처: 감성은 데모 4종목 실데이터, 모델 근거는 픽스처", async () => {
@@ -161,7 +138,9 @@ function minjiWith(overrides: Record<string, number>): StyleAxes {
 
 async function samsungNudges(styleAxes: StyleAxes) {
   const detail = stockDetails["005930"];
-  const market = toNudgeMarket(detail, await loadStockInsights("005930"), portfolioHoldings);
+  // 수급은 DB에서만 오므로(0013), 넛지 규칙 검사에는 저장된 실데이터 20영업일을 직접 넣는다
+  const insights = { ...(await loadStockInsights("005930")), supply: SUPPLY_SNAPSHOT["005930"] };
+  const market = toNudgeMarket(detail, insights, portfolioHoldings);
   assert.ok(market);
   return selectNudges(classifyBit(styleAxes), market).map(({ id }) => id);
 }

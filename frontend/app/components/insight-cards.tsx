@@ -672,7 +672,7 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
 
 // 투자자별 20일 순매수 합계를 가운데 0 기준 막대로. 순매수 = 적, 순매도 = 청.
 function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null; provenance: DataProvenance }) {
-  if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 연결되지 않았어요.</Unavailable>;
+  if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>;
   const totals = SUPPLY_SERIES.map((series) => ({
     ...series,
     total: supply.reduce((sum, day) => sum + day[series.key], 0),

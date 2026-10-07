@@ -17,13 +17,12 @@ import { SAMSUNG_SENTIMENT } from "./sentiment-fixture.ts";
 import {
   PRICE_PROVENANCE,
   STOCK_SNAPSHOT,
-  SUPPLY_PROVENANCE,
-  SUPPLY_SNAPSHOT,
 } from "./demo-snapshot.ts";
 import {
   loadSupabaseDisclosures,
   loadSupabaseFinancial,
   loadSupabaseSentiment,
+  loadSupabaseSupply,
   type Disclosure,
   type InsightQueryClient,
   type LiveSentimentSummary,
@@ -183,9 +182,6 @@ export interface FinancialSnapshot {
   asOf?: string;
 }
 
-export const supplyDemandProvider = async (code: string): Promise<SupplyDemandDay[] | null> =>
-  SUPPLY_SNAPSHOT[code] ?? null;
-
 const SENTIMENT_BY_CODE: Record<string, SentimentData> = {
   "005930": { ...SAMSUNG_SENTIMENT, source: "real" },
   "005380": sentimentFromTrack(HYUNDAI_SENTIMENT as NewsTrack),
@@ -238,8 +234,7 @@ export async function loadStockInsights(
   code: string,
   queryClient: InsightQueryClient | null = getSupabaseClient(),
 ): Promise<StockInsights> {
-  const [supply, fallbackSentiment, contributions] = await Promise.all([
-    supplyDemandProvider(code),
+  const [fallbackSentiment, contributions] = await Promise.all([
     sentimentProvider(code),
     contributionProvider(code),
   ]);
@@ -248,13 +243,16 @@ export async function loadStockInsights(
     live: null,
     headlines: [],
   };
-  const [remoteSentiment, remoteFinancial, disclosures] = queryClient
+  const [remoteSentiment, remoteFinancial, disclosures, supplyRows] = queryClient
     ? await Promise.all([
         loadSupabaseSentiment(code, queryClient).catch(() => emptySentiment),
         loadSupabaseFinancial(code, queryClient).catch(() => null),
         loadSupabaseDisclosures(code, queryClient).catch(() => []),
+        loadSupabaseSupply(code, queryClient).catch(() => []),
       ])
-    : [emptySentiment, null, []];
+    : [emptySentiment, null, [], []];
+  // 수급은 DB(KRX 투자자별 순매수)만 쓴다. 예시·고정 대체값은 두지 않는다.
+  const supply = supplyRows.length ? supplyRows : null;
   const historical = remoteSentiment.historical ?? fallbackSentiment;
   const sentiment = historical
     ? {
@@ -292,7 +290,9 @@ export async function loadStockInsights(
     financial,
     disclosures,
     provenance: {
-      supply: supply ? SUPPLY_PROVENANCE : FIXTURE,
+      supply: supply
+        ? { kind: "real", source: "KRX 투자자별 순매수 · DB 조회", asOf: supply.at(-1)?.date }
+        : FIXTURE,
       sentiment:
         sentiment?.source === "real"
           ? {

@@ -29,12 +29,6 @@ export const SUPPLY_SNAPSHOT = snapshot.supply.stocks as Record<
 >;
 
 
-export const SUPPLY_PROVENANCE: DataProvenance = {
-  kind: "real",
-  source: snapshot.supply.source,
-  asOf: snapshot.asOf,
-};
-
 export const MARKET_SNAPSHOT: MarketStatus = {
   date: snapshot.market.date,
   provenance: { kind: "real", source: snapshot.market.source, asOf: snapshot.market.date },
