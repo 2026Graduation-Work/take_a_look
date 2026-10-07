@@ -114,3 +114,9 @@
   - 사용한 도구·라이브러리·데이터 원천의 이름(예: FinanceDataReader, BigKinds, 허용 목록의 디자인 스킬)은 출처 표기로 쓴다
 - 유료 기능 활성화 금지 (GitHub Advanced Security 등)
 - schema/ 파일을 단독 판단으로 수정 금지 (freeze 상태, 전원 합의 필요). Claude Code는 `.claude/settings.json`이 수정 전에 묻는다
+
+## 무료 운영 규칙 (2027-02-01까지)
+- 결제 수단은 등록하지 않은 채로 둔다. 플랜·컴퓨트·애드온·브랜치·프로젝트 생성/일시정지는 다루지 않는다.
+- 외부 API는 무료 한도 안에서만 쓴다(NewsAPI.ai 하루 20회 상한, DART 일 한도).
+- 새 의존성은 무료 라이선스(MIT·Apache-2.0·BSD 등)만 쓴다.
+- 대량 백필·적재 전에는 `docs/ops/free-tier-budget.md`의 남은 한도를 먼저 확인한다.
