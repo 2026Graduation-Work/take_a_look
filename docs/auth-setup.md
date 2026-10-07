@@ -39,6 +39,14 @@
 | `0002_market_index_quotes.sql` | `market_status.index_quotes` 컬럼 | 필수 |
 | `0003_ips_profiles_schema_v11.sql` | `ips_profiles.schema_version`에 `1.1.0` 허용 | **필수** — 새 설문은 항상 `1.1.0`으로 저장하므로, 없으면 설문 저장이 실패합니다 |
 
+CLI로 확인하기 (0001~0008 적용 기록 맞춤, 2026-10-07):
+
+1. 루트 `.env`에 `SUPABASE_DB_PASSWORD`·`SUPABASE_ACCESS_TOKEN`을 넣고 `set -a; . ./.env; set +a`로 불러옵니다(값을 명령에 직접 쓰지 않음).
+2. 처음 한 번 `supabase link --project-ref oaqksneegnpteextxgux` (프로젝트 "Take a Look").
+3. `supabase migration list` — Local·Remote 열이 같으면 적용 기록이 맞습니다.
+4. SQL Editor로 새 파일을 적용했다면 `supabase migration repair --status applied <버전>`으로 기록만 맞춥니다.
+5. `supabase db push`는 운영에 바로 적용되므로 팀에 먼저 묻고 실행합니다.
+
 적용 여부 확인 쿼리:
 
 ```sql
