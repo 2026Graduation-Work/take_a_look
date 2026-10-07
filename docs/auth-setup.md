@@ -12,7 +12,7 @@
 
 | 항목 | 상태 |
 |---|---|
-| 마이그레이션 0001~0004 · seed.sql | ✅ 적용 완료(0004 평균 매입가 nullable, 2026-09-22) (Supabase 'Stock Prediction', ref `oaqksneegnpteextxgux`, 서울) |
+| 마이그레이션 0001~0004 · seed.sql | ✅ 적용 완료(0004 평균 매입가 nullable, 2026-09-22) (Supabase 'Take a Look', ref `oaqksneegnpteextxgux`, 서울) |
 | RLS | ✅ anon 키로 확인: 종목·시장 상태는 읽힘, 개인 테이블은 42501로 거부 |
 | Vercel 환경변수(4번) | ✅ Production·Preview 등록 + 프로덕션 재배포 완료. 로그인 화면에 이메일 입력칸이 보임 |
 | Auth URL 설정(3-3) | ✅ 2026-09-22 콘솔에서 입력(Site URL + Redirect 3줄), API로 확인 |
