@@ -77,6 +77,18 @@ python -m serving.pack validate --path serving/data/packs/PACK_ID
 
 Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. KRX 인증이 필요한 조회가 있으면 `KRX_ID`, `KRX_PW`도 설정한다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 운영 migration 0007과 기록된 시험 배치 게시 성공은 확인했다. 일일 자동 게시 활성화 후에는 수동 실행으로 최신 batch ID, H5/H20 snapshot, 기준일을 확인한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
 
+## 4. 게시 뒤 별도 step (2026-10-07)
+
+`chart-serving.yml`은 게시 step 뒤에 아래를 차례로 돈다. 모두 `backend/analysis/chart`에서 실행하고, 실패해도 이미 게시한 batch는 그대로다.
+
+| step | 명령 | 하는 일 |
+|---|---|---|
+| Retention | `python -m retention` | 예측 요약 로그 적재 + 게시 batch 최근 5개만(`prune_chart_batches`), 입력 파일·기록 30일, 뉴스 원문·공시 90일 |
+| Investor net purchases | `python -m supply` | KRX 투자자별 순매수(시장 전체, 개인·외국인·기관합계 3회), 빈 최근 20영업일 채움, 60영업일 보존 |
+| Sync stock master | `python -m stock_master` | universe로 `stocks` insert·update(삭제 없음), 위험 등급·표시·1년 변동성 백분위. KIND·시가총액 목록을 못 받으면 쓰지 않고 실패 |
+
+수동 실행 입력 `supply_only`는 서빙을 건너뛰고 수급 step만 돈다(로컬에 KRX 계정이 없을 때 검증용). 규칙은 `docs/stock-master-rules.md`, 한도는 `docs/ops/free-tier-budget.md`.
+
 ## 2026-09-30: 인증 점검과 화면 연결 시험
 
 - 저장소 secrets는 `KRX_ID`, `KRX_PW`다. 로컬 `.env`의 `_1` 계정을 사용할 때는
