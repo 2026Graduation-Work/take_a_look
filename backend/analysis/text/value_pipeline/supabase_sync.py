@@ -5,11 +5,14 @@ import argparse
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from . import news_run, newsapi_ai, supabase_store
+import requests
+
+from . import disclosures, news_run, newsapi_ai, supabase_store
+from .config import SETTINGS
 from .news_run import _parse_target
 
 DEFAULT_TARGETS: dict[str, str] = {
@@ -20,6 +23,38 @@ DEFAULT_TARGETS: dict[str, str] = {
     "035420": "네이버",
     "247540": "에코프로비엠",
 }
+
+
+NEWSAPI_DAILY_CALLS = 20  # 하루 총 호출 상한(docs/ops/free-tier-budget.md). 종목당 1회
+
+
+def dynamic_targets(client: Any, today: date | None = None) -> dict[str, str]:
+    """기본 6종목 + 전체 사용자의 보유 ∪ 활성 관심 종목. 상한을 넘으면 절반은 최근 등록 순, 나머지는 날마다 순환."""
+    today = today or date.today()
+    latest: dict[str, str] = {}
+    for table, params in (("portfolio_holdings", {}), ("watchlist", {"is_active": "eq.true"})):
+        for row in client.select(table, params={"select": "stock_code,created_at", "order": "created_at.desc", **params}):
+            latest[row["stock_code"]] = max(latest.get(row["stock_code"], ""), row["created_at"])
+    extra = [code for code, _ in sorted(latest.items(), key=lambda item: item[1], reverse=True)
+             if code not in DEFAULT_TARGETS]
+    slots = NEWSAPI_DAILY_CALLS - len(DEFAULT_TARGETS)
+    if len(extra) > slots:
+        recent, rest = extra[: slots - slots // 2], extra[slots - slots // 2:]
+        start = today.toordinal() * (slots // 2) % len(rest)
+        extra = recent + [rest[(start + i) % len(rest)] for i in range(slots // 2)]
+    names = {row["code"]: row["name"] for row in client.select(
+        "stocks", params={"select": "code,name", "code": f"in.({','.join(extra) or '000000'})", "order": "code"})}
+    return {**DEFAULT_TARGETS, **{code: names[code] for code in extra if code in names}}
+
+
+def newsapi_remaining() -> int | None:
+    """NewsAPI.ai 남은 횟수(무료 2,000회 중). 실패하면 None."""
+    try:
+        usage = requests.post("https://eventregistry.org/api/v1/usage",
+                              json={"apiKey": SETTINGS.newsapi_ai_key}, timeout=20).json()
+        return int(usage["availableTokens"]) - int(usage["usedTokens"])
+    except Exception:
+        return None
 
 
 @dataclass
@@ -163,10 +198,13 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     live = subparsers.add_parser("live", help="6종목 최근 24시간 뉴스를 수집·적재")
     live.add_argument("--target", type=_parse_target, action="append")
+    live.add_argument("--dynamic", action="store_true", help="기본 6 + 보유·관심 종목(하루 20회 상한)")
+    subparsers.add_parser("disclosures", help="DART 하루 전체 공시를 받아 종목에 맞춰 적재")
     reset_live = subparsers.add_parser(
         "reset-live", help="지정 종목의 live 행만 지운 뒤 최근 24시간 뉴스를 다시 적재"
     )
     reset_live.add_argument("--target", type=_parse_target, action="append")
+    reset_live.add_argument("--dynamic", action="store_true")
     news = subparsers.add_parser("backfill-news", help="뉴스 track JSON 적재")
     news.add_argument("paths", type=Path, nargs="+")
     financial = subparsers.add_parser("backfill-financial", help="재무 track JSON 적재")
@@ -178,7 +216,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def targets_from_args(args: argparse.Namespace) -> dict[str, str]:
+def targets_from_args(args: argparse.Namespace, client: Any = None) -> dict[str, str]:
+    if getattr(args, "dynamic", False):
+        return dynamic_targets(client)
     return dict(args.target) if args.target else dict(DEFAULT_TARGETS)
 
 
@@ -194,10 +234,17 @@ def _print_result(result: SyncResult) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     client = supabase_store.SupabaseRestClient.from_env()
+    if args.command == "disclosures":
+        disclosures.sync(client)
+        return 0
     if args.command == "live":
-        result = run_live_sync(targets_from_args(args), client=client)
+        targets = targets_from_args(args, client)
+        print(json.dumps({"event": "newsapi_targets", "count": len(targets), "codes": sorted(targets),
+                          "remaining_before": newsapi_remaining()}, ensure_ascii=False))
+        result = run_live_sync(targets, client=client)
+        print(json.dumps({"event": "newsapi_usage", "remaining_after": newsapi_remaining()}))
     elif args.command == "reset-live":
-        result = reset_live_sync(targets_from_args(args), client=client)
+        result = reset_live_sync(targets_from_args(args, client), client=client)
     elif args.command == "backfill-news":
         result = backfill_news(args.paths, client=client)
     elif args.command == "backfill-historical":

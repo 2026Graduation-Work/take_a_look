@@ -26,3 +26,4 @@ def test_retention_deletes_old_inputs_in_batches(monkeypatch):
     assert [len(body["prefixes"]) for body in deletes] == [1000, 200]  # 1200개 경로를 1000개씩
     assert ("DELETE", "/rest/v1/chart_feature_snapshots") in methods
     assert ("DELETE", "/rest/v1/news_articles") in methods
+    assert ("DELETE", "/rest/v1/disclosures") in methods
