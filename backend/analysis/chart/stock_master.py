@@ -70,7 +70,7 @@ def fetch_large_caps():
     return set(listing.nlargest(LARGE_CAP_RANK, "Marcap")["Code"].astype(str))
 
 
-def classify(universe, prices, managed_names, large_caps=frozenset()):
+def classify(universe, prices, managed_names, large_caps=frozenset(), as_of=None):
     """universe: Code·Name, prices: Code·Date·Close·Amount → stocks 행 목록."""
     prices = prices.sort_values(["Code", "Date"])
     by_code = prices.groupby("Code")
@@ -83,6 +83,7 @@ def classify(universe, prices, managed_names, large_caps=frozenset()):
 
     liquidity_cut = liquidity.quantile(LOW_LIQUIDITY_QUANTILE)
     volatility_cut = volatility.quantile(HIGH_VOLATILITY_QUANTILE)
+    volatility_rank = volatility.rank(pct=True)  # 화면 "가격 흔들림" 백분위(1 = 가장 큼)
 
     rows = []
     for code, name in zip(universe["Code"], universe["Name"], strict=True):
@@ -102,8 +103,12 @@ def classify(universe, prices, managed_names, large_caps=frozenset()):
         grade = grade_for(volatility.get(code, np.nan), code in large_caps)
         if {"spac", "managed_stock"} & set(flags):
             grade = 1
+        annual, rank = volatility.get(code, np.nan), volatility_rank.get(code, np.nan)
         rows.append({"code": code, "name": name, "market": "KOSDAQ" if code in KOSDAQ_CODES else "KOSPI",
-                     "risk_grade": grade, "risk_flags": flags, "is_active": True})
+                     "risk_grade": grade, "risk_flags": flags, "is_active": True,
+                     "volatility_annual": None if pd.isna(annual) else round(float(annual), 4),
+                     "volatility_percentile": None if pd.isna(rank) else round(float(rank), 4),
+                     "risk_as_of": as_of})
     return rows
 
 
@@ -119,7 +124,7 @@ def main():
     panel = store.load_price_panel(start, as_of)
     prices = pd.concat([frame.assign(Code=code) for code, frame in panel.items()], ignore_index=True)
     managed = fetch_managed_names()
-    rows = classify(universe, prices, managed, fetch_large_caps())
+    rows = classify(universe, prices, managed, fetch_large_caps(), as_of)
     matched = sum("managed_stock" in row["risk_flags"] for row in rows)
     print(json.dumps({"event": "stock_master", "as_of": as_of, "stocks": len(rows),
                       "managed_listed": len(managed), "managed_matched": matched}, ensure_ascii=False))

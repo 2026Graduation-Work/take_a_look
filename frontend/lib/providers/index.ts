@@ -7,7 +7,6 @@ import { getSupabaseClient } from "../supabase.ts";
 import type { DataProvenance, PortfolioHolding, RiskGrade, StockDetail } from "../types";
 import {
   CONTRIBUTION_FIXTURE,
-  VOLATILITY_PERCENTILE_FIXTURE,
   businessDaysEndingAt,
 } from "./fixtures.ts";
 import HYUNDAI_SENTIMENT from "./sentiment-005380.json" with { type: "json" };
@@ -416,27 +415,25 @@ export const periodsOverlap = (left: Period, right: Period) =>
   left.start <= right.end && right.start <= left.end;
 
 export interface RiskSnapshot {
-  volatilityAnnual: number; // 일간 로그수익률 표준편차 × √252
-  volatilityPercentile: number; // 0~1, FIXTURE
+  volatilityAnnual: number; // 1년, 일간 로그수익률 표준편차 × √252(종목 마스터, 위험 등급과 같은 계산)
+  volatilityPercentile: number; // 0~1, 코스피 전 종목 중 위치
+  asOf?: string; // 위 두 값의 기준일
   drawdownFrom3mHigh: number; // 60거래일(≈3개월) 최고가 대비
   return3d: number;
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
 
-// priceHistory(최근 60거래일 종가)에서 계산한다. 변동성 백분위만 픽스처다.
+// 변동성·백분위는 종목 마스터(1년), 고점 대비·3일 수익률은 priceHistory(최근 60거래일 종가)에서 계산한다.
 export function riskSnapshot(detail: StockDetail): RiskSnapshot | null {
   const prices = detail.priceHistory ?? [];
-  const volatilityPercentile = VOLATILITY_PERCENTILE_FIXTURE[detail.code];
-  if (prices.length < 4 || volatilityPercentile === undefined) return null;
+  const { volatilityAnnual, volatilityPercentile } = detail;
+  if (prices.length < 4 || volatilityAnnual === undefined || volatilityPercentile === undefined) return null;
 
-  const returns = prices.slice(1).map((price, index) => Math.log(price / prices[index]));
-  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
-  const variance =
-    returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1);
   const last = prices[prices.length - 1];
   return {
-    volatilityAnnual: Math.sqrt(variance * 252),
+    volatilityAnnual,
     volatilityPercentile,
+    asOf: detail.riskAsOf,
     drawdownFrom3mHigh: last / Math.max(...prices) - 1,
     return3d: last / prices[prices.length - 4] - 1,
     riskGrade: detail.riskGrade,

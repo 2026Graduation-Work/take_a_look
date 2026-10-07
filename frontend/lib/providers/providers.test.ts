@@ -137,7 +137,8 @@ function minjiWith(overrides: Record<string, number>): StyleAxes {
 }
 
 async function samsungNudges(styleAxes: StyleAxes) {
-  const detail = stockDetails["005930"];
+  // 1년 변동성·백분위는 종목 마스터 값(2026-10-06 운영 실측)을 넣는다
+  const detail = { ...stockDetails["005930"], volatilityAnnual: 0.8681, volatilityPercentile: 0.8518 };
   // 수급은 DB에서만 오므로(0013), 넛지 규칙 검사에는 저장된 실데이터 20영업일을 직접 넣는다
   const insights = { ...(await loadStockInsights("005930")), supply: SUPPLY_SNAPSHOT["005930"] };
   const market = toNudgeMarket(detail, insights, portfolioHoldings);

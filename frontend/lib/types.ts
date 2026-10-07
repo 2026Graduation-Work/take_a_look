@@ -90,6 +90,9 @@ export interface StockDetail extends RecommendedStock {
   priceDates?: string[]; // priceHistory와 같은 길이의 거래일(YYYY-MM-DD). 없으면 기준일에서 거꾸로 센다
   priceProvenance?: DataProvenance; // 시세 출처. 예측(provenance)과 다를 수 있다
   realizedReturns?: ReturnBin[]; // similarCaseCount건의 실현 수익률 분포
+  volatilityAnnual?: number; // 1년 변동성(일간 로그수익률 표준편차 × √252), 종목 마스터
+  volatilityPercentile?: number; // 0~1, 코스피 전 종목 중 위치(1 = 가장 큼)
+  riskAsOf?: string; // 위 두 값의 계산 기준일
   reasons: PredictionReason[]; // 기여도 순 Top 3
   aiAdvice?: string; // LLM 생성 설명(수치 번역만, 행동 제안 없음)
 }
@@ -132,7 +135,8 @@ export interface PortfolioHolding {
   signalLight: SignalLight;
   quantity: number;
   avgBuyPrice: number;
-  priceBasis?: "avg_buy" | "close"; // close = 평균 매입가가 없어 기준일 종가로 비중을 셈("현재가 기준")
+  priceBasis?: "avg_buy" | "close"; // close = 최신 종가로 센 평가금액, avg_buy = 종가가 없어 매입금액
+  priceAsOf?: string; // 평가에 쓴 종가의 기준일(YYYY-MM-DD)
   provenance: DataProvenance;
 }
 

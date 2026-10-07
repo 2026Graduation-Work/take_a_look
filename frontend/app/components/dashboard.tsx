@@ -15,7 +15,8 @@ import {
 } from "@/lib/queries";
 import type { RecommendedStock } from "@/lib/types";
 import { AVOIDED_ASSET_LABELS, summaryFromProfilingOutput } from "@/lib/profiling-rules";
-import { CLOSING_PRICE } from "@/lib/closing-prices";
+import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
+import { getSupabaseClient } from "@/lib/supabase";
 import { SIGNAL_META } from "@/lib/display";
 import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
@@ -113,6 +114,16 @@ export default function Dashboard(initialData: DashboardData) {
     getServerHoldingsSnapshot,
   );
   const savedHoldings = parseSavedHoldings(savedHoldingsSnapshot);
+  // 이 브라우저에 저장한 보유 종목의 평가금액용 최신 종가(최신 게시 차트 스냅샷)
+  const savedCodes = savedHoldings?.map(({ code }) => code).join(",") ?? "";
+  const [closes, setCloses] = useState<LatestCloses>(new Map());
+  useEffect(() => {
+    let active = true;
+    void loadLatestCloses(getSupabaseClient(), savedCodes ? savedCodes.split(",") : []).then((next) => active && setCloses(next));
+    return () => {
+      active = false;
+    };
+  }, [savedCodes]);
   // 사용자가 등록한 종목에 오늘 신호를 붙인다. 신호가 없는 종목은 중립으로
   // 꾸미지 않고 맵에서 빼고 개수만 알린다 — 없는 판단을 지어내지 않는다.
   const signalByCode = new Map(
@@ -129,8 +140,9 @@ export default function Dashboard(initialData: DashboardData) {
                 signalLight: source.signalLight,
                 quantity: saved.quantity,
                 ...(() => {
-                  const { price, basis } = costBasis(saved.avgBuyPrice, CLOSING_PRICE[saved.code]);
-                  return { avgBuyPrice: price, priceBasis: basis };
+                  const latest = closes.get(saved.code);
+                  const { price, basis } = costBasis(saved.avgBuyPrice, latest?.close);
+                  return { avgBuyPrice: price, priceBasis: basis, ...(latest ? { priceAsOf: latest.asOf } : {}) };
                 })(),
                 provenance: source.provenance,
               },

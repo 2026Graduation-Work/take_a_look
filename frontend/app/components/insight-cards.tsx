@@ -421,7 +421,8 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
         </Conclusion>
       ) : risk ? (
         <Conclusion>
-          최근 3개월 {TERM.volatility}은 시장 전체에서 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요.
+          최근 1년 {TERM.volatility}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요
+          {risk.asOf && <span className="text-xs text-muted tabular-nums"> · {risk.asOf.replaceAll("-", ".")} 기준</span>}
         </Conclusion>
       ) : !psychology ? (
         <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유·관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
@@ -512,11 +513,17 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
         </p>
       )}
       {risk && (
-        <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Stat label={`${TERM.volatility}(1년 기준)`} value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`} />
-          <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
-          <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
-        </dl>
+        <>
+          <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Stat
+              label={`${TERM.volatility}(1년 · 코스피 상위 ${Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}%)`}
+              value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`}
+            />
+            <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
+            <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
+          </dl>
+          {risk.asOf && <p className="m-0 text-2xs text-muted tabular-nums">{risk.asOf.replaceAll("-", ".")} 종가 기준</p>}
+        </>
       )}
       {sentimentView?.headlines.length ? (
         <details className="disclosure text-sm">
