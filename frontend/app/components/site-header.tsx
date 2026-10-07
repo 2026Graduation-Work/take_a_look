@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AccountControls from "./account-controls";
 import MarketStatusBar from "./market-status-bar";
+import StockSearch from "./stock-search";
 import type { InvestorProfileSummary, MarketStatus } from "@/lib/types";
 import Wordmark from "@/components/brand/Wordmark";
 
@@ -26,8 +27,6 @@ export default function SiteHeader({
   activePage = "dashboard",
   sectionLabel,
 }: SiteHeaderProps) {
-  const hasSearch = onQueryChange !== undefined;
-
   return (
     <>
       <header className="glass-bar sticky top-0 z-50">
@@ -57,16 +56,9 @@ export default function SiteHeader({
             })}
           </nav>
 
-          {hasSearch ? (
+          {onQueryChange ? (
             <div className="order-last flex min-w-0 basis-full items-center sm:order-none sm:flex-1 sm:basis-auto sm:justify-end">
-              <input
-                type="search"
-                value={query ?? ""}
-                onChange={(event) => onQueryChange?.(event.target.value)}
-                placeholder="종목명 또는 코드 검색"
-                aria-label="종목 검색"
-                className="box-border h-11 w-full min-w-0 rounded-md bg-track px-3.5 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30 sm:max-w-[280px]"
-              />
+              <StockSearch query={query ?? ""} onQueryChange={onQueryChange} />
             </div>
           ) : (
             <div className="hidden min-w-0 flex-1 truncate text-sm font-medium text-muted sm:block">

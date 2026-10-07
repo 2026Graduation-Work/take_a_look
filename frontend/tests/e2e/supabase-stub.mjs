@@ -9,6 +9,11 @@ const chartRows = snapshots.map(payload => ({
   batch_id: payload.batch_id, stock_code: payload.stock_code, horizon: payload.horizon, payload,
 }));
 
+const STOCKS = {
+  "035420": { name: "NAVER", market: "KOSPI", risk_grade: 2, risk_flags: [] },
+  "247540": { name: "에코프로비엠", market: "KOSDAQ", risk_grade: 1, risk_flags: [] },
+};
+
 createServer((request, response) => {
   const rest = request.url?.startsWith("/rest/v1/");
   const headers = {
@@ -24,6 +29,9 @@ createServer((request, response) => {
   }
   response.writeHead(rest ? 200 : 404, headers);
   const chart = request.url?.startsWith("/rest/v1/latest_chart_signal_snapshots?");
-  const sentiment = sentimentHistoryFixture(new URL(request.url || "/", "http://localhost"));
-  response.end(rest && request.method === "GET" ? JSON.stringify(sentiment ?? (chart ? chartRows : [])) : "{}");
+  const url = new URL(request.url || "/", "http://localhost");
+  const sentiment = sentimentHistoryFixture(url);
+  // 상세 화면 서버 렌더가 종목 마스터에서 찾는 종목(데모 예시 밖)
+  const stock = url.pathname === "/rest/v1/stocks" && STOCKS[url.searchParams.get("code")?.replace("eq.", "") ?? ""];
+  response.end(rest && request.method === "GET" ? JSON.stringify(sentiment ?? (stock ? [stock] : chart ? chartRows : [])) : "{}");
 }).listen(54321, "127.0.0.1");

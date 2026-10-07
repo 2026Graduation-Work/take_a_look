@@ -258,7 +258,7 @@ export function toRiskFlags(values: string[]): RiskFlag[] {
   return values.filter((value): value is RiskFlag => includes(RISK_FLAGS, value));
 }
 
-function toRiskGrade(value: number): RiskGrade {
+export function toRiskGrade(value: number): RiskGrade {
   if (![1, 2, 3, 4, 5].includes(value)) {
     throw new Error(`지원하지 않는 위험 등급입니다: ${value}`);
   }

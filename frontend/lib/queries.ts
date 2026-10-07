@@ -132,7 +132,7 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
     loadProfileQueryContext(client, appUser.id),
     loadHoldings(client, appUser.id),
   ]);
-  const [stocks, currentHoldingAlerts, holdings] = await Promise.all([
+  const [{ stocks, candidates }, currentHoldingAlerts, holdings] = await Promise.all([
     queryRecommendedStocks(client, appUser.id, profileContext.settings),
     queryHoldingAlerts(client, appUser.id, profileContext.settings, holdingRows),
     queryPortfolio(client, appUser.id, profileContext.settings, holdingRows),
@@ -146,7 +146,8 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
     profile: profileContext.result.profile,
     maxRiskTier: profileContext.result.maxRiskTier,
     avoidedLabels: profileContext.result.avoidedLabels,
-    excludedStocks: profileContext.result.excludedStocks,
+    // 종목 마스터가 전 종목이라, 제외 목록은 오늘 목록 후보에서 실제로 뺀 종목만 보인다.
+    excludedStocks: profileContext.result.excludedStocks.filter(({ code }) => candidates.has(code)),
   };
 }
 
@@ -196,7 +197,7 @@ async function queryRecommendedStocks(
   client: SupabaseClient,
   userId: string,
   profileSettings?: ProfileSettings,
-): Promise<RecommendedStock[]> {
+): Promise<{ stocks: RecommendedStock[]; candidates: Set<string> }> {
   const settings = profileSettings ?? (await loadProfileSettings(client, userId));
   const { data, error } = await client
     .from("predictions")
@@ -214,13 +215,14 @@ async function queryRecommendedStocks(
   );
   const stockByCode = new Map(stocks.map((stock) => [stock.code, stock]));
 
-  return predictions.flatMap((prediction) => {
+  const recommended = predictions.flatMap((prediction) => {
     const stock = stockByCode.get(prediction.stock_code);
     if (!stock || !passesHardConstraints(stock.risk_grade, toRiskFlags(stock.risk_flags), settings)) {
       return [];
     }
     return [mapRecommendedStock(prediction, stock)];
   });
+  return { stocks: recommended, candidates: new Set(predictions.map(({ stock_code }) => stock_code)) };
 }
 
 async function queryHoldingAlerts(
