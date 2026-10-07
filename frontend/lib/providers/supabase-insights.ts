@@ -456,3 +456,22 @@ export async function loadSupabaseFinancial(
     asOf: snapshot.as_of,
   };
 }
+
+export interface Disclosure {
+  rceptNo: string;
+  title: string;
+  kind: string;
+  filedOn: string;
+}
+
+// DART 공시 목록(제목·날짜·유형만 저장). 원문은 DART 링크로 연다.
+export async function loadSupabaseDisclosures(code: string, client: InsightQueryClient): Promise<Disclosure[]> {
+  const result = await client.from("disclosures")
+    .select("rcept_no,title,kind,filed_on")
+    .eq("stock_code", code)
+    .order("filed_on", { ascending: false })
+    .order("rcept_no", { ascending: false })
+    .limit(8) as QueryResult;
+  const rows = (unwrap(result, "disclosures") ?? []) as Array<{ rcept_no: string; title: string; kind: string; filed_on: string }>;
+  return rows.map((row) => ({ rceptNo: row.rcept_no, title: row.title, kind: row.kind, filedOn: row.filed_on }));
+}

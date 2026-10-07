@@ -24,8 +24,10 @@ import {
   SUPPLY_SNAPSHOT,
 } from "./demo-snapshot.ts";
 import {
+  loadSupabaseDisclosures,
   loadSupabaseFinancial,
   loadSupabaseSentiment,
+  type Disclosure,
   type InsightQueryClient,
   type LiveSentimentSummary,
   type SupabaseSentimentResult,
@@ -244,6 +246,7 @@ export interface StockInsights {
   liveSentiment: LiveSentimentSummary | null;
   contributions: ContributionSignal[] | null;
   financial: FinancialSnapshot | null;
+  disclosures: Disclosure[];
   provenance: Record<
     "supply" | "sentiment" | "liveSentiment" | "contributions" | "financial",
     DataProvenance
@@ -267,12 +270,13 @@ export async function loadStockInsights(
     live: null,
     headlines: [],
   };
-  const [remoteSentiment, remoteFinancial] = queryClient
+  const [remoteSentiment, remoteFinancial, disclosures] = queryClient
     ? await Promise.all([
         loadSupabaseSentiment(code, queryClient).catch(() => emptySentiment),
         loadSupabaseFinancial(code, queryClient).catch(() => null),
+        loadSupabaseDisclosures(code, queryClient).catch(() => []),
       ])
-    : [emptySentiment, null];
+    : [emptySentiment, null, []];
   const historical = remoteSentiment.historical ?? fallbackSentiment;
   const sentiment = historical
     ? {
@@ -307,6 +311,7 @@ export async function loadStockInsights(
     liveSentiment: remoteSentiment.live,
     contributions,
     financial,
+    disclosures,
     provenance: {
       supply: supply ? SUPPLY_PROVENANCE : FIXTURE,
       sentiment:

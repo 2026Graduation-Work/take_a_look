@@ -10,8 +10,9 @@ def test_news_sync_workflow_has_schedule_targets_secrets_and_runtime_guards() ->
 
     assert 'cron: "0 0 * * 1-5"' in text
     assert "workflow_dispatch:" in text
-    for target in ("005930:삼성전자", "005380:현대차", "035720:카카오", "068270:셀트리온"):
-        assert target in text
+    assert "supabase_sync live --dynamic" in text
+    assert "supabase_sync disclosures" in text
+    assert "${{ secrets.DART_API_KEY }}" in text
     for secret in ("NEWSAPI_AI_KEY", "SUPABASE_URL", "SUPABASE_SECRET_KEY"):
         assert f"${{{{ secrets.{secret} }}}}" in text
         assert f"{secret}=sk_" not in text

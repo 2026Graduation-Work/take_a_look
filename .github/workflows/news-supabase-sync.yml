@@ -27,7 +27,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60 # 대상 최대 20종목 × KR-FinBERT
     defaults:
       run:
         working-directory: backend/analysis/text
@@ -59,32 +59,26 @@ jobs:
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install -r requirements.txt
 
-      - name: Collect, analyze, and persist six stocks
+      # 대상: 기본 6 + 전체 사용자의 보유 ∪ 관심 종목, 하루 20회 상한(supabase_sync.dynamic_targets)
+      - name: Collect, analyze, and persist target stocks
         if: github.event_name == 'schedule' || inputs.mode == 'live'
-        run: |
-          python -m value_pipeline.supabase_sync live \
-            --target 005930:삼성전자 \
-            --target 005380:현대차 \
-            --target 035720:카카오 \
-            --target 068270:셀트리온 \
-            --target 035420:네이버 \
-            --target 247540:에코프로비엠
+        run: python -m value_pipeline.supabase_sync live --dynamic
 
+      # DART 하루 전체 공시 → 종목 마스터에 맞춰 적재(제목·날짜·유형만). 실패해도 뉴스 적재는 그대로
+      - name: Collect DART disclosures
+        if: github.event_name == 'schedule' || inputs.mode == 'live'
+        continue-on-error: true
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: python -m value_pipeline.supabase_sync disclosures
 
       - name: Retry Samsung live sync with safe diagnostics
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'live-samsung'
         run: python -m value_pipeline.supabase_sync live --target 005930:삼성전자
 
-      - name: Reset live rows, then collect all six stocks
+      - name: Reset live rows, then collect target stocks
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'reset-live'
-        run: |
-          python -m value_pipeline.supabase_sync reset-live \
-            --target 005930:삼성전자 \
-            --target 005380:현대차 \
-            --target 035720:카카오 \
-            --target 068270:셀트리온 \
-            --target 035420:네이버 \
-            --target 247540:에코프로비엠
+        run: python -m value_pipeline.supabase_sync reset-live --dynamic
 
       - name: Backfill four-stock historical news and DART snapshots
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'

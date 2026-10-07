@@ -24,6 +24,7 @@ import {
   STYLE_TYPE_RULE,
   STYLE_TYPE_SOURCE,
   TERM,
+  DISCLOSURE_KIND,
 } from "@/lib/copy-glossary";
 import { STYLE_AXIS_IDS } from "@/lib/profiling-rules";
 import {
@@ -423,7 +424,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           최근 3개월 {TERM.volatility}은 시장 전체에서 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요.
         </Conclusion>
       ) : !psychology ? (
-        <Unavailable>이 종목은 분위기를 볼 데이터가 아직 없어요.</Unavailable>
+        <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유·관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
       ) : null}
       {sentimentView?.basis === "live" && (
         <p className="m-0 text-xs text-muted tabular-nums">
@@ -537,7 +538,44 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           </ul>
         </details>
       ) : null}
+      <DisclosureList disclosures={insights.disclosures} />
     </>
+  );
+}
+
+// DART 공시 목록. 유형마다 쉬운 풀이를 펼쳐 볼 수 있다(copy-glossary DISCLOSURE_KIND).
+function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosures"] }) {
+  return (
+    <section aria-labelledby="disclosure-title" className="flex flex-col gap-2">
+      <h4 id="disclosure-title" className="m-0 text-sm font-medium text-ink">최근 공시</h4>
+      {disclosures.length ? (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {disclosures.map((item) => {
+            const kind = DISCLOSURE_KIND[item.kind] ?? DISCLOSURE_KIND.other;
+            return (
+              <li key={item.rceptNo} className="border-b border-line-soft py-1 last:border-b-0">
+                <a
+                  href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${item.rceptNo}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-h-11 items-center text-sm text-ink hover:underline"
+                >
+                  {item.title}
+                </a>
+                <details className="text-xs text-muted">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1 tabular-nums">
+                    {item.filedOn.replaceAll("-", ".")} · {kind.label} <span aria-hidden>ⓘ</span>
+                  </summary>
+                  <p className="m-0 pb-2 text-body">{kind.explain}</p>
+                </details>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="m-0 text-sm text-muted">최근 90일 안에 올라온 공시가 없어요.</p>
+      )}
+    </section>
   );
 }
 

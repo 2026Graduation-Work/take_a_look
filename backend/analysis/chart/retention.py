@@ -2,7 +2,7 @@
 
 1. 예측 요약 로그 적재 + 게시 배치는 최근 KEEP_BATCHES개만 남김(DB 함수 prune_chart_batches, 0009)
 2. Storage 차트 입력 파일과 그 기록(chart_feature_snapshots)은 FEATURE_DAYS일 초과분 삭제
-3. 뉴스 원문(news_articles)은 ARTICLE_DAYS일 초과분 삭제. 일별 집계(news_sentiment_daily)는 그대로
+3. 뉴스 원문(news_articles)·공시 목록(disclosures)은 ARTICLE_DAYS일 초과분 삭제. 일별 집계(news_sentiment_daily)는 그대로
 """
 
 import json
@@ -38,6 +38,7 @@ def main(today=None):
 
     article_cutoff = (today - timedelta(days=ARTICLE_DAYS)).isoformat()
     store._request("DELETE", "/rest/v1/news_articles?article_date=lt." + quote(article_cutoff), prefer="return=minimal")
+    store._request("DELETE", "/rest/v1/disclosures?filed_on=lt." + quote(article_cutoff), prefer="return=minimal")
     print(json.dumps({"event": "retention", "pruned_batches": pruned, "feature_rows": len(rows),
                       "storage_objects": len(paths), "feature_cutoff": cutoff, "article_cutoff": article_cutoff}))
 
