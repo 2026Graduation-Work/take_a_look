@@ -26,6 +26,7 @@ export interface OnboardingState {
   mode: "demo" | "supabase";
   userId?: string;
   displayName?: string;
+  email?: string;
   error?: string;
 }
 
@@ -86,6 +87,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
       mode: "supabase",
       userId: user.id,
       displayName,
+      email: user.email,
     };
   }
 
@@ -104,6 +106,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
       mode: "supabase",
       userId: user.id,
       displayName,
+      email: user.email,
     };
   }
 
@@ -113,6 +116,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
     mode: "supabase",
     userId: user.id,
     displayName,
+    email: user.email,
   };
 }
 

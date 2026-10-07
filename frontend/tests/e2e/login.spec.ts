@@ -59,8 +59,10 @@ test("계정 삭제: 확인 창 → 로그인 화면, 같은 계정으로 다시
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page).toHaveURL("/");
 
-  await page.goto("/profile");
-  await page.getByRole("button", { name: "계정 삭제" }).click();
+  await page.locator("summary[aria-label$='계정 메뉴']").click();
+  await page.getByRole("link", { name: "계정 관리" }).click();
+  await expect(page).toHaveURL(/\/profile#account$/);
+  await page.getByRole("region", { name: "계정" }).getByRole("button", { name: "계정 삭제" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "계정 삭제" }).click();
   await expect(page).toHaveURL(/\/login$/);
 
