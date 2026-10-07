@@ -1,4 +1,4 @@
-from value_pipeline.disclosures import classify, to_rows
+from analysis.text.value_pipeline.disclosures import classify, to_rows
 
 
 def test_classify_titles():
@@ -28,7 +28,11 @@ def test_rows_match_master_and_dedupe():
 def test_dynamic_targets_cap_and_rotation():
     from datetime import date
 
-    from value_pipeline.supabase_sync import DEFAULT_TARGETS, NEWSAPI_DAILY_CALLS, dynamic_targets
+    from analysis.text.value_pipeline.supabase_sync import (
+        DEFAULT_TARGETS,
+        NEWSAPI_DAILY_CALLS,
+        dynamic_targets,
+    )
 
     holdings = [{"stock_code": f"{i:06d}", "created_at": f"2026-10-{i % 28 + 1:02d}T00:00:00"} for i in range(1, 31)]
     holdings.append({"stock_code": "005930", "created_at": "2026-10-07T00:00:00"})  # 기본 종목은 중복으로 세지 않음
