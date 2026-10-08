@@ -1,5 +1,6 @@
 import { AVOIDED_ASSET_LABELS, summaryFromStyleAxes } from "./profiling-rules";
 import type { LatestCloses } from "./latest-closes.ts";
+import { chartProvenance } from "./chart-detail.ts";
 import { costBasis } from "./holdings-rules.ts";
 import type {
   DataProvenance,
@@ -226,16 +227,16 @@ export function mapPortfolioHolding(
   prediction?: PredictionRow,
   closes: LatestCloses = new Map(),
 ): PortfolioHolding {
+  const live = closes.get(holding.stock_code);
   return {
     code: holding.stock_code,
     name: stock.name,
     signalLight:
-      prediction && includes(SIGNAL_LIGHTS, prediction.signal_light)
-        ? prediction.signal_light
-        : "neutral",
+      live?.signal ??
+      (prediction && includes(SIGNAL_LIGHTS, prediction.signal_light) ? prediction.signal_light : "neutral"),
     quantity: holding.quantity,
     ...weightPrice(holding, closes),
-    provenance: SUPABASE_DEMO,
+    provenance: live?.signal ? chartProvenance(live.asOf) : SUPABASE_DEMO,
   };
 }
 

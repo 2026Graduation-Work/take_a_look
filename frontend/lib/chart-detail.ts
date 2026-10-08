@@ -1,9 +1,18 @@
 import { chartChange, type ChartSnapshot } from "./chart-public.ts";
-import type { HorizonDirection, ReturnBin, StockDetail } from "./types.ts";
+import type { DataProvenance, HorizonDirection, ReturnBin, StockDetail } from "./types.ts";
+
+export const chartProvenance = (asOf?: string): DataProvenance => ({ kind: "real", source: "LGBM · 20거래일 · 검증 전", asOf });
 
 export function chartDirection(chart: ChartSnapshot | undefined): HorizonDirection | null {
-  if (chart?.inference.status !== "available" || !chart.inference.scores) return null;
-  const { down, neutral, up } = chart.inference.scores;
+  return inferenceDirection(chart?.inference);
+}
+
+// 세 분류 점수 중 가장 높은 쪽. 대시보드는 payload 전체 대신 이 두 필드만 읽는다.
+export function inferenceDirection(
+  inference: Pick<ChartSnapshot["inference"], "status" | "scores"> | undefined,
+): HorizonDirection | null {
+  if (inference?.status !== "available" || !inference.scores) return null;
+  const { down, neutral, up } = inference.scores;
   const scores = [["down", down], ["flat", neutral], ["up", up]] as const;
   return scores.reduce((best, next) => next[1] > best[1] ? next : best)[0];
 }
@@ -20,7 +29,7 @@ export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefine
     priceHistory: chart?.prices.history.map(p => p.close) ?? [],
     priceDates: chart?.prices.history.map(p => p.date) ?? [],
     priceProvenance: { kind: "real", source: chart?.prices.source.replace("KRX adjusted daily OHLCV", "KRX 수정종가") ?? "KRX", asOf: chart?.data_asof },
-    provenance: { kind: "real", source: "LGBM · 20거래일 · 검증 전", asOf: chart?.data_asof },
+    provenance: chartProvenance(chart?.data_asof),
     returnBand: { low: band?.low ?? 0, high: band?.high ?? 0, ciLevel: .68 },
     realizedReturns: chart?.distribution.histogram.bins.map(b => ({ from: b.left, to: b.right, count: b.count })) ?? [],
     similarCaseCount: chart?.distribution.sample_count ?? 0,
