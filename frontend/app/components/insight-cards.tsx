@@ -730,7 +730,7 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
       </ul>
       <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
         <span>
-          {supply[0].date} ~ {supply[supply.length - 1].date} · 순매수 수량(주) · 기타법인 제외
+          {supply[0].date.replaceAll("-", ".")} ~ {supply[supply.length - 1].date.replaceAll("-", ".")} · 순매수 수량(주) · 기타법인 제외
         </span>
         <SourceLine provenance={provenance} />
       </div>
@@ -738,10 +738,16 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
   );
 }
 
+// '시점'이에요 / '폭'이에요 / '비율'이에요 / '추세'예요. 끝이 한글이 아니면 '예요'.
+function copula(word: string): string {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return code >= 0 && code < 11172 && code % 28 ? "이에요" : "예요";
+}
+
 const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 
 function FinancialPanel({ financial, provenance }: { financial: FinancialSnapshot | null; provenance: DataProvenance }) {
-  if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 보유·관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
+  if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유·관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");
@@ -844,7 +850,7 @@ function ContributionPanel({
         <strong className="font-semibold" style={{ color: target === "하방" ? "var(--color-down)" : target === "상방" ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
         </strong>{" "}
-        점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;예요.
+        점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
@@ -1009,18 +1015,27 @@ function Scale({ value, left, right, zones, current }: { value: number; left?: s
 
 // 데이터 출처 전체 — 섹션마다 한 줄로 둔 출처를 한곳에 모은다.
 export function SourceList({ detail, insights }: { detail: StockDetail; insights: StockInsights }) {
-  const rows: [string, DataProvenance][] = [
+  // 데이터가 없어 빈 상태로 보이는 항목은 "예시 데이터"가 아니라 "미제공"이다.
+  const { provenance: p } = insights;
+  const shown = (data: unknown, provenance: DataProvenance) => (data ? provenance : null);
+  const rows: [string, DataProvenance | null][] = [
     ["주가", detail.priceProvenance ?? detail.provenance],
     ["모델 신호·범위·근거", detail.provenance],
-    [TERM.sentiment, insights.provenance.sentiment],
-    ["최근 24시간 뉴스", insights.provenance.liveSentiment],
-    [TERM.supply, insights.provenance.supply],
-    [TERM.financial, insights.provenance.financial],
-    [TERM.contribution, insights.provenance.contributions],
+    [TERM.sentiment, shown(insights.sentiment, p.sentiment)],
+    ["최근 24시간 뉴스", shown(insights.liveSentiment, p.liveSentiment)],
+    [TERM.supply, shown(insights.supply, p.supply)],
+    [TERM.financial, shown(insights.financial, p.financial)],
+    [TERM.contribution, p.contributions],
     ...(insights.psychology
       ? ([["가격 흐름으로 본 분위기", insights.psychology.provenance]] as [string, DataProvenance][])
       : []),
-    ["체크포인트", combinedProvenance(detail.provenance, insights.provenance.supply, insights.provenance.sentiment)],
+    [
+      "체크포인트",
+      combinedProvenance(
+        detail.provenance,
+        ...[shown(insights.supply, p.supply), shown(insights.sentiment, p.sentiment)].filter((item) => item !== null),
+      ),
+    ],
   ];
   return (
     <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
@@ -1028,7 +1043,7 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
         <div key={label} className="contents">
           <dt className="text-body">{label}</dt>
           <dd className="m-0 min-w-0 [overflow-wrap:anywhere] [&>span]:max-w-full [&>span]:whitespace-normal">
-            {sourceText(provenance)}
+            {provenance ? sourceText(provenance) : "미제공"}
           </dd>
         </div>
       ))}

@@ -55,7 +55,7 @@ const hyundaiMotor: RecommendedStock = {
 const celltrion: RecommendedStock = {
   code: "068270",
   name: "셀트리온",
-  market: "KOSDAQ",
+  market: "KOSPI",
   riskGrade: 2,
   signalLight: "neutral",
   rankPercentile: 0.59,
