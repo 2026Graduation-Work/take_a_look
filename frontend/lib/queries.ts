@@ -295,8 +295,10 @@ async function queryPortfolio(
 
   return holdings.flatMap((holding) => {
     const stock = stockByCode.get(holding.stock_code);
-    return stock
-      ? [mapPortfolioHolding(holding, stock, predictionByCode.get(holding.stock_code), closes)]
+    const prediction = predictionByCode.get(holding.stock_code);
+    // 신호가 없는 종목은 중립으로 채우지 않는다(대시보드가 맵에서 빼고 개수만 알린다).
+    return stock && (closes.get(holding.stock_code)?.signal || prediction)
+      ? [mapPortfolioHolding(holding, stock, prediction, closes)]
       : [];
   });
 }

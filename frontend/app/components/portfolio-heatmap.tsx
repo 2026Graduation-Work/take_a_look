@@ -98,7 +98,7 @@ export default function PortfolioHeatmap({
                   role="listitem"
                   href={`/stocks/${holding.code}`}
                   title={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, ${signal.label} 신호`}
-                  className="flex min-h-0 min-w-0 flex-col justify-between overflow-hidden rounded-md px-3 py-2.5 text-white hover:text-white hover:no-underline hover:brightness-110"
+                  className="flex min-h-16 min-w-0 flex-col justify-between overflow-hidden rounded-md px-3 py-2 text-white hover:text-white hover:no-underline hover:brightness-110"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                 >
                   <span className="truncate text-base font-semibold">{holding.name}</span>
