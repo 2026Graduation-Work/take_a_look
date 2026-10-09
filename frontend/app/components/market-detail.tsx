@@ -64,7 +64,7 @@ export default function MarketDetail({ label, children }: { label: ReactNode; ch
             role="region"
             aria-label="시장 흔들림 설명"
             style={{ top: position.top, left: position.left }}
-            className="glass fixed z-50 w-[min(320px,calc(100vw-32px))] rounded-md bg-white/90 p-4 text-xs leading-5 text-body"
+            className="glass fixed z-50 w-[min(320px,calc(100vw-32px))] rounded-md bg-white/90 p-4 text-xs text-body"
           >
             {children}
           </div>,

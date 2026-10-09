@@ -466,7 +466,7 @@ function QuestionPage({
           <fieldset key={page.question.id} className="m-0 flex flex-col gap-5 border-0 p-0">
             <p className="m-0 text-sm text-muted">{page.axis.help}</p>
             <legend className="sr-only">{page.question.text}</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               {page.question.text}
             </h1>
             <div className="flex flex-col gap-2">
@@ -487,7 +487,7 @@ function QuestionPage({
         {page.kind === "experience" && (
           <fieldset className="m-0 flex flex-col gap-5 border-0 p-0">
             <legend className="sr-only">직접 투자한 경험은 얼마나 되나요?</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               직접 투자한 경험은 얼마나 되나요?
             </h1>
             <p className="m-0 text-sm text-muted">주식이나 ETF를 직접 사고판 기간으로 골라 주세요.</p>
@@ -509,7 +509,7 @@ function QuestionPage({
         {page.kind === "avoided" && (
           <fieldset className="m-0 flex flex-col gap-5 border-0 p-0">
             <legend className="sr-only">목록에서 빼고 싶은 종목 유형이 있나요?</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               목록에서 빼고 싶은 종목 유형이 있나요?
             </h1>
             <p className="m-0 text-sm text-muted">
@@ -539,7 +539,7 @@ function QuestionPage({
 
         {page.kind === "freeText" && (
           <div className="flex flex-col gap-5">
-            <h1 className="text-2xl font-semibold leading-snug">요즘 투자하면서 걱정되는 점이 있나요?</h1>
+            <h1 className="text-xl font-semibold">요즘 투자하면서 걱정되는 점이 있나요?</h1>
             <p className="m-0 text-sm text-muted">점수 계산에는 쓰지 않고 결과를 설명할 때 참고만 해요. 비워 둬도 돼요.</p>
             <textarea
               value={draft.freeText}
@@ -686,7 +686,7 @@ export function ResultView({
             ? "몇몇 질문의 답이 서로 엇갈려 유형을 단정하지 않았어요. 다시 답하거나 아래에서 직접 조정할 수 있어요."
             : BIT_SUMMARY[bit.type]}
         </p>
-        <p className="mt-3 text-xs leading-5 text-muted">
+        <p className="mt-3 text-xs text-muted">
           행동투자자 유형에서 착안한 분류예요. 금융회사의 투자자 등급과는 다른 것이고, 정보를 보여 주는
           순서와 체크포인트에만 쓰며 종목을 거르지 않아요.
         </p>
@@ -726,7 +726,7 @@ export function ResultView({
           <div className="mt-8 flex flex-col gap-2 rounded-lg bg-field px-4 py-3">
             <span className="text-sm font-medium text-body">답변 중 서로 부딪히는 부분이 있어요</span>
             {result.contradictions!.map((item) => (
-              <p key={item.id} className="m-0 text-sm leading-6 text-body">
+              <p key={item.id} className="m-0 text-sm text-body">
                 {item.observation} <span className="text-body">→ {item.follow_up_question}</span>
               </p>
             ))}
