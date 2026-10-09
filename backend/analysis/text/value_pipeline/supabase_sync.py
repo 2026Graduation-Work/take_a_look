@@ -25,7 +25,7 @@ DEFAULT_TARGETS: dict[str, str] = {
 }
 
 
-NEWSAPI_DAILY_CALLS = 20  # 하루 총 호출 상한(docs/ops/free-tier-budget.md). 종목당 1회
+NEWSAPI_DAILY_CALLS = 20  # 하루 총 호출 상한(docs/ops/free-tier-budget.md). 종목당 1회 + 남는 몫으로 잘린 종목만 2페이지
 
 
 def dynamic_targets(client: Any, today: date | None = None) -> dict[str, str]:
@@ -85,14 +85,24 @@ def run_live_sync(
     as_of: datetime | None = None,
 ) -> SyncResult:
     result = SyncResult()
-    for ticker, company_name in targets.items():
+    calls = 0
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return fetcher(*args, **kwargs)
+
+    for index, (ticker, company_name) in enumerate(targets.items()):
+        # 남은 종목의 첫 페이지 몫을 먼저 떼어 두고, 그래도 남으면 2페이지를 허용한다(하루 상한 안)
+        spare = NEWSAPI_DAILY_CALLS - calls - (len(targets) - index)
         try:
             output = news_run.run_live_cycle(
                 {ticker: company_name},
-                fetcher=fetcher,
+                fetcher=counted,
                 as_of=as_of,
                 page_size=100,
                 require_finbert=True,
+                extra_page=spare >= 1,
             )[ticker]
             supabase_store.persist_news_track(client, output)
         except supabase_store.SupabaseNoDataError as exc:
@@ -126,14 +136,24 @@ def reset_live_sync(
     live view intact. Historical rows are never selected by ``clear_live_news``.
     """
     result = SyncResult()
-    for ticker, company_name in targets.items():
+    calls = 0
+
+    def counted(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return fetcher(*args, **kwargs)
+
+    for index, (ticker, company_name) in enumerate(targets.items()):
+        # 남은 종목의 첫 페이지 몫을 먼저 떼어 두고, 그래도 남으면 2페이지를 허용한다(하루 상한 안)
+        spare = NEWSAPI_DAILY_CALLS - calls - (len(targets) - index)
         try:
             output = news_run.run_live_cycle(
                 {ticker: company_name},
-                fetcher=fetcher,
+                fetcher=counted,
                 as_of=as_of,
                 page_size=100,
                 require_finbert=True,
+                extra_page=spare >= 1,
             )[ticker]
             # Validate before deleting any persisted live rows.
             supabase_store._require_news_track(output)

@@ -121,7 +121,7 @@ Repository secret을 직접 등록한다. 값은 채팅·이슈·커밋에 남�
 
 workflow 이름은 `News Supabase Sync`다.
 
-- 평일 09:13 KST: `live --dynamic`으로 **기본 6종목 + 전체 사용자의 보유 ∪ 활성 관심 종목**의 직전 24시간 뉴스를 적재한다. 하루 호출 상한 20회(`NEWSAPI_DAILY_CALLS`). 넘으면 절반은 최근 등록 순, 나머지는 날마다 순환. 실행 전후 NewsAPI.ai 남은 횟수를 로그(`newsapi_targets`·`newsapi_usage`)에 남긴다.
+- 평일 09:13 KST: `live --dynamic`으로 **기본 6종목 + 전체 사용자의 보유 ∪ 활성 관심 종목**의 직전 24시간 뉴스를 적재한다. 하루 호출 상한 20회(`NEWSAPI_DAILY_CALLS`). 첫 페이지(최신 100건)가 꽉 차고 잘린 종목은 상한 안에서 2페이지(그다음 100건)를 더 받는다. 넘으면 절반은 최근 등록 순, 나머지는 날마다 순환. 실행 전후 NewsAPI.ai 남은 횟수를 로그(`newsapi_targets`·`newsapi_usage`)에 남긴다.
 - 같은 실행에서 `disclosures`: DART 하루 전체 공시(최근 3일)를 종목 마스터에 맞춰 적재(제목·날짜·유형만, 유형표 `docs/disclosure-kinds.md`).
 - 매주 월 07:30 KST: `financial-latest`로 같은 대상의 **최신 정기보고서**(분기·반기·사업) 재무를 접수번호가 바뀐 종목만 갱신.
 
