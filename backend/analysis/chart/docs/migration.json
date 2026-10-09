@@ -1,0 +1,158 @@
+{
+  "files": 48034,
+  "bytes": 33073679216,
+  "verification": "All 48034 file contents matched SHA-256 after relocation, before logic changes.",
+  "full_record": "workspace/archive/pre-refactor/migration-files.json",
+  "full_record_sha256": "fbab580d1dbc4751344aad37a88cf82a4b9f58bba46990a93683a2c03ed3d16c",
+  "moves": [
+    [
+      "data/datasets",
+      "workspace/experiments/datasets"
+    ],
+    [
+      "data/runs",
+      "workspace/experiments/runs/legacy-data-runs"
+    ],
+    [
+      "data",
+      "workspace/archive/data"
+    ],
+    [
+      "serving/data",
+      "workspace/serving"
+    ],
+    [
+      "experiments/cache",
+      "workspace/experiments/cache/predictions"
+    ],
+    [
+      "experiments/train_src/cache",
+      "workspace/experiments/cache/training"
+    ],
+    [
+      "experiments/results/README.md",
+      "archive/docs/results-README.md"
+    ],
+    [
+      "experiments/results/2026-06-progress-roadmap.md",
+      "archive/docs/2026-06-progress-roadmap.md"
+    ],
+    [
+      "experiments/results/legacy_screening/SELECTION_REPORT.md",
+      "archive/docs/SELECTION_REPORT.md"
+    ],
+    [
+      "experiments/results",
+      "workspace/experiments/runs"
+    ],
+    [
+      "core/local_config.py",
+      "experiments/config.py"
+    ],
+    [
+      "core/local_dataset.py",
+      "experiments/dataset/pipeline.py"
+    ],
+    [
+      "core/local_features.py",
+      "shared/features/builder.py"
+    ],
+    [
+      "core/bulk_prices.py",
+      "shared/data/bulk_prices.py"
+    ],
+    [
+      "core/models",
+      "workspace/archive/legacy-models"
+    ],
+    [
+      "core",
+      "archive/legacy/core"
+    ],
+    [
+      "data_collectors/price_collector.py",
+      "shared/data/providers.py"
+    ],
+    [
+      "data_collectors/trading_calendar.py",
+      "shared/data/trading_calendar.py"
+    ],
+    [
+      "data_collectors/preprocess_data.py",
+      "experiments/dataset/preprocess.py"
+    ],
+    [
+      "data_collectors",
+      "workspace/archive/data_collectors-remainder"
+    ],
+    [
+      "tests",
+      "shared/tests"
+    ],
+    [
+      "experiments/features/flow.py",
+      "shared/features/flow.py"
+    ],
+    [
+      "serving/refresh_local_pack.py",
+      "experiments/export/refresh_pack.py"
+    ],
+    [
+      "serving/build_pack.py",
+      "experiments/export/build_pack.py"
+    ],
+    [
+      "serving/internal/samples.py",
+      "experiments/export/samples.py"
+    ],
+    [
+      "configs",
+      "experiments/configs/datasets"
+    ],
+    [
+      "ONBOARDING.md",
+      "archive/docs/ONBOARDING.md"
+    ],
+    [
+      "LOCAL_PIPELINE.md",
+      "archive/docs/LOCAL_PIPELINE.md"
+    ],
+    [
+      "FLOW_COLLECTION_DIAGNOSIS.md",
+      "archive/docs/FLOW_COLLECTION_DIAGNOSIS.md"
+    ],
+    [
+      "scratch",
+      "archive/legacy/scratch"
+    ],
+    [
+      "experiments/check_data_integrity.py",
+      "archive/legacy/check_data_integrity.py"
+    ],
+    [
+      "experiments/scripts",
+      "archive/legacy/scripts"
+    ],
+    [
+      "experiments/result_dashboard",
+      "archive/legacy/result_dashboard"
+    ],
+    [
+      ".pytest_cache",
+      "workspace/archive/pytest-cache"
+    ],
+    [
+      "__pycache__",
+      "workspace/archive/chart-pycache"
+    ]
+  ],
+  "tracked_baseline_commit": "095584b",
+  "original_branch": "feat/chart-local-pipeline-contract",
+  "baseline_tests": {
+    "passed": 217,
+    "failed": 9,
+    "skipped": 3,
+    "seconds": 107.38
+  },
+  "baseline_ruff": "passed"
+}
