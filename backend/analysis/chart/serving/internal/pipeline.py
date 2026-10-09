@@ -270,8 +270,10 @@ def run(args):
         raise ValueError("Daily inference requires a pack matching the corrected feature builder")
     store = SupabaseStore()
     replay = getattr(args, "replay", False)
-    from .krx import install_request_timeout
+    from .krx import authenticated_stock, install_request_timeout
     install_request_timeout()
+    if os.environ.get("KRX_ID") and os.environ.get("KRX_PW"):
+        authenticated_stock()
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:
@@ -280,11 +282,11 @@ def run(args):
     batch, snapshots = build_batch(as_of, pack, paths, *collected)
     if historical_test:
         batch["result"]["historical_test"] = True
+    batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
     out = root / "batches" / batch["id"]
     out.mkdir(parents=True, exist_ok=True)
     (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
     (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
-    batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
     if args.publish:
         with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
             store.publish(batch, snapshots, pack)
@@ -370,6 +372,7 @@ def run_preview(args):
         store.upload_features(args.code, as_of, pack["feature_builder_id"], digest, current)
     frames = {args.code: (raw, current.iloc[0].to_dict(), current)}
     batch, snapshots = build_batch(as_of, pack, paths, universe, frames, {}, {args.code: digest})
+    batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
     out = root / "batches" / batch["id"]
     out.mkdir(parents=True, exist_ok=True)
     (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
