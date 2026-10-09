@@ -22,6 +22,7 @@ import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
 import { holdingAlertsOutside } from "@/lib/recommendation-filter";
 import { loadStrongSignals, type StrongSignal } from "@/lib/strong-signals";
+import { loadDailyChanges, type DailyChange } from "@/lib/daily-changes";
 import type { RiskFlag } from "@/lib/types";
 import {
   getSavedHoldingsSnapshot,
@@ -152,6 +153,17 @@ export default function Dashboard(initialData: DashboardData) {
         ];
       })
     : holdings;
+  // 어제와 달라진 근거: 보유 ∪ 관심 종목
+  const changeKey = JSON.stringify([...new Map([...(savedHoldings ?? holdings), ...watchlist].map(({ code, name }) => [code, name]))]);
+  const [changes, setChanges] = useState<DailyChange[] | null | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    const stocks = (JSON.parse(changeKey) as [string, string][]).map(([code, name]) => ({ code, name }));
+    void loadDailyChanges(getSupabaseClient(), stocks).then((next) => active && setChanges(next));
+    return () => {
+      active = false;
+    };
+  }, [changeKey]);
   const holdingsWithoutSignal = savedHoldings
     ? savedHoldings.length - activeHoldings.length
     : 0;
@@ -256,6 +268,8 @@ export default function Dashboard(initialData: DashboardData) {
                 {summary}
               </h1>
             </section>
+
+            {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
 
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-6">
               <div className="flex flex-col gap-8">
@@ -368,6 +382,35 @@ export default function Dashboard(initialData: DashboardData) {
 
       <DisclaimerFooter fixed={false} />
     </div>
+  );
+}
+
+// 보유·관심 종목에서 직전 대비 바뀐 사실 최대 3줄. 판단 문구 없이 무엇이·어떻게 + 상세 링크.
+function DailyChanges({ changes }: { changes: DailyChange[] }) {
+  return (
+    <section aria-labelledby="daily-changes" className="flex flex-col gap-2">
+      <h2 id="daily-changes" className="eyebrow px-1">어제와 달라진 근거</h2>
+      {changes.length ? (
+        <ul className="group-list m-0 list-none p-0">
+          {changes.map((change) => (
+            <li key={`${change.code}:${change.what}`}>
+              <Link
+                href={`/stocks/${change.code}`}
+                className="flex min-h-11 items-center gap-3 px-5 py-3 text-sm text-ink hover:bg-field hover:text-ink hover:no-underline"
+              >
+                <span className="flex-none font-medium">{change.name}</span>
+                <span className="min-w-0 flex-1 truncate text-body">
+                  {change.what} · <span className="tabular-nums">{change.how}</span>
+                </span>
+                <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="m-0 px-1 text-sm text-body">어제와 달라진 근거가 없어요.</p>
+      )}
+    </section>
   );
 }
 
