@@ -97,9 +97,9 @@ def diagnose():
         if not stored.empty:
             fresh = fetch_incremental_prices("005930", history_start, as_of, stored,
                                              {as_of: fetch_daily_prices(as_of)})
-            before = stored.set_index("Date").reindex(fresh.Date).reset_index(drop=True)
+            before = stored.set_index("Date").reindex(fresh.Date).reset_index(drop=True).reindex(columns=fresh.columns)
             fields = {}
-            for column in fresh.columns.drop("Date"):
+            for column in fresh.select_dtypes(include="number").columns:
                 left, right = fresh[column].to_numpy(float), before[column].to_numpy(float)
                 unequal = ~((left == right) | (np.isnan(left) & np.isnan(right)))
                 if unequal.any():

@@ -66,6 +66,14 @@ class SupabaseStore:
                 status = exc.code if isinstance(exc, HTTPError) else None
                 transient = status is None or status in {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
                 if isinstance(exc, HTTPError):
+                    if path.startswith("/storage/v1/object/authenticated/"):
+                        try:
+                            error = json.loads(exc.read())
+                        except (ValueError, OSError):
+                            error = {}
+                        if exc.code == 404 or str(error.get("statusCode")) == "404" or error.get("code") == "NoSuchKey":
+                            exc.close()
+                            raise FileNotFoundError("Private storage object absent") from None
                     exc.close()
                 if not retryable or not transient or attempt == 2:
                     detail = f"HTTP {status}" if status else type(exc).__name__
@@ -169,6 +177,38 @@ class SupabaseStore:
                           rows[offset:offset + 500], prefer="resolution=merge-duplicates,return=minimal")
 
 
+    def _load_private_frame(self, key):
+        try:
+            data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" + quote(key, safe="/"))
+        except FileNotFoundError:
+            return None
+        return pd.read_parquet(io.BytesIO(data))
+
+    def _save_private_frame(self, key, frame):
+        data = io.BytesIO()
+        frame.to_parquet(data, index=False)
+        self._request("POST", "/storage/v1/object/chart-features/" + quote(key, safe="/"),
+                      data.getvalue(), content_type="application/octet-stream",
+                      extra_headers={"x-upsert": "true"})
+
+    def load_flow_day(self, day):
+        return self._load_private_frame(f"investor-flows-v3/{day}.parquet")
+
+    def save_flow_day(self, day, frame):
+        self._save_private_frame(f"investor-flows-v3/{day}.parquet", frame)
+
+    def load_price_history(self, code):
+        return self._load_private_frame(f"raw-history-v3/{code}.parquet")
+
+    def save_price_history(self, code, frame):
+        self._save_private_frame(f"raw-history-v3/{code}.parquet", frame)
+
+    def load_raw_prices(self, code, as_of):
+        return self._load_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet")
+
+    def save_raw_prices(self, code, as_of, frame):
+        self._save_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet", frame)
+
     def upload_features(self, code, as_of, builder_id, input_hash, frame):
         if not code or not builder_id or len(input_hash) != 64:
             raise ValueError("Invalid feature storage identity")
@@ -185,6 +225,22 @@ class SupabaseStore:
         self._request("POST", "/rest/v1/chart_feature_snapshots?on_conflict=stock_code,as_of,builder_id,input_sha256",
                       [record], prefer="resolution=merge-duplicates,return=minimal")
         return record
+
+
+    def load_features(self, code, as_of, builder_id, input_hash):
+        path = ("/rest/v1/chart_feature_snapshots?stock_code=eq." + quote(code) +
+                "&as_of=eq." + quote(as_of) + "&builder_id=eq." + quote(builder_id) +
+                "&input_sha256=eq." + quote(input_hash) +
+                "&select=storage_path,feature_sha256")
+        rows = self._request("GET", path)
+        if not rows:
+            return None
+        item = rows[0]
+        data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" +
+                             quote(item["storage_path"], safe="/"))
+        if hashlib.sha256(data).hexdigest() != item["feature_sha256"]:
+            raise ValueError("Stored feature checksum mismatch")
+        return pd.read_parquet(io.BytesIO(data))
 
 
     def _existing_batch(self, batch_id):

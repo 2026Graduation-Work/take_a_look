@@ -4,7 +4,9 @@ import hashlib
 import json
 import math
 
+import lightgbm as lgb
 import numpy as np
+import pandas as pd
 
 from .progress import stage
 
@@ -59,6 +61,14 @@ WINDOW_INFO = {
 }
 
 
+for investor, label in (("individual", "개인"), ("institution", "기관"), ("foreign", "외국인")):
+    for window in (1, 5, 20):
+        BASE_INFO[f"flow_{investor}_{window}"] = (
+            f"{window}일 {label} 순매수 비중",
+            f"{window}거래일 {label} 순매수 거래대금 / 같은 기간 KRX 총 거래대금",
+        )
+
+
 def feature_info(name):
     if name in BASE_INFO:
         return BASE_INFO[name]
@@ -71,6 +81,8 @@ def feature_info(name):
 
 def infer_batch(model, features, *, class_index=None):
     """One model call per horizon for all valid current stock rows."""
+    if isinstance(model, (str, bytes)) or hasattr(model, "__fspath__"):
+        model = lgb.Booster(model_file=str(model))
     names = model.feature_name()
     if features.empty or set(names) - set(features):
         raise ValueError("Compatible feature rows required")
@@ -113,3 +125,10 @@ def infer_batch(model, features, *, class_index=None):
                         "up": float(scores[row_index, 2])}, features_top, feature_hash,
                        float(np.abs(row_contrib[:-1]).sum())))
     return result
+
+
+def infer(model_path, features, as_of):
+    frame = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
+    if len(frame) != 1:
+        raise ValueError("Exactly one compatible feature row required")
+    return infer_batch(model_path, frame)[0]

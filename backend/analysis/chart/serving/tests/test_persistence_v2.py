@@ -10,7 +10,23 @@ from serving.internal.storage import SupabaseStore, _pack_releases
 
 
 def v2_snapshot():
-    return json.loads((Path(__file__).parents[1] / "contracts/examples/normal.json").read_text())
+    value = json.loads((Path(__file__).parents[1] / "contracts/examples/normal.json").read_text())
+    value["contract"] = "chart_signal_detail_v2"
+    value["pack_id"] = "pack-1"
+    value.pop("cases", None)
+    value["distribution"] = {
+        "status": "available", "reason": None,
+        "policy_id": "multi_stock_up_sigma_001_005_v1",
+        "current": {"up": value["inference"]["scores"]["up"],
+                    "sigma": value["inference"]["sigma"]},
+        "tolerances": {"up_absolute": 0.01, "sigma_relative": 0.05},
+        "sample_count": 1, "stock_count": 1,
+        "period_start": "2024-01-01", "period_end": "2024-01-01",
+        "observed_through": "2024-02-01", "by_fold": {"fold-1": 1},
+        "histogram": {"bins": [{"left": -2, "right": 0, "count": 1}],
+                      "central_68": {"low": -1, "high": -1}},
+    }
+    return value
 
 
 def test_v2_one_case_and_partition_guard():
@@ -93,3 +109,23 @@ def test_pack_release_pair_and_unavailable_snapshot():
     value = unavailable_snapshot(code="005930", stock_name="삼성전자", as_of="2024-01-01",
                                  horizon=5, pack_id="pack-1", batch_id="batch", reason="no_prices")
     assert value["distribution"]["status"] == "unavailable"
+
+
+def test_private_storage_missing_object_is_a_cache_miss(monkeypatch):
+    import io
+    from urllib.error import HTTPError
+
+    from serving.internal import storage
+
+    store = storage.SupabaseStore("https://example.supabase.co", "secret")
+    def missing(*args, **kwargs):
+        raise HTTPError("https://example.supabase.co", 400, "Bad Request", {},
+                        io.BytesIO(b'{"statusCode":404,"code":"NoSuchKey"}'))
+    monkeypatch.setattr(storage, "urlopen", missing)
+    assert store.load_flow_day("2026-10-06") is None
+    def forbidden(*args, **kwargs):
+        raise HTTPError("https://example.supabase.co", 403, "Forbidden", {},
+                        io.BytesIO(b'{"message":"denied"}'))
+    monkeypatch.setattr(storage, "urlopen", forbidden)
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        store.load_flow_day("2026-10-06")

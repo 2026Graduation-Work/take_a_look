@@ -19,7 +19,7 @@ def test_confirmed_day_handles_delayed_schedule(monkeypatch, hour, expected):
 @pytest.mark.parametrize("replay", [False, True])
 def test_past_date_only_replays_when_requested(monkeypatch, tmp_path, replay):
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test"}, {}))
+    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}))
     monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
     calls = []
     def collect(*args, **kwargs):

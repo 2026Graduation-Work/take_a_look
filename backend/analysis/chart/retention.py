@@ -17,6 +17,32 @@ ARTICLE_DAYS = 90
 BUCKET = "chart-features"
 
 
+
+def prune_corrected_inputs(store, cutoff):
+    """Keep the full current history; expire dated replay/flow objects only."""
+    def listing(prefix):
+        rows = []
+        while True:
+            page = store._request("POST", f"/storage/v1/object/list/{BUCKET}",
+                                  {"prefix": prefix, "limit": 1000, "offset": len(rows),
+                                   "sortBy": {"column": "name", "order": "asc"}})
+            rows.extend(page)
+            if len(page) < 1000:
+                return rows
+    paths = []
+    for folder in listing("raw-prices-v3"):
+        name = folder["name"]
+        if len(name) == 10 and name < cutoff:
+            prefix = f"raw-prices-v3/{name}"
+            paths.extend(f"{prefix}/{item['name']}" for item in listing(prefix))
+    for item in listing("investor-flows-v3"):
+        if item["name"][:10] < cutoff:
+            paths.append(f"investor-flows-v3/{item['name']}")
+    for offset in range(0, len(paths), 1000):
+        store._request("DELETE", f"/storage/v1/object/{BUCKET}", {"prefixes": paths[offset:offset + 1000]})
+    return len(paths)
+
+
 def main(today=None):
     store = SupabaseStore()
     today = today or date.today()
@@ -36,11 +62,13 @@ def main(today=None):
     if rows:
         store._request("DELETE", "/rest/v1/chart_feature_snapshots?as_of=lt." + quote(cutoff), prefer="return=minimal")
 
+    corrected_objects = prune_corrected_inputs(store, cutoff)
+
     article_cutoff = (today - timedelta(days=ARTICLE_DAYS)).isoformat()
     store._request("DELETE", "/rest/v1/news_articles?article_date=lt." + quote(article_cutoff), prefer="return=minimal")
     store._request("DELETE", "/rest/v1/disclosures?filed_on=lt." + quote(article_cutoff), prefer="return=minimal")
     print(json.dumps({"event": "retention", "pruned_batches": pruned, "feature_rows": len(rows),
-                      "storage_objects": len(paths), "feature_cutoff": cutoff, "article_cutoff": article_cutoff}))
+                      "storage_objects": len(paths), "corrected_objects": corrected_objects, "feature_cutoff": cutoff, "article_cutoff": article_cutoff}))
 
 
 if __name__ == "__main__":
