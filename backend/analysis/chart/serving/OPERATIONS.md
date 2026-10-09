@@ -59,3 +59,8 @@ gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart p
 pack 생성 보고서의 원본 예측 수·사용 표본 수·제외 사유를 확인한다. 기존 태그라면 `gh release upload`를 사용한다. 새 pack으로 바꿀 때 H5/H20을 함께 교체하고 `config.yaml` 네 값을 한 번에 변경한다. 이전 설정으로 되돌리면 이전 pack을 다시 쓸 수 있다.
 
 Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+
+
+## 첫 전체 이력 수집
+
+가격 전체 이력을 가진 종목이 충분하지 않으면, 첫 실행은 KRX 날짜별 전체시장 비수정 OHLC 응답을 종목 간 공유한다. 기존 private history가 없는 종목이 `max(20, 전체 종목 수 // 10)`개를 초과할 때 사용한다. 종목별 수정가격 조회와 결합할 때 날짜가 완전히 일치하는 원본만 재사용한다. 조회 실패/누락은 개별 원본 조회로 보충하며, 각 날짜 응답은 runner 내부 SHA 검증 캐시에 보존한다. 별도 로컬 가격 데이터 archive는 공개 Release에 업로드하지 않는다. Actions 제한은 첫 실행에 맞춰 240분이다.

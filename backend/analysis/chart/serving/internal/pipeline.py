@@ -23,7 +23,7 @@ from .flows import collect_flows
 from .hashing import canonical_hash
 from .inference import infer_batch
 from .pack import load_pack
-from .prices import fetch_prices, price_snapshot
+from .prices import bootstrap_raw_prices, fetch_prices, price_snapshot
 from .progress import report, stage
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
@@ -95,6 +95,13 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
     flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
+    previous_prices = {}
+    if not replay and not historical_test:
+        for stock_code in universe.Code:
+            previous_prices[stock_code] = store.load_price_history(stock_code)
+        missing = [code for code, frame in previous_prices.items() if frame is None]
+        if len(missing) > max(20, len(universe) // 10):
+            bootstrap_raw_prices(data_root(), missing, days)
     frames, unavailable, raw_hashes = {}, {}, {}
     for index, row in enumerate(universe.itertuples(), 1):
         code = row.Code
@@ -109,7 +116,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
                 raw = stored
             else:
-                previous = None if historical_test else store.load_price_history(code)
+                previous = previous_prices.get(code)
                 request_start = start if previous is None else recent_start
                 fresh = _retry_fetch(code, request_start, as_of)
                 if previous is not None:

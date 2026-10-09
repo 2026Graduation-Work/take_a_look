@@ -1,12 +1,14 @@
 """Adjusted KRX OHLCV with actual turnover-derived adjusted VWAP."""
 
+import json
+import os
 import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from .progress import stage
+from .progress import report, stage
 
 REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
@@ -26,7 +28,18 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
     start, end = start_date.replace("-", ""), end_date.replace("-", "")
     adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
-    raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
+    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    seed = root / "bootstrap_raw" / f"{code}.parquet"
+    raw = pd.DataFrame()
+    if seed.is_file():
+        cached = pd.read_parquet(seed).set_index("Date")
+        raw = cached.loc[cached.index.isin(adjusted.index)].drop(columns="Code").rename(columns={
+            "RawOpen": "시가", "RawHigh": "고가", "RawLow": "저가", "RawClose": "종가",
+            "RawVolume": "거래량", "Amount": "거래대금"})
+        if not raw.index.equals(adjusted.index):
+            raw = pd.DataFrame()
+    if raw.empty:
+        raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
     if adjusted.empty or raw.empty:
         raise ValueError(f"KRX prices unavailable for {code}")
     adjusted = adjusted.rename(columns={"시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "등락률": "Change"})
@@ -37,6 +50,39 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     adjusted["Change"] = adjusted["Close"].pct_change(fill_method=None) * 100
     adjusted.index.name = "Date"
     return attach_actual_vwap(adjusted, raw).reset_index()
+
+
+def bootstrap_raw_prices(root, codes, trading_days):
+    """Share historical daily raw requests when many stocks lack archives."""
+    from core.bulk_prices import fetch_day, validate_day
+    from core.local_config import atomic_json, atomic_parquet
+    from core.local_dataset import sha256
+    from data_collectors import price_collector as source
+
+    cache_root = root / "bootstrap_days"
+    parts = []
+    days = pd.DatetimeIndex(pd.to_datetime(sorted(trading_days)))
+    for index, day in enumerate(days, 1):
+        path = cache_root / f"{day:%Y-%m-%d}.parquet"
+        meta = path.with_suffix(".json")
+        frame = None
+        if path.is_file() and meta.is_file():
+            metadata = json.loads(meta.read_text())
+            if metadata.get("sha256") == sha256(path):
+                frame = validate_day(pd.read_parquet(path), day)
+                if not set(codes).issubset(metadata.get("codes", [])):
+                    frame = None
+        if frame is None:
+            frame = fetch_day(source, day, lambda event: report("bootstrap_price_request", **event))
+            frame = frame.loc[frame.Code.isin(codes)]
+            atomic_parquet(path, frame)
+            atomic_json(meta, {"sha256": sha256(path), "codes": codes})
+        parts.append(frame)
+        if index % 25 == 0 or index == len(days):
+            report("bootstrap_price_days", completed=index, total=len(days))
+    panel = pd.concat(parts, ignore_index=True)
+    for code, frame in panel.groupby("Code", sort=False):
+        atomic_parquet(root / "bootstrap_raw" / f"{code}.parquet", frame)
 
 
 def load_prices(path: str | Path) -> pd.DataFrame:
@@ -88,7 +134,7 @@ def fetch_incremental_prices(code, start, as_of, stored, daily):
     """Refresh adjusted bases, while reusing archived raw prices and daily market reads."""
     adjusted = fetch_adjusted_prices(code, start, as_of)
     parts = []
-    if not stored.empty:
+    if not stored.empty and {"RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"}.issubset(stored):
         parts.append(stored.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]].rename(
             columns={"RawOpen": "시가", "RawHigh": "고가", "RawLow": "저가", "RawClose": "종가", "RawVolume": "거래량", "Amount": "거래대금"}))
     for day, market in daily.items():

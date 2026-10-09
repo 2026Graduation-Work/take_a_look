@@ -105,3 +105,8 @@ const { data, error } = await supabase
 | GitHub Release 업로드·Actions 수동/예약 실행 | 설정은 있으나 실실행 확인 전. |
 
 실행 명령과 로컬 Supabase 조회는 [OPERATIONS.md](OPERATIONS.md)에 모았다. 검증 상태는 위 표에 기록한다.
+
+
+## 첫 전체 이력 수집
+
+가격 전체 이력을 가진 종목이 충분하지 않으면, 첫 실행은 KRX 날짜별 전체시장 비수정 OHLC 응답을 종목 간 공유한다. 기존 private history가 없는 종목이 `max(20, 전체 종목 수 // 10)`개를 초과할 때 사용한다. 종목별 수정가격 조회와 결합할 때 날짜가 완전히 일치하는 원본만 재사용한다. 조회 실패/누락은 개별 원본 조회로 보충하며, 각 날짜 응답은 runner 내부 SHA 검증 캐시에 보존한다. 별도 로컬 가격 데이터 archive는 공개 Release에 업로드하지 않는다. Actions 제한은 첫 실행에 맞춰 240분이다.

@@ -159,3 +159,44 @@ def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
                           index=pd.to_datetime(["2026-10-06"]))
     monkeypatch.setattr(stock, "get_market_ohlcv_by_date", lambda *args, **kwargs: source.copy())
     assert fetch_prices("00088K", "2026-10-06", "2026-10-06").Close.iloc[0] == 100
+
+
+def test_bootstrap_shares_market_reads_and_reuses_verified_cache(monkeypatch, tmp_path):
+    from core import bulk_prices
+    from serving.internal.prices import bootstrap_raw_prices
+
+    days = pd.to_datetime(["2024-01-02", "2024-01-03"])
+    calls = []
+    def fetch(source, day, record):
+        calls.append(day)
+        return pd.DataFrame({"Date": [day] * 2, "Code": ["005930", "068270"],
+                             "RawOpen": [100, 100], "RawHigh": [110, 110], "RawLow": [90, 90],
+                             "RawClose": [100, 100], "RawVolume": [10, 10], "Amount": [1000, 1000]})
+    monkeypatch.setattr(bulk_prices, "fetch_day", fetch)
+    bootstrap_raw_prices(tmp_path, ["005930", "068270"], set(days.date))
+    assert len(calls) == 2
+    bootstrap_raw_prices(tmp_path, ["005930", "068270"], set(days.date))
+    assert len(calls) == 2
+    assert len(pd.read_parquet(tmp_path / "bootstrap_raw/005930.parquet")) == 2
+
+
+def test_replay_uses_saved_features_for_compact_price_archive(monkeypatch):
+    days = pd.bdate_range("2024-01-02", periods=75)
+    archive = pd.DataFrame({"Date": days[-60:], "Close": 100., "Volume": 10.})
+    archive.attrs["input_sha256"] = "a" * 64
+    current = pd.DataFrame({"Date": [days[-1]], "Close": [100.], "Sigma": [.02]})
+    class Store:
+        def load_universe(self, day):
+            return pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
+        def load_raw_prices(self, *args):
+            return archive
+        def load_features(self, code, day, builder, digest):
+            assert digest == "a" * 64 and builder == pipeline.BUILDER_ID
+            return current
+        def upload_features(self, *args):
+            pass
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(days.date))
+    monkeypatch.setattr(pipeline, "build_feature_frame", lambda *args: pytest.fail("Recomputed a truncated window"))
+    result = pipeline.collect(str(days[-1].date()), Store(), replay=True)
+    assert result[3] == {"005930": "a" * 64}
+    assert result[1]["005930"][1]["Sigma"] == .02
