@@ -11,8 +11,12 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
     if horizon not in (5, 20):
         raise ValueError("Only H5/H20 supported")
     predictions = pd.read_parquet(prediction_file)
-    if list(predictions.columns) != ["Date", "Code", "Prob"]:
+    score = "prob_up" if "prob_up" in predictions else "Prob"
+    if not {"Date", "Code", score} <= set(predictions):
         raise ValueError("Unexpected prediction columns")
+    if "fold_id" in predictions and not predictions.fold_id.eq(pd.to_datetime(predictions.Date).dt.year - 2019).all():
+        raise ValueError("Prediction fold/year mismatch")
+    predictions = predictions[["Date", "Code", score]].rename(columns={score: "Prob"})
     if predictions.duplicated(["Code", "Date"]).any():
         raise ValueError("Duplicate prediction key")
     predictions["Date"] = pd.to_datetime(predictions.Date)

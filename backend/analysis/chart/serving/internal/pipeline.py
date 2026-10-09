@@ -12,30 +12,23 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import lightgbm as lgb
+import numpy as np
 import pandas as pd
 import yaml
 
-from ..contracts import validate_snapshot
 from .calendar import refresh_krx_trading_days
 from .distribution import SampleIndex
-from .features import build_feature_frame
+from .features import BUILDER_ID, build_feature_frame
+from .flows import collect_flows
 from .hashing import canonical_hash
 from .inference import infer_batch
 from .pack import load_pack
-from .prices import (
-    changed_price_rows,
-    fetch_daily_prices,
-    fetch_incremental_prices,
-    fetch_prices,
-    price_snapshot,
-)
+from .prices import fetch_prices, price_snapshot
 from .progress import report, stage
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
-# Service stocks outside KOSPI. Outside the training universe: shown as "모델 검증 전".
-EXTRA_CODES = ("247540",)  # 에코프로비엠 (KOSDAQ)
 
 
 def official_day(requested=None):
@@ -57,7 +50,6 @@ def fetch_universe(as_of, code=None):
         codes = stock.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI")
         if not 500 <= len(codes) <= 1200:
             raise ValueError("Invalid KOSPI universe size")
-        codes = [*codes, *(item for item in EXTRA_CODES if item not in codes)]
     rows = pd.DataFrame({"Code": codes, "Name": [stock.get_market_ticker_name(item) for item in codes]})
     if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all()
             or rows.Name.isna().any() or not rows.Name.astype(str).str.strip().all()):
@@ -71,12 +63,12 @@ def frame_hash(frame):
     return hashlib.sha256(buffer.getvalue()).hexdigest()
 
 
-def _retry_fetch(code, start, as_of, *, stored=None, daily=None):
+def _retry_fetch(code, start, as_of):
     for attempt in range(3):
         try:
-            if daily is None:
-                return fetch_prices(code, start, as_of)
-            return fetch_incremental_prices(code, start, as_of, stored, daily)
+            return fetch_prices(code, start, as_of)
+        except ValueError:
+            raise
         except (OSError, TimeoutError, ConnectionError):
             if attempt == 2:
                 raise
@@ -84,69 +76,90 @@ def _retry_fetch(code, start, as_of, *, stored=None, daily=None):
 
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
-    start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
-    with stage("krx_calendar", as_of=as_of):
-        days = refresh_krx_trading_days(start, as_of)
-    if pd.Timestamp(as_of).date() not in days:
-        return None
+    start = "2016-01-01"
+    recent_start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
     if replay:
         universe = store.load_universe(as_of)
         if universe.empty:
             raise ValueError("Historical date lacks an archived universe")
+        days = refresh_krx_trading_days(start, as_of)
+        if pd.Timestamp(as_of).date() not in days:
+            return None
     else:
-        with stage("krx_universe", as_of=as_of):
-            universe = fetch_universe(as_of, code=code)
+        days = refresh_krx_trading_days(start, as_of)
+        if pd.Timestamp(as_of).date() not in days:
+            return None
+        universe = fetch_universe(as_of, code=code)
         if not historical_test:
-            with stage("save_universe", as_of=as_of, stocks=len(universe)):
-                store.save_universe(as_of, universe)
+            store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
-    stored_panel, daily, updates = {}, {}, {}
-    if not historical_test:
-        with stage("load_saved_price_panel", as_of=as_of):
-            stored_panel = store.load_price_panel(start, as_of)
-        if not replay:
-            archived_days = {pd.Timestamp(day).date() for code in universe.Code
-                             for day in stored_panel.get(code, pd.DataFrame(columns=["Date"])).Date}
-            for day in sorted((days - archived_days) | {pd.Timestamp(as_of).date()}):
-                date = day.isoformat()
-                daily[date] = fetch_daily_prices(date)
+    flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
     frames, unavailable, raw_hashes = {}, {}, {}
     for index, row in enumerate(universe.itertuples(), 1):
         code = row.Code
-        started = time.perf_counter()
         report("stock_start", stock_code=code, index=index, total=len(universe))
         try:
-            stored = pd.DataFrame() if historical_test else stored_panel.get(code, pd.DataFrame())
             if replay:
+                archived = store.load_raw_prices(code, as_of)
+                if archived is None:
+                    raise ValueError(f"Corrected raw input archive absent for {code}/{as_of}")
+                stored = archived
                 if stored.empty or stored.Date.max().date().isoformat() != as_of:
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
                 raw = stored
             else:
-                fresh = (_retry_fetch(code, start, as_of) if historical_test else
-                         _retry_fetch(code, start, as_of, stored=stored, daily=daily))
+                previous = None if historical_test else store.load_price_history(code)
+                request_start = start if previous is None else recent_start
+                fresh = _retry_fetch(code, request_start, as_of)
+                if previous is not None:
+                    previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
+                    overlap = previous[["Date", "Close", "RawClose", "RawVolume", "Amount"]].merge(
+                        fresh[["Date", "Close", "RawClose", "RawVolume", "Amount"]], on="Date", suffixes=("_old", "_new"))
+                    revised = overlap.empty or any(
+                        not np.allclose(overlap[f"{col}_old"], overlap[f"{col}_new"],
+                                                      rtol=1e-10, atol=1e-10, equal_nan=True)
+                        for col in ("Close", "RawClose", "RawVolume", "Amount"))
+                    if revised:
+                        fresh = _retry_fetch(code, start, as_of)
+                    else:
+                        fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
-                if historical_test:
-                    store.upsert_prices(code, fresh)
-                else:
-                    updates[code] = changed_price_rows(fresh, stored)
+                # Requery the entire feature window: adjusted past prices can change.
+                store.upsert_prices(code, fresh.loc[pd.to_datetime(fresh.Date).ge(pd.Timestamp(recent_start))])
                 raw = fresh
+                raw["Code"] = code
+                raw = raw.drop(columns=[c for c in raw if c.startswith(("Individual_", "Institution_", "Foreign_"))], errors="ignore")
+                if not flow.empty:
+                    raw = raw.merge(flow.loc[flow.Code.eq(code)].drop(columns="Code"),
+                                    on="Date", how="left", validate="one_to_one")
+                if not historical_test:
+                    store.save_price_history(code, raw)
+
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"
                 continue
-            with stage("build_features", stock_code=code, rows=len(raw)):
+            digest = raw.attrs.get("input_sha256") if replay else None
+            if digest:
+                current = store.load_features(code, as_of, BUILDER_ID, digest)
+                if current is None:
+                    raise ValueError(f"Archived corrected feature input absent for {code}/{as_of}")
+            else:
                 features = build_feature_frame(raw, days)
-            current = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
+                current = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
             if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
                 unavailable[code] = "feature_row_missing"
                 continue
-            digest = frame_hash(raw)
-            if historical_test:
-                store.upload_features(code, as_of, "alpha158_actual_vwap_v1", digest, features)
-            frames[code] = (raw, current.iloc[0].to_dict())
+            digest = digest or frame_hash(raw)
+            if not replay and not historical_test:
+                archive = raw.tail(60).copy()
+                archive.attrs["input_sha256"] = digest
+                store.save_raw_prices(code, as_of, archive)
+            store.upload_features(code, as_of, BUILDER_ID, digest, current)
+            frames[code] = (raw, current.iloc[0].to_dict(), current)
             raw_hashes[code] = digest
         except ValueError as exc:
             if replay:
@@ -156,20 +169,17 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             unavailable[code] = "price_source_unavailable"
         finally:
             report("stock_complete", stock_code=code, index=index, total=len(universe),
-                   status="available" if code in frames else unavailable.get(code, "failed"),
-                   seconds=round(time.perf_counter() - started, 3))
+                   status="available" if code in frames else unavailable.get(code, "failed"))
     if not frames:
         raise ValueError("No confirmed stock inputs; previous batch retained")
-    if not historical_test:
-        if updates:
-            with stage("save_price_updates", rows=sum(len(frame) for frame in updates.values())):
-                store.upsert_price_panel(updates)
-        with stage("upload_feature_panel", stocks=len(frames)):
-            store.upload_feature_panel(as_of, "alpha158_actual_vwap_v1", raw_hashes, frames)
-    return universe, frames, unavailable, raw_hashes
+    flow_report["complete_current_rows"] = sum(
+        all(pd.notna(row.get(f"flow_{investor}_{window}"))
+            for investor in ("individual", "institution", "foreign") for window in (1, 5, 20))
+        for _, row, _ in frames.values())
+    return universe, frames, unavailable, raw_hashes, flow_report
 
 
-def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
+def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, flow_report=None):
     names = dict(zip(universe.Code, universe.Name))
     codes = sorted(names)
     batch_id = canonical_hash({"as_of": as_of, "pack_id": pack["pack_id"],
@@ -181,22 +191,23 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
         item = pack["horizons"][f"h{horizon}"]
         model_path, samples_path = paths[horizon]
         model = lgb.Booster(model_file=str(model_path))
-        selected = list(frames)
-        current = pd.DataFrame([frames[code][1] for code in selected], index=selected)
-        with stage("model_inference", horizon=horizon, stocks=len(selected)):
-            predictions = infer_batch(model, current)
+        flow_names = [name for name in model.feature_name() if name.startswith("flow_")]
+        incomplete = {code for code, (_, row, _) in frames.items()
+                      if any(pd.isna(row.get(name)) for name in flow_names)}
+        selected = [code for code in frames if code not in incomplete]
+        current = pd.DataFrame([frames[code][1] for code in selected])
+        predictions = infer_batch(model, current) if selected else []
         by_code = dict(zip(selected, predictions))
-        with stage("load_historical_samples", horizon=horizon):
-            history = SampleIndex(pd.read_parquet(samples_path))
+        history = SampleIndex(pd.read_parquet(samples_path))
         for code in codes:
-            if code in unavailable:
+            if code in unavailable or code in incomplete:
                 snapshots.append(unavailable_snapshot(
                     code=code, stock_name=names[code], as_of=as_of, horizon=horizon,
                     pack_id=pack["pack_id"], batch_id=batch_id,
-                    reason=unavailable[code], model_sha256=item["model_sha256"],
+                    reason=unavailable.get(code, "flow_window_incomplete"), model_sha256=item["model_sha256"],
                     samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack)))
                 continue
-            raw, row = frames[code]
+            raw, row, _ = frames[code]
             scores, contributions, features_hash, contribution_total = by_code[code]
             target = max(range(3), key=lambda i: scores[("down", "neutral", "up")[i]])
             sigma, close = float(row["Sigma"]), float(row["Close"])
@@ -207,11 +218,10 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
                                                        "down": close * (1 - down * sigma)},
                          "contribution_space": f"class_{target}_raw_margin", "features": contributions,
                          "contribution_abs_sum": contribution_total}
-            price = price_snapshot(raw, code, as_of, "NAVER 수정주가·KRX 거래대금 (pykrx)")
+            price = price_snapshot(raw, code, as_of, "KRX 비수정 OHLC·거래대금, 동일 수정계수 적용")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
-            with stage("historical_distribution", stock_code=code, horizon=horizon):
-                distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
+            distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
             snapshots.append(build_snapshot(
                 code=code, stock_name=names[code], as_of=as_of, horizon=horizon,
                 pack_id=pack["pack_id"], batch_id=batch_id, inference=inference,
@@ -223,7 +233,8 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes):
     batch = {"id": batch_id, "as_of": as_of, "pack_id": pack["pack_id"],
              "release_h5": pack["pack_id"] + ":h5", "release_h20": pack["pack_id"] + ":h20",
              "expected_stock_codes": codes, "status": "staging",
-             "result": {"snapshot_count": len(snapshots), "unavailable_count": len(unavailable) * 2}}
+             "result": {"snapshot_count": len(snapshots), "unavailable_count": sum(s["inference"]["status"] == "unavailable" for s in snapshots),
+                        "flows": flow_report or {}}}
     return batch, snapshots
 
 
@@ -244,16 +255,23 @@ def write_batch(root, batch, snapshots):
 
 
 def run(args):
-    root = data_root()
+    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    root.mkdir(parents=True, exist_ok=True)
     as_of = official_day(args.as_of)
     historical_test = getattr(args, "historical_test", False)
     if historical_test:
         require_local_url(os.environ.get("SUPABASE_URL", ""))
+        if not args.dry_run or args.publish:
+            raise ValueError("--historical-test is dry-run only")
         if as_of == datetime.now(KST).date().isoformat():
             raise ValueError("--historical-test requires a past date")
     pack, paths = active_pack(root)
+    if pack["feature_builder_id"] != BUILDER_ID:
+        raise ValueError("Daily inference requires a pack matching the corrected feature builder")
     store = SupabaseStore()
     replay = getattr(args, "replay", False)
+    from .krx import install_request_timeout
+    install_request_timeout()
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:
@@ -262,20 +280,20 @@ def run(args):
     batch, snapshots = build_batch(as_of, pack, paths, *collected)
     if historical_test:
         batch["result"]["historical_test"] = True
-    for snapshot in snapshots:
-        validate_snapshot(snapshot)
+    out = root / "batches" / batch["id"]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
+    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
     batch["result"]["validation_status"] = pack.get("validation_status", "unverified")
-    write_batch(root, batch, snapshots)
     if args.publish:
         with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
             store.publish(batch, snapshots, pack)
-        # 시장 바 지수. 예측 게시와 별개라 실패해도 게시는 유지하고, 화면은 마지막 기준일과 "N일 전"을 보인다.
         try:
             from .krx import authenticated_stock
             from .market import market_status_row
             store.upsert_market_status(market_status_row(authenticated_stock(), as_of))
             report("market_status", as_of=as_of, status="ok")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             report("market_status", as_of=as_of, status="failed", error_type=type(exc).__name__)
     print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
                       "pack_id": pack["pack_id"], "stock_count": len(batch["expected_stock_codes"]),
@@ -314,28 +332,50 @@ def load_cached_input(data_root, code, requested_date=None):
 
 
 def run_preview(args):
+    if not re.fullmatch(r"[0-9A-Z]{6}", args.code):
+        raise ValueError("Invalid stock code")
     if not args.compute_only:
         require_local_url(os.environ.get("SUPABASE_URL", ""))
-    root = data_root()
-    as_of, name, raw, current = load_cached_input(root, args.code, args.as_of)
-    pack, paths = active_pack(root)
-    # Give legacy input a separate release identity so this local preview can
-    # never be mistaken for the production alpha158_actual_vwap_v1 builder.
-    pack = dict(pack, pack_id=pack["pack_id"] + "_legacy_preview",
-                feature_builder_id="legacy_processed_unverified_preview")
+    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
+    pack_dir = root / "packs" / config["pack_id"]
+    pack, paths = load_pack(pack_dir)
+    if pack["feature_builder_id"] == BUILDER_ID:
+        dataset = Path(getattr(args, "dataset_root", None) or Path(__file__).parents[2] / "data/datasets/local_2016_kospi_v1")
+        raw = pd.read_parquet(dataset / "raw" / f"{args.code}.parquet")
+        if "PriceBasis" not in raw or not raw.PriceBasis.eq("krx_raw_ohlc_uniform_close_ratio_v1").all():
+            raise ValueError("Corrected pack requires verified corrected raw prices")
+        raw["Date"] = pd.to_datetime(raw.Date)
+        as_of = pd.Timestamp(args.as_of or raw.Date.max())
+        raw = raw.loc[raw.Date.le(as_of)].sort_values("Date").reset_index(drop=True)
+        if raw.empty or raw.Date.max() != as_of:
+            raise ValueError("Requested date is absent from corrected inputs")
+        name = str(raw.iloc[-1].Name)
+        calendar = json.loads((pack_dir / "calendar.json").read_text())
+        current = build_feature_frame(raw, set(pd.to_datetime(calendar["trading_days"]).date))
+        current = current.loc[current.Date.eq(as_of)]
+        if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
+            raise ValueError("No complete corrected feature row")
+        as_of = as_of.date().isoformat()
+    else:
+        as_of, name, raw, current = load_cached_input(root, args.code, args.as_of)
+        pack = dict(pack, pack_id=pack["pack_id"] + "_legacy_preview",
+                    feature_builder_id="legacy_processed_unverified_preview")
     digest = frame_hash(raw)
     universe = pd.DataFrame({"Code": [args.code], "Name": [name]})
-    store = None if args.compute_only else SupabaseStore()
-    if store:
+    if not args.compute_only:
+        store = SupabaseStore()
         store.save_universe(as_of, universe)
         store.upsert_prices(args.code, raw)
         store.upload_features(args.code, as_of, pack["feature_builder_id"], digest, current)
-    frames = {args.code: (raw, current.iloc[0].to_dict())}
+    frames = {args.code: (raw, current.iloc[0].to_dict(), current)}
     batch, snapshots = build_batch(as_of, pack, paths, universe, frames, {}, {args.code: digest})
-    write_batch(root, batch, snapshots)
+    out = root / "batches" / batch["id"]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
+    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
     if args.publish:
-        with stage("publish_batch", batch_id=batch["id"], snapshots=len(snapshots)):
-            store.publish(batch, snapshots, pack)
+        SupabaseStore().publish(batch, snapshots, pack)
     event = "local_preview_published" if args.publish else (
         "local_preview_computed" if args.compute_only else "local_preview_staged")
     print(json.dumps({"event": event,

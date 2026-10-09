@@ -28,6 +28,7 @@ def test_historical_test_fetches_selected_stock_instead_of_replaying(monkeypatch
         {"Date": pd.to_datetime([as_of]), "Close": [100], "Volume": [1000]}))
     monkeypatch.setattr(pipeline, "build_feature_frame", lambda *_: pd.DataFrame(
         {"Date": pd.to_datetime([as_of]), "Sigma": [0.02]}))
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *_: (pd.DataFrame(), {}))
     monkeypatch.setattr(pipeline, "frame_hash", lambda *_: "digest")
 
     class Store:
@@ -43,7 +44,7 @@ def test_historical_test_fetches_selected_stock_instead_of_replaying(monkeypatch
         def upload_features(self, *_):
             pass
 
-    universe, frames, unavailable, _ = pipeline.collect(as_of, Store(), code="005930", historical_test=True)
+    universe, frames, unavailable, _, _ = pipeline.collect(as_of, Store(), code="005930", historical_test=True)
     assert universe.Code.tolist() == ["005930"]
     assert list(frames) == ["005930"]
     assert not unavailable
@@ -68,8 +69,9 @@ def test_daily_universe_uses_requested_krx_date(monkeypatch):
     monkeypatch.setattr(stock, "get_market_ticker_list", listing)
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: f"stock-{code}")
     universe = pipeline.fetch_universe("2026-09-21")
-    assert len(universe) == 500 + len(pipeline.EXTRA_CODES)
-    assert {"00104K", "247540"} <= set(universe.Code)
+    assert len(universe) == 500
+    assert "00104K" in set(universe.Code)
+    assert "247540" not in set(universe.Code)
 
 
 def test_historical_test_rejects_remote_supabase(monkeypatch, tmp_path):

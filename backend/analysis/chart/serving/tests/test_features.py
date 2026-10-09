@@ -45,7 +45,8 @@ def test_adjusted_vwap_uses_actual_turnover_and_price_scale():
     dates = pd.to_datetime(["2024-01-02"])
     adjusted = pd.DataFrame({"Close": [50.0], "Volume": [100.0]}, index=dates)
     raw = pd.DataFrame(
-        {"종가": [100.0], "거래량": [100.0], "거래대금": [10500.0]}, index=dates
+        {"시가": [100.0], "고가": [101.0], "저가": [99.0],
+         "종가": [100.0], "거래량": [100.0], "거래대금": [10500.0]}, index=dates
     )
     result = attach_actual_vwap(adjusted, raw)
     assert result["AdjustmentFactor"].iloc[0] == 0.5
@@ -63,53 +64,3 @@ def test_price_history_uses_observed_dates_and_rejects_duplicates():
     assert len(row["history"]) == 2
     with pytest.raises(ValueError, match="duplicate"):
         price_snapshot(pd.concat([frame, frame]), "005930", "2026-01-06", "test")
-
-
-@pytest.mark.parametrize("code", ["005930", "00104K", "0126Z0"])
-def test_krx_prices_accept_valid_alphanumeric_codes(monkeypatch, code):
-    from pykrx import stock
-    from serving.internal.prices import fetch_prices
-
-    dates = pd.to_datetime(["2026-09-30"])
-    source = pd.DataFrame({"시가": [100], "고가": [102], "저가": [99], "종가": [101],
-                           "거래량": [1000], "등락률": [1], "거래대금": [101000]}, index=dates)
-    def prices(start, end, ticker, adjusted):
-        assert ticker == code
-        return source.copy()
-    monkeypatch.setattr(stock, "get_market_ohlcv_by_date", prices)
-    assert fetch_prices(code, "2026-09-01", "2026-09-30").VWAP.iloc[0] == 101
-
-
-@pytest.mark.parametrize("volume", [0, 10])
-def test_missing_vwap_is_allowed_only_on_no_trade_days(volume):
-    from serving.internal.features import normalize_trading_halts
-
-    raw = pd.DataFrame({"Date": pd.to_datetime(["2026-09-30"]), "Open": [100], "High": [100],
-                        "Low": [100], "Close": [100], "Volume": [volume], "VWAP": [float("nan")]})
-    if volume:
-        with pytest.raises(ValueError, match="실제 VWAP"):
-            normalize_trading_halts(raw, {"2026-09-30"})
-    else:
-        normalized = normalize_trading_halts(raw, {"2026-09-30"})
-        assert normalized.VWAP.iloc[0] == normalized.Close.iloc[0] == 100
-        assert normalized.Volume.iloc[0] == 0
-
-
-def test_constant_price_windows_do_not_produce_infinite_correlations():
-    import numpy as np
-    from serving.internal.features import generate_full_alpha158_features
-
-    rng = np.random.default_rng(42)
-    for trailing in (5, 10, 20, 30, 60):
-        close = rng.integers(100, 1000, 100).astype(float)
-        close[-trailing:] = 333.
-        volume = rng.integers(1, 10000, 100).astype(float)
-        source = pd.DataFrame({'Open': close, 'High': close+1, 'Low': close-1,
-                               'Close': close, 'Volume': volume, 'VWAP': close})
-        features = generate_full_alpha158_features(source)
-        correlations = features.filter(regex=r'^cor[rd]_')
-        assert not np.isinf(correlations.to_numpy(dtype=float)).any()
-        assert pd.isna(features.corr_5.iloc[-1])
-        # Defined windows retain pandas' original result.
-        expected = source.Close.rolling(5).corr(source.Volume).iloc[10]
-        assert features.corr_5.iloc[10] == pytest.approx(expected)

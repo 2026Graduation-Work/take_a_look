@@ -48,6 +48,7 @@ jobs:
         working-directory: backend/analysis/chart
     env:
       PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
       CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/serving/data
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
@@ -88,9 +89,9 @@ jobs:
         if: ${{ inputs.diagnose == true }}
         run: python -m serving.run_daily --diagnose
 
-      - name: Validate committed model pack
+      - name: Download and verify configured model pack
         if: ${{ inputs.diagnose != true && inputs.supply_only != true }}
-        run: python -m serving.pack validate
+        run: python -m serving.pack download --config serving/config.yaml
 
       - name: Publish recorded display-test batch
         if: ${{ inputs.publish_preview == true }}

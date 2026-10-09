@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .internal.hashing import sha256_file
 from .internal.pack import build_pack
 
 
@@ -16,13 +17,16 @@ def main(argv=None):
         parser.add_argument(f"--predictions-h{horizon}", type=Path, required=True)
     parser.add_argument("--processed-dir", type=Path, required=True)
     parser.add_argument("--calendar-file", type=Path)
+    parser.add_argument("--research-manifest", type=Path, help="Corrected local training provenance JSON")
     args = parser.parse_args(argv)
-    root, reports = build_pack(
+    root, archive, reports = build_pack(
         pack_id=args.pack_id, output=args.output,
         models={5: args.model_h5, 20: args.model_h20},
         predictions={5: args.predictions_h5, 20: args.predictions_h20},
-        processed_dir=args.processed_dir, calendar_file=args.calendar_file)
-    print(json.dumps({"pack": str(root), "reports": reports}, ensure_ascii=False))
+        processed_dir=args.processed_dir, calendar_file=args.calendar_file,
+        research_manifest=json.loads(args.research_manifest.read_text()) if args.research_manifest else None)
+    print(json.dumps({"pack": str(root), "archive": str(archive), "archive_sha256": sha256_file(archive),
+                      "reports": reports}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
