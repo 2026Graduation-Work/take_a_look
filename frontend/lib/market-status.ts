@@ -1,4 +1,4 @@
-// 시장 바: Supabase market_status 최신 행(차트 서빙이 평일 18:30 이후 갱신) → MarketStatus.
+// 시장 바: Supabase market_status 최신 행(차트 서빙이 평일 18:47 이후 갱신) → MarketStatus.
 // 행이 없거나 읽기 실패면 호출한 쪽의 스냅샷을 그대로 쓴다.
 
 import { kstDay } from "./display.ts";

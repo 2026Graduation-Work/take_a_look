@@ -43,5 +43,25 @@ def test_corrected_retention_preserves_history_and_recent_inputs():
                 "raw-prices-v3/2026-08-01": [{"name": "005930.parquet"}],
                 "investor-flows-v3": [{"name": "2026-08-01.parquet"}, {"name": "2026-10-08.parquet"}],
             }[body["prefix"]]
-    assert retention.prune_corrected_inputs(Store(), "2026-09-09") == 2
+    assert retention.prune_corrected_inputs(Store(), "2026-09-09", "2026-09-09") == 2
     assert removed == ["raw-prices-v3/2026-08-01/005930.parquet", "investor-flows-v3/2026-08-01.parquet"]
+
+
+def test_inputs_follow_oldest_kept_batch_but_flows_keep_30_days(monkeypatch):
+    removed = []
+    class Store:
+        def _request(self, method, path, body=None, prefer=None):
+            if path.startswith("/rest/v1/chart_batches"):
+                return [{"as_of": "2026-10-02"}]
+            if path.startswith("/rest/v1/chart_feature_snapshots?select"):
+                return [{"storage_path": "alpha/2026-10-01/h/005930.parquet"}] if "as_of=lt.2026-10-02" in path else []
+            if method == "DELETE" and path.startswith("/storage/"):
+                removed.extend(body["prefixes"])
+            if path.startswith("/storage/v1/object/list/"):
+                return {"raw-prices-v3": [{"name": "2026-10-01"}, {"name": "2026-10-02"}],
+                        "raw-prices-v3/2026-10-01": [{"name": "005930.parquet"}],
+                        "investor-flows-v3": [{"name": "2026-10-01.parquet"}]}[body["prefix"]]
+            return 0
+    monkeypatch.setattr(retention, "SupabaseStore", Store)
+    retention.main(date(2026, 10, 12))
+    assert removed == ["alpha/2026-10-01/h/005930.parquet", "raw-prices-v3/2026-10-01/005930.parquet"]
