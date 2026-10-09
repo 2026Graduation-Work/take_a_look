@@ -7,6 +7,9 @@ import SiteHeader from "../components/site-header";
 import { WatchlistEditor } from "../components/stock-marks";
 import { useOnboarding } from "../components/onboarding-provider";
 import { useStockOptions } from "./use-stock-options";
+import GainText from "../components/gain-text";
+import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
+import { getSupabaseClient } from "@/lib/supabase";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -73,6 +76,16 @@ export default function HoldingsEditor({
         })));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
+  // 평단 대비 평가손익(#255): 대시보드와 같은 최신 게시 종가(loadLatestCloses)
+  const codeKey = rows.map(({ code }) => code).join(",");
+  const [closes, setCloses] = useState<LatestCloses>(new Map());
+  useEffect(() => {
+    let active = true;
+    void loadLatestCloses(getSupabaseClient(), codeKey ? codeKey.split(",") : []).then((next) => active && setCloses(next));
+    return () => {
+      active = false;
+    };
+  }, [codeKey]);
   const [baseline, setBaseline] = useState<SavedHolding[]>(initial); // 마지막으로 저장된 목록
   const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
 
@@ -189,9 +202,12 @@ export default function HoldingsEditor({
             <ul className="group-list m-0 list-none p-0">
               {rows.map((row) => (
                 <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-4 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
-                  <div className="col-span-2 flex items-baseline gap-2 sm:col-span-1">
+                  <div className="col-span-2 flex flex-wrap items-baseline gap-x-2 sm:col-span-1">
                     <span className="text-base font-medium">{row.name}</span>
                     <span className="text-xs text-muted tabular-nums">{row.code}</span>
+                    <span className="basis-full">
+                      <GainText avgBuyPrice={row.avgBuyPrice} close={closes.get(row.code)?.close} />
+                    </span>
                   </div>
                   <label className="flex flex-col gap-1">
                     <span className="text-2xs text-muted">수량(주)</span>

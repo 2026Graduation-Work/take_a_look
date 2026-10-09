@@ -49,3 +49,9 @@ export function costBasis(
     ? { price: close, basis: "close" }
     : { price: avgBuyPrice ?? 0, basis: "avg_buy" };
 }
+
+// 평단 대비 평가손익 비율(#255). 0.12 = +12%. 평단을 모르거나(null·0) 최신 종가가 없으면 null(미제공).
+export function gainRatio(avgBuyPrice: number | null, close: number | undefined): number | null {
+  if (!avgBuyPrice || avgBuyPrice <= 0 || close === undefined || !(close > 0)) return null;
+  return close / avgBuyPrice - 1;
+}
