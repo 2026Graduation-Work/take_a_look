@@ -34,7 +34,7 @@ test("신호 전환 → 수급 전환 → 뉴스 부호 전환 순, 최대 3줄"
 
 test("주의 유형 공시는 신호 전환 다음으로 올라오고, 바뀐 것이 없으면 빈 목록", () => {
   const caution = { ...base, disclosures: [...base.disclosures, { stock_code: "005930", kind: "inquiry", title: "조회공시 답변", filed_on: "2026-10-08" }] };
-  assert.equal(detectChanges(caution)[1].how, "조회 공시 · 조회공시 답변 외 1건");
+  assert.deepEqual([detectChanges(caution)[1].what, detectChanges(caution)[1].how], ["새 공시 2건", "조회 공시 · 조회공시 답변"]);
   assert.deepEqual(detectChanges({ ...base, signals: [], sentiment: [], supply: [], disclosures: [] }), []);
 });
 

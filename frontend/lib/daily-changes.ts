@@ -74,8 +74,9 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
       .sort((left, right) => Number(CAUTION_KINDS.has(right.kind)) - Number(CAUTION_KINDS.has(left.kind)));
     if (filings[0]) {
       const kind = DISCLOSURE_KIND[filings[0].kind]?.label ?? "공시";
-      const more = filings.length > 1 ? ` 외 ${filings.length - 1}건` : "";
-      ranked.push([CAUTION_KINDS.has(filings[0].kind) ? 1 : 4, { code, name, what: "새 공시", how: `${kind} · ${filings[0].title}${more}` }]);
+      // 건수를 앞에 둔다 — 390px에서 긴 제목 끝이 잘려도 몇 건인지는 보이게
+      const what = filings.length > 1 ? `새 공시 ${filings.length}건` : "새 공시";
+      ranked.push([CAUTION_KINDS.has(filings[0].kind) ? 1 : 4, { code, name, what, how: `${kind} · ${filings[0].title}` }]);
     }
   }
   return ranked.sort((left, right) => left[0] - right[0]).slice(0, MAX_LINES).map(([, change]) => change);
