@@ -197,7 +197,8 @@ test("new user: 보유 종목 '아직 없어요' -> 대시보드 빈 상태", as
   await page.getByRole("button", { name: "아직 없어요" }).click();
 
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("오늘 모델 신호가 강한 종목은 2개예요.");
+  // 스텁 게시 배치: 삼성전자(하방) + SPAC 1종목(상방). 데모 응답은 SPAC 회피를 골라 1개만 남는다
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("오늘 모델 신호가 강한 종목은 1개예요.");
   await expect(page.getByText("관심 가는 종목을 검색해 보세요")).toBeVisible();
   // 돌아온 사용자는 온보딩을 건너뛴다
   await page.goto("/survey");
