@@ -5,6 +5,7 @@
 
 import json
 import os
+import re
 import subprocess
 from datetime import date, datetime, timedelta, timezone
 from urllib.request import Request, urlopen
@@ -15,6 +16,8 @@ NEWSAPI_DAILY_PLAN = 20  # 하루 상한(AGENTS.md 무료 운영 규칙)
 PLAN_END = date(2027, 2, 1)
 MAX_PUBLISH_LAG = 2  # 영업일(주말만 뺀다. 공휴일이 끼면 하루 늦게 울릴 수 있다)
 TITLE = "[ops] 무료 한도 경고"
+SITE_URL = "https://takealook-skku.vercel.app"  # Vercel 연동이 덮어쓴 적 있음(docs/auth-setup.md 3-3)
+SITE_URL_TITLE = "[ops] 인증 Site URL 변경됨"
 
 
 def weekdays_between(start, end):
@@ -46,6 +49,25 @@ def post_json(url, body, headers):
         return json.loads(response.read())
 
 
+def site_url():
+    """인증 Site URL(Management API). 되돌리지 않고 읽기만 한다."""
+    ref = re.match(r"https://([^.]+)\.", os.environ["SUPABASE_URL"]).group(1)
+    request = Request(f"https://api.supabase.com/v1/projects/{ref}/config/auth",
+                      headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
+                               "User-Agent": "free-tier-watch"})  # 기본 urllib UA는 Cloudflare가 막을 수 있다
+    with urlopen(request, timeout=30) as response:
+        return json.loads(response.read())["site_url"]
+
+
+def report(title, body):
+    found = subprocess.run(["gh", "issue", "list", "--state", "open", "--search", f'"{title}" in:title',
+                            "--json", "number", "-q", ".[0].number"], capture_output=True, text=True, check=True).stdout.strip()
+    if found:
+        subprocess.run(["gh", "issue", "comment", found, "--body", body], check=True)
+    else:
+        subprocess.run(["gh", "issue", "create", "--title", title, "--body", body], check=True)
+
+
 def main():
     key = os.environ["SUPABASE_SECRET_KEY"]
     usage = post_json(os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/budget_usage", {}, {"apikey": key})
@@ -56,16 +78,17 @@ def main():
         remaining = None
     today = datetime.now(timezone(timedelta(hours=9))).date()
     alerts, measured = check(usage, remaining, today)
-    print(json.dumps({"event": "free_tier_watch", **measured, "alerts": alerts}, ensure_ascii=False))
-    if not alerts:
-        return
-    body = f"{today} 주간 감시\n\n" + "\n".join(f"- {a}" for a in alerts) + f"\n\n측정값: `{json.dumps(measured)}`\n\n기준: docs/ops/free-tier-budget.md"
-    found = subprocess.run(["gh", "issue", "list", "--state", "open", "--search", f'"{TITLE}" in:title',
-                            "--json", "number", "-q", ".[0].number"], capture_output=True, text=True, check=True).stdout.strip()
-    if found:
-        subprocess.run(["gh", "issue", "comment", found, "--body", body], check=True)
-    else:
-        subprocess.run(["gh", "issue", "create", "--title", TITLE, "--body", body], check=True)
+    try:
+        current = site_url()
+    except Exception as exc:  # 측정 실패도 경고로 남긴다
+        current = f"읽기 실패({type(exc).__name__})"
+    print(json.dumps({"event": "free_tier_watch", **measured, "alerts": alerts, "site_url": current}, ensure_ascii=False))
+    if current.rstrip("/") != SITE_URL:
+        report(SITE_URL_TITLE, f"{today} 주간 감시\n\n- 인증 Site URL `{current}` ≠ `{SITE_URL}`\n\n"
+               "자동으로 되돌리지 않습니다. 확인 후 docs/auth-setup.md 3-3 절차로 되돌려 주세요.")
+    if alerts:
+        report(TITLE, f"{today} 주간 감시\n\n" + "\n".join(f"- {a}" for a in alerts)
+               + f"\n\n측정값: `{json.dumps(measured)}`\n\n기준: docs/ops/free-tier-budget.md")
 
 
 if __name__ == "__main__":
