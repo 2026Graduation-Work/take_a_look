@@ -96,22 +96,14 @@ test("대상 외 종목은 null", async () => {
   );
 });
 
-test("출처: 감성은 데모 4종목 실데이터, 모델 근거는 픽스처", async () => {
-  const samsung = await loadStockInsights("005930");
-  assert.deepEqual(samsung.provenance.sentiment, {
-    kind: "real",
-    source: "BigKinds · KR-FinBERT · 저장된 데이터",
-    asOf: samsung.sentiment?.days.at(-1)?.date,
-  });
-  for (const key of ["contributions"] as const) {
-    assert.equal(samsung.provenance[key].kind, "fixture", key);
-  }
-  for (const code of ["005380", "035720", "068270"]) {
+test("출처: DB가 없는 데모·로컬에서만 저장본 감성·기여도를 예시 데이터로 보인다", async () => {
+  for (const code of ["005930", "005380", "035720", "068270"]) {
     const insights = await loadStockInsights(code);
-    assert.equal(insights.provenance.sentiment.kind, "real", code);
-    assert.match(insights.provenance.sentiment.source, /저장된 데이터/, code);
-    assert.equal(insights.provenance.sentiment.asOf, insights.sentiment?.days.at(-1)?.date, code);
+    assert.ok(insights.sentiment?.days.length, code);
+    assert.equal(insights.provenance.sentiment.kind, "fixture", code);
   }
+  assert.ok((await loadStockInsights("005930")).contributions?.length);
+  assert.equal((await loadStockInsights("005930")).provenance.contributions.kind, "fixture");
 });
 
 test("가격 흐름 분위기: 데모 4종목은 실데이터 스냅샷에서 구간 말을 갖는다", async () => {
@@ -198,7 +190,7 @@ class StaticSupabaseClient {
   }
 }
 
-test("Supabase에 live만 있으면 과거 감성은 정적 데이터로 폴백하고, 재무는 대체값 없이 비운다", async () => {
+test("운영(DB 연결)에서 live만 있으면 과거 감성·기여도는 대체값 없이 미제공, 재무도 비운다", async () => {
   const live = {
     track: "live",
     source: "newsapi_ai",
@@ -239,14 +231,15 @@ test("Supabase에 live만 있으면 과거 감성은 정적 데이터로 폴백�
 
   const insights = await loadStockInsights("005930", client as never);
 
-  assert.equal(insights.sentiment?.days.length, 20);
+  assert.equal(insights.sentiment?.days.length, 0);
+  assert.equal(insights.contributions, null);
   assert.equal(insights.liveSentiment?.score, 0.6);
   assert.equal(insights.sentiment?.headlines.length, 3);
   assert.equal(insights.financial, null); // 고정 재무 대체값은 두지 않는다(최신 정기보고서만)
   assert.equal(insights.provenance.liveSentiment.source, "NewsAPI.ai · KR-FinBERT");
-  assert.equal(insights.provenance.sentiment.source, "BigKinds · KR-FinBERT · 저장된 데이터");
+  assert.equal(insights.provenance.sentiment.source, "NewsAPI.ai · KR-FinBERT · DB 조회");
   const collectedAt = Date.parse("2026-09-26T09:00:00+09:00");
-  assert.equal(marketSentimentView(insights, collectedAt + 73 * 3_600_000)?.basis, "historical");
+  assert.equal(marketSentimentView(insights, collectedAt + 73 * 3_600_000), null);
   assert.deepEqual(marketSentimentView(insights, collectedAt), {
     basis: "live",
     score: 0.6,

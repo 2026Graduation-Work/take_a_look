@@ -20,6 +20,7 @@ import {
 import {
   loadSupabaseDisclosures,
   loadSupabaseFinancial,
+  loadSupabasePsychology,
   loadSupabaseSentiment,
   loadSupabaseSupply,
   type Disclosure,
@@ -243,17 +244,21 @@ export async function loadStockInsights(
     live: null,
     headlines: [],
   };
-  const [remoteSentiment, remoteFinancial, disclosures, supplyRows] = queryClient
+  const [remoteSentiment, remoteFinancial, disclosures, supplyRows, remotePsychology] = queryClient
     ? await Promise.all([
         loadSupabaseSentiment(code, queryClient).catch(() => emptySentiment),
         loadSupabaseFinancial(code, queryClient).catch(() => null),
         loadSupabaseDisclosures(code, queryClient).catch(() => []),
         loadSupabaseSupply(code, queryClient).catch(() => []),
+        loadSupabasePsychology(code, queryClient).catch(() => null),
       ])
-    : [emptySentiment, null, [], []];
+    : [emptySentiment, null, [], [], null];
+  // 운영(DB 연결)에서는 저장본·픽스처로 대신하지 않는다 — DB에 없으면 "미제공"(#198).
+  // DB가 없는 데모·로컬 실행에서만 저장본을 "예시 데이터"로 보인다.
+  const offline = !queryClient;
   // 수급은 DB(KRX 투자자별 순매수)만 쓴다. 예시·고정 대체값은 두지 않는다.
   const supply = supplyRows.length ? supplyRows : null;
-  const historical = remoteSentiment.historical ?? fallbackSentiment;
+  const historical = remoteSentiment.historical ?? (offline ? fallbackSentiment : null);
   const sentiment = historical
     ? {
         ...historical,
@@ -273,20 +278,24 @@ export async function loadStockInsights(
       : null;
   // 재무는 DB(최신 정기보고서)만 쓴다. 고정 대체값은 두지 않는다.
   const financial = remoteFinancial;
-  const psychology = STOCK_SNAPSHOT[code]?.psychology;
+  const psychology = remotePsychology
+    ? { ...remotePsychology, provenance: { kind: "real", source: "KRX 종가·거래량 · 최신 게시 차트", asOf: remotePsychology.asOf } as DataProvenance }
+    : offline && STOCK_SNAPSHOT[code]
+      ? { ...STOCK_SNAPSHOT[code].psychology, provenance: PRICE_PROVENANCE }
+      : null;
   return {
     psychology: psychology
       ? {
           word: psychology.word,
           explain: "최근 20일 오름세와 석 달 평균 거래 가격 대비 위치로 본 분위기예요",
           axis: psychology.axis,
-          provenance: PRICE_PROVENANCE,
+          provenance: psychology.provenance,
         }
       : null,
     supply,
     sentiment,
     liveSentiment: remoteSentiment.live,
-    contributions,
+    contributions: offline ? contributions : null,
     financial,
     disclosures,
     provenance: {
@@ -294,15 +303,10 @@ export async function loadStockInsights(
         ? { kind: "real", source: "KRX 투자자별 순매수 · DB 조회", asOf: supply.at(-1)?.date }
         : FIXTURE,
       sentiment:
-        sentiment?.source === "real"
+        sentiment && (remoteSentiment.historical || remoteSentiment.live)
           ? {
               kind: "real",
-              source: remoteSentiment.historical
-                ? "BigKinds · KR-FinBERT · DB 조회"
-                : sentiment.provider && sentiment.backend
-                  ? `${sentiment.provider === "bigkinds" ? "BigKinds" : "NewsAPI.ai"} · ${sentiment.backend === "kr-finbert" ? "KR-FinBERT" : sentiment.backend}`
-                    + " · 저장된 데이터"
-                  : "BigKinds · KR-FinBERT · 저장된 데이터",
+              source: remoteSentiment.historical ? "BigKinds · KR-FinBERT · DB 조회" : "NewsAPI.ai · KR-FinBERT · DB 조회",
               asOf: (sentiment.asOf && kstDay(Date.parse(sentiment.asOf))) || sentiment.days.at(-1)?.date,
             }
           : FIXTURE,
