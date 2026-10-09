@@ -7,10 +7,10 @@ const base: ChangeInput = {
   stocks: [{ code: "005380", name: "현대차" }, { code: "035720", name: "카카오" }, { code: "068270", name: "셀트리온" }, { code: "005930", name: "삼성전자" }],
   batchIds: ["b2", "b1"],
   signals: [
-    { stock_code: "005380", batch_id: "b2", status: "available", scores: scores(0.2, 0.2, 0.6) },
-    { stock_code: "005380", batch_id: "b1", status: "available", scores: scores(0.6, 0.2, 0.2) },
-    { stock_code: "005930", batch_id: "b2", status: "available", scores: scores(0.6, 0.2, 0.2) },
-    { stock_code: "005930", batch_id: "b1", status: "available", scores: scores(0.6, 0.2, 0.2) },
+    { stock_code: "005380", batch_id: "b2", pack: "p", status: "available", scores: scores(0.2, 0.2, 0.6) },
+    { stock_code: "005380", batch_id: "b1", pack: "p", status: "available", scores: scores(0.6, 0.2, 0.2) },
+    { stock_code: "005930", batch_id: "b2", pack: "p", status: "available", scores: scores(0.6, 0.2, 0.2) },
+    { stock_code: "005930", batch_id: "b1", pack: "p", status: "available", scores: scores(0.6, 0.2, 0.2) },
   ],
   sentiment: [
     { stock_code: "068270", track: "live", sentiment_date: "2026-10-07", sentiment_mean: 0.35 },
@@ -36,4 +36,9 @@ test("주의 유형 공시는 신호 전환 다음으로 올라오고, 바뀐 �
   const caution = { ...base, disclosures: [...base.disclosures, { stock_code: "005930", kind: "inquiry", title: "조회공시 답변", filed_on: "2026-10-08" }] };
   assert.equal(detectChanges(caution)[1].how, "조회 공시 · 조회공시 답변 외 1건");
   assert.deepEqual(detectChanges({ ...base, signals: [], sentiment: [], supply: [], disclosures: [] }), []);
+});
+
+test("모델(pack)이 바뀐 배치끼리는 신호 전환으로 보지 않는다", () => {
+  const swapped = { ...base, signals: base.signals.map((row) => (row.batch_id === "b1" ? { ...row, pack: "old" } : row)) };
+  assert.ok(!detectChanges(swapped).some(({ what }) => what === "4주 신호"));
 });

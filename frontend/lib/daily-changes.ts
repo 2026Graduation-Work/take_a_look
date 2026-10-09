@@ -13,7 +13,7 @@ type Scores = { down: number; neutral: number; up: number } | null;
 
 export interface ChangeInput {
   stocks: { code: string; name: string }[];
-  signals: { stock_code: string; batch_id: string; status: string | null; scores: Scores }[];
+  signals: { stock_code: string; batch_id: string; pack: string | null; status: string | null; scores: Scores }[];
   batchIds: [string, string?]; // [최신, 직전]
   sentiment: { stock_code: string; track: string; sentiment_date: string; sentiment_mean: number }[];
   supply: { stock_code: string; trade_date: string; foreign_investor: number; institution: number }[];
@@ -40,12 +40,12 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
   const ranked: [number, DailyChange][] = [];
   for (const { code, name } of input.stocks) {
     const [latestId, previousId] = input.batchIds;
-    const at = (id?: string) => {
-      const row = input.signals.find((signal) => signal.stock_code === code && signal.batch_id === id);
-      return row ? direction(row.status, row.scores) : null;
-    };
-    const [now, before] = [at(latestId), previousId ? at(previousId) : null];
-    if (now && before && now !== before) {
+    const find = (id?: string) => input.signals.find((signal) => signal.stock_code === code && signal.batch_id === id);
+    const [latest, previous] = [find(latestId), previousId ? find(previousId) : undefined];
+    const now = latest ? direction(latest.status, latest.scores) : null;
+    const before = previous ? direction(previous.status, previous.scores) : null;
+    // 모델(pack)이 바뀐 날은 비교하지 않는다 — 모델 교체를 시장 변화처럼 보이지 않게
+    if (now && before && now !== before && latest!.pack === previous!.pack) {
       ranked.push([0, { code, name, what: "4주 신호", how: `${DIRECTION[before]} → ${DIRECTION[now]}` }]);
     }
 
@@ -95,7 +95,7 @@ export async function loadDailyChanges(
   const since = new Date(Date.parse(asOf) - 14 * 86_400_000).toISOString().slice(0, 10);
   const [signals, sentiment, supply, disclosures] = await Promise.all([
     client.from("chart_signal_snapshots")
-      .select("stock_code,batch_id,status:payload->inference->>status,scores:payload->inference->scores")
+      .select("stock_code,batch_id,pack:payload->>pack_id,status:payload->inference->>status,scores:payload->inference->scores")
       .in("batch_id", ids).eq("horizon", 20).in("stock_code", codes),
     client.from("news_sentiment_daily").select("stock_code,track,sentiment_date,sentiment_mean")
       .in("stock_code", codes).gte("sentiment_date", since).not("sentiment_mean", "is", null),
