@@ -17,7 +17,7 @@
   화면 규칙은 `frontend/DESIGN.md`, 값(색·타이포·간격)은 `frontend/app/globals.css`의 `@theme`가 SSOT
 - `schema/` — 블록 간 JSON 계약 (SSOT, freeze됨). 변경 시 전원 합의 필수.
 - `supabase/` — 마이그레이션(0001~0014)·시드. 새 마이그레이션은 CLI(`supabase db push`, 사용법 `docs/auth-setup.md`)로 적용하고 `docs/erd.md`·`docs/auth-setup.md` 표를 함께 고친다.
-- `.github/` — CI(블록별 3-job), Dependabot, CodeQL. 예약 실행: 차트 서빙(평일 18:30 KST), 뉴스·공시(평일 09:00)·재무(월 07:30), 무료 한도 감시(월 10:00)
+- `.github/` — CI(블록별 3-job), Dependabot, CodeQL. 예약 실행: 차트 서빙(평일 18:47 KST), 뉴스·공시(평일 09:13)·재무(월 07:37), 무료 한도 감시(월 10:07) — 정각·30분은 GitHub 예약이 몰려 늦어서 피함
 
 ## 개발 환경
 - Python: 각 블록 디렉토리 기준. dev 의존성은 `backend/profiling/survey/requirements-dev.txt` (ruff 등)

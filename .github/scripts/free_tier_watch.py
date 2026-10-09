@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.request import Request, urlopen
 
 DB_LIMIT_MB = 350
-STORAGE_LIMIT_MB = 800
+STORAGE_LIMIT_MB = 700  # 1GB 무료 한도에 여유(2/1까지 600MB 아래 목표)
 NEWSAPI_DAILY_PLAN = 20  # 하루 상한(AGENTS.md 무료 운영 규칙)
 PLAN_END = date(2027, 2, 1)
 MAX_PUBLISH_LAG = 2  # 영업일(주말만 뺀다. 공휴일이 끼면 하루 늦게 울릴 수 있다)

@@ -2,10 +2,10 @@ name: News Supabase Sync
 
 on:
   schedule:
-    # GitHub cron은 UTC 기준: 평일 00:00 UTC = 09:00 KST.
-    - cron: "0 0 * * 1-5"
-    # 월 07:30 KST: 최신 정기보고서 재무(바뀐 종목만)
-    - cron: "30 22 * * 0"
+    # GitHub cron은 UTC 기준: 평일 00:13 UTC = 09:13 KST. 정각·30분은 몰려서 늦게 도는 경우가 많아 피한다.
+    - cron: "13 0 * * 1-5"
+    # 월 07:37 KST: 최신 정기보고서 재무(바뀐 종목만)
+    - cron: "37 22 * * 0"
   workflow_dispatch:
     inputs:
       mode:
@@ -64,19 +64,19 @@ jobs:
 
       # 대상: 기본 6 + 전체 사용자의 보유 ∪ 관심 종목, 하루 20회 상한(supabase_sync.dynamic_targets)
       - name: Collect, analyze, and persist target stocks
-        if: github.event.schedule == '0 0 * * 1-5' || inputs.mode == 'live'
+        if: github.event.schedule == '13 0 * * 1-5' || inputs.mode == 'live'
         run: python -m value_pipeline.supabase_sync live --dynamic
 
       # DART 하루 전체 공시 → 종목 마스터에 맞춰 적재(제목·날짜·유형만). 실패해도 뉴스 적재는 그대로
       - name: Collect DART disclosures
-        if: github.event.schedule == '0 0 * * 1-5' || inputs.mode == 'live'
+        if: github.event.schedule == '13 0 * * 1-5' || inputs.mode == 'live'
         continue-on-error: true
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: python -m value_pipeline.supabase_sync disclosures
 
       - name: Latest periodic-report financials (changed stocks only)
-        if: github.event.schedule == '30 22 * * 0' || inputs.mode == 'financial'
+        if: github.event.schedule == '37 22 * * 0' || inputs.mode == 'financial'
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
         run: python -m value_pipeline.supabase_sync financial-latest

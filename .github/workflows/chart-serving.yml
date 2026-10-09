@@ -2,8 +2,8 @@ name: Daily chart serving
 
 on:
   schedule:
-    # GitHub cron uses UTC: weekdays 18:30 Asia/Seoul.
-    - cron: "30 9 * * 1-5"
+    # GitHub cron uses UTC: weekdays 18:47 Asia/Seoul. :00/:30 are avoided (queue delays, 10/08 started 7h late).
+    - cron: "47 9 * * 1-5"
   workflow_dispatch:
     inputs:
       as_of:

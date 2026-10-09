@@ -335,7 +335,7 @@ export interface MarketSentimentView {
   headlines: Headline[];
 }
 
-// 수집은 평일 09시 1회라 금요일분이 월요일 09시까지 최신이다(72시간). 그보다 오래되면 "최근 24시간"이라 부르지 않는다.
+// 수집은 평일 09:13 1회라 금요일분이 월요일 09시대까지 최신이다(72시간). 그보다 오래되면 "최근 24시간"이라 부르지 않는다.
 const LIVE_MAX_AGE_MS = 72 * 3_600_000;
 
 export function marketSentimentView(

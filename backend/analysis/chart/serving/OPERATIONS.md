@@ -3,7 +3,7 @@
 활성 pack: `kospi_uniform_v3_train2023_2025_20261009` (기본 H5/H20, 2023~2025 학습).
 검증된 archive는 [GitHub Release](https://github.com/2026Graduation-Work/take_a_look/releases/tag/chart-serving-kospi_uniform_v3_train2023_2025_20261009)에 업로드했다. Actions는 config의 SHA256으로 다운로드를 검증한다.
 
-PR 머지 후 `Daily chart serving`을 실행한다. 첫 배포에서 과거 거래일을 새로 수집하려면 `as_of`에 확정 거래일을 입력하고 `replay=false`로 실행한다. `replay=true`는 새 builder로 저장된 입력만 재사용한다. `dry_run=true`는 입력을 저장·검증하지만 공개 batch를 바꾸지 않는다. 예약 실행은 평일 18:30 KST이며 휴장일에는 게시하지 않는다.
+PR 머지 후 `Daily chart serving`을 실행한다. 첫 배포에서 과거 거래일을 새로 수집하려면 `as_of`에 확정 거래일을 입력하고 `replay=false`로 실행한다. `replay=true`는 새 builder로 저장된 입력만 재사용한다. `dry_run=true`는 입력을 저장·검증하지만 공개 batch를 바꾸지 않는다. 예약 실행은 평일 18:47 KST이며 휴장일에는 게시하지 않는다.
 
 ```bash
 gh workflow run chart-serving.yml --ref main -f as_of=2026-10-08 -f dry_run=true
@@ -58,7 +58,7 @@ gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart p
 
 pack 생성 보고서의 원본 예측 수·사용 표본 수·제외 사유를 확인한다. 기존 태그라면 `gh release upload`를 사용한다. 새 pack으로 바꿀 때 H5/H20을 함께 교체하고 `config.yaml` 네 값을 한 번에 변경한다. 이전 설정으로 되돌리면 이전 pack을 다시 쓸 수 있다.
 
-Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:47 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
 
 
 ## 첫 전체 이력 수집

@@ -8,11 +8,11 @@ WORKFLOW = Path(__file__).resolve().parents[4] / ".github/workflows/news-supabas
 def test_news_sync_workflow_has_schedule_targets_secrets_and_runtime_guards() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
-    assert 'cron: "0 0 * * 1-5"' in text
+    assert 'cron: "13 0 * * 1-5"' in text
     assert "workflow_dispatch:" in text
     assert "supabase_sync live --dynamic" in text
     assert "supabase_sync disclosures" in text
-    assert 'cron: "30 22 * * 0"' in text and "supabase_sync financial-latest" in text
+    assert 'cron: "37 22 * * 0"' in text and "supabase_sync financial-latest" in text
     assert "${{ secrets.DART_API_KEY }}" in text
     for secret in ("NEWSAPI_AI_KEY", "SUPABASE_URL", "SUPABASE_SECRET_KEY"):
         assert f"${{{{ secrets.{secret} }}}}" in text

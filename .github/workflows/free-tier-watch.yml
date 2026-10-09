@@ -4,7 +4,7 @@ name: Free tier watch
 # 같이 예약 워크플로를 다시 켜서 공개 레포 60일 비활성 자동 꺼짐을 막는다. 서드파티 액션 없이 gh·GITHUB_TOKEN만.
 on:
   schedule:
-    - cron: "0 1 * * 1" # 월 10:00 KST
+    - cron: "7 1 * * 1" # 월 10:07 KST(정각 회피)
   workflow_dispatch:
 
 permissions:
