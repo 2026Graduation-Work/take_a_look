@@ -92,7 +92,9 @@ Authentication 메뉴에서:
    - Site URL: **`https://takealook-skku.vercel.app`** 가 맞는 값입니다. 이력:
      1. 2026-10-06 `takealook-skku`로 설정
      2. 2026-10-07 Vercel 연동 직후 `https://take-a-look-choi-jung-hyeon-s-projects.vercel.app/`로 바뀜(연동이 덮어씀)
-     3. 2026-10-08 Management API로 되돌림(#230, docs/security.md). 2026-10-09에 다시 `take-a-look-…`로 바뀐 것을 확인 — 연동이 계속 덮어쓸 수 있음
+     3. 2026-10-08 Management API로 되돌림(#230, docs/security.md). 2026-10-09에 다시 `take-a-look-…`로 바뀐 것을 확인
+     4. 원인: **Supabase–Vercel 연동이 운영 배포마다 Site URL을 Vercel 프로젝트 주소로 덮어씀** → 2026-10-09 연동 해제(`vercel integration list`: 리소스 없음). 같은 날 PATCH로 되돌리고, 다음 운영 배포 뒤 GET으로 유지 확인(#236)
+   - 연동을 끊어도 Vercel env `NEXT_PUBLIC_SUPABASE_URL`·`NEXT_PUBLIC_SUPABASE_ANON_KEY`는 Production·Preview에 직접 넣은 값으로 남아 있다(2026-10-09 `vercel env ls`로 이름 확인). 연동을 다시 켜지 않는다.
    - 감시: `free-tier-watch.yml`(주 1회)이 Management API로 읽어 다르면 `[ops] 인증 Site URL 변경됨` 이슈를 엽니다. 자동으로 되돌리지 않습니다.
    - 되돌리기: Authentication → URL Configuration에서 Site URL 입력, 또는 `PATCH https://api.supabase.com/v1/projects/{ref}/config/auth` `{"site_url": "https://takealook-skku.vercel.app"}`(개인 access token)
    - Redirect URLs: `https://takealook-skku.vercel.app/**`, `https://stock-prediction-v2-chi.vercel.app/**`, `http://localhost:3000/**`, `https://*-choi-jung-hyeon-s-projects.vercel.app/**`(Preview), `take-a-look-…` 프로젝트 주소 패턴
