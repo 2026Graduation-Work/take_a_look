@@ -132,8 +132,13 @@ async function samsungNudges(styleAxes: StyleAxes) {
   // 1년 변동성·백분위는 종목 마스터 값(2026-10-06 운영 실측)을 넣는다
   const detail = { ...stockDetails["005930"], volatilityAnnual: 0.8681, volatilityPercentile: 0.8518 };
   // 수급은 DB에서만 오므로(0013), 넛지 규칙 검사에는 저장된 실데이터 20영업일을 직접 넣는다
-  const insights = { ...(await loadStockInsights("005930", null)), supply: SUPPLY_SNAPSHOT["005930"] };
-  const market = toNudgeMarket(detail, insights, portfolioHoldings);
+  const base = await loadStockInsights("005930", null);
+  // N07은 Live 일별 최근 두 수집일로 본다(#254). 기사 충분한 두 날, 변화량 |Δ| 0.6 >= p90
+  const liveSentiment = { score: 0, scoreStd: 0, articleCount: 40, publisherCount: 5, status: "ok" as const,
+    asOf: "2026-10-09T09:41:00+09:00", windowStart: "", windowEnd: "", coverage: base.sentiment!.coverage!,
+    periodDays: [{ date: "2026-10-08", score: 0.4, articleCount: 58 }, { date: "2026-10-09", score: -0.2, articleCount: 21 }] };
+  const insights = { ...base, supply: SUPPLY_SNAPSHOT["005930"], liveSentiment };
+  const market = toNudgeMarket(detail, insights, portfolioHoldings, Date.parse("2026-10-09T12:00:00+09:00"));
   assert.ok(market);
   return selectNudges(classifyBit(styleAxes), market).map(({ id }) => id);
 }
@@ -150,7 +155,7 @@ test("김민지 + 삼성전자: information_reliance를 0.3으로 올리면 수�
   assert.deepEqual(await samsungNudges(minjiWith({ information_reliance: 0.3 })), ["N02", "N07"]);
 });
 
-// urgency +0.44 × 감성 창 마지막 날 |Δ| >= p90(실제 날짜 구간) → N07.
+// urgency +0.44 × Live 최근 두 수집일 |Δ| >= p90 → N07.
 // N04(변동성 백분위 0.48)·N05(3개월 고점 대비, 실데이터 시세)는 시장 조건이 거짓이라 발화하지 않는다.
 // sentiment-fixture.ts가 다시 생성되면 재확인한다.
 const EXPECTED_MINJI_SAMSUNG: string[] = ["N07"];
@@ -277,4 +282,21 @@ test("오늘 Live 표시: KST 날짜가 바뀌면 최근 Live도 오늘 점으�
   assert.equal(aggregateSentimentPeriods(days,"year")[0].date,"2025");
   assert.equal(insights.sentiment.days[0].articleCount,10);
   assert.equal(days.length,3);
+});
+
+test("N07(#254): Live 최근 두 수집일로만 판단 — 기사 적은 날·한 날뿐이면 없음, 지난 날은 '오늘' 대신 날짜", async () => {
+  const detail = { ...stockDetails["005930"], volatilityAnnual: 0.8681, volatilityPercentile: 0.8518 };
+  const base = await loadStockInsights("005930", null);
+  const live = (days: { date: string; score: number; articleCount: number }[]) => ({ ...base, supply: SUPPLY_SNAPSHOT["005930"],
+    liveSentiment: { score: 0, scoreStd: 0, articleCount: 9, publisherCount: 1, status: "ok" as const, asOf: "", windowStart: "", windowEnd: "",
+      coverage: base.sentiment!.coverage!, periodDays: days } });
+  const on = (days: Parameters<typeof live>[0], now: string) => toNudgeMarket(detail, live(days), [], Date.parse(now))!;
+  const two = [{ date: "2026-10-07", score: 0.35, articleCount: 44 }, { date: "2026-10-08", score: -0.22, articleCount: 10 }];
+  assert.ok(Math.abs(on(two, "2026-10-08T20:00:00+09:00").sentimentChange! + 0.57) < 1e-9);
+  assert.equal(on(two, "2026-10-08T20:00:00+09:00").sentimentDayLabel, "오늘");
+  assert.equal(on(two, "2026-10-09T20:00:00+09:00").sentimentDayLabel, "10.08에");
+  assert.equal(on([two[0], { ...two[1], articleCount: 2 }], "2026-10-09T20:00:00+09:00").sentimentChange, null);
+  assert.equal(on([two[1]], "2026-10-09T20:00:00+09:00").sentimentChange, null);
+  // 과거(BigKinds) 일별만 있으면 비교하지 않는다
+  assert.equal(toNudgeMarket(detail, { ...base, supply: SUPPLY_SNAPSHOT["005930"] }, [])!.sentimentChange, null);
 });

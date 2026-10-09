@@ -19,7 +19,8 @@ export interface NudgeMarket {
   volatilityPercentile: number; // 0~1, 시장 내 변동성 백분위. 1 = 가장 큼
   drawdownFrom3mHigh: number; // 3개월 고점 대비. -0.15 = -15%
   return3d: number; // 최근 3거래일 누적. 0.10 = +10%
-  sentimentChange: number; // 뉴스 감성 점수(-1~1)의 전일 대비 변화량
+  sentimentChange: number | null; // 뉴스 감성(-1~1) 최근 두 수집일(Live 일별) 변화량. 두 날이 없거나 기사가 적으면 null
+  sentimentDayLabel: string; // 최근 수집일 말: 오늘 수집이면 "오늘", 아니면 "10.08에" — 지난 날을 "오늘"이라 부르지 않는다
   isTopHolding: boolean; // 보유 종목 중 비중 1위
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
@@ -51,7 +52,7 @@ interface NudgeRule {
   axis: StyleAxisId;
   side: 1 | -1;
   market: (m: NudgeMarket) => boolean;
-  text: string;
+  text: string | ((m: NudgeMarket) => string);
 }
 
 const always = () => true;
@@ -110,8 +111,8 @@ export const NUDGES: readonly NudgeRule[] = [
     // urgency: -1=여유, +1=조급함
     axis: "urgency",
     side: 1,
-    market: (m) => Math.abs(m.sentimentChange) >= SENTIMENT_SHIFT,
-    text: "오늘 이 종목의 뉴스 분위기가 어제와 크게 달라졌어요. 여러 기사가 같은 일을 다루고 있을 수 있어요.",
+    market: (m) => m.sentimentChange !== null && Math.abs(m.sentimentChange) >= SENTIMENT_SHIFT,
+    text: (m) => `${m.sentimentDayLabel} 이 종목의 뉴스 분위기가 직전 수집일과 크게 달라졌어요. 여러 기사가 같은 일을 다루고 있을 수 있어요.`,
   },
   {
     id: "N08",
@@ -177,5 +178,5 @@ export function selectNudges(
       return true;
     })
     .slice(0, limit)
-    .map(({ id, text, axis }) => ({ id, text, axis, ratio: bit.ratios[axis] }));
+    .map(({ id, text, axis }) => ({ id, text: typeof text === "function" ? text(market) : text, axis, ratio: bit.ratios[axis] }));
 }

@@ -3,6 +3,7 @@
 
 import type { NudgeMarket } from "../profiling/nudges";
 import { kstDay } from "../display.ts";
+import { FEW_ARTICLES } from "../copy-glossary.ts";
 import { getSupabaseClient } from "../supabase.ts";
 import type { DataProvenance, PortfolioHolding, RiskGrade, StockDetail } from "../types";
 import {
@@ -446,22 +447,26 @@ export function riskSnapshot(detail: StockDetail): RiskSnapshot | null {
 }
 
 // 넛지 판정 입력. 필요한 데이터가 하나라도 없으면 null이고, 그 종목은 넛지를 판정하지 않는다.
-// 감성 변화(N07)는 감성 시계열의 마지막 두 날 기준이다. 시세 기준일과 맞추지 않는다.
+// 감성 변화(N07)는 매일 수집(Live) 일별의 최근 두 수집일 기준이다(#254). 과거(BigKinds) 일별로 "오늘"을 말하지 않는다.
 export function toNudgeMarket(
   detail: StockDetail,
   insights: StockInsights,
   holdings: HoldingWeight[],
+  now: number = Date.now(),
 ): NudgeMarket | null {
   const risk = riskSnapshot(detail);
-  const { supply, sentiment } = insights;
-  if (!risk || !supply?.length || !sentiment || sentiment.days.length < 2) return null;
+  const { supply } = insights;
+  if (!risk || !supply?.length) return null;
+  const [previousDay, latestDay] = [...(insights.liveSentiment?.periodDays ?? [])]
+    .sort((left, right) => left.date.localeCompare(right.date)).slice(-2);
+  // 두 날이 다 있고 둘 다 기사가 충분할 때만 비교한다(한두 기사로 점수가 크게 흔들리는 날 제외)
+  const comparable = previousDay && latestDay && previousDay.articleCount >= FEW_ARTICLES && latestDay.articleCount >= FEW_ARTICLES;
 
   let retailStreak = 0;
   for (let index = supply.length - 1; index >= 0 && supply[index].retail > 0; index -= 1) {
     retailStreak += 1;
   }
   const latest = supply[supply.length - 1];
-  const [previousDay, latestDay] = sentiment.days.slice(-2);
   // ponytail: 보유 비중은 매입금액(수량 × 평단) 기준. 보유 종목 현재가가 연결되면 평가금액 기준으로 바꾼다.
   const cost = ({ quantity, avgBuyPrice }: HoldingWeight) => quantity * avgBuyPrice;
   const topHolding = holdings.reduce<HoldingWeight | null>(
@@ -477,7 +482,8 @@ export function toNudgeMarket(
     volatilityPercentile: risk.volatilityPercentile,
     drawdownFrom3mHigh: risk.drawdownFrom3mHigh,
     return3d: risk.return3d,
-    sentimentChange: latestDay.score - previousDay.score,
+    sentimentChange: comparable ? latestDay.score - previousDay.score : null,
+    sentimentDayLabel: latestDay && latestDay.date !== kstDay(now) ? `${latestDay.date.slice(5).replace("-", ".")}에` : "오늘",
     isTopHolding: topHolding?.code === detail.code,
     riskGrade: detail.riskGrade,
   };
