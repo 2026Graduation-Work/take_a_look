@@ -53,3 +53,18 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | [superpowers](https://github.com/obra/superpowers) (MIT) | 개인 선택 | 질문 → 설계 승인 → 짧은 계획 → 테스트 먼저. 서환이 이미 개인 설치로 쓰고 있다(`docs/superpowers/`). 단계마다 문서를 만들어 토큰을 많이 쓰므로 레포 공용 설치는 하지 않는다 |
 | [ponytail](https://github.com/DietrichGebert/ponytail) (MIT) | 사용 중 | 중현 세션에 이미 켜져 있다(#136 정리). "라이브러리 대신 네이티브 한 줄" 원칙은 DESIGN.md의 새 의존성 금지와 같다 |
 | 클레이모피즘·뉴모피즘·스큐어모피즘 | 기각 | 부푼 3D·낮은 대비·실물 흉내는 금융 근거 화면의 가독성·무게와 맞지 않는다. 유리는 탐색 층에만 채택(DESIGN.md 4-1) |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-09)
+
+| 도구 | 판정 | 이유 |
+|---|---|---|
+| [web-design-guidelines](https://github.com/vercel-labs/agent-skills) (Vercel) | 규칙만 적용 | 스킬 본문이 실행할 때마다 원격 규칙을 새로 받아 와서 SHA 고정 원칙과 안 맞는다. 규칙 원문 [web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines)(MIT, `434b7f91364665f2f733b310ec54809bf8f37937`)으로 한 번 점검: `transition: all`·확대 막기·`div onClick`·크기 없는 `img`·붙여넣기 막기 0건, `outline-none`은 모두 `focus:ring` 대체 있음. 빠진 `theme-color`·`touch-action: manipulation`만 반영. 영어 Title Case·Intl 강제 같은 항목은 한글 화면·`lib/display.ts` 규칙이 우선 |
+| [emil-design-eng · apple-design](https://github.com/emilkowalski/skills) (MIT) | 아이디어만 | 스프링·제스처·드래그 모션 중심. 우리 모션은 펼치기·눌림뿐(DESIGN.md 5장)이라 `fixing-motion-performance`로 충분. "눌림 피드백은 pointer-down에 바로"는 이미 `.btn-*:active`로 있음 |
+| [hallmark](https://github.com/nutlope/hallmark) (MIT) | 기각 | 테마 20여 종 + 프롬프트 게이트 57~65개. 방향은 이미 정했고(DESIGN.md) 점검은 redesign·baseline-ui와 겹친다. 게이트가 길어 토큰 부담 |
+| ui-ux-pro-max · frontend-design · Impeccable · Taste | 기존 판정 유지 | 09-23·09-26·10-06 표 참고 |
+| [Ruflo](https://github.com/ruvnet/ruflo)(옛 Claude Flow) · [ECC](https://github.com/affaan-m/ECC) | 기각 | 역할별 에이전트 군집·하네스 교체. 토큰을 크게 늘리고 설정·메모리를 따로 관리해야 한다. 우리는 단일 세션 + ponytail + 내장 `/code-review`로 충분 |
+| [Graphify](https://github.com/Graphify-Labs/graphify) | 기각 | 코드베이스 지식 그래프 색인. 레포 규모 대비 색인 관리 부담(10/06 Graft·Codebase Memory MCP와 같은 판정) |
+| [MarkItDown](https://github.com/microsoft/markitdown) (MIT) | 필요할 때만 | 설치 없이 `pipx run markitdown 파일.docx`처럼 일회성으로. 지금은 PDF·이미지를 Read로 바로 읽어 상시 도입할 이유가 없음 |
+| [agent-browser](https://github.com/vercel-labs/agent-browser) · [Agent-Reach](https://github.com/Panniantong/Agent-Reach) | 기각 | 브라우저는 `@playwright/test`로 이미 화면 확인 중. SNS 크롤링은 계정 쿠키가 필요하고 서비스 범위 밖 |
+| Remotion · HyperFrames | 기존 판정 유지 | 발표 영상이 필요할 때 HyperFrames(Apache-2.0). Remotion은 일정 규모 이상 회사 라이선스가 따로 있어 후순위 |
+| prompts.chat · iFixAi · OpenShell · ai-engineering-from-scratch · AnyPS5 · openGym | 기각 | 프롬프트 모음·에이전트 감사·샌드박스 런타임·학습 자료·무관한 앱으로 이 프로젝트에 쓸 곳이 없음 |

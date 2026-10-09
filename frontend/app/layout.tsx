@@ -12,7 +12,8 @@ const pretendard = localFont({
 });
 
 // 아이폰 홈 인디케이터 영역(safe-area)까지 그려야 하단 탭 막대가 env(safe-area-inset-bottom)로 비켜 선다.
-export const viewport: Viewport = { viewportFit: "cover" };
+// theme-color = 페이지 바탕(--color-page). 모바일 브라우저 주소창 색이 화면과 이어진다(Vercel Web Interface Guidelines)
+export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f5f5f7" };
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://stock-prediction-v2-chi.vercel.app"),
