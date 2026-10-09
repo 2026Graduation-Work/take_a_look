@@ -89,7 +89,7 @@ for (const code of CODES) {
 }
 
 test("대상 외 종목은 null", async () => {
-  const { supply, sentiment, contributions, financial } = await loadStockInsights("000660");
+  const { supply, sentiment, contributions, financial } = await loadStockInsights("000660", null);
   assert.deepEqual(
     { supply, sentiment, contributions, financial },
     { supply: null, sentiment: null, contributions: null, financial: null },
@@ -98,24 +98,24 @@ test("대상 외 종목은 null", async () => {
 
 test("출처: DB가 없는 데모·로컬에서만 저장본 감성·기여도를 예시 데이터로 보인다", async () => {
   for (const code of ["005930", "005380", "035720", "068270"]) {
-    const insights = await loadStockInsights(code);
+    const insights = await loadStockInsights(code, null);
     assert.ok(insights.sentiment?.days.length, code);
     assert.equal(insights.provenance.sentiment.kind, "fixture", code);
   }
-  assert.ok((await loadStockInsights("005930")).contributions?.length);
-  assert.equal((await loadStockInsights("005930")).provenance.contributions.kind, "fixture");
+  assert.ok((await loadStockInsights("005930", null)).contributions?.length);
+  assert.equal((await loadStockInsights("005930", null)).provenance.contributions.kind, "fixture");
 });
 
 test("가격 흐름 분위기: 데모 4종목은 실데이터 스냅샷에서 구간 말을 갖는다", async () => {
   for (const code of ["005930", "005380", "035720", "068270"]) {
-    const { psychology } = await loadStockInsights(code);
+    const { psychology } = await loadStockInsights(code, null);
     assert.ok(psychology, code);
     assert.equal(psychology.provenance.kind, "real");
     assert.equal(psychology.provenance.asOf, "2025-12-30");
     assert.ok(psychology.axis >= -1 && psychology.axis <= 1);
     assert.ok(["많이 들뜸", "조금 들뜸", "차분함", "조금 움츠러듦", "많이 움츠러듦"].includes(psychology.word));
   }
-  assert.equal((await loadStockInsights("000660")).psychology, null);
+  assert.equal((await loadStockInsights("000660", null)).psychology, null);
 });
 
 
@@ -132,7 +132,7 @@ async function samsungNudges(styleAxes: StyleAxes) {
   // 1년 변동성·백분위는 종목 마스터 값(2026-10-06 운영 실측)을 넣는다
   const detail = { ...stockDetails["005930"], volatilityAnnual: 0.8681, volatilityPercentile: 0.8518 };
   // 수급은 DB에서만 오므로(0013), 넛지 규칙 검사에는 저장된 실데이터 20영업일을 직접 넣는다
-  const insights = { ...(await loadStockInsights("005930")), supply: SUPPLY_SNAPSHOT["005930"] };
+  const insights = { ...(await loadStockInsights("005930", null)), supply: SUPPLY_SNAPSHOT["005930"] };
   const market = toNudgeMarket(detail, insights, portfolioHoldings);
   assert.ok(market);
   return selectNudges(classifyBit(styleAxes), market).map(({ id }) => id);
