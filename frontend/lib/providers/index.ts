@@ -206,7 +206,9 @@ export const contributionProvider = async (code: string): Promise<ContributionSi
     .sort((left, right) => right.share - left.share);
 };
 
-export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuyPrice">;
+export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuyPrice"> & {
+  rawAvgBuyPrice?: number | null; // 사용자가 입력한 평단 원값(모르면 null). avgBuyPrice는 비중 계산용으로 종가가 채워질 수 있다
+};
 
 // 가격·거래량으로 본 분위기 한 줄(psychology_market_v1). 구간 말 + 풀이.
 export interface PsychologyLine {

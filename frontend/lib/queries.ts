@@ -377,6 +377,7 @@ async function queryStockDetail(
       code: stock_code,
       quantity,
       avgBuyPrice: costBasis(avg_buy_price, closes.get(stock_code)?.close).price,
+      rawAvgBuyPrice: avg_buy_price,
     })),
     source: "supabase",
   };
