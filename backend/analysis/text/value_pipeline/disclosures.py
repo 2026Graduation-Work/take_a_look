@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from datetime import date, timedelta
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -46,13 +48,24 @@ def classify(title: str) -> str:
     return "other"
 
 
+def _get(url: str, attempts: int = 3) -> dict:
+    # 10/09 Actions에서 DART 연결 타임아웃 1회로 공시 전체가 빠졌다. 일시 오류만 짧게 다시 시도한다.
+    for attempt in range(attempts):
+        try:
+            with urlopen(url, timeout=30) as response:
+                return json.loads(response.read())
+        except (URLError, TimeoutError):
+            if attempt == attempts - 1:
+                raise
+            time.sleep(10 * (attempt + 1))
+
+
 def fetch_day(day: date, api_key: str) -> list[dict]:
     rows, page = [], 1
     while True:
         query = urlencode({"crtfc_key": api_key, "bgn_de": day.strftime("%Y%m%d"), "end_de": day.strftime("%Y%m%d"),
                            "page_no": page, "page_count": 100})
-        with urlopen(f"{LIST_URL}?{query}", timeout=30) as response:
-            data = json.loads(response.read())
+        data = _get(f"{LIST_URL}?{query}")
         if data.get("status") == "013":  # 조회된 데이터 없음
             return rows
         if data.get("status") != "000":

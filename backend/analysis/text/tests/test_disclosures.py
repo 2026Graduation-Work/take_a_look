@@ -67,3 +67,23 @@ def test_interim_report_is_annualized_from_cumulative():
     raw = parse_report(frame, 6)
     assert raw["revenue"] == 200 and raw["revenue_prev"] == 160  # 반기 누적 × 2
     assert raw["net_income"] == 20 and raw["total_equity"] == 1000
+
+
+def test_get_retries_timeout(monkeypatch):
+    import io
+    from urllib.error import URLError
+
+    from analysis.text.value_pipeline import disclosures
+
+    calls = []
+
+    def fake_urlopen(url, timeout):
+        calls.append(url)
+        if len(calls) == 1:
+            raise URLError("timed out")
+        return io.BytesIO(b'{"status": "013"}')
+
+    monkeypatch.setattr(disclosures, "urlopen", fake_urlopen)
+    monkeypatch.setattr(disclosures.time, "sleep", lambda s: None)
+    assert disclosures._get("u") == {"status": "013"}
+    assert len(calls) == 2
