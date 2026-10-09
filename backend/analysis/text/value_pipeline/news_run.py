@@ -31,8 +31,12 @@ def run_live_cycle(
     as_of: datetime | None = None,
     page_size: int = 100,
     require_finbert: bool = False,
+    extra_page: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    """종목별 API 검색으로 각 종목의 직전 24시간 트랙을 만든다."""
+    """종목별 API 검색으로 각 종목의 직전 24시간 트랙을 만든다.
+
+    extra_page면 첫 페이지가 꽉 차고 잘렸을 때만 2페이지(그다음 오래된 100건)를 더 받는다.
+    """
     if not targets:
         raise ValueError("최소 하나의 대상 종목이 필요합니다.")
     now = as_of or datetime.now(KST)
@@ -55,11 +59,16 @@ def run_live_cycle(
         )
         if isinstance(fetched, newsapi_ai.ArticleBatch):
             items = fetched.articles
+            if extra_page and fetched.truncated and fetched.returned_count >= page_size:
+                more = fetcher([search_keyword], query_start.isoformat(), end.isoformat(), page_size=page_size, page=2)
+                seen = {item["news_id"] for item in items}
+                items = items + [item for item in more.articles if item["news_id"] not in seen]
+            total = fetched.total_results
             provider_metadata = {
-                "total_results": fetched.total_results,
-                "returned_count": fetched.returned_count,
+                "total_results": total,
+                "returned_count": len(items),
                 "pages": fetched.pages,
-                "truncated": fetched.truncated,
+                "truncated": total is not None and total > len(items),
             }
         else:
             items = fetched

@@ -255,3 +255,35 @@ def test_reset_live_collects_and_validates_before_replacing_each_stock(
         ("persist", "035420"),
     ]
     assert result.succeeded == ["005930", "035420"]
+
+
+def test_second_page_only_for_full_truncated_stocks_within_daily_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    from analysis.text.value_pipeline import news_run, newsapi_ai
+
+    pages: list[tuple[str, int]] = []
+
+    def fetcher(keywords, start, end, *, page_size, page=1):
+        pages.append((keywords[0], page))
+        full = keywords[0] != "카카오"  # 005930은 검색어 덮어쓰기("삼성")가 있다
+        count = page_size if full else 30
+        articles = [{"news_id": f"{keywords[0]}-{page}-{i}"} for i in range(count)]
+        return newsapi_ai.ArticleBatch(articles=articles, total_results=325 if full else 30,
+                                       returned_count=count, pages=4 if full else 1, truncated=full)
+
+    seen: dict[str, int] = {}
+
+    def fake_track(items, ticker, *args, provider_metadata=None, **kwargs):
+        seen[ticker] = provider_metadata["returned_count"]
+        return {"ticker": ticker, "truncated": provider_metadata["truncated"]}
+
+    monkeypatch.setattr(news_run.news_tracks, "build_live_track", fake_track)
+    monkeypatch.setattr(supabase_sync.supabase_store, "persist_news_track", lambda client, track: None)
+
+    supabase_sync.run_live_sync({"005930": "삼성전자", "035720": "카카오"}, client=object(), fetcher=fetcher)
+    assert [page for _, page in pages] == [1, 2, 1]  # 꽉 찬 종목만 2페이지
+    assert seen == {"005930": 200, "035720": 30}
+
+    pages.clear()
+    full_day = {f"{i:06d}": "삼성전자" for i in range(supabase_sync.NEWSAPI_DAILY_CALLS)}
+    supabase_sync.run_live_sync(full_day, client=object(), fetcher=fetcher)
+    assert len(pages) == supabase_sync.NEWSAPI_DAILY_CALLS  # 대상이 상한만큼이면 2페이지 없음
