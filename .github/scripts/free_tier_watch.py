@@ -18,6 +18,7 @@ MAX_PUBLISH_LAG = 2  # 영업일(주말만 뺀다. 공휴일이 끼면 하루 �
 TITLE = "[ops] 무료 한도 경고"
 SITE_URL = "https://takealook-skku.vercel.app"  # Vercel 연동이 덮어쓴 적 있음(docs/auth-setup.md 3-3)
 SITE_URL_TITLE = "[ops] 인증 Site URL 변경됨"
+OWNER = "Choi-Jung-Hyeon"  # 운영 감시 담당
 
 
 def weekdays_between(start, end):
@@ -65,7 +66,11 @@ def report(title, body):
     if found:
         subprocess.run(["gh", "issue", "comment", found, "--body", body], check=True)
     else:
-        subprocess.run(["gh", "issue", "create", "--title", title, "--body", body], check=True)
+        # 담당·라벨·Type을 바로 채운다(팀 이슈 규칙). Priority 등 필드는 사람이 정한다
+        url = subprocess.run(["gh", "issue", "create", "--title", title, "--body", body, "--label", "bug",
+                              "--assignee", OWNER], capture_output=True, text=True, check=True).stdout.strip()
+        subprocess.run(["gh", "api", "-X", "PATCH", f"repos/{os.environ['GH_REPO']}/issues/{url.rsplit('/', 1)[1]}",
+                        "-f", "type=Bug"], check=False)
 
 
 def main():
