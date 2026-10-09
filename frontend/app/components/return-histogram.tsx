@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SignalMeta } from "@/lib/display";
 import { clipReturnBins } from "@/lib/chart-detail";
 import type { ReturnBand, ReturnBin } from "@/lib/types";
@@ -47,7 +47,20 @@ export default function ReturnHistogram({
   signal,
   horizonLabel,
 }: ReturnHistogramProps) {
+  // 누른 막대의 건수를 보인다. 다시 누르거나 바깥을 누르거나 Esc로 닫는다(올리기만으로는 열지 않음)
   const [hovered, setHovered] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (hovered === null) return;
+    const outside = (event: PointerEvent) => !root.current?.contains(event.target as Node) && setHovered(null);
+    const escape = (event: KeyboardEvent) => event.key === "Escape" && setHovered(null);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [hovered]);
 
   if (
     rawBins.length === 0 ||
@@ -107,7 +120,7 @@ export default function ReturnHistogram({
   const ciPercent = Math.round(band.ciLevel * 100);
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <svg
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
@@ -236,7 +249,7 @@ export default function ReturnHistogram({
           실제 수익률 ({horizonLabel})
         </text>
 
-        {/* 호버 히트 영역 (막대보다 넓게, 플롯 전체 높이) */}
+        {/* 누르는 영역 (막대보다 넓게, 플롯 전체 높이) */}
         {bins.map((bin, i) => (
           <rect
             key={bin.from}
@@ -245,8 +258,8 @@ export default function ReturnHistogram({
             width={x(bin.to) - x(bin.from)}
             height={plotH + 14}
             fill="transparent"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
+            className="cursor-pointer"
+            onClick={() => setHovered((current) => (current === i ? null : i))}
           />
         ))}
       </svg>
@@ -259,14 +272,14 @@ export default function ReturnHistogram({
 
       {hovered !== null && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-2.5 py-1.5 shadow-lift"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-3 py-2 shadow-lift"
           style={{
             left: `${(((x(bins[hovered].from) + x(bins[hovered].to)) / 2) / VB_W) * 100}%`,
             top: `${((y(bins[hovered].count) - 8) / VB_H) * 100}%`,
           }}
         >
           <span className="text-xs font-medium tabular-nums">{binLabel(bins[hovered])}</span>
-          <span className="ml-1.5 text-xs text-muted">
+          <span className="ml-2 text-xs text-muted">
             {bins[hovered].count.toLocaleString("ko-KR")}건 / {caseCount.toLocaleString("ko-KR")}건
           </span>
         </div>

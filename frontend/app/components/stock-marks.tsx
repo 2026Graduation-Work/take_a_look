@@ -88,7 +88,7 @@ export default function StockMarks({ code, name }: { code: string; name: string 
             });
           }}
         >
-          <label className="flex flex-col gap-1.5 text-xs text-muted">
+          <label className="flex flex-col gap-2 text-xs text-muted">
             내 판단 메모
             <textarea
               value={draft}
@@ -125,7 +125,7 @@ export function WatchlistEditor() {
       </h2>
       <ul className="group-list m-0 list-none p-0">
         {watchlist.map((stock) => (
-          <li key={stock.code} className="flex items-center gap-3 px-5 py-3.5">
+          <li key={stock.code} className="flex items-center gap-3 px-5 py-4">
             <span className="min-w-0 flex-1 truncate text-base font-medium">{stock.name}</span>
             <span className="text-xs text-muted tabular-nums">{stock.code}</span>
             <ConfirmButton

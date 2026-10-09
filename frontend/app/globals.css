@@ -67,19 +67,19 @@
      본문 15px, 보조 13px, 제목·대표 수치 28~40px. 임의값 금지.
      글자를 키운 대신 한 화면 정보량을 줄인다. */
   --text-2xs: 0.8125rem; /* 13px — 각주·차트 눈금. 이보다 작게 쓰지 않는다 */
-  --text-2xs--line-height: 1.45;
+  --text-2xs--line-height: 1.6;
   --text-xs: 0.875rem; /* 14px — 보조·라벨 */
-  --text-xs--line-height: 1.5;
+  --text-xs--line-height: 1.6;
   --text-sm: 1rem; /* 16px — 본문 기준 */
   --text-sm--line-height: 1.6;
   --text-base: 1.125rem; /* 18px — 목록 항목 제목·강조 본문 */
-  --text-base--line-height: 1.5;
+  --text-base--line-height: 1.6;
   --text-lg: 1.25rem; /* 20px — 카드 제목 */
-  --text-lg--line-height: 1.4;
+  --text-lg--line-height: 1.3;
   --text-xl: 1.5rem; /* 24px — 섹션 제목 */
   --text-xl--line-height: 1.3;
   --text-3xl: 1.75rem; /* 28px — 화면 제목 */
-  --text-3xl--line-height: 1.2;
+  --text-3xl--line-height: 1.3;
   --text-4xl: 2.5rem; /* 40px — 대표 수치 하나 */
   --text-4xl--line-height: 1.1;
 
@@ -117,11 +117,10 @@ body {
   overflow-wrap: break-word;
 }
 
-/* 큰 글자일수록 자간을 좁힌다 — 큰 텍스트가 벌어져 보이는 현상 보정 */
+/* 제목은 줄 길이를 고르게(자간은 기본, DESIGN.md 3-1) */
 h1,
 h2,
 h3 {
-  letter-spacing: -0.02em;
   text-wrap: balance;
 }
 

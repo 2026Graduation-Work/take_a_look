@@ -57,7 +57,7 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder="종목명 또는 코드 검색"
         aria-label="종목 검색"
-        className="box-border h-11 w-full min-w-0 rounded-md bg-track px-3.5 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+        className="box-border h-11 w-full min-w-0 rounded-md bg-track px-4 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
       />
       {open && matches.length > 0 && (
         <ul aria-label="종목 검색 결과" className="glass absolute inset-x-0 top-12 z-50 m-0 list-none overflow-hidden rounded-md bg-white/90 p-0 py-1">

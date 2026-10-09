@@ -14,7 +14,6 @@ import EvidenceTabs, {
   SourceList,
   useDemoStyleAxes,
 } from "./insight-cards";
-import SourceLine from "./source-line";
 import StockMarks from "./stock-marks";
 import PriceHistoryChart from "./price-history-chart";
 import ReturnHistogram from "./return-histogram";
@@ -33,6 +32,7 @@ import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
 import type { InvestorProfileSummary, MarketStatus, StockDetail, StyleAxes } from "@/lib/types";
+import { staleLabel } from "@/lib/market-status";
 
 function formatPercent(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
@@ -47,7 +47,7 @@ function RiskMeter({ grade }: { grade: StockDetail["riskGrade"] }) {
   return (
     <span className="inline-flex items-center gap-2 text-sm text-body">
       위험도 <strong className="font-semibold text-ink">{word}</strong>
-      <span className="flex gap-0.5" aria-hidden>
+      <span className="flex gap-1" aria-hidden>
         {Array.from({ length: 5 }, (_, index) => (
           <span key={index} className={`h-2 w-3 rounded-[2px] ${index < filled ? "bg-ink" : "bg-track"}`} />
         ))}
@@ -150,7 +150,7 @@ export default function StockDetailView({
 
         {/* 1. 헤더 */}
         <section aria-labelledby="stock-name" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <span className="eyebrow tabular-nums">
               {detail.code} · {detail.market}
               {detail.riskFlags.length > 0 && ` · ${detail.riskFlags.map((flag) => RISK_FLAG_LABEL[flag]).join(" · ")}`}
@@ -160,7 +160,7 @@ export default function StockDetailView({
             </h1>
             <RiskMeter grade={detail.riskGrade} />
           </div>
-          <div className="flex flex-col items-start gap-0.5 sm:items-end">
+          <div className="flex flex-col items-start gap-1 sm:items-end">
             {hasCurrentPrice ? (
               <>
                 <span className="text-4xl font-semibold tabular-nums">
@@ -168,8 +168,8 @@ export default function StockDetailView({
                 </span>
                 <span className="text-base font-medium tabular-nums" style={{ color: changeColor }}>
                   {changeArrow} {formatPercent(changePercent)}
-                  <span className="ml-1.5 text-xs font-normal text-muted">
-                    전일 대비 · {formatDate(detail.asOf)} 기준
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    전일 대비{detail.asOf && staleLabel(detail.asOf) && ` · ${formatDate(detail.asOf)} 기준`}
                   </span>
                 </span>
               </>
@@ -209,9 +209,8 @@ export default function StockDetailView({
             </p>
           )}
           <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
-            <SourceLine label="주가 출처" provenance={detail.priceProvenance ?? detail.provenance} />
-            <SourceLine label="신호 출처" provenance={detail.provenance} />
+            {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
+            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
           </div>
         </section>
 
@@ -227,9 +226,9 @@ export default function StockDetailView({
         {/* 5. 더 알아보기 */}
         <details className="disclosure surface p-6">
           <summary>
-            <span className="flex flex-col gap-0.5">
+            <span className="flex flex-col gap-1">
               <span className="text-lg font-semibold">더 알아보기</span>
-              <span className="text-xs text-muted">수익률 분포 · 기간별 비교 · 계산 근거 · 데이터 출처</span>
+              <span className="text-xs text-muted">수익률 분포 · 기간별 비교 · 계산 근거 · 데이터 출처·기준</span>
             </span>
           </summary>
           <div className="mt-6 flex flex-col gap-8">
@@ -266,7 +265,7 @@ export default function StockDetailView({
                 {horizons.map(([key, legacyDirection]) => {
                   const direction = preview ? chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
                   return (
-                  <li key={key} className="flex flex-col gap-0.5 rounded-md bg-field px-4 py-3">
+                  <li key={key} className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
                     <span className="text-xs text-muted">{preview ? key === "h5" ? "1주 · 5거래일" : "4주 · 20거래일" : HORIZON_LABEL[key]}</span>
                     <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
                       {direction ? `${HORIZON_META[direction].arrow} ${preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : "중립" : DIRECTION_WORD[direction]}` : "미제공"}
@@ -298,7 +297,7 @@ export default function StockDetailView({
 
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">
               <h3 id="more-sources" className="text-base font-semibold">
-                데이터 출처
+                데이터 출처·기준
               </h3>
               <SourceList detail={detail} insights={insights} />
             </section>

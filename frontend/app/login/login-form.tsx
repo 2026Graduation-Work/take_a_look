@@ -65,7 +65,7 @@ export default function LoginForm() {
   }
 
   const field =
-    "h-11 w-full rounded-md bg-field px-3.5 text-sm font-normal text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
+    "h-11 w-full rounded-md bg-field px-4 text-sm font-normal text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
 
   function back() {
     setEmailOpen(false);
@@ -113,7 +113,7 @@ export default function LoginForm() {
               ))}
             </div>
             {tab === "signup" && (
-              <label className="flex flex-col gap-1.5 text-xs text-muted">
+              <label className="flex flex-col gap-2 text-xs text-muted">
                 이름
                 <input
                   value={name}
@@ -127,7 +127,7 @@ export default function LoginForm() {
                 />
               </label>
             )}
-            <label className="flex flex-col gap-1.5 text-xs text-muted">
+            <label className="flex flex-col gap-2 text-xs text-muted">
               이메일
               <input
                 type="email"
@@ -140,7 +140,7 @@ export default function LoginForm() {
                 className={field}
               />
             </label>
-            <label className="flex flex-col gap-1.5 text-xs text-muted">
+            <label className="flex flex-col gap-2 text-xs text-muted">
               비밀번호
               <input
                 type="password"

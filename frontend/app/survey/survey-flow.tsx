@@ -383,7 +383,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
             <span className="grid size-8 flex-none place-items-center rounded-full bg-track text-sm font-semibold tabular-nums">
               {index + 1}
             </span>
-            <span className="flex flex-col gap-0.5">
+            <span className="flex flex-col gap-1">
               <span className="text-base font-medium">{title}</span>
               <span className="text-sm text-body">{body}</span>
             </span>
@@ -602,7 +602,7 @@ function ChoiceRow({
         onClick={type === "radio" && selected ? onChange : undefined}
         className="size-4 flex-none accent-[var(--color-brand)]"
       />
-      <span className="flex flex-col gap-0.5">
+      <span className="flex flex-col gap-1">
         <span>{label}</span>
         {detail && <span className="text-xs font-normal text-muted">{detail}</span>}
       </span>
@@ -738,7 +738,7 @@ export function ResultView({
             <span className="mr-2 text-sm font-medium text-ink">제외할 종목 유형</span>
             {avoidedLabels.length ? (
               avoidedLabels.map((label) => (
-                <span key={label} className="rounded-sm bg-track px-2.5 py-1 text-xs text-body">
+                <span key={label} className="rounded-sm bg-track px-3 py-1 text-xs text-body">
                   {label}
                 </span>
               ))

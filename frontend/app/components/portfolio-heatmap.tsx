@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
-import SourceLine from "./source-line";
+import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
+import { staleLabel } from "@/lib/market-status";
 
 interface WeightedHolding {
   holding: PortfolioHolding;
@@ -79,7 +80,7 @@ export default function PortfolioHeatmap({
 
   const grandTotal = columnTotals.reduce((sum, value) => sum + value, 0) || 1;
   return (
-    <div className="surface flex flex-col gap-3 p-4">
+    <div className="surface flex flex-col gap-4 p-4">
       <div
         role="list"
         aria-label="보유 종목별 오늘 모델 신호"
@@ -98,7 +99,7 @@ export default function PortfolioHeatmap({
                   key={holding.code}
                   role="listitem"
                   href={`/stocks/${holding.code}`}
-                  title={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, ${signal.label} 신호`}
+                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, ${signal.label} 신호`}
                   className="flex min-h-16 min-w-0 flex-col justify-between overflow-hidden rounded-md px-3 py-2 text-white hover:text-white hover:no-underline hover:brightness-110"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                 >
@@ -115,12 +116,14 @@ export default function PortfolioHeatmap({
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+        <DotLegend items={SIGNAL_LEGEND} />
         <span>
-          색은 오늘 모델 신호(빨강 상방 · 회색 중립 · 파랑 하방), 넓이는 평가금액 기준
-          {closeAsOf && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
+          넓이는 평가금액
+          {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
+          {closeAsOf && staleLabel(closeAsOf) && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
+          {provenance?.kind === "real" ? " · 모델 검증 전" : provenance && " · 예시 데이터"}
         </span>
-        {provenance && <SourceLine provenance={provenance} />}
       </div>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">

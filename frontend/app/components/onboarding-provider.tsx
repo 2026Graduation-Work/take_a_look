@@ -110,7 +110,7 @@ function DemoAccountBanner() {
   return (
     <div
       role="note"
-      className="bg-track px-4 py-1.5 text-center text-xs font-medium text-body"
+      className="bg-track px-4 py-2 text-center text-xs font-medium text-body"
     >
       데모 계정 · 예시 데이터
       <span className="font-normal"> — 가입 없이 둘러보는 중이에요. 설문 결과는 이 브라우저에만 저장돼요.</span>

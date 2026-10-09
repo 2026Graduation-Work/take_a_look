@@ -59,7 +59,9 @@ import { CHART } from "@/lib/chart-colors";
 import { formatKstDateTime, kstDay } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
-import SourceLine, { sourceText } from "./source-line";
+import { SourceTable } from "./source-line";
+import DotLegend from "./dot-legend";
+import { staleLabel } from "@/lib/market-status";
 
 // 극성은 lib/profiling/style-questions.json axes와 같다.
 const AXIS_META: Record<StyleAxisId, { name: string; negative: string; positive: string }> = {
@@ -238,7 +240,7 @@ export function Checkpoints({
       {demo.styleAxes && (
         <details className="disclosure border-t border-line-soft pt-3">
           <summary>다른 유형이라면?</summary>
-          <p className="mb-2.5 mt-2 text-xs text-muted">
+          <p className="mb-3 mt-2 text-xs text-muted">
             다른 유형은 같은 종목을 어떤 순서와 확인 거리로 보는지 바꿔 볼 수 있어요. 이 화면에서만 바뀌어요.
           </p>
           <div role="group" aria-label="다른 유형이라면?" className="flex flex-wrap gap-2">
@@ -250,7 +252,7 @@ export function Checkpoints({
                   type="button"
                   aria-pressed={active}
                   onClick={() => demo.setViewAs(type)}
-                  className={`min-h-11 rounded-sm px-3.5 text-xs font-medium ${
+                  className={`min-h-11 rounded-sm px-4 text-xs font-medium ${
                     active ? "bg-brand-soft text-brand" : "bg-track text-body hover:bg-line"
                   }`}
                 >
@@ -299,7 +301,7 @@ export default function EvidenceTabs({
 
   return (
     <section aria-labelledby="evidence-title" className="flex flex-col gap-4">
-      <div className="flex flex-col gap-0.5 px-1">
+      <div className="flex flex-col gap-1 px-1">
         <span className="eyebrow">판단 근거 4가지 · 내 성향에 맞춘 순서</span>
         <h2 id="evidence-title" className="text-xl font-semibold">
           무엇을 근거로 판단할까요?
@@ -341,9 +343,9 @@ export default function EvidenceTabs({
       >
         <h3 className="text-lg font-semibold">{TAB_META[active].question}</h3>
         {active === "market" && <MarketPanel detail={detail} insights={insights} />}
-        {active === "supply" && <SupplyPanel supply={insights.supply} provenance={insights.provenance.supply} />}
+        {active === "supply" && <SupplyPanel supply={insights.supply} />}
         {active === "financial" && (
-          <FinancialPanel financial={insights.financial} provenance={insights.provenance.financial} />
+          <FinancialPanel financial={insights.financial} />
         )}
         {active === "contribution" && (
           <ContributionPanel
@@ -351,7 +353,6 @@ export default function EvidenceTabs({
             total={contributionTotal}
             features={modelFeatures}
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
-            provenance={detail.provenance}
           />
         )}
         <Why>{TAB_META[active].why}</Why>
@@ -423,7 +424,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
       ) : risk ? (
         <Conclusion>
           최근 1년 {TERM.volatility}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요
-          {risk.asOf && <span className="text-xs text-muted tabular-nums"> · {risk.asOf.replaceAll("-", ".")} 기준</span>}
+          {risk.asOf && staleLabel(risk.asOf) && <span className="text-xs text-muted tabular-nums"> · {risk.asOf.replaceAll("-", ".")} 기준</span>}
         </Conclusion>
       ) : !psychology ? (
         <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유·관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
@@ -473,12 +474,12 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
               );
             })}
           </div>
-          <p className="m-0 text-2xs text-muted tabular-nums">
-            -1 부정 ~ +1 긍정 · {selectedSentimentPeriod === "day" ? "일별 관련 기사 평균" : `${selectedSentimentPeriod === "month" ? "월별" : "연별"} 뉴스 감성 · 기사 수 가중평균`}
+          <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
+            <DotLegend items={[["var(--color-up)", "긍정"], ["var(--color-muted)", "중립"], ["var(--color-down)", "부정"]]} />
+            {selectedSentimentPeriod === "day" ? "일별 관련 기사 평균" : `${selectedSentimentPeriod === "month" ? "월별" : "연별"} 뉴스 감성 · 기사 수 가중평균`}
             {chartDates && ` · ${sentimentDateLabel(chartDates.start)} ~ ${sentimentDateLabel(chartDates.end)}`}
             {includesLive && " · 오늘 Live 반영"}
           </p>
-          {sentiment && <SourceLine provenance={insights.provenance.sentiment} />}
           <div
             role="tabpanel"
             id="sentiment-panel"
@@ -523,7 +524,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
             <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
             <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
           </dl>
-          {risk.asOf && <p className="m-0 text-2xs text-muted tabular-nums">{risk.asOf.replaceAll("-", ".")} 종가 기준</p>}
+          {risk.asOf && staleLabel(risk.asOf) && <p className="m-0 text-2xs text-muted tabular-nums">{risk.asOf.replaceAll("-", ".")} 종가 기준</p>}
         </>
       )}
       {sentimentView?.headlines.length ? (
@@ -531,7 +532,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           <summary>
             대표 기사 <span className="count">{sentimentView.headlines.length}건</span>
           </summary>
-          <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
+          <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">
             {sentimentView.headlines.map((headline) => (
               <li key={`${headline.date}:${headline.title}`} className="text-sm text-ink">
                 {headline.url ? (
@@ -583,19 +584,13 @@ function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosur
       ) : (
         <p className="m-0 text-sm text-muted">최근 90일 안에 올라온 공시가 없어요.</p>
       )}
-      {disclosures.length > 0 && (
-        <SourceLine
-          provenance={{ kind: "real", source: "DART 전자공시(제목·날짜만 저장, 유형은 제목 규칙으로 분류)", asOf: disclosures[0].filedOn }}
-          href="https://dart.fss.or.kr"
-        />
-      )}
     </section>
   );
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md bg-field px-4 py-3">
+    <div className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="m-0 text-lg font-semibold tabular-nums">{value}</dd>
     </div>
@@ -612,10 +607,25 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
     ...days.map((day) => ({ ...day, label: dateLabel(day.date), liveScore: null as number | null })),
     ...(live ? [{ date: live.asOf, label: "오늘 Live", score: connectLive ? live.score : null, liveScore: live.score, articleCount: live.articleCount }] : []),
   ];
+  // 점을 누르면 그 날 값, 바깥을 누르거나 Esc로 닫는다(올리기만으로는 열지 않음)
+  const [tip, setTip] = useState(false);
+  const chartRoot = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!tip) return;
+    const outside = (event: PointerEvent) => !chartRoot.current?.contains(event.target as Node) && setTip(false);
+    const escape = (event: globalThis.KeyboardEvent) => event.key === "Escape" && setTip(false);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [tip]);
   return (
-    <div className="h-[204px] min-w-0">
+    <div ref={chartRoot} className="h-[204px] min-w-0">
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={{ width: 860, height: 180 }}>
         <LineChart
+          onClick={() => setTip(true)}
           data={data}
           margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
         >
@@ -640,6 +650,8 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
           />
           <ReferenceLine y={0} stroke={CHART.line} />
           <Tooltip
+            trigger="click"
+            active={tip ? undefined : false}
             contentStyle={TOOLTIP_STYLE}
             formatter={(value, _name, item) => {
               const count = (item.payload as SentimentDay).articleCount;
@@ -690,7 +702,7 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
 }
 
 // 투자자별 20일 순매수 합계를 가운데 0 기준 막대로. 순매수 = 적, 순매도 = 청.
-function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null; provenance: DataProvenance }) {
+function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
   if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>;
   const totals = SUPPLY_SERIES.map((series) => ({
     ...series,
@@ -706,7 +718,7 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
         최근 20영업일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
         {seller.label}이 가장 많이 팔았어요.
       </Conclusion>
-      <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
+      <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {totals.map(({ key, label, total, latest }) => {
           const buy = total >= 0;
           const color = buy ? "var(--color-up)" : "var(--color-down)";
@@ -738,7 +750,6 @@ function SupplyPanel({ supply, provenance }: { supply: SupplyDemandDay[] | null;
         <span>
           {supply[0].date.replaceAll("-", ".")} ~ {supply[supply.length - 1].date.replaceAll("-", ".")} · 순매수 수량(주) · 기타법인 제외
         </span>
-        <SourceLine provenance={provenance} />
       </div>
     </>
   );
@@ -752,7 +763,7 @@ function copula(word: string): string {
 
 const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 
-function FinancialPanel({ financial, provenance }: { financial: FinancialSnapshot | null; provenance: DataProvenance }) {
+function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유·관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
@@ -798,7 +809,6 @@ function FinancialPanel({ financial, provenance }: { financial: FinancialSnapsho
       </details>
       <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
         <span>{financial.period}</span>
-        <SourceLine provenance={provenance} detail={financial.filing} />
       </div>
     </>
   );
@@ -810,13 +820,11 @@ function ContributionPanel({
   features,
   total,
   reasons,
-  provenance,
 }: {
   features?: ChartSnapshot["inference"]["features"];
   space?: ChartSnapshot["inference"]["contribution_space"];
   total?: number;
   reasons: PredictionReason[];
-  provenance: DataProvenance;
 }) {
   if (!features?.length) {
     if (!reasons.length) return <Unavailable>이 예측에 연결된 근거 데이터가 없어요.</Unavailable>;
@@ -829,7 +837,7 @@ function ContributionPanel({
           {reasons.map((reason, index) => (
             <li key={`${reason.title}:${index}`} className="flex gap-3">
               <span className="flex-none text-sm text-muted tabular-nums">{index + 1}</span>
-              <span className="flex flex-col gap-0.5">
+              <span className="flex flex-col gap-1">
                 <span className="text-sm text-ink">{reason.title}</span>
                 <span className="text-xs text-muted">
                   {reason.detail} · {reason.sourceLabel}
@@ -838,7 +846,6 @@ function ContributionPanel({
             </li>
           ))}
         </ol>
-        <SourceLine provenance={provenance} />
       </>
     );
   }
@@ -863,7 +870,7 @@ function ContributionPanel({
           const up = feature.contribution > 0;
           const color = !up || target === "중립" ? "var(--color-muted)" : target === "하방" ? "var(--color-down)" : "var(--color-up)";
           return (
-            <li key={feature.name} className="flex flex-col gap-1.5" data-model-feature={feature.name}>
+            <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
                 <span className="ml-auto flex-none text-xs text-muted tabular-nums">
@@ -904,7 +911,6 @@ function ContributionPanel({
       </details>
       <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
         <span>{total === undefined ? "전체 항목 기준값이 없어 %는 미제공해요." : "기여도 = 전체 항목 대비 비중이라 합이 100%가 아닐 수 있어요."} {target} 강화 = 점수를 높임 · 완화 = 낮춤 · 예측 확률·수익률 아님</span>
-        <SourceLine provenance={provenance} />
       </div>
     </>
   );
@@ -979,7 +985,7 @@ export function CalculationBasis({
 function BasisTile({ title, value, sub, rule, children }: { title: string; value: string; sub: string; rule?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 rounded-md bg-field px-4 py-3">
-      <div className="flex flex-col gap-0.5">
+      <div className="flex flex-col gap-1">
         <span className="text-xs text-muted">{title}</span>
         <span className="text-base font-semibold text-ink">
           {value} <span className="text-sm font-normal tabular-nums text-muted">{sub}</span>
@@ -995,7 +1001,7 @@ function BasisTile({ title, value, sub, rule, children }: { title: string; value
 function Scale({ value, left, right, zones, current }: { value: number; left?: string; right?: string; zones?: string[]; current?: number }) {
   const position = `${((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100}%`;
   return (
-    <div role="img" aria-label={`-1부터 +1 사이에서 ${signed(value)} 위치`} className="flex flex-col gap-1.5">
+    <div role="img" aria-label={`-1부터 +1 사이에서 ${signed(value)} 위치`} className="flex flex-col gap-2">
       <div className="relative h-2 rounded-full bg-track">
         {!zones && <span className="absolute inset-y-0 left-1/2 w-0.5 bg-field" />}
         {zones?.slice(1).map((_, index) => (
@@ -1030,7 +1036,11 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
     [TERM.sentiment, shown(insights.sentiment, p.sentiment)],
     ["최근 24시간 뉴스", shown(insights.liveSentiment, p.liveSentiment)],
     [TERM.supply, shown(insights.supply, p.supply)],
-    [TERM.financial, shown(insights.financial, p.financial)],
+    [TERM.financial, shown(insights.financial, p.financial && insights.financial?.filing
+      ? { ...p.financial, source: `${p.financial.source} · ${insights.financial.filing}` } : p.financial)],
+    ["최근 공시", insights.disclosures.length
+      ? { kind: "real", source: "DART 전자공시(제목·날짜만 저장, 유형은 제목 규칙으로 분류)", asOf: insights.disclosures[0].filedOn }
+      : null],
     [TERM.contribution, p.contributions],
     ...(insights.psychology
       ? ([["가격 흐름으로 본 분위기", insights.psychology.provenance]] as [string, DataProvenance][])
@@ -1044,22 +1054,14 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
     ],
   ];
   return (
-    <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-      {rows.map(([label, provenance]) => (
-        <div key={label} className="contents">
-          <dt className="text-body">{label}</dt>
-          <dd className="m-0 min-w-0 [overflow-wrap:anywhere] [&>span]:max-w-full [&>span]:whitespace-normal">
-            {provenance ? sourceText(provenance) : "미제공"}
-          </dd>
-        </div>
-      ))}
+    <SourceTable rows={rows}>
       {detail.priceProvenance?.source.includes("수정주가") && (
         <p className="col-span-2 m-0 mt-1 text-xs text-muted">
           주가는 수정주가예요. 그 뒤에 있었던 배당·주식 나눔을 반영해 과거 가격을 다시 계산한 값이라, 그날 실제로 거래된
           가격과 조금 다를 수 있어요. 가격 흐름과 등락률을 비교하기에는 이 방식이 정확해요.
         </p>
       )}
-    </dl>
+    </SourceTable>
   );
 }
 
