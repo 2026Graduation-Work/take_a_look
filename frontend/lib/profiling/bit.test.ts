@@ -249,3 +249,12 @@ test("다른 성향으로 보기: 프리셋은 해당 유형으로 분류되고 
     }
   }
 });
+
+test("위험도 안내는 한 줄(#256): riskNote가 N11 자리를 대신하고, 없을 때만 N11", async () => {
+  const { checkpointItems } = await import("./nudges.ts");
+  const n11 = { id: "N11" as const, text: "위험도는 높은 편이에요", axis: "loss_tolerance" as const, ratio: -0.5 };
+  const n07 = { id: "N07" as const, text: "뉴스", axis: "urgency" as const, ratio: 0.5 };
+  assert.deepEqual(checkpointItems([n11, n07], "위험 감수 정도(38)").map(({ key }) => key), ["risk", "N07"]);
+  assert.deepEqual(checkpointItems([n07], "위험 감수 정도(38)").map(({ key }) => key), ["N07", "risk"]);
+  assert.deepEqual(checkpointItems([n11, n07], null).map(({ key }) => key), ["N11", "N07"]);
+});
