@@ -89,10 +89,13 @@ Authentication 메뉴에서:
    - 끄면: 비밀번호로 가입하자마자 로그인됩니다. **발표·시연 기간에는 끄는 것을 권장합니다.** 무료 플랜의 메일 발송 한도(시간당 몇 통)에 막히지 않습니다.
    - 켜면: 가입 후 확인 메일의 링크를 눌러야 로그인됩니다. 화면에 "확인 메일을 보냈어요" 안내가 나옵니다.
 3. **URL Configuration**
-   - 현재 값(2026-10-07 Management API로 확인):
-     - Site URL: `https://take-a-look-choi-jung-hyeon-s-projects.vercel.app/`
-     - Redirect URLs: `https://takealook-skku.vercel.app/**`, `https://stock-prediction-v2-chi.vercel.app/**`, `http://localhost:3000/**`, `https://*-choi-jung-hyeon-s-projects.vercel.app/**`(Preview), `take-a-look-…` 프로젝트 주소 패턴
-   - 공개 주소(`takealook-skku`)로 Site URL을 옮길지는 docs/security.md "남은 것"에서 관리합니다.
+   - Site URL: **`https://takealook-skku.vercel.app`** 가 맞는 값입니다. 이력:
+     1. 2026-10-06 `takealook-skku`로 설정
+     2. 2026-10-07 Vercel 연동 직후 `https://take-a-look-choi-jung-hyeon-s-projects.vercel.app/`로 바뀜(연동이 덮어씀)
+     3. 2026-10-08 Management API로 되돌림(#230, docs/security.md). 2026-10-09에 다시 `take-a-look-…`로 바뀐 것을 확인 — 연동이 계속 덮어쓸 수 있음
+   - 감시: `free-tier-watch.yml`(주 1회)이 Management API로 읽어 다르면 `[ops] 인증 Site URL 변경됨` 이슈를 엽니다. 자동으로 되돌리지 않습니다.
+   - 되돌리기: Authentication → URL Configuration에서 Site URL 입력, 또는 `PATCH https://api.supabase.com/v1/projects/{ref}/config/auth` `{"site_url": "https://takealook-skku.vercel.app"}`(개인 access token)
+   - Redirect URLs: `https://takealook-skku.vercel.app/**`, `https://stock-prediction-v2-chi.vercel.app/**`, `http://localhost:3000/**`, `https://*-choi-jung-hyeon-s-projects.vercel.app/**`(Preview), `take-a-look-…` 프로젝트 주소 패턴
 4. **API 키 확인**: Project Settings → API에서 `Project URL`과 `anon public` 키를 복사합니다.
    - ⚠️ `service_role` 키는 절대 Vercel 프론트 환경변수에 넣지 않습니다.
 

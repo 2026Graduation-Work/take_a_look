@@ -1,6 +1,6 @@
 name: Free tier watch
 
-# 주 1회: 무료 한도(DB·Storage·NewsAPI.ai·차트 게시 지연)를 재고, 넘으면 이슈를 남긴다.
+# 주 1회: 무료 한도(DB·Storage·NewsAPI.ai·차트 게시 지연)와 인증 Site URL을 재고, 벗어나면 이슈를 남긴다.
 # 같이 예약 워크플로를 다시 켜서 공개 레포 60일 비활성 자동 꺼짐을 막는다. 서드파티 액션 없이 gh·GITHUB_TOKEN만.
 on:
   schedule:
@@ -33,4 +33,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           NEWSAPI_AI_KEY: ${{ secrets.NEWSAPI_AI_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: python3 .github/scripts/free_tier_watch.py
