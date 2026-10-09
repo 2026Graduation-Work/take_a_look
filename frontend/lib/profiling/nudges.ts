@@ -137,7 +137,7 @@ export const NUDGES: readonly NudgeRule[] = [
     axis: "rule_adherence",
     side: 1,
     market: always,
-    text: "미리 정한 매매 기준을 지키기 어려운 편이라고 답하셨어요. 다시 볼 가격(손절선·목표가)을 정해 두셨다면 지금 확인해 보세요.",
+    text: "미리 정한 매매 기준을 지키기 어려운 편이라고 답하셨어요. 이 종목에 적어 둔 판단 메모가 있다면 지금 다시 읽어 보세요.",
   },
   {
     id: "N11",
@@ -148,6 +148,14 @@ export const NUDGES: readonly NudgeRule[] = [
     text: "이 종목의 위험도는 높은 편이에요. 원금이 줄어드는 데 민감한 편이라고 답하셨어요.",
   },
 ];
+
+// 체크포인트 줄(최대 MAX_VISIBLE_NUDGES). 위험도 안내는 한 줄만(#256): 성향 숫자가 들어간 riskNote가 있으면
+// N11 자리를 대신하고, N11이 없으면 뒤에 붙는다.
+export function checkpointItems(nudges: FiredNudge[], riskNote: string | null): { key: string; text: string }[] {
+  const items = nudges.map(({ id, text }) => (id === "N11" && riskNote ? { key: "risk", text: riskNote } : { key: id, text }));
+  if (riskNote && !nudges.some(({ id }) => id === "N11")) items.push({ key: "risk", text: riskNote });
+  return items.slice(0, MAX_VISIBLE_NUDGES);
+}
 
 // 넛지가 아니라 화면 하단 안내 배너(기존 N12). BIT 스펙트럼 수동 쪽 두 유형에만 보인다.
 export const SCREEN_GUIDE_NOTICE: { appliesTo: readonly BitType[]; text: string } = {

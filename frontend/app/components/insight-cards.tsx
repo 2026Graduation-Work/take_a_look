@@ -36,7 +36,7 @@ import {
   type BitType,
   type CardId,
 } from "@/lib/profiling/bit";
-import { SCREEN_GUIDE_NOTICE, selectNudges } from "@/lib/profiling/nudges";
+import { SCREEN_GUIDE_NOTICE, checkpointItems, selectNudges } from "@/lib/profiling/nudges";
 import {
   combinedProvenance,
   aggregateSentimentPeriods,
@@ -195,10 +195,7 @@ export function Checkpoints({
   const { bit } = demo;
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
-  const items = [
-    ...nudges.map(({ id, text }) => ({ key: id, text })),
-    ...(extra ? [{ key: "risk", text: extra }] : []),
-  ].slice(0, 2);
+  const items = checkpointItems(nudges, extra);
 
   return (
     <section aria-labelledby="checkpoint-title" className="surface flex flex-col gap-4 p-6">
