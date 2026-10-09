@@ -56,7 +56,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
-import { formatKstDateTime } from "@/lib/display";
+import { formatKstDateTime, kstDay } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import SourceLine, { sourceText } from "./source-line";
@@ -385,8 +385,9 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
   const sentimentDates = sentiment ? sentimentPeriod(sentiment) : null;
   const periodMismatch = Boolean(prices && sentimentDates && !periodsOverlap(prices, sentimentDates));
   const sentimentTabs: SentimentPeriod[] = ["day", "month", "year"];
-  const periodInput = selectedSentimentPeriod === "day"
-    ? sentiment?.days ?? [] : sentimentDaysIncludingLive(insights);
+  // 일별에서 오늘은 '오늘 Live' 점(직전 24시간)이 맡는다.
+  const periodInput = sentimentDaysIncludingLive(insights)
+    .filter(({ date }) => !chartLive || date !== kstDay(Date.parse(chartLive.asOf)));
   const periodDays = aggregateSentimentPeriods(periodInput, selectedSentimentPeriod);
   const chartDates = periodInput.length ? {start: periodInput[0].date, end: periodInput.at(-1)!.date} : null;
   const includesLive = selectedSentimentPeriod !== "day" && Boolean(todayLive) && Boolean(insights.liveSentiment?.periodDays?.length);
@@ -658,7 +659,12 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             name={TERM.sentiment}
             stroke={CHART.priceLine}
             strokeWidth={2}
-            dot={false}
+            // 기사 적은 날은 속 빈 점으로 구분(풀이는 툴팁·FEW_ARTICLES_RULE)
+            dot={({ cx, cy, payload }) =>
+              payload.articleCount < FEW_ARTICLES && typeof payload.score === "number" ? (
+                <circle data-sentiment-few="true" cx={cx} cy={cy} r={3} fill="var(--color-surface)" stroke={CHART.priceLine} strokeWidth={1.5} />
+              ) : <g />
+            }
             activeDot={false}
             isAnimationActive={false}
           />

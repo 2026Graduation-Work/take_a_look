@@ -379,10 +379,10 @@ export function todayLiveSentimentView(
   return Number.isFinite(asOf) && asOf <= now && kstDay(asOf) === kstDay(now) ? view : null;
 }
 
-export function sentimentDaysIncludingLive(insights: StockInsights, now: number = Date.now()): SentimentDay[] {
-  const days = (insights.sentiment?.days ?? []).map((day) => ({...day}));
-  if (!todayLiveSentimentView(insights, now)) return days;
-  return [...days, ...(insights.liveSentiment?.periodDays ?? [])]
+// 과거(BigKinds) 일별 뒤에 매일 수집(Live) 일별을 잇는다. 겹치는 날 Live는 기사 단위로 중복을 뺀 값이다(loadSupabaseSentiment).
+export function sentimentDaysIncludingLive(insights: StockInsights): SentimentDay[] {
+  return [...(insights.sentiment?.days ?? []), ...(insights.liveSentiment?.periodDays ?? [])]
+    .map((day) => ({...day}))
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 

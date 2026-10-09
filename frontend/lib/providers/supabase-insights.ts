@@ -321,13 +321,11 @@ export async function loadSupabaseSentiment(
   const liveTrack = tracks.find(({ track }) => track === "live");
   const liveEnd = liveTrack ? Date.parse(liveTrack.as_of) : NaN;
   const liveStart = liveEnd - 24 * 3_600_000;
-  const liveDateStart = Number.isFinite(liveStart) ? kstDay(liveStart) : "";
-  const liveDateEnd = Number.isFinite(liveEnd) ? kstDay(liveEnd) : "";
-  const liveDailyResult = liveTrack && liveDateStart && liveDateEnd
+  // Live 일별 행은 저장된 기사 전체로 날짜마다 다시 집계된다(supabase_store.live_daily_rows). 수집한 모든 날을 잇는다.
+  const liveDailyResult = liveTrack
     ? await client.from("news_sentiment_daily")
       .select("sentiment_date,sentiment_mean,article_count")
       .eq("stock_code", code).eq("track", "live")
-      .gte("sentiment_date", liveDateStart).lte("sentiment_date", liveDateEnd)
       .order("sentiment_date", { ascending: true }) as QueryResult
     : {data: [], error: null};
   const liveDaily = (unwrap(liveDailyResult, "news_sentiment_daily") ?? []) as Array<{
@@ -347,9 +345,7 @@ export async function loadSupabaseSentiment(
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
   const liveDays = liveDaily.filter((row) =>
-    row.sentiment_mean !== null && Number.isFinite(row.sentiment_mean) && row.article_count > 0
-    && liveTrack && row.sentiment_date >= liveDateStart
-    && row.sentiment_date <= liveDateEnd)
+    row.sentiment_mean !== null && Number.isFinite(row.sentiment_mean) && row.article_count > 0)
     .map((row) => ({date:row.sentiment_date,score:row.sentiment_mean as number,articleCount:row.article_count}));
   const historicalDates = new Set(days.map(({date}) => date));
   const overlappingDates = liveDays.map(({date}) => date).filter((date) => historicalDates.has(date));

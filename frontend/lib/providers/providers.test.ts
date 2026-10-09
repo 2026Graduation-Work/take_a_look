@@ -270,18 +270,18 @@ test("오늘 Live 표시: KST 날짜가 바뀌면 최근 Live도 오늘 점으�
   assert.equal(todayLiveSentimentView(insights, Date.parse("2026-10-05T14:58:00Z")), null);
 });
 
- test("월·연 입력은 오늘 Live의 기사 날짜별 점수·기사 수를 추가하며 일별 원본을 바꾸지 않는다", async () => {
+ test("과거 일별 뒤에 Live 일별을 이어 붙이고 월·연은 기사 수로 합치며 원본을 바꾸지 않는다", async () => {
   const base = await loadStockInsights("005930", null);
   const insights = { ...base, sentiment: { ...base.sentiment!, days: [{date:"2025-12-31",score:0.2,articleCount:10}] },
     liveSentiment: {score:0.1,scoreStd:0,articleCount:3,publisherCount:1,status:"ok" as const,
       asOf:"2026-01-01T09:00:00+09:00",windowStart:"",windowEnd:"",coverage:base.sentiment!.coverage!,
       periodDays:[{date:"2025-12-31",score:-0.4,articleCount:2},{date:"2026-01-01",score:1,articleCount:1}]}};
-  const days = sentimentDaysIncludingLive(insights, Date.parse("2026-01-01T10:00:00+09:00"));
+  const days = sentimentDaysIncludingLive(insights);
   const months = aggregateSentimentPeriods(days,"month");
   assert.equal(months[0].articleCount,12);
   assert.ok(Math.abs(months[0].score-0.1)<1e-12);
   assert.deepEqual(months[1],{date:"2026-01",score:1,articleCount:1});
   assert.equal(aggregateSentimentPeriods(days,"year")[0].date,"2025");
   assert.equal(insights.sentiment.days[0].articleCount,10);
-  assert.deepEqual(sentimentDaysIncludingLive(insights,Date.parse("2026-01-02T10:00:00+09:00")),insights.sentiment.days);
+  assert.equal(days.length,3);
 });
