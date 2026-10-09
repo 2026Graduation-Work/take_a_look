@@ -360,6 +360,6 @@ summary::-webkit-details-marker {
 /* 모바일 하단 탭 막대가 있는 화면은 마지막 내용이 막대에 가리지 않게 아래를 비운다 */
 @media (max-width: 639px) {
   body:has(.tab-bar) {
-    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom)); /* 막대(약 3rem + 아래 0.75rem)와 면책 문구 사이 여유 약 2.5rem */
   }
 }
