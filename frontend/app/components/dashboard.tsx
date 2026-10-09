@@ -13,7 +13,6 @@ import {
   getAuthenticatedDashboardData,
   type DashboardData,
 } from "@/lib/queries";
-import type { RecommendedStock } from "@/lib/types";
 import { AVOIDED_ASSET_LABELS, summaryFromProfilingOutput } from "@/lib/profiling-rules";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { chartProvenance } from "@/lib/chart-detail";
@@ -22,6 +21,8 @@ import { SIGNAL_META } from "@/lib/display";
 import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
 import { holdingAlertsOutside } from "@/lib/recommendation-filter";
+import { loadStrongSignals, type StrongSignal } from "@/lib/strong-signals";
+import type { RiskFlag } from "@/lib/types";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -162,28 +163,37 @@ export default function Dashboard(initialData: DashboardData) {
         .map((asset) => AVOIDED_ASSET_LABELS[asset])
         .filter((label): label is string => Boolean(label))
     : avoidedLabels;
-  const activeExcludedStocks = activeAvoidedLabels.length > 0 ? excludedStocks : [];
+  // 오늘 신호가 강한 종목: 최신 게시 배치 코스피 전 종목의 4주 확신도 순(계정·데모 같은 화면). 회피 항목만 뺀다.
+  const avoidedKey = (Object.entries(AVOIDED_ASSET_LABELS) as [RiskFlag, string][])
+    .filter(([, label]) => activeAvoidedLabels.includes(label)).map(([flag]) => flag).join(",");
+  const [strong, setStrong] = useState<Awaited<ReturnType<typeof loadStrongSignals>> | undefined>(undefined);
+  useEffect(() => {
+    let active = true;
+    void loadStrongSignals(getSupabaseClient(), { userMaxRiskTier: null, avoided: new Set(avoidedKey ? avoidedKey.split(",") : []) })
+      .then((next) => active && setStrong(next));
+    return () => {
+      active = false;
+    };
+  }, [avoidedKey]);
+  const strongSignals = strong ? [...strong.up, ...strong.down] : [];
+  const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
   const normalized = keyword.toLowerCase();
-  const matches = (stock: RecommendedStock) =>
+  const matches = (stock: { name: string; code: string }) =>
     stock.name.toLowerCase().includes(normalized) ||
     stock.code.toLowerCase().includes(normalized);
-  // 모델 신호 순(신호 강도 순위). 성향으로 고르지 않는다.
-  const strongStocks = [...stocks].sort((left, right) => right.rankPercentile - left.rankPercentile);
-  const visibleStocks = keyword
-    ? [...strongStocks, ...holdingAlerts].filter(matches)
-    : strongStocks;
-  const noResult = keyword && visibleStocks.length === 0;
+  const visibleStrong = keyword ? strongSignals.filter(matches) : strongSignals;
+  const visibleAlerts = keyword ? holdingAlerts.filter(matches) : [];
+  const noResult = keyword && visibleStrong.length + visibleAlerts.length === 0;
   const holdingCount = savedHoldings ? savedHoldings.length : activeHoldings.length;
   const summary = dashboardSummary({
     holdingSignals: activeHoldings.map(({ signalLight }) => signalLight),
     holdingCount,
-    strongCount: strongStocks.length,
+    strongCount: strongSignals.length,
   });
   // 요약 문장은 보유 맵 신호의 기준일(최신 게시 차트)을 따른다. 없으면 시장 기준일.
   const summaryAsOf = activeHoldings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1) || marketStatus.date;
-  const listAsOf = closes.get(strongStocks[0]?.code ?? "")?.asOf;
-  const listProvenance = listAsOf ? chartProvenance(listAsOf) : strongStocks[0]?.provenance ?? marketStatus.provenance;
+  const listProvenance = strongSignals[0] ? chartProvenance(strongSignals[0].asOf) : marketStatus.provenance;
 
   function retryAuthenticatedData() {
     setAuthenticatedResult(null);
@@ -301,7 +311,9 @@ export default function Dashboard(initialData: DashboardData) {
 
               <section aria-label="오늘 신호가 강한 종목" className="flex flex-col gap-3">
                 <SectionHead title="오늘 신호가 강한 종목" />
-                {!keyword && stocks.length === 0 ? (
+                {strong === undefined ? (
+                  <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
+                ) : !keyword && strongSignals.length === 0 ? (
                   <div className="surface flex min-h-[160px] items-center justify-center px-6 text-center">
                     <p className="text-sm text-body">오늘 보여 줄 모델 신호가 아직 없어요.</p>
                   </div>
@@ -314,14 +326,17 @@ export default function Dashboard(initialData: DashboardData) {
                   </div>
                 ) : (
                   <div className="group-list">
-                    {visibleStocks.map((stock) => (
+                    {visibleStrong.map((signal) => (
+                      <StrongRow key={signal.code} signal={signal} />
+                    ))}
+                    {visibleAlerts.map((stock) => (
                       <StockRow key={stock.code} stock={stock} />
                     ))}
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
                   <SourceLine provenance={listProvenance} />
-                  <span className="text-2xs text-muted">신호는 과거 데이터로 만든 참고 정보예요</span>
+                  <span className="text-2xs text-muted">모델 검증 전 · 신호는 과거 데이터로 만든 참고 정보예요</span>
                 </div>
                 {!keyword && activeExcludedStocks.length > 0 && (
                   <details className="disclosure surface px-5">
@@ -353,6 +368,30 @@ export default function Dashboard(initialData: DashboardData) {
 
       <DisclaimerFooter fixed={false} />
     </div>
+  );
+}
+
+// 한 줄: 종목명 · 왜(기여도 1위 항목) · 방향. 검증 상태는 섹션 출처 줄에 한 번만.
+function StrongRow({ signal }: { signal: StrongSignal }) {
+  const meta = SIGNAL_META[signal.direction === "up" ? "positive" : "negative"];
+  return (
+    <Link
+      href={`/stocks/${signal.code}`}
+      data-stock-row={signal.code}
+      className="flex items-center gap-4 px-5 py-4 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex items-baseline gap-2">
+          <span className="truncate text-base font-medium">{signal.name}</span>
+          <span className="flex-none text-xs text-muted tabular-nums">{signal.code}</span>
+        </span>
+        <span className="truncate text-xs text-muted">{signal.why ? `가장 크게 본 것: ${signal.why}` : "4주 · 20거래일"}</span>
+      </div>
+      <span className="flex-none text-sm font-semibold" style={{ color: meta.ink }}>
+        {signal.direction === "up" ? "상방" : "하방"}
+      </span>
+      <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
+    </Link>
   );
 }
 
