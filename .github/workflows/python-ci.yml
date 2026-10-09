@@ -14,14 +14,8 @@ on:
       - "schema/**"
       - "ruff.toml"
       - ".github/workflows/python-ci.yml"
+  # PR에서는 항상 시작한다(필수 체크가 건너뜀=통과로 보고되게). 블록 선택은 아래 changes job
   pull_request:
-    paths:
-      - "backend/profiling/**"
-      - "frontend/lib/profiling/style-questions.json"
-      - "backend/analysis/**"
-      - "schema/**"
-      - "ruff.toml"
-      - ".github/workflows/python-ci.yml"
 
 permissions:
   contents: read

@@ -1,7 +1,8 @@
 name: Web CI
 
 # 프론트엔드(frontend) 변경 시 lint + build + 데모 E2E 자동 실행.
-# Python CI(python-ci.yml)와 경로 필터로 분리되어 상호 간섭하지 않는다.
+# PR에서는 항상 시작하고 job 안에서 경로를 본다 — main 규칙의 필수 체크(lint-and-build)가
+# 프론트 변경이 없는 PR에서도 "건너뜀(통과)"으로 보고되게(경로 필터로 아예 안 돌면 영원히 대기).
 
 on:
   push:
@@ -10,15 +11,28 @@ on:
       - "frontend/**"
       - ".github/workflows/web-ci.yml"
   pull_request:
-    paths:
-      - "frontend/**"
-      - ".github/workflows/web-ci.yml"
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/web-ci.yml'
+
   lint-and-build:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # e2e 계정 흐름용 가짜 Supabase 주소. NEXT_PUBLIC_*은 빌드 때 박히므로 job 전체에 둔다.
