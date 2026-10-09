@@ -15,7 +15,7 @@ test("public predictions retain the original detail UI and both model directions
   });
   await page.goto("/stocks/005930");
   await expect(page.getByTestId("preview-provenance")).toHaveText(/모델 검증 전 · 2026.09.21/);
-  await expect(page.getByRole("heading", { name: /모델 신호 하방\s*순위 미제공/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^모델 신호 하방$/ })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
   await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
@@ -52,7 +52,7 @@ test("failed public reads show retry, without restoring demo predictions", async
   await page.goto("/stocks/005930");
   // PostgREST retries transient 503 responses before exposing the error.
   await expect(page.getByText("차트를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: /모델 신호 미제공\s*순위 미제공/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^모델 신호 미제공$/ })).toBeVisible();
   await expect(page.getByText(/상위 \d+%/)).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "다시 시도" }).click();

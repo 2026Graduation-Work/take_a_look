@@ -118,7 +118,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   // 대시보드: 두 결과(성향 + 보유 종목)를 합쳐 보여 준다
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 1종목 모두 부정 신호는 없어요.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 1종목 모두 하방 신호는 없어요.");
   await expect(page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem")).toHaveCount(1);
   // e2e 스텁은 차트 스냅샷 종가를 주지 않아 평균 매입가도 없는 이 종목은 매입금액(0) 기준으로 센다
   await expect(page.getByText("종가가 없는 종목은 매입금액 기준")).toBeVisible();

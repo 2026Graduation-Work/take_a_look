@@ -77,6 +77,7 @@ export default function PortfolioHeatmap({
     );
   }
 
+  const grandTotal = columnTotals.reduce((sum, value) => sum + value, 0) || 1;
   return (
     <div className="surface flex flex-col gap-3 p-4">
       <div
@@ -102,7 +103,11 @@ export default function PortfolioHeatmap({
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                 >
                   <span className="truncate text-base font-semibold">{holding.name}</span>
-                  <span className="truncate text-sm font-medium">{signal.label}</span>
+                  <span className="flex items-baseline justify-between gap-2 text-sm font-medium">
+                    <span className="truncate">{signal.label}</span>
+                    {/* 비중 = 평가금액 ÷ 보유 합계 */}
+                    <span className="flex-none text-xs tabular-nums opacity-85">{Math.round((amount / grandTotal) * 100)}%</span>
+                  </span>
                 </Link>
               );
             })}
@@ -111,7 +116,7 @@ export default function PortfolioHeatmap({
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <span>
-          색은 오늘 모델 신호(적 긍정 · 회색 중립 · 청 부정), 넓이는 평가금액 기준
+          색은 오늘 모델 신호(빨강 상방 · 회색 중립 · 파랑 하방), 넓이는 평가금액 기준
           {closeAsOf && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
         </span>

@@ -186,7 +186,7 @@ export default function StockDetailView({
           <div className="flex flex-col gap-1">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
-              <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{preview ? "순위 미제공" : topPercentLabel(detail.rankPercentile)}</span>
+              {!preview && <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}

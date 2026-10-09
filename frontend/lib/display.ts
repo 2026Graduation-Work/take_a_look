@@ -18,13 +18,13 @@ export interface SignalMeta {
 // 색은 globals.css @theme 토큰만 참조한다. 여기서 새 hex를 만들지 않는다.
 export const SIGNAL_META: Record<SignalLight, SignalMeta> = {
   strong_positive: {
-    label: "강한 긍정",
+    label: "강한 상방",
     ink: "var(--color-sig-sp)",
     tint: "var(--color-sig-sp-tint)",
     solid: "var(--color-sig-sp-solid)",
   },
   positive: {
-    label: "긍정",
+    label: "상방",
     ink: "var(--color-sig-p)",
     tint: "var(--color-sig-p-tint)",
     solid: "var(--color-sig-p-solid)",
@@ -36,13 +36,13 @@ export const SIGNAL_META: Record<SignalLight, SignalMeta> = {
     solid: "var(--color-sig-n-solid)",
   },
   negative: {
-    label: "부정",
+    label: "하방",
     ink: "var(--color-sig-ng)",
     tint: "var(--color-sig-ng-tint)",
     solid: "var(--color-sig-ng-solid)",
   },
   strong_negative: {
-    label: "강한 부정",
+    label: "강한 하방",
     ink: "var(--color-sig-sn)",
     tint: "var(--color-sig-sn-tint)",
     solid: "var(--color-sig-sn-solid)",
