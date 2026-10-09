@@ -476,3 +476,15 @@ test("날짜만 저장된 Live 창도 overlap 기사 집계는 기준시각 직�
   const result=await loadSupabaseSentiment("005930",client as never);
   assert.deepEqual(result.live?.periodDays,[{date:"2026-09-25",score:0.5,articleCount:1}]);
 });
+
+test("가격 흐름 분위기는 백엔드 산식(20일 위험 대비 수익 + 60일 거래량가중 평균가 대비 위치)과 같다", async () => {
+  const { psychologyAxis, moodWord } = await import("./supabase-insights.ts");
+  // 60일 동안 하루 1%씩 고르게 오르면(흔들림이 거의 없음) 들뜸 쪽 끝
+  const rising = Array.from({ length: 60 }, (_, i) => ({ close: 100 * 1.01 ** i * (i % 2 ? 1.001 : 1), volume: 1000 }));
+  const axis = psychologyAxis(rising)!;
+  assert.ok(axis > 0.5);
+  assert.equal(moodWord(axis), "많이 들뜸");
+  assert.equal(psychologyAxis(rising.slice(1)), null); // 60일 미만이면 미제공
+  const flat = Array.from({ length: 60 }, () => ({ close: 100, volume: 1000 }));
+  assert.equal(psychologyAxis(flat), null); // 흔들림 0 → 나눗셈 불가(백엔드 _safe_divide와 같이 값 없음)
+});

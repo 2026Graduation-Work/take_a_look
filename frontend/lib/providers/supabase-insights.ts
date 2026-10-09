@@ -490,3 +490,36 @@ export async function loadSupabaseSupply(code: string, client: InsightQueryClien
     date: row.trade_date, retail: Number(row.retail), foreign: Number(row.foreign_investor), institution: Number(row.institution),
   }));
 }
+
+// 가격 흐름 분위기(psychology_market_v1의 psych_greed_fear_axis)를 최신 게시 차트의 종가·거래량으로 같은 산식으로 계산한다.
+// 원본: backend/analysis/chart/experiments/features/psychology/market_psychology.py · frontend/scripts/build_demo_snapshot.py mood_word
+export function psychologyAxis(history: Array<{ close: number; volume: number }>): number | null {
+  // 요약축에 필요한 건 20일 수익(종가 21개)과 60일 거래량가중 평균가(60개)뿐이라 60거래일이면 된다(게시 차트가 60개를 싣는다).
+  if (history.length < 60) return null;
+  const tail = history.slice(-60);
+  const returns = tail.slice(-21).map(({ close }, index, rows) => index ? Math.log(close / rows[index - 1].close) : NaN).slice(1);
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const std = Math.sqrt(returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (returns.length - 1));
+  const window = tail.slice(-60);
+  const traded = window.reduce((sum, { volume }) => sum + volume, 0);
+  const reference = window.reduce((sum, { close, volume }) => sum + close * volume, 0) / traded;
+  const close = tail.at(-1)!.close;
+  if (!(std > 0) || !(traded > 0) || !(reference > 0)) return null;
+  const fearGreed = Math.tanh((mean * returns.length) / (std * Math.sqrt(20)));
+  const disposition = Math.tanh((close - reference) / reference / 0.1);
+  const axis = (fearGreed + disposition) / 2;
+  return Number.isFinite(axis) ? axis : null;
+}
+
+export function moodWord(axis: number): string {
+  return axis >= 0.5 ? "많이 들뜸" : axis >= 0.2 ? "조금 들뜸" : axis > -0.2 ? "차분함" : axis > -0.5 ? "조금 움츠러듦" : "많이 움츠러듦";
+}
+
+export async function loadSupabasePsychology(code: string, client: InsightQueryClient) {
+  const result = await client.from("latest_chart_signal_snapshots")
+    .select("as_of:payload->>data_asof,history:payload->prices->history")
+    .eq("stock_code", code).eq("horizon", 20).maybeSingle() as QueryResult;
+  const row = unwrap(result, "latest_chart_signal_snapshots") as { as_of: string; history: Array<{ close: number; volume: number }> | null } | null;
+  const axis = row?.history ? psychologyAxis(row.history) : null;
+  return axis === null ? null : { axis, word: moodWord(axis), asOf: row!.as_of };
+}

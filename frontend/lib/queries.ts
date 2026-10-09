@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadLatestCloses } from "./latest-closes.ts";
-import { snapshotPrice } from "./providers/demo-snapshot.ts";
 import { costBasis } from "./holdings-rules.ts";
 import {
   avoidanceNotice,
@@ -364,11 +363,8 @@ async function queryStockDetail(
   assertOk(featureError, "상세 화면 예측 근거 조회");
 
   return {
-    // 시세는 DB 저장 계약이 없어 실데이터 스냅샷에서 붙인다(데모 4종목만).
-    detail: {
-      ...mapStockDetail(prediction, stockResult.data as StockRow, (featureData ?? []) as PredictionFeatureRow[]),
-      ...snapshotPrice(code),
-    },
+    // 시세는 붙이지 않는다. 상세 화면(ChartPreviewDetail)이 최신 게시 차트 종가로 채우고, 없으면 미제공(#198).
+    detail: mapStockDetail(prediction, stockResult.data as StockRow, (featureData ?? []) as PredictionFeatureRow[]),
     profile: mapProfileSummary(
       userResult.data as UserRow,
       profile,
