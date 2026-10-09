@@ -106,7 +106,7 @@ export default function PortfolioHeatmap({
                   <span className="flex items-baseline justify-between gap-2 text-sm font-medium">
                     <span className="truncate">{signal.label}</span>
                     {/* 비중 = 평가금액 ÷ 보유 합계 */}
-                    <span className="flex-none text-xs tabular-nums opacity-85">{Math.round((amount / grandTotal) * 100)}%</span>
+                    <span className="flex-none text-xs tabular-nums">{Math.round((amount / grandTotal) * 100)}%</span>
                   </span>
                 </Link>
               );

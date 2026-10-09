@@ -68,3 +68,9 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | [agent-browser](https://github.com/vercel-labs/agent-browser) · [Agent-Reach](https://github.com/Panniantong/Agent-Reach) | 기각 | 브라우저는 `@playwright/test`로 이미 화면 확인 중. SNS 크롤링은 계정 쿠키가 필요하고 서비스 범위 밖 |
 | Remotion · HyperFrames | 기존 판정 유지 | 발표 영상이 필요할 때 HyperFrames(Apache-2.0). Remotion은 일정 규모 이상 회사 라이선스가 따로 있어 후순위 |
 | prompts.chat · iFixAi · OpenShell · ai-engineering-from-scratch · AnyPS5 · openGym | 기각 | 프롬프트 모음·에이전트 감사·샌드박스 런타임·학습 자료·무관한 앱으로 이 프로젝트에 쓸 곳이 없음 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-09 오후)
+
+| 도구 | 판정 | 이유 |
+|---|---|---|
+| "화면 만드는 프롬프트 8가지"(레퍼런스 분석·색·글자·아이콘·부품·레이아웃·모션·화면 검수 역할 분담, SNS 가이드) | 흐름만 채택 | 원문은 DM 배포라 설치할 실체가 없다. 1~6단계는 `frontend-design`(브리프 → 토큰 → 기본값 점검)·DESIGN.md·`baseline-ui`와 겹치고, 7단계는 DESIGN.md 5장(눌림·펼치기만)과 같다. 실제 캡처를 비교해 영향이 큰 차이부터 고치는 **8단계(화면 검수)** 만 작업 끝 절차로 쓴다 — 첫 적용(#250): 보유 맵 비중 글자 대비 4.18 → 5.07(흰 85% → 흰), 390에서 잘리던 공시 건수를 앞으로 |
