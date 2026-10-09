@@ -43,6 +43,11 @@ class _RecordingClient:
     def __init__(self, snapshot_rows: list[dict[str, Any]] | None = None) -> None:
         self.snapshot_rows = snapshot_rows if snapshot_rows is not None else [{"id": "snapshot-id"}]
         self.calls: list[dict[str, Any]] = []
+        self.stored_articles: list[dict[str, Any]] = []
+
+    def select(self, table: str, *, params: dict[str, str]) -> list[dict[str, Any]]:
+        self.calls.append({"table": table, "select": params})
+        return self.stored_articles
 
     def upsert(
         self,
@@ -247,13 +252,15 @@ def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:
 
     assert [call["table"] for call in client.calls] == [
         "news_sentiment_tracks",
-        "news_sentiment_daily",
         "news_articles",
+        "news_articles",
+        "news_sentiment_daily",
     ]
-    assert [call["on_conflict"] for call in client.calls] == [
+    assert [call.get("on_conflict") for call in client.calls] == [
         "stock_code,track",
-        "stock_code,track,sentiment_date",
         "stock_code,track,news_id",
+        None,
+        "stock_code,track,sentiment_date",
     ]
     parent = client.calls[0]["rows"][0]
     assert parent == {
@@ -278,9 +285,31 @@ def test_persist_news_track_maps_parent_daily_and_safe_article_rows() -> None:
         "provider_pages": 2,
         "provider_truncated": True,
     }
-    article = client.calls[2]["rows"][0]
+    article = client.calls[1]["rows"][0]
     assert article["article_date"] == "2026-09-18"
     assert not {"body", "summary", "content"}.intersection(article)
+
+
+def test_live_daily_rows_use_all_stored_articles_not_only_latest_window() -> None:
+    client = _RecordingClient()
+    # 전날 수집분(앞선 실행)과 오늘 수집분이 함께 저장돼 있다
+    client.stored_articles = [
+        {"article_date": "2026-09-17", "press": "A", "sentiment_score": 0.2},
+        {"article_date": "2026-09-17", "press": "B", "sentiment_score": 0.6},
+        {"article_date": "2026-09-17", "press": "A", "sentiment_score": -0.2},
+        {"article_date": "2026-09-18", "press": "C", "sentiment_score": 0.4},
+    ]
+
+    track = _live_track()
+    track["timeline"] = [{"date": "2026-09-17"}, {"date": "2026-09-18"}]
+    supabase_store.persist_news_track(client, track)
+
+    daily = {row["sentiment_date"]: row for row in client.calls[-1]["rows"]}
+    assert daily["2026-09-17"]["article_count"] == 3
+    assert daily["2026-09-17"]["publisher_count"] == 2
+    assert daily["2026-09-17"]["sentiment_mean"] == 0.2
+    assert daily["2026-09-18"]["article_count"] == 1
+    assert client.calls[2]["select"]["article_date"].startswith("in.(")
 
 
 def test_persist_news_track_identifies_zero_relevant_as_no_data() -> None:

@@ -455,14 +455,14 @@ test("Live 기간 집계는 KST 기사 날짜로 나누고 ID·URL·제목 중�
   ]);
 });
 
-test("월·연에 쓰는 Live 일별 점수는 DB 결과를 그대로 재사용한다", async () => {
+test("Live 일별 점수는 24시간 창 밖의 지난 수집일도 DB 결과 그대로 잇는다", async () => {
   const client=new FakeClient({
     news_sentiment_tracks:[{data:trackRows,error:null}],
     news_sentiment_daily:[{data:[],error:null},{data:[{sentiment_date:"2026-09-25",sentiment_mean:0.3,article_count:9},{sentiment_date:"2026-09-26",sentiment_mean:-0.2,article_count:3},{sentiment_date:"2026-09-01",sentiment_mean:1,article_count:99}],error:null}],
     news_articles:[{data:[],error:null}],
   });
   const result=await loadSupabaseSentiment("005930",client as never);
-  assert.deepEqual(result.live?.periodDays,[{date:"2026-09-25",score:0.3,articleCount:9},{date:"2026-09-26",score:-0.2,articleCount:3}]);
+  assert.deepEqual(result.live?.periodDays,[{date:"2026-09-25",score:0.3,articleCount:9},{date:"2026-09-26",score:-0.2,articleCount:3},{date:"2026-09-01",score:1,articleCount:99}]);
   assert.equal(client.operations.news_articles.filter(([op])=>op==="select").length,1);
 });
 

@@ -9,6 +9,8 @@ from typing import Any
 
 import requests
 
+from . import sentiment
+
 
 class SupabaseConfigurationError(RuntimeError):
     """Supabase 연결 설정이 없거나 잘못된 경우."""
@@ -250,26 +252,6 @@ def persist_news_track(client: SupabaseRestClient, track: Mapping[str, Any]) -> 
         "news_sentiment_tracks", [parent], on_conflict="stock_code,track"
     )
 
-    daily_rows = [
-        {
-            "stock_code": stock_code,
-            "track": track_name,
-            "sentiment_date": _iso_date(point.get("date"), field="timeline.date"),
-            "status": point.get("status"),
-            "sentiment_mean": point.get("sentiment_mean"),
-            "sentiment_std": point.get("sentiment_std"),
-            "article_count": int(point.get("article_count") or 0),
-            "publisher_count": int(point.get("publisher_count") or 0),
-        }
-        for point in track.get("timeline", [])
-    ]
-    if daily_rows:
-        client.upsert(
-            "news_sentiment_daily",
-            daily_rows,
-            on_conflict="stock_code,track,sentiment_date",
-        )
-
     article_rows = [
         {
             "stock_code": stock_code,
@@ -291,6 +273,53 @@ def persist_news_track(client: SupabaseRestClient, track: Mapping[str, Any]) -> 
             article_rows,
             on_conflict="stock_code,track,news_id",
         )
+
+    dates = [_iso_date(point.get("date"), field="timeline.date") for point in track.get("timeline", [])]
+    if track_name == "live" and dates:
+        # Live는 매일 직전 24시간 중 최신 100건만 받는다. 그 창의 날짜별 값으로 덮으면 전날 행이
+        # 다음 날 오전 일부만 남는다(10/05~10/08 일별 0~3건). 날짜별 값은 저장된 기사 전체로 다시 낸다.
+        daily_rows = live_daily_rows(client, stock_code, dates)
+    else:
+        daily_rows = [
+            {
+                "stock_code": stock_code,
+                "track": track_name,
+                "sentiment_date": _iso_date(point.get("date"), field="timeline.date"),
+                "status": point.get("status"),
+                "sentiment_mean": point.get("sentiment_mean"),
+                "sentiment_std": point.get("sentiment_std"),
+                "article_count": int(point.get("article_count") or 0),
+                "publisher_count": int(point.get("publisher_count") or 0),
+            }
+            for point in track.get("timeline", [])
+        ]
+    if daily_rows:
+        client.upsert(
+            "news_sentiment_daily",
+            daily_rows,
+            on_conflict="stock_code,track,sentiment_date",
+        )
+
+
+def live_daily_rows(client: Any, stock_code: str, dates: list[str]) -> list[dict[str, Any]]:
+    """저장된 Live 기사로 날짜별 감성 행을 만든다(기사 없는 날은 insufficient_data)."""
+    stored = client.select("news_articles", params={
+        "select": "article_date,press,sentiment_score",
+        "stock_code": f"eq.{stock_code}", "track": "eq.live",
+        "article_date": f"in.({','.join(dates)})", "order": "news_id",
+    })
+    rows = []
+    for day in dates:
+        articles = [row for row in stored if row["article_date"] == day]
+        scores = [float(row["sentiment_score"]) for row in articles]
+        mean, std = sentiment.aggregate(scores) if scores else (None, None)
+        rows.append({
+            "stock_code": stock_code, "track": "live", "sentiment_date": day,
+            "status": "ok" if scores else "insufficient_data",
+            "sentiment_mean": mean, "sentiment_std": std, "article_count": len(scores),
+            "publisher_count": len({row["press"] for row in articles if row.get("press")}),
+        })
+    return rows
 
 
 def persist_financial_track(
