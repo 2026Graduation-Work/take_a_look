@@ -9,7 +9,7 @@ import SignOutButton from "./sign-out-button";
 export default function AccountControls({ profile }: { profile: InvestorProfileSummary }) {
   const { state } = useOnboarding();
   const displayName = state.displayName?.trim() || profile.displayName;
-  const item = "block px-4 py-2.5 text-left text-sm text-ink hover:bg-field hover:text-ink hover:no-underline";
+  const item = "block px-4 py-3 text-left text-sm text-ink hover:bg-field hover:text-ink hover:no-underline";
 
   return (
     <details className="relative ml-auto flex-none">

@@ -28,7 +28,7 @@
 | frontend-design: 기본값이 아닌 서체 고르기 | 기각 | 한글 본문은 Pretendard 하나 |
 | redesign: 가짜 숫자를 "자연스럽게" 흩트리기 | 기각 | 없는 데이터를 만들지 않는다. 예시는 예시로 표시 |
 | baseline-ui: motion/react·cn·Radix/Base UI 도입 | 기각 | 새 의존성 추가 없이 기존 스택(Tailwind v4 + 네이티브 요소)으로 |
-| baseline-ui: 자간 변경 금지 | 부분 채택 | 제목 자간 -0.02em은 유지(한글 큰 글자 보정) |
+| baseline-ui: 자간 변경 금지 | 채택(2026-10-10) | 제목 자간 -0.02em 보정도 걷어 내고 기본값으로(DESIGN.md 2-2) |
 | 공통: 강조색 하나, 그라데이션·글로우 금지, 빈 상태에 다음 행동 하나, tabular-nums, 200ms 이하 ease-out, prefers-reduced-motion | 채택 | DESIGN.md v2에 반영 |
 
 taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 본체 스킬(`design-taste-frontend`) 설정이라

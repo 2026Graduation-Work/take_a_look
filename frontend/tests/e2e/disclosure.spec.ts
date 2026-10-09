@@ -23,10 +23,12 @@ async function tabTo(page: Page, isTarget: () => boolean) {
 test("키보드만으로 시장 흔들림 설명과 제외 항목을 열고 닫는다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await readyDashboard(page);
-  const tooltip = page.getByRole("tooltip");
+  const tooltip = page.getByRole("region", { name: "시장 흔들림 설명" });
   const trigger = page.getByRole("button", { name: /시장 흔들림/ });
 
   await tabTo(page, () => document.activeElement?.textContent?.includes("시장 흔들림") ?? false);
+  await expect(tooltip).toBeHidden(); // 포커스만으로는 열리지 않는다
+  await page.keyboard.press("Enter");
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText("지난 1년 중");
   // 트리거 바로 아래에 붙는다
@@ -35,6 +37,7 @@ test("키보드만으로 시장 흔들림 설명과 제외 항목을 열고 닫�
   expect(p!.y - (t!.y + t!.height)).toBeLessThan(24);
   await page.keyboard.press("Escape");
   await expect(tooltip).toBeHidden();
+  await expect(trigger).toBeFocused();
 
   const summary = page.locator("summary", { hasText: "직접 고른 제외 항목" });
   await expect(summary.locator(".count")).toHaveText(/\d+개/);
@@ -47,13 +50,17 @@ test("키보드만으로 시장 흔들림 설명과 제외 항목을 열고 닫�
   await expect(list).toBeHidden();
 });
 
-test("마우스는 올리면 보이고 벗어나면 사라진다", async ({ page }) => {
+test("마우스는 올려도 열리지 않고, 누르면 열리고 바깥을 누르면 닫힌다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await readyDashboard(page);
-  await page.getByRole("button", { name: /시장 흔들림/ }).hover();
-  await expect(page.getByRole("tooltip")).toBeVisible();
-  await page.mouse.move(10, 600);
-  await expect(page.getByRole("tooltip")).toBeHidden();
+  const panel = page.getByRole("region", { name: "시장 흔들림 설명" });
+  const trigger = page.getByRole("button", { name: /시장 흔들림/ });
+  await trigger.hover();
+  await expect(panel).toBeHidden();
+  await trigger.click();
+  await expect(panel).toBeVisible();
+  await page.mouse.click(10, 600);
+  await expect(panel).toBeHidden();
 });
 
 test.describe("터치", () => {
@@ -61,8 +68,8 @@ test.describe("터치", () => {
   test("탭하면 열리고 바깥을 탭하면 닫힌다", async ({ page }) => {
     await readyDashboard(page);
     await page.getByRole("button", { name: /시장 흔들림/ }).tap();
-    await expect(page.getByRole("tooltip")).toBeVisible();
+    await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).toBeVisible();
     await page.getByRole("heading", { name: "내 보유 종목의 오늘 신호" }).tap();
-    await expect(page.getByRole("tooltip")).toBeHidden();
+    await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).toBeHidden();
   });
 });

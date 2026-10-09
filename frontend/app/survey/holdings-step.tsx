@@ -18,7 +18,7 @@ const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity,
 }));
 
 const field =
-  "h-11 w-full rounded-md bg-field px-3.5 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
+  "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
 
 function parseCount(value: string): number {
   const parsed = Number.parseInt(value.replaceAll(",", "").trim(), 10);
@@ -83,7 +83,7 @@ export default function HoldingsStep({
 
   return (
     <section aria-labelledby="holdings-step-title" className="surface flex flex-col gap-6 px-6 py-8 sm:px-10">
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <h1 id="holdings-step-title" className="text-3xl font-semibold">
           지금 가진 주식이 있나요?
         </h1>
@@ -133,7 +133,7 @@ export default function HoldingsStep({
             }}
             className="flex flex-col gap-3"
           >
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">종목 검색</span>
               <input
                 list="onboarding-stock-catalog"
@@ -151,11 +151,11 @@ export default function HoldingsStep({
               </datalist>
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">수량(주)</span>
                 <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="10" className={field} />
               </label>
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
                 <input
                   inputMode="numeric"

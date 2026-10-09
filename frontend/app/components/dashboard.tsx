@@ -6,7 +6,8 @@ import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
-import SourceLine from "./source-line";
+import { SourceTable } from "./source-line";
+import { staleLabel } from "@/lib/market-status";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -39,7 +40,8 @@ import {
 
 function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-3 px-1">
+    // 두 열 제목 줄 높이를 같게(편집 링크가 있어도 없어도 44px) — 카드 윗변이 맞는다
+    <div className="flex min-h-11 items-center justify-between gap-3 px-1">
       <h2 className="text-xl font-semibold">{title}</h2>
       {action}
     </div>
@@ -253,7 +255,7 @@ export default function Dashboard(initialData: DashboardData) {
             <Link
               href="/profile"
               aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
-              className="surface flex items-center gap-3 px-5 py-3.5 text-sm text-body hover:bg-white/70 hover:no-underline"
+              className="surface flex items-center gap-3 px-5 py-4 text-sm text-body hover:bg-white/70 hover:no-underline"
             >
               <span className="min-w-0 flex-1 truncate">
                 <span className="font-semibold text-ink">{activeProfile.profileTypeLabel}</span> ·{" "}
@@ -262,8 +264,9 @@ export default function Dashboard(initialData: DashboardData) {
               <span aria-hidden className="flex-none text-muted">›</span>
             </Link>
 
-            <section aria-labelledby="today-summary" className="flex flex-col gap-1.5 px-1">
-              <span className="eyebrow tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>
+            <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1">
+              {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
+              {staleLabel(summaryAsOf) && <span className="eyebrow tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
               <h1 id="today-summary" className="text-3xl font-semibold">
                 {summary}
               </h1>
@@ -332,7 +335,7 @@ export default function Dashboard(initialData: DashboardData) {
                     <p className="text-sm text-body">오늘 보여 줄 모델 신호가 아직 없어요.</p>
                   </div>
                 ) : noResult ? (
-                  <div className="surface flex flex-col items-center gap-3 px-6 py-8 text-center">
+                  <div className="surface flex flex-col items-center gap-4 px-6 py-8 text-center">
                     <p className="text-sm text-body">&lsquo;{keyword}&rsquo;은(는) 오늘 목록에 없어요.</p>
                     <Link href={`/stocks/${encodeURIComponent(keyword)}`} className="btn-secondary">
                       종목 정보 보기
@@ -348,10 +351,10 @@ export default function Dashboard(initialData: DashboardData) {
                     ))}
                   </div>
                 )}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
-                  <SourceLine provenance={listProvenance} />
-                  <span className="text-2xs text-muted">모델 검증 전 · 신호는 과거 데이터로 만든 참고 정보예요</span>
-                </div>
+                {/* "모델 검증 전"은 모델 신호가 처음 나오는 곳에 한 번 — 보유 맵이 있으면 그 범례에 있다 */}
+                <p className="m-0 px-1 text-2xs text-muted">
+                  {activeHoldings.length === 0 && "모델 검증 전 · "}신호는 과거 데이터로 만든 참고 정보예요
+                </p>
                 {!keyword && activeExcludedStocks.length > 0 && (
                   <details className="disclosure surface px-5">
                     <summary>
@@ -360,7 +363,7 @@ export default function Dashboard(initialData: DashboardData) {
                     </summary>
                     <div className="flex flex-col gap-2 pb-4 text-xs text-body">
                       <p className="m-0 text-muted">{activeAvoidedLabels.join(" · ")}을(를) 골라 목록에서 뺐어요.</p>
-                      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+                      <ul className="m-0 flex list-none flex-col gap-2 p-0">
                         {activeExcludedStocks.map((stock) => (
                           <li key={stock.code} className="flex flex-wrap items-baseline gap-x-2 [word-break:keep-all]">
                             <span className="font-medium text-ink [overflow-wrap:anywhere]">{stock.name}</span>
@@ -376,6 +379,22 @@ export default function Dashboard(initialData: DashboardData) {
               </section>
             </div>
 
+            {/* 출처는 카드마다 두지 않고 맨 아래 한 묶음(docs/research/source-display.md). 아래로만 펼쳐져 위쪽은 움직이지 않는다 */}
+            <details className="disclosure surface px-5">
+              <summary>데이터 출처·기준</summary>
+              <div className="pb-4">
+                <SourceTable
+                  rows={[
+                    ["시장 지수·흔들림", marketStatus.provenance],
+                    ["보유 종목 신호·종가", activeHoldings[0]?.provenance ?? null],
+                    ["오늘 신호가 강한 종목", strongSignals.length ? listProvenance : null],
+                    ["어제와 달라진 근거", changes?.length
+                      ? { kind: "real", source: "직전 게시 배치 대비 4주 신호 · KRX 투자자별 순매수 · NewsAPI.ai × KR-FinBERT 일별 · DART 공시" }
+                      : null],
+                  ]}
+                />
+              </div>
+            </details>
           </>
         )}
       </div>
@@ -423,7 +442,7 @@ function StrongRow({ signal }: { signal: StrongSignal }) {
       data-stock-row={signal.code}
       className="flex items-center gap-4 px-5 py-4 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-baseline gap-2">
           <span className="truncate text-base font-medium">{signal.name}</span>
           <span className="flex-none text-xs text-muted tabular-nums">{signal.code}</span>

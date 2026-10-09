@@ -30,7 +30,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
       data-stock-row={stock.code}
       className="flex items-center gap-4 px-5 py-4 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-baseline gap-2">
           <span className="truncate text-base font-medium">{stock.name}</span>
           <span className="flex-none text-xs text-muted tabular-nums">{stock.code}</span>
@@ -46,7 +46,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
             : chart ? `4주 · ${chart.data_asof.slice(5, 10).replace("-", ".")}` : "게시된 예측 결과가 아직 없어요."
           : oneLineReason(stock)}</span>
       </div>
-      <div className="flex flex-none flex-col items-end gap-0.5">
+      <div className="flex flex-none flex-col items-end gap-1">
         <span className="text-sm font-semibold" style={{ color: signal.ink }}>
           {preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : direction === "flat" ? "중립" : "신호 미제공" : signal.label}
         </span>

@@ -155,7 +155,7 @@ export default function HoldingsEditor({
   const total = rows.reduce((sum, row) => sum + row.quantity * (row.avgBuyPrice ?? 0), 0);
 
   const field =
-    "h-11 w-full rounded-md bg-field px-3.5 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
+    "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
 
   return (
     <div className="w-full">
@@ -188,7 +188,7 @@ export default function HoldingsEditor({
             </div>
             <ul className="group-list m-0 list-none p-0">
               {rows.map((row) => (
-                <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-3.5 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
+                <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-4 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
                   <div className="col-span-2 flex items-baseline gap-2 sm:col-span-1">
                     <span className="text-base font-medium">{row.name}</span>
                     <span className="text-xs text-muted tabular-nums">{row.code}</span>
@@ -277,7 +277,7 @@ export default function HoldingsEditor({
           <h2 id="add-sheet-title" className="text-lg font-semibold">
             종목 추가
           </h2>
-          <label className="flex flex-col gap-1.5">
+          <label className="flex flex-col gap-2">
             <span className="text-xs text-muted">종목명 또는 코드</span>
             <input
               list="stock-catalog"
@@ -296,7 +296,7 @@ export default function HoldingsEditor({
             </datalist>
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">수량(주)</span>
               <input
                 inputMode="numeric"
@@ -306,7 +306,7 @@ export default function HoldingsEditor({
                 className={field}
               />
             </label>
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
               <input
                 inputMode="numeric"

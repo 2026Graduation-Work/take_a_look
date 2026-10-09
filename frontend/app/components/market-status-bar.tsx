@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { MARKET_CONDITION_META } from "@/lib/display";
 import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
-import SourceLine from "./source-line";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
 
 // 헤더 아래 시장 브리핑: 지수 3개(등락 적/청) + 한 문장. 점수 숫자는 두지 않는다.
@@ -19,7 +18,7 @@ function Quote({ quote }: { quote: MarketIndexQuote }) {
     quote.change > 0 ? "var(--color-up)" : quote.change < 0 ? "var(--color-down)" : "var(--color-muted)";
   const arrow = quote.change > 0 ? "▲" : quote.change < 0 ? "▼" : "";
   return (
-    <span className="flex flex-none items-baseline gap-1.5 whitespace-nowrap">
+    <span className="flex flex-none items-baseline gap-2 whitespace-nowrap">
       <span className="text-xs text-muted">{quote.label}</span>
       <span className="text-sm font-medium tabular-nums">{formatValue(quote)}</span>
       <span className="text-xs tabular-nums" style={{ color }}>
@@ -88,12 +87,11 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
             </p>
             <p className="m-0 mt-1">거래: 최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">3등분해 낮음·보통·높음으로 불러요. {meta.comment}.</p>
-            <SourceLine provenance={status.provenance} />
           </MarketDetail>
         ) : (
           <span className="flex-none whitespace-nowrap text-xs text-body lg:ml-auto">{meta.comment}</span>
         )}
-        {!real && <SourceLine provenance={status.provenance} />}
+        {!real && <span className="flex-none text-2xs text-muted">예시 데이터</span>}
       </div>
     </section>
   );

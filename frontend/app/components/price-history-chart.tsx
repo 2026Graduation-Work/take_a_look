@@ -225,7 +225,7 @@ export default function PriceHistoryChart({
 
       {hovered !== null && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-2.5 py-1.5 shadow-lift"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-3 py-2 shadow-lift"
           style={{
             left: `${(xAt(hovered) / VB_W) * 100}%`,
             top: `${((y(prices[hovered]) - 10) / VB_H) * 100}%`,
@@ -234,7 +234,7 @@ export default function PriceHistoryChart({
           <span className="text-xs text-muted">
             {hovered === prices.length - 1 ? "오늘" : `${prices.length - 1 - hovered}거래일 전`}
           </span>
-          <span className="ml-1.5 text-xs font-medium tabular-nums">
+          <span className="ml-2 text-xs font-medium tabular-nums">
             {prices[hovered].toLocaleString("ko-KR")}원
           </span>
         </div>
