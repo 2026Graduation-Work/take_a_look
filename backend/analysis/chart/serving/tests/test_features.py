@@ -45,7 +45,8 @@ def test_adjusted_vwap_uses_actual_turnover_and_price_scale():
     dates = pd.to_datetime(["2024-01-02"])
     adjusted = pd.DataFrame({"Close": [50.0], "Volume": [100.0]}, index=dates)
     raw = pd.DataFrame(
-        {"종가": [100.0], "거래량": [100.0], "거래대금": [10500.0]}, index=dates
+        {"시가": [100.0], "고가": [101.0], "저가": [99.0],
+         "종가": [100.0], "거래량": [100.0], "거래대금": [10500.0]}, index=dates
     )
     result = attach_actual_vwap(adjusted, raw)
     assert result["AdjustmentFactor"].iloc[0] == 0.5

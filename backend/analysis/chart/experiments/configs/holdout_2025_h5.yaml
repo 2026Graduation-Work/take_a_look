@@ -1,46 +1,42 @@
-experiment_name: "holdout_2025_h5_u175_d150"
-description: "Final H5 chart baseline: train 2022-2024, untouched 2025 holdout."
-tags: ["baseline", "final_holdout", "dynamic_sigma", "h5"]
-
+experiment_name: holdout_2025_h5_u175_d150
+description: 'Final H5 chart baseline: train 2022-2024, untouched 2025 holdout.'
+tags:
+- baseline
+- final_holdout
+- dynamic_sigma
+- h5
 data:
-  tickers: ""
-  universe: "kospi_all_2024-12-30_snapshot"
-  price_dir: "data/processed"
-  # Drive snapshot을 교체하면 notebook의 실행 사본에 고유 version을 넣는다.
-  version: "drive-snapshot-set-me"
-  start_date: "2022-01-01"
-  # ML 라벨 평가는 2025-12-31 뒤의 관측 버퍼를 원본 parquet에서 읽는다.
-  end_date: "2025-12-31"
-  split_strategy: "single"
+  tickers: ''
+  universe: kospi_all_2024-12-30_snapshot
+  universe_file: experiments/configs/universes/kospi_all_2024-12-30.csv
+  start_date: '2022-01-01'
+  end_date: '2025-12-31'
+  split_strategy: single
   embargo_days: 7
   splits:
-    - fold_id: 0
-      name: "2025 final holdout"
-      train_start: "2022-01-01"
-      train_end: "2024-12-31"
-      test_start: "2025-01-08"
-      test_end: "2025-12-31"
-
+  - fold_id: 0
+    name: 2025 final holdout
+    train_start: '2022-01-01'
+    train_end: '2024-12-31'
+    test_start: '2025-01-08'
+    test_end: '2025-12-31'
 features:
-  set_name: "alpha158"
-  technical: true
-  fundamental: false
-  include_market_features: false
-  include_volume_features: true
-
+  groups:
+  - base
+  include: []
+  exclude: []
 labels:
-  type: "dynamic_sigma"
-  volatility_mode: "current_sigma"
+  type: dynamic_sigma
+  volatility_mode: current_sigma
   horizon: 5
   up_mult: 1.75
-  down_mult: 1.50
+  down_mult: 1.5
   up_class: 2
   neutral_class: 1
   down_class: 0
-
 model:
-  type: "LGBM"
-  objective: "multiclass"
+  type: LGBM
+  objective: multiclass
   params:
     n_estimators: 1000
     learning_rate: 0.01
@@ -50,34 +46,37 @@ model:
     colsample_bytree: 0.7
     subsample: 0.8
     subsample_freq: 1
-    class_weight: "balanced"
+    class_weight: balanced
     random_state: 42
     n_jobs: -1
-
-# 2025가 유일한 최종 OOS 검증 구간이므로 내부 6개월 validation을 생략한다.
-# train.py는 이때 라벨 관측을 2024-12-31에서 닫아 2025 누수를 차단한다.
 training:
   skip_validation: true
-
 strategy:
-  score_column: "prob_up"
-  selection: "top_k"
+  score_column: prob_up
+  selection: top_k
   top_n: 5
   prob_threshold: 0.65
-  position_weighting: "equal_weight"
-
+  position_weighting: equal_weight
 backtest:
   initial_cash: 10000000
   signal_lag_days: 1
-  entry_price: "open"
-  exit_price: "open"
+  entry_price: open
+  exit_price: rule
   fee: 0.00105
   max_holding_days: 5
-  up_mult: 1.8
-  down_mult: 1.2
-  hard_sl_mult: 1.5
-
+  up_mult: 1.75
+  down_mult: 1.5
+  hard_sl_mult: 1.2
 evaluation:
-  probability_bins: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-  benchmark_strategies: [random_top_k, momentum_5d, ma20_breakout, market_index]
-  random_baseline_seeds: 5
+  probability_bins:
+  - 0
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1
+  benchmark_file: data/datasets/local_2016_v1/benchmarks/KOSPI.parquet
+  benchmark_strategies:
+  - market_index
+contract_version: 3
+dataset: configs/dataset.yaml

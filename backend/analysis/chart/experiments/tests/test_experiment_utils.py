@@ -1,11 +1,27 @@
 # ruff: noqa: I001
 
 import pandas as pd
+import pytest
 
-from experiments.experiment_utils import build_fold_alignment, filter_to_test_fold_rows
+from experiments.experiment_utils import (
+    build_fold_alignment,
+    filter_to_test_fold_rows,
+    resolve_tickers,
+)
 
 
 SPLITS = [{"fold_id": 0, "name": "fold-0", "test_start": "2024-01-01", "test_end": "2024-01-31"}]
+
+
+def test_frozen_universe_is_loaded_and_missing_prices_fail(tmp_path) -> None:
+    universe = tmp_path / "universe.csv"
+    universe.write_text("Code\n5930\n123456\n")
+    (tmp_path / "005930.parquet").touch()
+    config = {"data": {"universe_file": str(universe), "price_dir": str(tmp_path)}}
+    with pytest.raises(ValueError, match="Missing processed files"):
+        resolve_tickers(config, __file__)
+    (tmp_path / "123456.parquet").touch()
+    assert resolve_tickers(config, __file__) == ["005930", "123456"]
 
 
 def test_fold_alignment_rejects_missing_actual_label_key() -> None:

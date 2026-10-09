@@ -1,11 +1,8 @@
 import argparse
-import os
 import sys
 
 
 def main(config_path, predictions_path=None):
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"[ERROR] 설정을 불러올 수 없습니다: {config_path}")
 
     print("=========================================================================")
     print("🚀 Starting Experiment Analysis Wrapper")

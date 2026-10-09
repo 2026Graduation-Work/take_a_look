@@ -13,6 +13,11 @@ class TradingCalendarError(RuntimeError):
     """Official session coverage is missing or inconsistent."""
 
 
+def _calendar_path() -> Path:
+    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    return root / "krx_trading_calendar.json"
+
+
 def refresh_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     """Fetch official KOSPI index sessions and atomically store a coverage artifact."""
     from pykrx import stock
@@ -20,9 +25,6 @@ def refresh_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
     if start > end:
         raise ValueError("start_date is after end_date")
-    root = os.environ.get("CHART_SERVING_DATA_DIR")
-    if not root:
-        raise TradingCalendarError("CHART_SERVING_DATA_DIR is required")
     index = stock.get_index_ohlcv_by_date(
         start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), "1001", name_display=False
     )
@@ -31,7 +33,7 @@ def refresh_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     days = {pd.Timestamp(value).date() for value in index.index}
     if any(day < start.date() or day > end.date() for day in days):
         raise TradingCalendarError("KRX index returned an out-of-range session")
-    path = Path(root) / "krx_trading_calendar.json"
+    path = _calendar_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "source": "KOSPI index trading days",
@@ -52,10 +54,7 @@ def get_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     start, end = pd.Timestamp(start_date).normalize(), pd.Timestamp(end_date).normalize()
     if start > end:
         raise ValueError("start_date is after end_date")
-    data_root = os.environ.get("CHART_SERVING_DATA_DIR")
-    if not data_root:
-        raise TradingCalendarError("CHART_SERVING_DATA_DIR is required")
-    path = Path(data_root) / "krx_trading_calendar.json"
+    path = _calendar_path()
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
         if payload.get("source") != "KOSPI index trading days":

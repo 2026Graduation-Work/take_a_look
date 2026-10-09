@@ -1,5 +1,5 @@
 active_pack:
-  pack_id: hold2022_2024_wf2019_2025_v1
-  release_tag: chart-serving-pack-v1
-  asset_name: hold2022_2024_wf2019_2025_v1.tar.gz
-  sha256: 69170ee2d4ae047a364630ecc619b450d78427f9e6c5c65ef1898fe911322d70
+  pack_id: kospi_uniform_v3_train2023_2025_20261009
+  release_tag: chart-serving-kospi_uniform_v3_train2023_2025_20261009
+  asset_name: kospi_uniform_v3_train2023_2025_20261009.tar.gz
+  sha256: 16871814a0e3ae422e469dfbb3072ef4608ed7cc6bf9c805e71859b4b440b4b2

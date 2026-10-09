@@ -1,12 +1,15 @@
 # ruff: noqa: I001
 
 import argparse
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import json
 import os
 
 import numpy as np
 import pandas as pd
-import yaml
 from evaluation.metrics import (
     calculate_calibration_table,
     calculate_classification_metrics,
@@ -18,12 +21,14 @@ from experiment_utils import (
     filter_to_test_fold_rows,
     generate_predictions_hash,
     label_params_from_config,
+    load_universe_intervals,
     load_predictions,
     resolve_splits,
+    resolve_tickers,
     result_dir,
     test_date_bounds,
 )
-from train_src.loaders import load_parquet_data
+from train_src.loaders import load_parquet_data  # noqa: F401
 
 
 def _json_safe(value):
@@ -63,14 +68,13 @@ def _restrict_predictions_to_labeled_rows(
 
 
 def main(config_path, predictions_path=None):
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(
-            f"[ERROR] 설정을 불러올 수 없습니다. 경로를 확인해주세요: {config_path}"
-        )
-
     print(f"[*] Loading config from {config_path}...")
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    from core.local_config import load_experiment_config
+    config = load_experiment_config(config_path)
+    from functools import partial
+    from train_src.loaders import load_parquet_data as base_loader
+    global load_parquet_data
+    load_parquet_data = partial(base_loader, feature_columns=config["feature_columns"], sample_only=True)
 
     exp_name = config.get("experiment_name", "default_exp")
     print(f"\n📊 [*] Starting ML Evaluation: {exp_name}")
@@ -90,7 +94,8 @@ def main(config_path, predictions_path=None):
     print(f"[*] 데이터 소스 디렉토리: {processed_dir}")
 
     full_test_start, full_test_end = test_date_bounds(splits)
-    tickers_cfg = config.get("data", {}).get("tickers", None)
+    tickers_cfg = resolve_tickers(config, __file__)
+    universe_intervals = load_universe_intervals(config)
 
     # Load actual labels
     label_params = label_params_from_config(config)
@@ -103,12 +108,17 @@ def main(config_path, predictions_path=None):
         tickers=tickers_cfg,
         label_params=label_params,
         training=False,  # Load all requested columns normally
+        sample_only=config.get("contract_version") == 3,
+        universe_only=config.get("data", {}).get("point_in_time", False),
+        strict=config.get("data", {}).get("point_in_time", False),
+        universe_intervals=universe_intervals,
     )
     actual_df["Date"] = pd.to_datetime(actual_df["Date"]).dt.tz_localize(None)
     actual_df = filter_to_test_fold_rows(actual_df, splits)
 
     # 미래 outcome을 확인할 수 없는 상장폐지 종목의 마지막 tail은 정답 라벨이 없다.
     # 백테스트용 원본 prediction은 보존하고 ML 평가에서만 labeled key로 제한한다.
+    all_oos_predictions = final_predictions.copy()
     final_predictions, unlabeled_prediction_rows = _restrict_predictions_to_labeled_rows(
         final_predictions, actual_df
     )
@@ -210,6 +220,21 @@ def main(config_path, predictions_path=None):
 
     # Save files
     out_dir = result_dir(config, __file__)
+    from core.local_config import atomic_json, atomic_parquet
+    from core.local_dataset import sha256
+
+    history = all_oos_predictions.merge(actual_df[["Date", "Code", "Y_Label"]],
+                                        on=["Date", "Code"], how="left", validate="one_to_one")
+    history["label_observed"] = history.Y_Label.notna()
+    history_path = Path(out_dir) / "oos_history.parquet"
+    atomic_parquet(history_path, history)
+    atomic_json(Path(out_dir) / "oos_history.manifest.json", {
+        "prediction_hash": predictions_hash, "sha256": sha256(history_path),
+        "rows": len(history), "label_observed_rows": int(history.label_observed.sum()),
+        "years": sorted(history.Date.dt.year.unique().tolist()), "splits": splits,
+        "feature_columns": config.get("feature_columns"),
+        "purpose": "full OOS score distribution; no strategy threshold/top-N filtering",
+    })
     model_metrics_df.to_csv(os.path.join(out_dir, "model_metrics_by_fold.csv"), index=False)
     calibration_df.to_csv(os.path.join(out_dir, "calibration_by_fold.csv"), index=False)
 

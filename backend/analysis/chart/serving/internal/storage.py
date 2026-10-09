@@ -55,6 +55,13 @@ class SupabaseStore:
                 data = response.read()
                 return json.loads(data) if data and "json" in response.headers.get("Content-Type", "") else data
         except HTTPError as exc:
+            if path.startswith("/storage/v1/object/authenticated/"):
+                try:
+                    error = json.loads(exc.read())
+                except (ValueError, OSError):
+                    error = {}
+                if exc.code == 404 or str(error.get("statusCode")) == "404" or error.get("code") == "NoSuchKey":
+                    raise FileNotFoundError("Private storage object absent") from None
             raise RuntimeError(f"Supabase {method} {path.split('?')[0]} failed: HTTP {exc.code}") from None
 
     def save_universe(self, as_of, rows):
@@ -108,6 +115,38 @@ class SupabaseStore:
         if not frame.empty:
             frame["Date"] = pd.to_datetime(frame["Date"])
         return frame
+
+    def _load_private_frame(self, key):
+        try:
+            data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" + quote(key, safe="/"))
+        except FileNotFoundError:
+            return None
+        return pd.read_parquet(io.BytesIO(data))
+
+    def _save_private_frame(self, key, frame):
+        data = io.BytesIO()
+        frame.to_parquet(data, index=False)
+        self._request("POST", "/storage/v1/object/chart-features/" + quote(key, safe="/"),
+                      data.getvalue(), content_type="application/octet-stream",
+                      extra_headers={"x-upsert": "true"})
+
+    def load_flow_day(self, day):
+        return self._load_private_frame(f"investor-flows-v3/{day}.parquet")
+
+    def save_flow_day(self, day, frame):
+        self._save_private_frame(f"investor-flows-v3/{day}.parquet", frame)
+
+    def load_price_history(self, code):
+        return self._load_private_frame(f"raw-history-v3/{code}.parquet")
+
+    def save_price_history(self, code, frame):
+        self._save_private_frame(f"raw-history-v3/{code}.parquet", frame)
+
+    def load_raw_prices(self, code, as_of):
+        return self._load_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet")
+
+    def save_raw_prices(self, code, as_of, frame):
+        self._save_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet", frame)
 
     def upload_features(self, code, as_of, builder_id, input_hash, frame):
         if not code or not builder_id or len(input_hash) != 64:

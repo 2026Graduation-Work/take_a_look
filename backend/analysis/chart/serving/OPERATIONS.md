@@ -56,6 +56,31 @@ python -m serving.run_daily --publish
 
 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
 
+## 수정된 기본 모델 pack 재생성과 검증
+
+현재 pack은 로컬에서 생성·활성화했다. 재학습 없이 완료된 연구 실행의 2026 fold 모델과 저장된 walk-forward 예측으로 재생성할 수 있다.
+
+```bash
+python -m serving.refresh_local_pack \
+  --h5-result experiments/results/sliding_2016_2026_h5_kospi_739166ce0d474177 \
+  --h20-result experiments/results/sliding_2016_2026_h20_kospi_1734679be11d0369 \
+  --pack-id kospi_uniform_v3_train2023_2025_20261009 --activate
+python -m serving.local_preview --compute-only
+```
+
+동일한 검증된 pack이 이미 있으면 재사용한다. 새 pack에는 공식 calendar, 2023~2025 학습 기간, 모델·예측 해시, 2019~2026 walk-forward 표본, 피처 동등성 증거가 들어간다. 기존 학습/수집 캐시와 이전 pack은 지우지 않는다. `previous_active_pack.json`으로 이전 설정을 확인할 수 있다. 이전 pack으로 실제 되돌리려면 피처 생성 코드도 그 버전에 맞춰야 하며, 새 daily 경로는 구형 피처 pack을 거부한다.
+
+새 runner에는 로컬 pack이 없으므로 다음 asset을 Release에 올리고 이 코드 변경을 PR로 배포해야 한다. `serving/config.yaml`은 새 태그와 archive SHA를 이미 가리킨다. Release를 준비하기 전에 새 설정만 원격에 반영하면 pack 다운로드가 실패한다.
+
+```bash
+gh release create chart-serving-kospi_uniform_v3_train2023_2025_20261009 \
+  serving/data/packs/kospi_uniform_v3_train2023_2025_20261009.tar.gz \
+  --title "Corrected KOSPI basic H5/H20 models" \
+  --notes "Uniform raw OHLC adjustment and actual VWAP; trained 2023-2025."
+```
+
+기본 모델을 교체한 상태이므로 수급은 수집·피처 계산·저장되지만 기본 모델 점수에는 쓰이지 않는다. 수급 모델 적용에는 해당 모델과 과거 표본을 함께 담은 별도의 pack이 필요하다.
+
 ## 3. 새 pack과 Actions
 
 `config.yaml`의 `active_pack`이 pack ID·Release 태그·첨부 파일명·압축 파일 SHA-256을 고정한다. 로컬에 같은 pack 디렉터리가 있으면 다운로드를 생략한다. 새 Actions runner에는 로컬 pack이 없으므로 GitHub Release 첨부 파일에서 내려받는다.

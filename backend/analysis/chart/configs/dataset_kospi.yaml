@@ -1,0 +1,15 @@
+contract_version: 3
+dataset_id: local_2016_kospi_v1
+root: data/datasets/local_2016_kospi_v1
+collection:
+  start_date: '2016-01-01'
+  end_date: null # 최신 확정 관측 거래일을 최초 구축 시 고정
+  markets: [KOSPI]
+  include_delisted: true
+  investor_flows: true
+preprocessing:
+  sigma_window: 20
+  sigma_min_periods: 10
+  # 과거 정보로만 계산하는 기본 배리어 피처; 실험 라벨과 독립
+  barrier_feature_up_mult: 1.5
+  barrier_feature_down_mult: 1.2

@@ -2,6 +2,14 @@ import numpy as np
 import pandas as pd
 
 
+def _universe_mask(price_df: pd.DataFrame, template: pd.DataFrame) -> pd.DataFrame:
+    if "UniverseEligible" not in price_df:
+        return pd.DataFrame(True, index=template.index, columns=template.columns)
+    return price_df.pivot(index="Date", columns="Code", values="UniverseEligible").reindex(
+        index=template.index, columns=template.columns
+    ).fillna(False).astype(bool)
+
+
 def restrict_signals_to_test_folds(
     entries: pd.DataFrame,
     weights: pd.DataFrame,
@@ -36,7 +44,8 @@ def generate_random_top_k_signals(
     trading_halt = price_df.pivot(index="Date", columns="Code", values="Trading_Halt").fillna(0)
 
     # 유효 종목 마스크 (가격이 존재하고 거래정지가 아님)
-    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0)
+    eligible = _universe_mask(price_df, raw_open_price)
+    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0) & eligible
 
     # 무작위 난수 매트릭스 생성
     np.random.seed(seed)
@@ -64,7 +73,7 @@ def generate_random_top_k_signals(
     weights = weights.shift(1).fillna(0.0)
 
     # 진입일 거래정지 차단
-    entries = entries & raw_open_price.notna() & (trading_halt == 0)
+    entries = entries & raw_open_price.notna() & (trading_halt == 0) & eligible
     weights = weights.where(entries, np.nan)
 
     return entries, weights
@@ -85,7 +94,8 @@ def generate_momentum_signals(
     # 5일 모멘텀 점수 계산
     momentum_score = close_price.pct_change(periods=horizon)
 
-    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0)
+    eligible = _universe_mask(price_df, raw_open_price)
+    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0) & eligible
     momentum_score = momentum_score.where(valid_mask)
 
     # 상위 top_n 랭킹
@@ -105,7 +115,7 @@ def generate_momentum_signals(
     weights = weights.shift(1).fillna(0.0)
 
     # 진입일 거래정지 차단
-    entries = entries & raw_open_price.notna() & (trading_halt == 0)
+    entries = entries & raw_open_price.notna() & (trading_halt == 0) & eligible
     weights = weights.where(entries, np.nan)
 
     return entries, weights
@@ -128,7 +138,8 @@ def generate_ma_breakout_signals(
     breakout_mask = close_price > ma
     spread = close_price / ma - 1.0
 
-    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0) & breakout_mask
+    eligible = _universe_mask(price_df, raw_open_price)
+    valid_mask = raw_open_price.notna() & (open_price > 1.0) & (trading_halt == 0) & breakout_mask & eligible
     spread = spread.where(valid_mask)
 
     # 상위 top_n 랭킹
@@ -148,7 +159,7 @@ def generate_ma_breakout_signals(
     weights = weights.shift(1).fillna(0.0)
 
     # 진입일 거래정지 차단
-    entries = entries & raw_open_price.notna() & (trading_halt == 0)
+    entries = entries & raw_open_price.notna() & (trading_halt == 0) & eligible
     weights = weights.where(entries, np.nan)
 
     return entries, weights

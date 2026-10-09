@@ -6,6 +6,35 @@ import pytest
 from experiments.train_src import loaders
 
 
+def test_listing_interval_is_start_inclusive_and_delisting_end_exclusive(monkeypatch) -> None:
+    dates = pd.date_range("2024-01-01", periods=12, freq="B")
+    source = pd.DataFrame(
+        {
+            "Date": dates,
+            "Code": ["000001"] * len(dates),
+            "Open": [100.0] * len(dates),
+            "High": [100.0] * len(dates),
+            "Low": [100.0] * len(dates),
+            "Close": [100.0] * len(dates),
+            "Volume": [1] * len(dates),
+        }
+    )
+    monkeypatch.setattr(loaders.glob, "glob", lambda _: ["/fixtures/000001.parquet"])
+    monkeypatch.setattr(loaders.pd, "read_parquet", lambda _: source.copy())
+    intervals = pd.DataFrame(
+        {
+            "Code": ["000001"],
+            "ListingDate": [dates[3]],
+            "DelistingDate": [dates[8]],
+        }
+    )
+
+    loaded = loaders.load_parquet_data("/fixtures", universe_intervals=intervals, universe_only=True)
+
+    assert loaded["UniverseEligible"].all()
+    assert loaded["Date"].tolist() == list(dates[3:8])
+
+
 def test_label_loading_keeps_requested_last_horizon_rows_with_right_buffer(monkeypatch) -> None:
     source = pd.DataFrame(
         {

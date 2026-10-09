@@ -58,6 +58,13 @@ WINDOW_INFO = {
     "vsumd": ("거래량 증감 차이", "증가 비중에서 감소 비중을 뺀 값"),
 }
 
+for investor, label in (("individual", "개인"), ("institution", "기관"), ("foreign", "외국인")):
+    for window in (1, 5, 20):
+        BASE_INFO[f"flow_{investor}_{window}"] = (
+            f"{window}일 {label} 순매수 비중",
+            f"{window}거래일 {label} 순매수 거래대금 / 같은 기간 KRX 총 거래대금",
+        )
+
 
 def feature_info(name):
     if name in BASE_INFO:

@@ -1,3 +1,5 @@
+> 로컬 config 기반 수집·실험은 [LOCAL_PIPELINE.md](LOCAL_PIPELINE.md)의 v3 계약을 따른다. 아래의 과거 캐시·실행 예시는 v3 CLI에서 그대로 재사용하지 않는다.
+
 # Chart 온보딩
 
 이 문서가 chart 파트의 실행·재현·수정 기준이다. 모든 명령은
@@ -92,7 +94,7 @@ pytest
 
 ```bash
 python data_collectors/price_collector.py --mode full --start-date 2016-01-01
-python data_collectors/preprocess_data.py --mode full
+python data_collectors/preprocess_data.py --mode full --rebuild
 ```
 
 ### 최신 거래일 갱신

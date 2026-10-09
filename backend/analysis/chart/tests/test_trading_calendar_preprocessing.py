@@ -26,24 +26,10 @@ def raw_prices():
     "normalizer",
     [preprocess_data.normalize_trading_halts, features.normalize_trading_halts],
 )
-def test_normalizer_inserts_only_missing_krx_session_not_weekday_holiday(
-    raw_prices, normalizer
-):
-    market_days = {
-        date(2026, 9, 24),
-        date(2026, 9, 25),
-        date(2026, 9, 29),
-    }
-
-    normalized = normalizer(raw_prices, market_days)
-
-    assert normalized["Date"].tolist() == list(
-        pd.to_datetime(["2026-09-24", "2026-09-25", "2026-09-29"])
-    )
-    assert normalized["Trading_Halt"].tolist() == [0, 1, 0]
-    assert pd.Timestamp("2026-09-28") not in set(normalized["Date"])
-    assert normalized.loc[1, "Close"] == 100.0
-    assert normalized.loc[1, "Volume"] == 0.0
+def test_normalizer_rejects_unverified_missing_session(raw_prices, normalizer):
+    market_days = {date(2026, 9, 24), date(2026, 9, 25), date(2026, 9, 29)}
+    with pytest.raises(ValueError, match="Unverified missing sessions"):
+        normalizer(raw_prices, market_days)
 
 
 def test_reindex_rejects_raw_row_on_non_trading_day(raw_prices):
@@ -118,9 +104,9 @@ def test_alpha158_rejects_hlc3_fallback(feature_generator):
 )
 def test_normalizer_does_not_hide_missing_vwap_on_traded_row(raw_prices, normalizer):
     raw_prices.loc[1, "VWAP"] = pd.NA
-    market_days = {date(2026, 9, 24), date(2026, 9, 25), date(2026, 9, 29)}
+    market_days = {date(2026, 9, 24), date(2026, 9, 29)}
 
-    with pytest.raises(ValueError, match="실제 VWAP 값이 없습니다"):
+    with pytest.raises(ValueError, match="positive finite OHLC/VWAP"):
         normalizer(raw_prices, market_days)
 
 

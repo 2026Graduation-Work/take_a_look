@@ -1,6 +1,8 @@
 # ── 데이터 수집 및 전처리 ───────────────────────
+exchange-calendars==4.13.2
 finance-datareader>=0.9.202
 pykrx>=1.2.8
+python-dotenv>=1.0
 pandas>=1.5.3
 numpy>=2.5.3
 pyarrow>=25.0.1

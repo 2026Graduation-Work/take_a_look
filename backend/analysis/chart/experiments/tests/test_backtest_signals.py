@@ -46,6 +46,7 @@ def test_strategy_keeps_embargo_market_dates_so_shift_cannot_cross_fold_boundary
             "Code": ["000001"] * len(dates),
             "Open": [100.0] * len(dates),
             "Trading_Halt": [0] * len(dates),
+            "Sigma": [0.1] * len(dates),
         }
     )
     # Jan 3 is a fold's final prediction day. Jan 4/5 are embargo market days;

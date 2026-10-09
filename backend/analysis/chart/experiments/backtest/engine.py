@@ -159,6 +159,68 @@ def _compute_internal_equal_weight_benchmark(
     return result
 
 
+def configured_benchmark(config, index, price_df):
+    """Use a frozen benchmark when supplied; never silently substitute another index."""
+    path = config.get("evaluation", {}).get("benchmark_file")
+    if not path:
+        if config.get("contract_version") == 3:
+            raise ValueError("evaluation.benchmark_file must identify a frozen dataset index")
+        return compute_custom_krx_composite(index, price_df)
+    from core.local_config import chart_path
+    path = chart_path(path)
+    frame = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path, parse_dates=["Date"])
+    frame["Date"] = pd.to_datetime(frame["Date"])
+    frame = frame.set_index("Date")
+    if frame.index.duplicated().any():
+        raise ValueError("Duplicate benchmark dates")
+    returns = frame["Close"].sort_index().pct_change(fill_method=None).reindex(index)
+    if returns.isna().any() or not np.isfinite(returns).all():
+        raise ValueError("Benchmark must cover every evaluation day and preceding close")
+    return _attach_benchmark_attrs(returns, str(path), "frozen daily closes; no dividends")
+
+
+def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) -> pd.Series:
+    """KOSPI price-index buy-and-hold returns on the portfolio's trading dates."""
+    index = pd.DatetimeIndex(index).tz_localize(None)
+    if csv_path:
+        closes = pd.read_csv(csv_path, parse_dates=["Date"]).set_index("Date")["Close"]
+        source = csv_path
+    else:
+        cache_path = os.path.join(os.path.dirname(_benchmark_cache_paths()[0]), "kospi_index_close.parquet")
+        if os.path.exists(cache_path):
+            closes = pd.read_parquet(cache_path).set_index("Date")["Close"]
+        else:
+            import FinanceDataReader as fdr
+
+            raw = fdr.DataReader(
+                "KS11",
+                (index.min() - pd.Timedelta(days=10)).strftime("%Y-%m-%d"),
+                (index.max() + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+            )
+            closes = raw["Close"]
+            if closes.empty:
+                raise ValueError("KOSPI index download returned no closes")
+            closes.index = pd.DatetimeIndex(closes.index).tz_localize(None)
+            closes.rename("Close").rename_axis("Date").reset_index().to_parquet(cache_path, index=False)
+        source = "FinanceDataReader KS11"
+
+    closes.index = pd.DatetimeIndex(closes.index).tz_localize(None)
+    closes = pd.to_numeric(closes, errors="coerce").sort_index()
+    if closes.index.has_duplicates or closes.empty or (closes <= 0).any():
+        raise ValueError("KOSPI index closes contain duplicate dates or invalid prices")
+    if closes.index.min() >= index.min():
+        raise ValueError("KOSPI index needs a close before the first evaluation date")
+    # Portfolio dates may include KRX holidays; holding the index is flat then.
+    aligned_close = closes.reindex(closes.index.union(index)).sort_index().ffill()
+    returns = aligned_close.pct_change(fill_method=None).reindex(index)
+    if returns.isna().any() or not np.isfinite(returns).all():
+        missing = index[returns.isna()]
+        raise ValueError(f"KOSPI index missing evaluation dates: {missing[:5].tolist()}")
+    result = returns.rename("Benchmark_KOSPI")
+    result.attrs["benchmark_source"] = source
+    return result
+
+
 def compute_custom_krx_composite(
     index: pd.DatetimeIndex, price_df: pd.DataFrame | None = None
 ) -> pd.Series:
@@ -366,6 +428,9 @@ class VectorBTEngine:
         )
 
     def run(self, entries: pd.DataFrame, weights: pd.DataFrame, price_df: pd.DataFrame, generate_report: bool = True):
+        if self.config.get("contract_version") == 3:
+            from .local_execution import simulate
+            return simulate(self.config, entries, weights, price_df)
         print(
             f"[Backtest] 시뮬레이션 가동 (초기자금: {self.init_cash:,}원, 수수료: {self.fee * 100}%)"
         )
@@ -460,7 +525,7 @@ class VectorBTEngine:
 
                 daily_returns = pf.returns()
                 ew_benchmark = pf.benchmark_returns()
-                custom_krx_benchmark = compute_custom_krx_composite(open_price.index, price_df)
+                custom_krx_benchmark = configured_benchmark(self.config, open_price.index, price_df)
 
                 returns_df = pd.DataFrame(
                     {

@@ -76,6 +76,7 @@ venv/
 *.csv
 *.parquet
 **/config.yaml
+!backend/analysis/chart/serving/config.yaml
 /chart_handoff_output/
 
 # 기본 Baseline 실험의 모델/캐시/결과는 Git에 올려서 공유 (추적 허용)
@@ -103,6 +104,12 @@ backend/analysis/chart/experiments/configs/*
 !backend/analysis/chart/experiments/configs/base.yaml
 !backend/analysis/chart/experiments/configs/holdout_2025_h5.yaml
 !backend/analysis/chart/experiments/configs/holdout_2025_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2019_2025_h5.yaml
+!backend/analysis/chart/experiments/configs/sliding_2019_2025_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h5.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h5_flow.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h20_flow.yaml
 !backend/analysis/chart/experiments/configs/universes/
 !backend/analysis/chart/experiments/configs/universes/kospi_all_2024-12-30.csv
 
@@ -116,6 +123,9 @@ backend/analysis/chart/experiments/configs/*
 !backend/analysis/chart/data/raw/005930.parquet
 !backend/analysis/chart/data/processed/005930.parquet
 !backend/analysis/chart/data/ticker_metadata.csv
+backend/analysis/chart/data/runs/
+backend/analysis/chart/data/runtime_cache/
+backend/analysis/chart/.venv-pipeline/
 backend/analysis/chart/data/raw/corp_code_mapping.json
 !backend/analysis/chart/core/models/
 
@@ -136,3 +146,6 @@ docs_cache/
 backend/analysis/text/data/raw/
 # LLM 캐시는 기사(네이버 검색 결과 포함)를 입력으로 만든 요약이라 함께 제외한다.
 backend/analysis/text/value_pipeline/llm_cache/
+
+# Local experiment datasets and manifests (never tracked)
+backend/analysis/chart/data/datasets/

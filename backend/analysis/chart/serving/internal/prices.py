@@ -1,5 +1,6 @@
 """Adjusted KRX OHLCV with actual turnover-derived adjusted VWAP."""
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -9,36 +10,18 @@ REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
-    """Use KRX unadjusted turnover and volume, scaled to adjusted close."""
-    if adjusted.empty or raw.empty:
-        raise ValueError("Adjusted and raw KRX frames are required")
-    result = adjusted.copy()
-    result.index = pd.to_datetime(result.index).normalize()
-    source = raw.rename(columns={"종가": "RawClose", "거래량": "RawVolume", "거래대금": "Amount"})
-    source.index = pd.to_datetime(source.index).normalize()
-    needed = {"RawClose", "RawVolume", "Amount"}
-    if not needed.issubset(source):
-        raise ValueError(f"Actual VWAP inputs missing: {sorted(needed - set(source))}")
-    result = result.join(source[["RawClose", "RawVolume", "Amount"]].apply(pd.to_numeric, errors="coerce"), how="left")
-    traded = pd.to_numeric(result["Volume"], errors="coerce").fillna(0).gt(0)
-    bad = traded & (
-        result[["RawClose", "RawVolume", "Amount"]].isna().any(axis=1)
-        | result[["RawClose", "RawVolume", "Amount"]].le(0).any(axis=1)
-    )
-    if bad.any():
-        raise ValueError(f"KRX turnover missing for traded dates: {result.index[bad][:5].tolist()}")
-    result["AdjustmentFactor"] = result["Close"] / result["RawClose"].where(result["RawClose"].gt(0))
-    result["VWAP"] = result["Amount"] / result["RawVolume"] * result["AdjustmentFactor"]
-    result.loc[~traded, "VWAP"] = np.nan
-    return result
+    """Use the same raw OHLC scaling and VWAP calculation as collection."""
+    from data_collectors.price_collector import _attach_actual_vwap
+
+    return _attach_actual_vwap(adjusted, raw)
 
 
 def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     """Fetch both price bases from KRX; imports pykrx only when collection runs."""
     from pykrx import stock
 
-    if len(code) != 6 or not code.isdigit():
-        raise ValueError("Stock code must be six digits")
+    if not re.fullmatch(r"[0-9A-Z]{6}", code):
+        raise ValueError("Stock code must be six uppercase alphanumeric characters")
     start, end = start_date.replace("-", ""), end_date.replace("-", "")
     adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
     raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
@@ -49,7 +32,7 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     if not set(required).issubset(adjusted):
         raise ValueError(f"Adjusted KRX fields missing: {sorted(set(required) - set(adjusted))}")
     adjusted = adjusted[required].copy()
-    adjusted["Change"] = adjusted["Change"].fillna(0.0)
+    adjusted["Change"] = adjusted["Close"].pct_change(fill_method=None) * 100
     adjusted.index.name = "Date"
     return attach_actual_vwap(adjusted, raw).reset_index()
 

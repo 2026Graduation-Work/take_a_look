@@ -10,6 +10,7 @@ class SwingStrategy:
     """
 
     def __init__(self, config: dict):
+        self.config = config
         self.strat_cfg = config.get("strategy", {})
         self.prob_threshold = self.strat_cfg.get("prob_threshold", 0.75)
         self.top_n = self.strat_cfg.get("top_n", 5)
@@ -33,12 +34,29 @@ class SwingStrategy:
         # 연속된 가격 캘린더 위에서 정상적으로 진행된다.
         market = price_df.copy()
         market["Date"] = pd.to_datetime(market["Date"]).dt.tz_localize(None)
-        prediction_frame = predictions[["Date", "Code", "Prob"]].copy()
+        score = self.strat_cfg.get("score_column", "Prob")
+        if (
+            score == "prob_up"
+            and score not in predictions
+            and self.config.get("contract_version") != 3
+        ):
+            score = "Prob"
+        prediction_frame = (
+            predictions[["Date", "Code", score]].rename(columns={score: "Prob"}).copy()
+        )
         prediction_frame["Date"] = pd.to_datetime(prediction_frame["Date"]).dt.tz_localize(None)
 
         raw_open_price = market.pivot(index="Date", columns="Code", values="Open")
         open_price = raw_open_price.ffill()
         trading_halt = market.pivot(index="Date", columns="Code", values="Trading_Halt").fillna(0)
+        eligible = (
+            market.pivot(index="Date", columns="Code", values="UniverseEligible")
+            .reindex(index=raw_open_price.index, columns=raw_open_price.columns)
+            .fillna(False)
+            .astype(bool)
+            if "UniverseEligible" in market
+            else pd.DataFrame(True, index=raw_open_price.index, columns=raw_open_price.columns)
+        )
         prob = prediction_frame.pivot(index="Date", columns="Code", values="Prob")
         prob = prob.reindex(index=raw_open_price.index, columns=raw_open_price.columns).fillna(0.0)
         prediction_dates = prediction_frame.assign(_prediction=True).pivot(
@@ -54,6 +72,7 @@ class SwingStrategy:
             & raw_open_price.notna()
             & (open_price > 1.0)
             & (trading_halt == 0)
+            & eligible
         )
 
         # 4. Top N 랭킹 (행 단위로 매일 가장 유망한 종목 선별)
@@ -69,16 +88,27 @@ class SwingStrategy:
 
         # 6. 미래 참조(Look-ahead bias) 원천 차단
         # T일 모델 예측을 바탕으로 -> 실제 매수는 T+1일 Open 가격에 진입
-        entries = raw_entries.shift(1).fillna(False)
-        weights = weights.shift(1).fillna(0.0)
+        lag = self.config.get("backtest", {}).get("signal_lag_days", 1)
+        entries = raw_entries.shift(lag).fillna(False)
+        weights = weights.shift(lag).fillna(0.0)
 
         # T+1일(매수 집행일)이 거래정지일이면 진입 차단
         # T+1이 embargo라면 이전 fold의 신호를 실행하지 않는다. 다음 fold 첫날도
         # prediction 날짜이지만 raw signal이 없으므로, 과거 fold 신호가 건너오지 않는다.
-        entries = entries & prediction_dates & raw_open_price.notna() & (trading_halt == 0)
+        entries = (
+            entries & prediction_dates & raw_open_price.notna() & (trading_halt == 0) & eligible
+        )
+        for offset in range(1, lag + 1):
+            entries &= prediction_dates.shift(offset).fillna(False)
 
         # 7. 강제 리밸런싱 및 수수료 폭탄 방지
         # VectorBT는 빈칸이 아니면 매일 비중을 조절하려 하므로, 매수 진입일 외에는 NaN으로 둠
         weights = weights.where(entries, np.nan)
 
+        signal_sigma = (
+            market.pivot(index="Date", columns="Code", values="Sigma")
+            .reindex(index=entries.index, columns=entries.columns)
+            .shift(lag)
+        )
+        entries.attrs["signal_sigma"] = signal_sigma
         return entries, weights
