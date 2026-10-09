@@ -1,11 +1,11 @@
-# 출처·기준 시점 표시 조사 (2026-10-10)
+# 출처·기준 시점 표시 조사 (2026-10-09)
 
 "필요한 것만, 흔들림 없이" 화면 정리(Task 2) 전에, 다른 서비스가 **기준 시점과 출처를 어디에 몇 번** 보여 주는지 확인했다.
 직접 열어 본 것과 문서로만 본 것을 나눠 적는다.
 
 | 서비스 | 기준 시점 | 출처 | 확인 방법 |
 |---|---|---|---|
-| 토스증권 종목 상세(웹, `tossinvest.com/stocks/A005930/analytics`) | 화면 공통 시각은 한 곳("20:45 기준", 시세는 "실시간"). 항목 날짜는 **다를 때만** 그 항목 옆에 붙인다: 상장주식수 "(26년 10월 9일 기준)", 재무 "25년 12월 기준", 산업 비중 "(2020년 12월 기준)" | 데이터 묶음 끝에 한 줄 "출처: FnGuide 및 기업 IR자료". 카드마다 버튼으로 두지 않음 | 2026-10-10 Playwright로 열어 본문 텍스트 추출 |
+| 토스증권 종목 상세(웹, `tossinvest.com/stocks/A005930/analytics`) | 화면 공통 시각은 한 곳("20:45 기준", 시세는 "실시간"). 항목 날짜는 **다를 때만** 그 항목 옆에 붙인다: 상장주식수 "(26년 10월 9일 기준)", 재무 "25년 12월 기준", 산업 비중 "(2020년 12월 기준)" | 데이터 묶음 끝에 한 줄 "출처: FnGuide 및 기업 IR자료". 카드마다 버튼으로 두지 않음 | 2026-10-09 Playwright로 열어 본문 텍스트 추출 |
 | Our World in Data 차트(`/grapher/population-unwpp`) | 차트 아래 목록에 "Last updated 2024-07-12" 한 번, "Date range"·"Next expected update" | 같은 목록에 "Data source: UN, World Population Prospects (2024) – processed by Our World in Data" 한 번. 가공 과정·인용은 "Sources and processing"(더 보기)로 접어 둠 | WebFetch로 페이지 구조 확인 |
 | FT 차트(사내 차트 프레임 `g-chartframe`, npm 5.3.3) | 제목 아래 부제(`subtitle`)에 단위·기간 | 그래픽마다 **아래쪽 source 한 줄**(`frame.source("Source: FT Research|Graphic: …")`). 출처·주석·크레딧을 같은 줄에 | 패키지 README의 frame API |
 | 애플 주식 앱 | 공식 문서(Apple 지원 "Check stocks on iPhone")에서 기준 시각·제공자 표기 위치를 확인하지 못했다 | 〃 | 판정에서 뺌(앱 관찰 없이 기억으로 쓰지 않는다) |
