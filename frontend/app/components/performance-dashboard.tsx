@@ -81,15 +81,15 @@ export default function PerformanceDashboard({
           <h1 id="scorecard-title" className="text-3xl font-semibold">
             심리 피처를 더하면 예측이 나아지나요?
           </h1>
-          <p className="m-0 max-w-2xl text-sm leading-6 text-body">
+          <p className="m-0 max-w-2xl text-sm text-body">
             가격 피처만 쓴 모델 A와 심리 피처를 더한 모델 B를 같은 조건에서 비교했어요.
           </p>
           {isSample && (
-            <p role="note" className="m-0 mt-2 rounded-md bg-field px-4 py-3 text-sm leading-6 text-body">
+            <p role="note" className="m-0 mt-2 rounded-md bg-field px-4 py-3 text-sm text-body">
               <strong className="font-semibold text-ink">예시 데이터</strong> · {conclusion}
             </p>
           )}
-          {!isSample && <p className="m-0 max-w-2xl text-sm leading-6 text-ink">{conclusion}</p>}
+          {!isSample && <p className="m-0 max-w-2xl text-sm text-ink">{conclusion}</p>}
         </section>
 
         <section aria-labelledby="compare-title" className="flex flex-col gap-3">
@@ -215,7 +215,7 @@ function Definitions({ items }: { items: [string, string][] }) {
       {items.map(([term, description]) => (
         <div key={term} className="contents">
           <dt className="pt-3 text-sm font-medium text-ink sm:pb-3">{term}</dt>
-          <dd className="m-0 border-b border-line-soft pb-3 text-sm leading-6 text-body last:border-0 sm:pt-3">{description}</dd>
+          <dd className="m-0 border-b border-line-soft pb-3 text-sm text-body last:border-0 sm:pt-3">{description}</dd>
         </div>
       ))}
     </dl>

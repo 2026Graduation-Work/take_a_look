@@ -284,7 +284,7 @@ export default function StockDetailView({
                 <h3 id="more-ai" className="text-base font-semibold">
                   숫자를 풀어 쓴 설명 <span className="text-xs font-normal text-muted">AI 작성 · 매매 조언 아님</span>
                 </h3>
-                <p className="m-0 text-sm leading-relaxed text-body">{detail.aiAdvice}</p>
+                <p className="m-0 text-sm text-body">{detail.aiAdvice}</p>
               </section>
             )}
 

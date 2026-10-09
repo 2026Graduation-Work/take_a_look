@@ -170,7 +170,7 @@ function OnboardingError({
       <section className="w-full max-w-[460px] surface p-7">
         <BrandMark />
         <h1 className="mt-8 text-xl font-semibold text-ink">연결을 확인해 주세요</h1>
-        <p role="alert" className="mt-2 text-sm leading-6 text-muted">
+        <p role="alert" className="mt-2 text-sm text-muted">
           {message}
         </p>
         <button

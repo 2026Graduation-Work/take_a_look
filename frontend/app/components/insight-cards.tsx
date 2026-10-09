@@ -231,7 +231,7 @@ export function Checkpoints({
           {items.map((item, index) => (
             <li key={item.key} data-nudge={item.key} className="flex gap-3">
               <span className="flex-none text-sm text-muted tabular-nums">{index + 1}</span>
-              <p className="m-0 max-w-2xl text-base leading-relaxed text-ink">{item.text}</p>
+              <p className="m-0 max-w-2xl text-base text-ink">{item.text}</p>
             </li>
           ))}
         </ol>
