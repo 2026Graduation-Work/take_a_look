@@ -1,52 +1,169 @@
-"""Build and locally activate corrected models from completed research runs."""
+"""Verify preserved v3 artifacts, export a matching pack, and activate locally."""
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
-from core.local_config import atomic_json
+from experiments.experiment_utils import resolve_splits
+from serving.internal.inference import infer_batch
+from serving.internal.pack import load_pack
+from shared.data.calendar import verify_calendar_schedule
+from shared.data.providers import _attach_actual_vwap
+from shared.data.validation import validate_prices
+from shared.features.builder import build_feature_frame
+from shared.features.columns import BASE_FEATURES
+from shared.io import atomic_json, sha256_file
+from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS, processing_contract
 
-from .internal.features import BUILDER_ID, build_feature_frame
-from .internal.hashing import sha256_file
-from .internal.inference import infer_batch
-from .internal.pack import build_pack, load_pack
-from .internal.prices import attach_actual_vwap
-
-ROOT = Path(__file__).resolve().parents[1]
+from .pack import build_pack
 
 
-def verify_inputs(dataset, names):
-    days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
-    evidence = []
-    cases = {"005930": None, "000040": None, "001527": "2024-03-28",
-             "015540": "2016-03-25", "016380": "2016-02-16", "016385": "2016-02-16",
-             "047810": "2017-10-11", "145210": "2025-03-21"}
-    for code, target in cases.items():
-        raw = pd.read_parquet(dataset / "raw" / f"{code}.parquet")
-        as_of = pd.Timestamp(target) if target else pd.to_datetime(raw.Date).max()
-        raw = raw.loc[pd.to_datetime(raw.Date).le(as_of)].copy()
+def preserved_path(value):
+    """Only export resolves historical manifest paths through the audited move map."""
+    old = Path(value)
+    if not old.is_absolute():
+        old = CHART_ROOT / old
+    relative = str(old.relative_to(CHART_ROOT))
+    moves = json.loads((CHART_ROOT / "docs/migration.json").read_text())["moves"]
+    for source, target in moves:
+        if relative == source or relative.startswith(source + "/"):
+            return CHART_ROOT / (target + relative[len(source):])
+    return old
+
+
+def verify_inputs(dataset, names, feature_store=None):
+    original = json.loads((dataset / "dataset_manifest.json").read_text())
+    processed = json.loads((dataset / "processed_manifest.json").read_text())
+    calendar = json.loads((dataset / "calendar.json").read_text())
+    verify_calendar_schedule(calendar)
+    if (original.get("contract_version") != 3 or not original.get("prices_complete")
+            or original.get("price_basis") != PRICE_BASIS
+            or processed["settings"] != PREPROCESSING
+            or processed["raw_files"] != original["raw_files"]):
+        raise ValueError("Preserved v3 dataset settings or raw provenance mismatch")
+    original_builder = CHART_ROOT / "workspace/archive/pre-refactor/originals/core/local_features.py"
+    if processed.get("processing_contract") == processing_contract():
+        builder_source = CHART_ROOT / "shared/features/builder.py"
+    else:
+        builder_source = original_builder
+        if processed["implementation_sha256"] != sha256_file(builder_source):
+            raise ValueError("Preserved processed data has an unverified builder")
+    metadata = pd.read_csv(dataset / "ticker_metadata.csv", dtype={"Code": str},
+                           parse_dates=["ListingDate", "DelistingDate"])
+    days = pd.to_datetime(calendar["trading_days"])
+    checked_rows, unavailable_rows, range_rows = 0, 0, 0
+    cases = []
+    comparison = list(dict.fromkeys(["Open", "High", "Low", "Close", "Volume", "VWAP",
+                                    "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount",
+                                    "RegularSessionUnavailable", "Trading_Halt", "Log_Ret", "Sigma", *names]))
+    for index, (name, expected_hash) in enumerate(sorted(processed["files"].items()), 1):
+        source, expected_path = dataset / "raw" / name, dataset / "processed" / name
+        if sha256_file(source) != original["raw_files"][name] or sha256_file(expected_path) != expected_hash:
+            raise ValueError(f"Preserved raw/processed checksum mismatch: {name}")
+        raw = pd.read_parquet(source)
+        expected = pd.read_parquet(expected_path)
+        if feature_store is not None:
+            trained = pd.read_parquet(feature_store / name, columns=["Date", *names])
+            if (not pd.to_datetime(trained.Date).equals(pd.to_datetime(expected.Date))
+                    or not np.allclose(trained[names].to_numpy(dtype=float), expected[names].to_numpy(dtype=float), rtol=1e-8, atol=1e-10, equal_nan=True)):
+                raise ValueError(f"Model training store/v3 processed input mismatch: {name}")
         indexed = raw.set_index("Date")
-        # Reconstruct a provider response, then exercise serving's actual price path.
-        source = indexed[[f"Raw{c}" for c in ("Open", "High", "Low", "Close", "Volume")]+["Amount"]]
-        supplied = indexed[["Open", "High", "Low", "Close", "Volume"]].copy()
-        supplied["Change"] = supplied.Close.pct_change(fill_method=None) * 100
-        attached = attach_actual_vwap(supplied, source).reset_index()
-        for col in raw:
-            if col not in attached:
-                attached[col] = raw[col].to_numpy()
-        rebuilt = build_feature_frame(attached, set(days.date))
-        expected = pd.read_parquet(dataset / "processed" / f"{code}.parquet")
-        expected = expected.loc[pd.to_datetime(expected.Date).eq(as_of)].iloc[0]
-        actual = rebuilt.loc[rebuilt.Date.eq(as_of)].iloc[0]
-        if not np.allclose(actual[names].to_numpy(dtype=float), expected[names].to_numpy(dtype=float),
+        fields = [f"Raw{c}" for c in ("Open", "High", "Low", "Close", "Volume")] + ["Amount"]
+        attached = _attach_actual_vwap(indexed, indexed[fields]).reset_index()
+        pieces = []
+        for interval in metadata.loc[metadata.Code.eq(Path(name).stem)].itertuples():
+            active = pd.to_datetime(attached.Date).ge(interval.ListingDate)
+            if pd.notna(interval.DelistingDate):
+                active &= pd.to_datetime(attached.Date).lt(interval.DelistingDate)
+            subset = attached.loc[active].copy()
+            if subset.empty:
+                continue
+            active_days = days[(days >= subset.Date.min()) & (days <= subset.Date.max())]
+            subset = validate_prices(subset, pd.DatetimeIndex(active_days))
+            pieces.append(build_feature_frame(subset, days, PREPROCESSING))
+        rebuilt = pd.concat(pieces, ignore_index=True)
+        if not pd.to_datetime(rebuilt.Date).equals(pd.to_datetime(expected.Date)):
+            raise ValueError(f"Shared/v3 session or listing interval mismatch: {name}")
+        if not np.allclose(rebuilt[comparison].to_numpy(dtype=float), expected[comparison].to_numpy(dtype=float),
                            rtol=1e-8, atol=1e-10, equal_nan=True):
-            raise ValueError(f"Serving/training feature mismatch: {code}/{as_of.date()}")
-        evidence.append({"code": code, "date": as_of.date().isoformat(), "features_match": len(names)})
-    return evidence
+            raise ValueError(f"Shared/v3 price or feature mismatch: {name}")
+        checked_rows += len(raw)
+        unavailable_rows += int(expected.RegularSessionUnavailable.sum())
+        range_rows += int(expected.VWAPOutsideDailyRange.sum())
+        if Path(name).stem in {"005930", "000040", "001527", "015540", "016380", "016385", "047810", "145210"}:
+            cases.append({"code": Path(name).stem, "rows": len(raw), "columns_match": len(comparison)})
+        if index % 100 == 0:
+            print(json.dumps({"event": "shared_v3_parity", "files_checked": index, "rows_checked": checked_rows}), flush=True)
+    return {"files": len(processed["files"]), "rows": checked_rows, "columns": comparison,
+            "rtol": 1e-8, "atol": 1e-10, "regular_session_unavailable_rows": unavailable_rows,
+            "vwap_outside_range_rows": range_rows, "cases": cases,
+            "original_builder_sha256": sha256_file(builder_source),
+            "dataset_manifest_sha256": sha256_file(dataset / "dataset_manifest.json"),
+            "processed_manifest_sha256": sha256_file(dataset / "processed_manifest.json"),
+            "calendar_sha256": sha256_file(dataset / "calendar.json")}
+
+
+def verify_runs(result_dirs):
+    models, predictions, provenance = {}, {}, {}
+    configs = []
+    for horizon, result in result_dirs.items():
+        manifest_path = result / "run_manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        cfg = manifest["config"]
+        if (cfg.get("contract_version") != 3 or cfg["features"]["groups"] != ["base"]
+                or cfg["labels"]["horizon"] != horizon or manifest["feature_columns"] != list(BASE_FEATURES)
+                or cfg["dataset"]["preprocessing"] != PREPROCESSING):
+            raise ValueError("Expected completed basic v3 H5/H20 runs in common feature order")
+        folds = resolve_splits(cfg)
+        last = folds[-1]
+        if (last["train_start"], last["train_end"], last["test_end"]) != ("2023-01-01", "2025-12-31", "2026-10-06"):
+            raise ValueError("Expected 2023..2025 training and data ending 2026-10-06")
+        cache_hash = manifest["predictions_hash"]
+        models[horizon] = CHART_ROOT / "workspace/experiments/cache/training/models" / f"{cache_hash}_fold{last['fold_id']}_model.txt"
+        predictions[horizon] = CHART_ROOT / "workspace/experiments/cache/predictions" / f"{cache_hash}_predictions.parquet"
+        model_meta_path = Path(str(models[horizon]) + ".manifest.json")
+        prediction_meta_path = Path(str(predictions[horizon]) + ".manifest.json")
+        model_meta = json.loads(model_meta_path.read_text())
+        pred_meta = json.loads(prediction_meta_path.read_text())
+        if (sha256_file(models[horizon]) != model_meta["sha256"]
+                or sha256_file(predictions[horizon]) != pred_meta["sha256"]
+                or pred_meta["predictions_hash"] != cache_hash or pred_meta["config"] != cfg
+                or pred_meta["feature_columns"] != manifest["feature_columns"]
+                or model_meta["feature_columns"] != manifest["feature_columns"]):
+            raise ValueError("Preserved model/prediction provenance mismatch")
+        model = lgb.Booster(model_file=str(models[horizon]))
+        if model.num_model_per_iteration() != 3 or model.feature_name() != manifest["feature_columns"]:
+            raise ValueError("Research model feature/class mismatch")
+        prediction = pd.read_parquet(predictions[horizon])
+        prediction.Date = pd.to_datetime(prediction.Date)
+        if (set(prediction.fold_id.unique()) != {f["fold_id"] for f in folds}
+                or not prediction.fold_id.eq(prediction.Date.dt.year - 2019).all()
+                or prediction.Date.max() != pd.Timestamp("2026-10-06")
+                or not np.allclose(prediction[["prob_down", "prob_neutral", "prob_up"]].sum(axis=1), 1)):
+            raise ValueError("OOS dates/folds/classes mismatch")
+        store = preserved_path(cfg["features"]["materialized_dir"])
+        feature_manifest_path = store / "feature_manifest.json"
+        feature_manifest = json.loads(feature_manifest_path.read_text())
+        for name, digest in feature_manifest["file_hashes"].items():
+            if sha256_file(store / name) != digest:
+                raise ValueError(f"Training feature store checksum mismatch: {name}")
+        provenance[f"h{horizon}"] = {
+            "run_manifest_sha256": sha256_file(manifest_path), "original_run_manifest": str(manifest_path),
+            "prediction_hash": cache_hash, "prediction_sha256": pred_meta["sha256"],
+            "prediction_manifest_sha256": sha256_file(prediction_meta_path),
+            "model_sha256": model_meta["sha256"], "model_manifest_sha256": sha256_file(model_meta_path),
+            "feature_manifest_sha256": sha256_file(feature_manifest_path), "training_feature_store": str(store), "fold": last,
+            "oos_period": {"start": prediction.Date.min().date().isoformat(), "end": "2026-10-06"},
+            "labels": cfg["labels"], "prediction_rows": len(prediction)}
+        configs.append(cfg)
+    if configs[0]["dataset"] != configs[1]["dataset"]:
+        raise ValueError("H5/H20 datasets disagree")
+    return models, predictions, provenance, preserved_path(configs[0]["dataset"]["root"])
 
 
 def main(argv=None):
@@ -54,70 +171,64 @@ def main(argv=None):
     parser.add_argument("--h5-result", type=Path, required=True)
     parser.add_argument("--h20-result", type=Path, required=True)
     parser.add_argument("--pack-id", required=True)
-    parser.add_argument("--activate", action="store_true", help="Update local serving config after validation")
+    parser.add_argument("--activate", action="store_true")
     args = parser.parse_args(argv)
-    manifests = {h: json.loads(p.joinpath("run_manifest.json").read_text())
-                 for h, p in ((5, args.h5_result), (20, args.h20_result))}
-    models, predictions, provenance = {}, {}, {}
-    for h, manifest in manifests.items():
-        cfg = manifest["config"]
-        if cfg["features"]["groups"] != ["base"] or cfg["labels"]["horizon"] != h:
-            raise ValueError("Expected corrected basic H5/H20 research runs")
-        if cfg["data"]["sliding"]["end_year"] != 2026:
-            raise ValueError("Expected latest completed 2026 fold")
-        cache_hash = manifest["predictions_hash"]
-        models[h] = ROOT / "experiments/train_src/cache/models" / f"{cache_hash}_fold7_model.txt"
-        predictions[h] = ROOT / "experiments/cache" / f"{cache_hash}_predictions.parquet"
-        model_meta = json.loads(models[h].with_suffix(".txt.manifest.json").read_text())
-        if sha256_file(models[h]) != model_meta["sha256"]:
-            raise ValueError("Research model checksum mismatch")
-        model = lgb.Booster(model_file=str(models[h]))
-        if model.feature_name() != manifest["feature_columns"]:
-            raise ValueError("Research model feature mismatch")
-        provenance[f"h{h}"] = {"run_manifest_sha256": sha256_file((args.h5_result if h==5 else args.h20_result)/"run_manifest.json"),
-                                "prediction_hash": cache_hash, "model_sha256": model_meta["sha256"], "fold_id": 7}
-    dataset = Path(manifests[5]["config"]["dataset"]["root"])
-    if dataset != Path(manifests[20]["config"]["dataset"]["root"]):
-        raise ValueError("H5/H20 dataset mismatch")
-    names = manifests[5]["feature_columns"]
-    evidence = verify_inputs(dataset, names)
-    info = {"feature_builder_id": BUILDER_ID, "training_period": {"start": "2023-01-01", "end": "2025-12-31"},
-            "validation_status": "local_price_feature_and_inference_checks_passed",
+    models, predictions, sources, dataset = verify_runs({5: args.h5_result, 20: args.h20_result})
+    stores = {source["training_feature_store"] for source in sources.values()}
+    if len(stores) != 1:
+        raise ValueError("Base H5/H20 training feature stores disagree")
+    evidence = verify_inputs(dataset, list(BASE_FEATURES), Path(next(iter(stores))))
+    info = {"feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
+            "training_period": {"start": "2023-01-01", "end": "2025-12-31"},
+            "data_period": {"start": "2016-01-04", "end": "2026-10-06", "partial_years": [2026]},
+            "validation_status": "all_preserved_v3_price_feature_hashes_and_local_inference_passed",
             "known_issues": ["Adjusted prices are current snapshots, not point-in-time archives.",
                              "Past KOSPI membership history is not fully verified.",
-                             "These base models do not consume the separately collected investor-flow features."],
-            "models": provenance, "feature_parity_cases": evidence}
-    root = ROOT / "serving/data/packs" / args.pack_id
-    if root.exists():
-        existing, _ = load_pack(root)
-        if existing.get("research_provenance") != info:
-            raise ValueError("Existing pack has different research provenance")
-        archive = root.parent / f"{args.pack_id}.tar.gz"
-        if not archive.is_file():
-            raise FileNotFoundError(archive)
-        reports = json.loads((root / "build_report.json").read_text())
-    else:
-        root, archive, reports = build_pack(pack_id=args.pack_id, output=ROOT/"serving/data/packs",
-                                           models=models, predictions=predictions, processed_dir=dataset/"processed",
-                                           calendar_file=dataset/"calendar.json", research_manifest=info)
+                             "KRX turnover aggregation scope is unverified; out-of-range VWAP is retained.",
+                             "Regular-session unavailable rows exclude execution but do not establish official suspension.",
+                             "Missing investor ranking rows stay null; base H5/H20 models do not use flows.",
+                             "2026 results are partial through 2026-10-06."],
+            "models": sources, "feature_parity": evidence}
+    output = CHART_ROOT / "workspace/serving/packs"
+    root, archive, reports = build_pack(pack_id=args.pack_id, output=output, models=models,
+        predictions=predictions, processed_dir=dataset / "processed",
+        calendar_file=dataset / "calendar.json", research_manifest=info)
     pack, paths = load_pack(root)
-    raw = pd.read_parquet(dataset/"raw/005930.parquet")
-    dates = pd.to_datetime(raw.Date)
-    raw = raw.loc[dates.le(dates.max())]
-    days = pd.to_datetime(json.loads((dataset/"calendar.json").read_text())["trading_days"])
+    raw = pd.read_parquet(dataset / "raw/005930.parquet")
+    days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
     features = build_feature_frame(raw, set(days.date)).tail(1)
-    scores = {str(h): infer_batch(paths[h][0], features)[0][0] for h in (5,20)}
-    atomic_json(root/"serving_check.json", {"feature_parity": evidence, "stock_code": "005930", "scores": scores})
+    scores = {str(h): infer_batch(paths[h][0], features)[0][0] for h in (5, 20)}
+    atomic_json(root / "serving_check.json", {"feature_parity": evidence, "stock_code": "005930", "scores": scores})
     if args.activate:
-        config_path = ROOT/"serving/config.yaml"
-        previous = yaml.safe_load(config_path.read_text())
-        if previous["active_pack"]["pack_id"] != args.pack_id:
-            atomic_json(root/"previous_active_pack.json", previous)
+        config_path = CHART_ROOT / "serving/config.local.yaml"
+        previous_path = config_path if config_path.exists() else CHART_ROOT / "serving/config.yaml"
+        previous = yaml.safe_load(previous_path.read_text())
+        atomic_json(root / "previous_active_pack.json", {"config": previous,
+                    "builder_baseline_commit": "095584b", "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
+                    "policy": "Restore this pack together with its recorded compatible builder."})
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,
-            "release_tag": "chart-serving-"+args.pack_id, "asset_name": archive.name,
-            "sha256": sha256_file(archive)}},sort_keys=False))
+            "release_tag": "chart-serving-" + args.pack_id, "asset_name": archive.name,
+            "sha256": sha256_file(archive), "builder_sha256": processing_contract()["sha256"]}}, sort_keys=False))
         temporary.replace(config_path)
+        # Explicitly export one operational preview input, with provenance. Serving never scans research paths.
+        inputs = CHART_ROOT / "workspace/serving/inputs/raw"
+        inputs.mkdir(parents=True, exist_ok=True)
+        source = dataset / "raw/005930.parquet"
+        destination = inputs / "005930.parquet"
+        if destination.exists():
+            backup = CHART_ROOT / "workspace/archive/previous-operational-inputs" / sha256_file(destination)
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(destination, backup)
+        shutil.copy2(source, destination)
+        atomic_json(destination.with_suffix(".manifest.json"), {"source": str(source), "source_sha256": sha256_file(source),
+                    "processing_contract_sha256": processing_contract()["sha256"], "pack_id": args.pack_id,
+                    "purpose": "explicit local preview input transfer"})
+    atomic_json(CHART_ROOT / "docs/local-pack-validation.json", {
+        "pack_id": args.pack_id, "processing_contract": pack["processing_contract"],
+        "models": sources, "feature_parity": evidence, "build_reports": reports, "scores": scores,
+        "archive_sha256": sha256_file(archive), "activated_locally": args.activate,
+        "data_period": info["data_period"], "known_issues": info["known_issues"]})
     print(json.dumps({"pack_id": args.pack_id, "archive": str(archive), "sha256": sha256_file(archive),
                       "activated_locally": args.activate, "reports": reports, "scores": scores}))
 

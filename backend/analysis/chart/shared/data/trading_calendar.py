@@ -2,13 +2,14 @@ import json
 import os
 from collections.abc import Collection
 from datetime import date, datetime
+from pathlib import Path
 
 import FinanceDataReader as fdr
 import pandas as pd
 
 # 실행 위치(CWD)와 무관하게 chart/data/ 아래 한 파일을 쓴다(추론 서버 등 CWD가 다른 호출자, #107).
 TRADING_CALENDAR_CACHE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "krx_trading_calendar.json"
+    str(Path(__file__).resolve().parents[2]), "workspace", "archive", "data", "krx_trading_calendar.json"
 )
 _KOSPI_INDEX_TICKER = "1001"
 _TRADING_CALENDAR_SOURCE = "KOSPI index trading days"

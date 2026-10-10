@@ -75,8 +75,8 @@ evaluation:
   - 0.6
   - 0.8
   - 1
-  benchmark_file: data/datasets/local_2016_v1/benchmarks/KOSPI.parquet
+  benchmark_file: workspace/experiments/datasets/shared_v3_local_2016/benchmarks/KOSPI.parquet
   benchmark_strategies:
   - market_index
 contract_version: 3
-dataset: configs/dataset.yaml
+dataset: experiments/configs/datasets/dataset.yaml

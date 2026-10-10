@@ -166,7 +166,7 @@ def configured_benchmark(config, index, price_df):
         if config.get("contract_version") == 3:
             raise ValueError("evaluation.benchmark_file must identify a frozen dataset index")
         return compute_custom_krx_composite(index, price_df)
-    from core.local_config import chart_path
+    from experiments.config import chart_path
     path = chart_path(path)
     frame = pd.read_parquet(path) if path.suffix == ".parquet" else pd.read_csv(path, parse_dates=["Date"])
     frame["Date"] = pd.to_datetime(frame["Date"])

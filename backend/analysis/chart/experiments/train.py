@@ -1,10 +1,7 @@
 # ruff: noqa: I001
 
 import argparse
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gc
 import json
 import os
@@ -14,7 +11,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-from experiment_utils import (
+from experiments.experiment_utils import (
     cache_dir,
     find_processed_dir,
     generate_dataset_hash,
@@ -25,8 +22,8 @@ from experiment_utils import (
     resolve_splits,
     resolve_tickers,
 )
-from train_src.lgbm_wrapper import LGBMWrapper
-from train_src.loaders import load_parquet_data
+from experiments.train_src.lgbm_wrapper import LGBMWrapper
+from experiments.train_src.loaders import load_parquet_data
 
 
 def _json_safe(value):
@@ -278,11 +275,11 @@ def _print_validation_report(fold_number: int, validation_metrics: dict) -> None
 
 def main(config_path):
     print(f"[*] Loading config from {config_path}...")
-    from core.local_config import load_experiment_config
+    from experiments.config import load_experiment_config
 
     config = load_experiment_config(config_path)
     from functools import partial
-    from train_src.loaders import load_parquet_data as base_loader
+    from experiments.train_src.loaders import load_parquet_data as base_loader
 
     global load_parquet_data
     load_parquet_data = partial(
@@ -328,7 +325,7 @@ def main(config_path):
     predictions_cache_path = os.path.join(exp_cache_dir, f"{predictions_hash}_predictions.parquet")
 
     if os.path.exists(predictions_cache_path):
-        from experiment_utils import load_predictions
+        from experiments.experiment_utils import load_predictions
 
         load_predictions(config, splits, __file__)
         print("\n⚡ [CACHE HIT] 기존 설정 기반 예측 캐시를 찾았습니다!")
@@ -575,8 +572,8 @@ def main(config_path):
 
         final_predictions = pd.concat(all_predictions, ignore_index=True)
         final_predictions.to_parquet(predictions_cache_path, index=False)
-        from core.local_config import atomic_json
-        from core.local_dataset import sha256
+        from shared.io import atomic_json
+        from shared.io import sha256
 
         atomic_json(
             predictions_cache_path + ".manifest.json",
@@ -585,6 +582,7 @@ def main(config_path):
                 "feature_columns": config["feature_columns"],
                 "config": config,
                 "sha256": sha256(predictions_cache_path),
+                "processing_contract": config["processing_contract"],
             },
         )
         print(

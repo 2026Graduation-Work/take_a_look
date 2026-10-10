@@ -5,8 +5,8 @@ import re
 from pathlib import Path
 
 import pandas as pd
-from core.local_config import atomic_json, atomic_parquet, identity
-from core.local_dataset import sha256, validate_processed_inputs
+from experiments.dataset.pipeline import validate_processed_inputs
+from shared.io import atomic_json, atomic_parquet, identity, sha256
 
 from .flow import build_flow_features
 from .panel_builder import assemble_feature_panel, load_feature_sources
@@ -90,6 +90,7 @@ def prepare_local_panel(config):
         if set(selected) & set(FLOW_FEATURES):
             raw = pd.read_parquet(root / "raw" / name)
             flow = build_flow_features(raw, calendar["trading_days"])
+            panel = panel.drop(columns=list(FLOW_FEATURES), errors="ignore")
             panel = panel.merge(
                 flow.drop(columns="AvailableDate"),
                 on=["Date", "Code"],

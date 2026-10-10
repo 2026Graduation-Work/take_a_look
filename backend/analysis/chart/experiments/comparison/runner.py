@@ -60,10 +60,16 @@ def resolve_feature_sets(config: dict[str, Any], config_dir: Path) -> tuple[list
     feature_config = config.get("features", {})
     baseline = list(feature_config.get("baseline", []))
     model_file = feature_config.get("baseline_model_file")
-    if bool(baseline) == bool(model_file):
+    group = feature_config.get("baseline_group")
+    if sum([bool(baseline), bool(model_file), bool(group)]) != 1:
         raise ComparisonConfigError(
             "configure exactly one of features.baseline or features.baseline_model_file"
         )
+    if group:
+        if group != "base":
+            raise ComparisonConfigError("baseline_group must be base")
+        from shared.features.columns import BASE_FEATURES
+        baseline = list(BASE_FEATURES)
     if model_file:
         baseline = _features_from_model(_resolve_path(model_file, config_dir))
 
@@ -488,7 +494,7 @@ def run_comparison(
             with backtest_config_path.open("w", encoding="utf-8") as file:
                 yaml.safe_dump(backtest_config, file, allow_unicode=True, sort_keys=False)
             backtest_command = (
-                f"python experiments/run_backtest.py --config {backtest_config_path} "
+                f"python -m experiments.run_backtest --config {backtest_config_path} "
                 f"--predictions-path {prediction_path}"
             )
             runs.append(

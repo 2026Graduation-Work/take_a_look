@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
-from core.local_config import atomic_json
+from shared.io import atomic_json
 
 
 class DailyPortfolio:

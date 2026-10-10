@@ -2,215 +2,35 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import tempfile
-import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-from .local_config import (
+from experiments.config import (
     append_collection_event,
     atomic_json,
     atomic_parquet,
     identity,
     load_dataset_config,
 )
-from .local_features import build_feature_frame
-
-VALIDATION_VERSION = 3
-PRICE_BASIS = "krx_raw_ohlc_uniform_close_ratio_v1"
-
-
-def supplement_raw_ohlc(root, code, days, raw, source):
-    """Preserve daily snapshots; cache missing KRX OHLC histories separately."""
-    fields = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]
-    if raw is not None and set(fields) <= set(raw):
-        return raw
-    started = time.monotonic()
-    parts = []
-    current = days[0]
-    # Reuse complete legacy chunks before requesting a full history.
-    while current <= days[-1]:
-        end = min(current + pd.DateOffset(years=2) - pd.Timedelta(days=1), days[-1])
-        path = root / "raw_ohlc_cache" / f"{code}_{current:%Y%m%d}_{end:%Y%m%d}.parquet"
-        sidecar = path.with_suffix(".json")
-        if path.exists() and sidecar.exists():
-            meta = json.loads(sidecar.read_text())
-            if meta.get("sha256") == sha256(path):
-                parts.append(pd.read_parquet(path).set_index("Date"))
-        current = end + pd.Timedelta(days=1)
-    cached = pd.concat(parts).sort_index() if parts else pd.DataFrame(columns=fields)
-    path = root / "raw_ohlc_cache" / f"{code}_{days[0]:%Y%m%d}_{days[-1]:%Y%m%d}.parquet"
-    sidecar = path.with_suffix(".json")
-    if path.exists() and sidecar.exists():
-        meta = json.loads(sidecar.read_text())
-        if meta.get("sha256") == sha256(path):
-            cached = pd.read_parquet(path).set_index("Date")
-    if not cached.empty and not cached.index.has_duplicates and days.difference(cached.index).empty:
-        history = cached.reindex(days)
-        provider = "cache"
-    else:
-        with source._krx_request_timeout():
-            history = source.krx.get_market_ohlcv_by_date(
-                days[0].strftime("%Y%m%d"), days[-1].strftime("%Y%m%d"), code, adjusted=False
-            )
-        history = history.rename(columns={
-            "시가": "RawOpen", "고가": "RawHigh", "저가": "RawLow",
-            "종가": "RawClose", "거래량": "RawVolume", "거래대금": "Amount",
-        })
-        if history.empty or set(fields) - set(history):
-            raise ValueError("Missing KRX raw OHLC history")
-        history = history[fields].apply(pd.to_numeric, errors="raise")
-        history.index = pd.to_datetime(history.index).normalize()
-        if history.index.has_duplicates or len(days.difference(history.index)):
-            raise ValueError("Incomplete KRX raw OHLC history dates")
-        history = history.reindex(days)
-        overlap = cached.index.intersection(days)
-        if len(overlap) and not np.allclose(history.loc[overlap, fields], cached.loc[overlap, fields],
-                                           rtol=1e-10, atol=1e-12, equal_nan=True):
-            raise ValueError("KRX full history disagrees with preserved OHLC chunks")
-        provider = "full history"
-    if raw is not None:
-        for column in set(fields) & set(raw):
-            if not np.allclose(history[column], raw[column], rtol=1e-10, atol=1e-12, equal_nan=True):
-                raise ValueError(f"KRX OHLC supplement disagrees with preserved {column}")
-    if provider != "cache":
-        atomic_parquet(path, history.rename_axis("Date").reset_index())
-        atomic_json(sidecar, {"sha256": sha256(path), "source": "pykrx KRX adjusted=False"})
-    print(f"{code} KRX OHLC: {time.monotonic() - started:.2f}s ({provider}, {len(history)} rows)", flush=True)
-    if raw is None:
-        return history
-    return raw.join(history[[column for column in fields if column not in raw]])
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def validate_index(frame, start, end):
-    if frame is None or frame.empty:
-        raise ValueError("Empty index response")
-    frame = frame.rename(columns={"종가": "Close"}).copy()
-    frame.index = pd.to_datetime(frame.index).normalize()
-    frame = frame.loc[(frame.index >= start) & (frame.index <= end)]
-    if frame.index.has_duplicates or frame.empty or "Close" not in frame:
-        raise ValueError("Invalid index dates/columns")
-    values = pd.to_numeric(frame.Close, errors="coerce")
-    if not np.isfinite(values).all() or values.le(0).any():
-        raise ValueError("Invalid index prices")
-    return values.sort_index()
-
-
-def latest_confirmed_market_day(cutoff):
-    from data_collectors.price_collector import get_krx_session
-
-    session = get_krx_session()
-    if session is None:
-        raise ValueError("KRX reference required to establish latest confirmed session")
-    response = session.get(
-        "https://data.krx.co.kr/comm/bldAttendant/executeForResourceBundle.cmd",
-        params={"baseName": "krx.mdc.i18n.component", "key": "B128.bld"},
-        timeout=30,
-    )
-    response.raise_for_status()
-    value = response.json()["result"]["output"][0]["max_work_dt"]
-    latest = pd.to_datetime(value, format="%Y%m%d").normalize()
-    if latest > cutoff:
-        from data_collectors.price_collector import krx
-
-        latest = pd.to_datetime(
-            krx.get_nearest_business_day_in_a_week(cutoff.strftime("%Y%m%d"), prev=True),
-            format="%Y%m%d",
-        ).normalize()
-        if latest > cutoff:
-            raise ValueError("KRX could not establish a completed session before cutoff")
-    return latest
-
-
-def fetch_authenticated_index(start, end):
-    """Read KRX's index endpoint using the existing authenticated session."""
-    from data_collectors.price_collector import get_krx_session
-
-    session = get_krx_session()
-    if session is None:
-        raise ValueError("Authenticated KRX session required for direct index verification")
-    frames = []
-    current = start
-    while current <= end:
-        chunk_end = min(current + pd.DateOffset(years=2) - pd.Timedelta(days=1), end)
-        response = session.post(
-            "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
-            data={
-                "bld": "dbms/MDC/STAT/standard/MDCSTAT00301",
-                "indIdx": "1", "indIdx2": "001",
-                "strtDd": current.strftime("%Y%m%d"),
-                "endDd": chunk_end.strftime("%Y%m%d"),
-                "share": "1", "money": "1", "csvxls_isNo": "false",
-            },
-            timeout=(10, 30),
-        )
-        response.raise_for_status()
-        frame = pd.DataFrame(response.json()["output"])
-        if frame.empty or {"TRD_DD", "CLSPRC_IDX"} - set(frame):
-            raise ValueError(f"Missing direct KRX index response: {current.date()}..{chunk_end.date()}")
-        frames.append(pd.DataFrame({
-            "Date": pd.to_datetime(frame.TRD_DD),
-            "Close": pd.to_numeric(frame.CLSPRC_IDX.astype(str).str.replace(",", "", regex=False)),
-        }))
-        current = chunk_end + pd.Timedelta(days=1)
-    return pd.concat(frames, ignore_index=True).set_index("Date")
-
-
-# Exchange-calendar rules are independent of the index price response. KRX's
-# announced closures missing in exchange_calendars 4.13.2 are explicit exceptions.
-# Sources: https://kind.krx.co.kr/external/2026/05/20/000110/20260520000197/32154.htm
-# Same holiday schedule across markets: https://regulation.krx.co.kr/contents/RGL/03/03030100/RGL03030100.jsp
-CALENDAR_RULES_VERSION = 1
-ANNOUNCED_CLOSURES = {"2026-06-03": "Local election", "2026-07-17": "Constitution Day"}
-
-
-def scheduled_sessions(start, end):
-    import exchange_calendars as calendars
-
-    if start < pd.Timestamp("2016-01-01") or end > pd.Timestamp("2026-12-31"):
-        raise ValueError("Calendar rules reviewed for 2016..2026 only; review new KRX closures first")
-    schedule = calendars.get_calendar("XKRX", start=start, end=end)
-    return schedule.sessions.tz_localize(None).difference(
-        pd.DatetimeIndex(pd.to_datetime(list(ANNOUNCED_CLOSURES)))
-    )
-
-
-def verify_calendar_schedule(payload):
-    """Detect omissions shared by all price adapters, including both boundaries."""
-    import exchange_calendars as calendars
-
-    start, end = pd.Timestamp(payload["requested_start"]), pd.Timestamp(payload["checked_end"])
-    expected = scheduled_sessions(start, end)
-    observed = pd.DatetimeIndex(pd.to_datetime(payload["trading_days"]))
-    if observed.has_duplicates or not observed.is_monotonic_increasing:
-        raise ValueError("Invalid cached calendar dates/order")
-    missing, extra = expected.difference(observed), observed.difference(expected)
-    if len(missing) or len(extra):
-        raise ValueError(
-            "Calendar disagrees with independent XKRX schedule: "
-            f"missing_sessions={missing.strftime('%Y-%m-%d').tolist()}, "
-            f"unexpected_sessions={extra.strftime('%Y-%m-%d').tolist()}"
-        )
-    return {
-        "rules_version": CALENDAR_RULES_VERSION,
-        "provider": "exchange_calendars XKRX", "package_version": calendars.__version__,
-        "rules_sha256": sha256(Path(__file__)),
-        "announced_closures": ANNOUNCED_CLOSURES,
-        "checked_start": str(start.date()), "checked_end": str(end.date()),
-        "sessions": len(expected),
-    }
+from shared.data.calendar import (  # noqa: F401
+    build_calendar,
+    fetch_authenticated_index,
+    scheduled_sessions,
+    verify_calendar_schedule,
+)
+from shared.data.prices import fetch_price_window, supplement_raw_ohlc  # noqa: F401
+from shared.data.validation import (  # noqa: F401
+    expected_sessions,
+    validate_flow,
+    validate_index,
+    validate_prices,
+)
+from shared.features.builder import build_feature_frame
+from shared.io import sha256
+from shared.settings import PRICE_BASIS, VALIDATION_VERSION, processing_contract
 
 
 def reject_price_revision(root, code, previous, current):
@@ -242,106 +62,9 @@ def reject_price_revision(root, code, previous, current):
         raise ValueError(f"Historical prices revised; existing raw preserved. Use a new dataset root; inspect {destination}")
 
 
-def build_calendar(root, collection):
-    from data_collectors import trading_calendar as calendar
-    from data_collectors.price_collector import fdr
-
-    start = pd.Timestamp(collection["start_date"])
-    # A live session must never enter a historical dataset before its close.
-    now = pd.Timestamp.now(tz="Asia/Seoul")
-    confirmed_cutoff = now.tz_localize(None).normalize()
-    if now.hour < 16:
-        confirmed_cutoff -= pd.Timedelta(days=1)
-    requested_end = pd.Timestamp(collection.get("end_date") or confirmed_cutoff)
-    end = min(requested_end, confirmed_cutoff)
-    latest_reference = (
-        latest_confirmed_market_day(confirmed_cutoff)
-        if collection.get("end_date") is None
-        else None
-    )
-    if latest_reference is not None:
-        end = latest_reference
-    secondary = validate_index(calendar._fetch_pykrx_index(start, end), start, end)
-    fallbacks = []
-    primary_provider = "FinanceDataReader KS11"
-    try:
-        primary = validate_index(calendar._fetch_fdr_index(start, end), start, end)
-        if not primary.index.equals(secondary.index):
-            raise ValueError("KS11 dates differ from KRX (stale or partial cache)")
-        if primary.index[-1] < end - pd.Timedelta(days=7):
-            raise ValueError("KS11 does not establish requested boundary coverage")
-        if latest_reference is not None and primary.index[-1] != latest_reference:
-            raise ValueError("KS11 is older than the latest confirmed KRX session")
-    except Exception as exc:
-        fallbacks.append({"provider": primary_provider, "reason": str(exc)})
-        primary_provider = "KRX authenticated MDCSTAT00301"
-        primary = validate_index(
-            fetch_authenticated_index(start, end), start, end
-        )
-    if not primary.index.equals(secondary.index):
-        raise ValueError(
-            "Calendar providers disagree; no verified coverage: "
-            f"only {primary_provider}={primary.index.difference(secondary.index).strftime('%Y-%m-%d').tolist()}, "
-            f"only pykrx={secondary.index.difference(primary.index).strftime('%Y-%m-%d').tolist()}"
-        )
-    if primary.index[0] > start + pd.Timedelta(days=7) or primary.index[-1] < end - pd.Timedelta(
-        days=7
-    ):
-        raise ValueError("Index response does not establish requested boundary coverage")
-    effective_end = primary.index[-1]
-    if latest_reference is not None and effective_end != latest_reference:
-        raise ValueError("Index response is stale relative to KRX latest-session reference")
-    kosdaq_provider = "FinanceDataReader KQ11"
-    try:
-        kosdaq = validate_index(
-            fdr.DataReader("KQ11", str(start.date()), str(effective_end.date())),
-            start, effective_end,
-        )
-        if not kosdaq.index.equals(primary.index):
-            raise ValueError("KQ11 dates differ from verified KOSPI sessions")
-    except Exception as exc:
-        fallbacks.append({"provider": kosdaq_provider, "reason": str(exc)})
-        kosdaq_provider = "pykrx KOSDAQ 2001"
-        from data_collectors.price_collector import krx
-
-        kosdaq = validate_index(
-            krx.get_index_ohlcv_by_date(
-                start.strftime("%Y%m%d"), effective_end.strftime("%Y%m%d"), "2001"
-            ), start, effective_end,
-        )
-    if not kosdaq.index.equals(primary.index):
-        raise ValueError("KOSDAQ index has missing sessions")
-    payload = {
-        "validation_version": VALIDATION_VERSION,
-        "requested_start": str(start.date()),
-        "requested_end": str(requested_end.date()),
-        "checked_end": str(end.date()),
-        "observed_start": str(primary.index[0].date()),
-        "observed_end": str(effective_end.date()),
-        "verified_start": str(primary.index[0].date()),
-        "verified_end": str(effective_end.date()),
-        "trading_days": [str(day.date()) for day in primary.index],
-        "providers": [primary_provider, "pykrx KOSPI 1001", kosdaq_provider],
-        "fallbacks": fallbacks,
-        "latest_confirmed_reference": str(latest_reference.date())
-        if latest_reference is not None
-        else None,
-        "fetched_at": now.isoformat(),
-        "unverified_tail": str(requested_end.date()) if requested_end > effective_end else None,
-    }
-    payload["schedule_validation"] = verify_calendar_schedule(payload)
-    atomic_json(root / "calendar.json", payload)
-    for name, series in [("KOSPI", primary), ("KOSDAQ", kosdaq)]:
-        atomic_parquet(
-            root / "benchmarks" / f"{name}.parquet",
-            series.rename("Close").rename_axis("Date").reset_index(),
-        )
-    return payload
-
-
 def fetch_active_listing_intervals(market):
     """Use each security's own KRX listing date, including preferred shares."""
-    from data_collectors.price_collector import get_krx_session
+    from shared.data.providers import get_krx_session
 
     session = get_krx_session()
     if session is None:
@@ -371,7 +94,7 @@ def fetch_active_listing_intervals(market):
 
 
 def load_metadata(collection, end):
-    from data_collectors import price_collector as source
+    from shared.data import providers as source
 
     parts = []
     for market in collection["markets"]:
@@ -440,112 +163,9 @@ def load_metadata(collection, end):
     return metadata
 
 
-def expected_sessions(intervals, calendar):
-    days = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
-    expected = pd.DatetimeIndex([])
-    for row in intervals.itertuples():
-        active = days >= row.ListingDate
-        if pd.notna(row.DelistingDate):
-            active &= days < row.DelistingDate
-        expected = expected.union(days[active])
-    return expected.sort_values()
-
-
-def validate_prices(frame, expected):
-    if "Date" not in frame:
-        raise ValueError("Missing Date")
-    frame = frame.copy()
-    frame["Date"] = pd.to_datetime(frame.Date).dt.normalize()
-    if frame.Date.duplicated().any() or not pd.DatetimeIndex(frame.Date).sort_values().equals(
-        expected
-    ):
-        missing = expected.difference(pd.DatetimeIndex(frame.Date))
-        raise ValueError(f"Price coverage mismatch; missing {missing[:5].tolist()}")
-    required = [
-        "Open",
-        "High",
-        "Low",
-        "Close",
-        "Volume",
-        "Amount",
-        "RawVolume",
-        "RawClose",
-        "RawOpen", "RawHigh", "RawLow",
-        "AdjustmentFactor",
-        "VWAP",
-    ]
-    if set(required) - set(frame):
-        raise ValueError("Missing OHLC/VWAP source fields")
-    frame[required] = frame[required].apply(pd.to_numeric, errors="coerce")
-    if (
-        not np.isfinite(frame[["Volume", "RawVolume", "Amount"]].to_numpy()).all()
-        or frame[["Volume", "RawVolume", "Amount"]].lt(0).any().any()
-    ):
-        raise ValueError("Invalid volume/amount")
-    traded = frame.Volume.gt(0)
-    if not np.array_equal(frame.Volume.to_numpy(), frame.RawVolume.to_numpy()):
-        raise ValueError("Volume disagrees with KRX RawVolume")
-    unavailable = frame[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)
-    regular = traded & ~unavailable
-    turnover_fields = ["Close", "RawClose", "Volume", "RawVolume", "Amount", "AdjustmentFactor", "VWAP"]
-    values = frame.loc[traded, turnover_fields].to_numpy(dtype=float)
-    if not np.isfinite(values).all() or (values <= 0).any():
-        raise ValueError("Non-positive/non-finite traded prices or VWAP source")
-    values = frame.loc[regular, required].to_numpy(dtype=float)
-    if not np.isfinite(values).all() or (values <= 0).any():
-        raise ValueError("Non-positive/non-finite regular-session OHLC")
-    row = frame.loc[regular]
-    if (
-        (row.Low > row[["Open", "Close"]].min(axis=1)).any()
-        or (row.High < row[["Open", "Close"]].max(axis=1)).any()
-        or (row.Low > row.High).any()
-    ):
-        raise ValueError("OHLC relationship invalid")
-    row = frame.loc[traded]
-    calculated = row.Amount / row.RawVolume * row.AdjustmentFactor
-    if not np.allclose(row.VWAP, calculated, rtol=1e-8) or not np.allclose(
-        row.AdjustmentFactor, row.Close / row.RawClose, rtol=1e-8
-    ):
-        raise ValueError("VWAP adjustment mismatch")
-    for column in ("Open", "High", "Low", "Close"):
-        if not np.allclose(row[column], row[f"Raw{column}"] * row.AdjustmentFactor, rtol=1e-10):
-            raise ValueError("OHLC uniform adjustment mismatch")
-    frame["RegularSessionUnavailable"] = unavailable
-    frame["VWAPOutsideDailyRange"] = regular & ((frame.VWAP < frame.Low) | (frame.VWAP > frame.High))
-    frame["VWAPScope"] = "KRX_amount_volume_scope_unverified"
-    frame["PriceBasis"] = PRICE_BASIS
-    halt = ~traded
-    if (frame.loc[halt, ["RawVolume", "Amount"]] != 0).any().any():
-        raise ValueError("Zero-volume row has inconsistent source amount")
-    frame["Trading_Halt"] = halt.astype("int8")
-    return frame.sort_values("Date").reset_index(drop=True)
-
-
-def validate_flow(frame, day, columns):
-    required = {"Date", "Code", *columns}
-    if frame.empty or required - set(frame):
-        raise ValueError("Incomplete flow cache schema")
-    dates = pd.to_datetime(frame.Date).dt.normalize()
-    if (
-        not dates.eq(day).all()
-        or frame.Code.duplicated().any()
-        or not frame.Code.astype(str).str.fullmatch(r"[0-9A-Z]{6}").all()
-    ):
-        raise ValueError("Invalid flow cache date/code/duplicates")
-    values = frame[columns].apply(pd.to_numeric, errors="coerce")
-    # A partial investor response remains missing; never manufacture zero.
-    if ((frame[columns].notna() & values.isna()).any().any()
-            or np.isinf(values.to_numpy(dtype=float, na_value=np.nan)).any()
-            or values.lt(0).any().any()):
-        raise ValueError("Invalid flow values")
-    frame = frame.copy()
-    frame[columns] = values
-    return frame
-
-
 def flow_coverage(root, investors, columns, market_days):
     """Missing ranking rows are unknown observations, never inferred zero trades."""
-    from experiments.features.flow import build_flow_features
+    from shared.features.flow import build_flow_features
 
     coverage = []
     for path in sorted((root / "raw").glob("*.parquet")):
@@ -577,7 +197,7 @@ def flow_coverage(root, investors, columns, market_days):
 
 def verify_cached_flows(config_path):
     """Audit existing flow caches independently of unfinished price collection."""
-    from data_collectors import price_collector as source
+    from shared.data import providers as source
 
     config = load_dataset_config(config_path)
     root = Path(config["root"])
@@ -628,7 +248,7 @@ def verify_cached_flows(config_path):
 
 
 def collect_dataset(config_path, *, mode="full", rebuild=False):
-    from data_collectors import price_collector as source
+    from shared.data import providers as source
 
     config = load_dataset_config(config_path)
     root = Path(config["root"])
@@ -684,7 +304,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
                 {"status": "failed", "stage": "metadata", "reason": str(exc)},
             )
             raise
-    from .bulk_prices import prepare_bulk_prices, stock_raw
+    from shared.data.bulk_prices import prepare_bulk_prices, stock_raw
 
     report = {"prices": [], "flow_failures": [], "market_history_verified": False}
     bulk = prepare_bulk_prices(root, metadata, calendar, mode, report, source)
@@ -743,58 +363,12 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
                 ]
                 if days.empty:
                     continue
-                args = (code, str(days.min().date()), str(days.max().date()))
                 raw_window = stock_raw(bulk, code, days) if bulk is not None else None
-                raw_window = supplement_raw_ohlc(root, code, days, raw_window, source)
-                fetched = None
-                failures = []
-                adapters = (
-                    [("pykrx", source._fetch_delisted_pykrx)]
-                    if row.IsDelisted
-                    else [("fdr", source._fetch_ohlcv_fdr), ("pykrx", source._fetch_ohlcv_pykrx)]
-                )
-                for provider, adapter in adapters:
-                    try:
-                        if bulk is None:
-                            candidate = adapter(*args, raw_df=raw_window)
-                        else:
-                            # pykrx omits default HTTP timeouts; bound both cached-raw
-                            # adjusted calls and the individual raw fallback.
-                            for attempt in range(1, 4):
-                                try:
-                                    with source._krx_request_timeout():
-                                        candidate = (adapter(*args, raw_df=raw_window)
-                                                     if raw_window is not None else adapter(*args))
-                                    if candidate is None or candidate.empty:
-                                        raise ValueError("Empty provider response")
-                                    break
-                                except Exception as exc:
-                                    append_collection_event(root, {
-                                        "state": "request_failed", "stage": "prices", "code": code,
-                                        "provider": provider, "attempt": attempt, "start_date": args[1],
-                                        "end_date": args[2], "exception_type": type(exc).__name__,
-                                        "reason": str(exc), **getattr(exc, "details", {}),
-                                    })
-                                    if attempt == 3:
-                                        raise
-                                    source.time.sleep(attempt)
-                        if candidate is None or candidate.empty:
-                            raise ValueError("Empty provider response")
-                        candidate = candidate.rename_axis("Date").reset_index()
-                        candidate = candidate.loc[pd.to_datetime(candidate.Date).isin(days)]
-                        candidate = validate_prices(candidate, days)
-                        fetched = candidate.assign(
-                            Code=code,
-                            Name=row.Name,
-                            IsDelisted=row.IsDelisted,
-                            PriceProvider=provider,
-                        )
-                        providers.append(provider)
-                        break
-                    except Exception as exc:
-                        failures.append(str(exc))
-                if fetched is None:
-                    raise ValueError("; ".join(failures))
+                fetched = fetch_price_window(code, days, root=root, raw=raw_window,
+                    is_delisted=row.IsDelisted, source=source,
+                    progress=lambda event: append_collection_event(root, event))
+                providers.append(fetched.PriceProvider.iloc[0])
+                fetched = fetched.assign(Code=code, Name=row.Name, IsDelisted=row.IsDelisted)
                 parts.append(fetched)
             frame = validate_prices(pd.concat(parts, ignore_index=True), expected)
             if previous is not None:
@@ -861,6 +435,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "flows_complete": False,
         "flow_queries_complete": False,
         "price_basis": PRICE_BASIS,
+        "processing_contract": processing_contract(config["preprocessing"]),
     }
     atomic_json(manifest_path, checkpoint)
     atomic_json(
@@ -983,6 +558,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "raw_files": files,
         "prices_complete": not failed,
         "price_basis": PRICE_BASIS,
+        "processing_contract": processing_contract(config["preprocessing"]),
         "flow_queries_complete": bool(config["collection"]["investor_flows"])
         and not report["flow_failures"]
         and report.get("flow_progress", {}).get("completed_days") == len(calendar["trading_days"]),
@@ -1021,6 +597,11 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         dtype={"Code": str},
         parse_dates=["ListingDate", "DelistingDate"],
     )
+    previous_processed = root / "processed_manifest.json"
+    if previous_processed.exists():
+        previous = json.loads(previous_processed.read_text())
+        if previous.get("processing_contract") != processing_contract(config["preprocessing"]):
+            raise ValueError("Preserve the previous processed data; use a new dataset root for this builder")
     reports = []
     outputs = {}
     for path in sorted((root / "raw").glob("*.parquet")):
@@ -1046,7 +627,7 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
                     )
                 )
             frame = pd.concat(pieces, ignore_index=True)
-            from experiments.features.registry import BASE_FEATURES
+            from shared.features.columns import BASE_FEATURES
 
             missing = frame[list(BASE_FEATURES)].isna()
             reports.append(
@@ -1074,13 +655,14 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         {
             "contract_version": VALIDATION_VERSION,
             "settings": config["preprocessing"],
+            "processing_contract": processing_contract(config["preprocessing"]),
             "raw_files": (
                 {name: manifest["raw_files"][name] for name in outputs}
                 if allow_partial else manifest["raw_files"]
             ),
             "allow_partial": allow_partial,
             "files": outputs,
-            "implementation_sha256": sha256(Path(__file__).with_name("local_features.py")),
+            "implementation_sha256": sha256(Path(__file__).parents[2] / "shared/features/builder.py"),
         },
     )
     print(f"Processed {len(outputs)} files; retained warmup and full price paths")
@@ -1103,9 +685,11 @@ def validate_processed_inputs(config):
     expected_raw = dataset["raw_files"]
     if processed.get("allow_partial"):
         expected_raw = {name: expected_raw.get(name) for name in processed["raw_files"]}
+    if processed.get("processing_contract") != processing_contract(config["preprocessing"]):
+        raise ValueError("Shared processing changed; rerun preprocessing in a new dataset root")
     if processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw:
         raise ValueError("Dataset changed; rerun preprocessing before preparing features")
-    if processed["implementation_sha256"] != sha256(Path(__file__).with_name("local_features.py")):
+    if processed["implementation_sha256"] != sha256(Path(__file__).parents[2] / "shared/features/builder.py"):
         raise ValueError("Feature implementation changed; rerun preprocessing")
     for directory, fingerprints in (
         ("raw", processed["raw_files"]),

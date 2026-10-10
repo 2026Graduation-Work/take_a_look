@@ -6,7 +6,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from .local_config import append_collection_event, atomic_json, atomic_parquet
+from shared.io import append_collection_event, atomic_json, atomic_parquet
 
 CACHE_VERSION = 1
 RAW_COLUMNS = ["RawClose", "RawVolume", "Amount"]
@@ -72,7 +72,9 @@ def fetch_day(source, day, record):
 
 def prepare_bulk_prices(root, metadata, calendar, mode, report, source):
     """Skip saved stocks; amortize daily requests only when cheaper than histories."""
-    from .local_dataset import expected_sessions, sha256, validate_prices
+    from shared.io import sha256
+
+    from .validation import expected_sessions, validate_prices
 
     needed = {}
     for code, intervals in metadata.groupby("Code", sort=True):

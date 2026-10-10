@@ -4,7 +4,8 @@ from datetime import date
 
 import pandas as pd
 import pytest
-from data_collectors import price_collector, trading_calendar
+from shared.data import providers as price_collector
+from shared.data import trading_calendar
 
 
 def _write_calendar_cache(path, start, end, trading_days):
@@ -116,9 +117,10 @@ def test_get_krx_trading_days_prefers_covering_cache_without_network(tmp_path, m
 
 def test_trading_calendar_cache_path_does_not_depend_on_cwd():
     assert os.path.isabs(trading_calendar.TRADING_CALENDAR_CACHE_PATH)
-    assert trading_calendar.TRADING_CALENDAR_CACHE_PATH.endswith(
-        os.path.join("chart", "data", "krx_trading_calendar.json")
-    )
+    from pathlib import Path
+
+    from shared.settings import CHART_ROOT
+    assert Path(trading_calendar.TRADING_CALENDAR_CACHE_PATH) == CHART_ROOT / "workspace/archive/data/krx_trading_calendar.json"
 
 
 def test_get_krx_trading_days_fails_closed_for_incomplete_cache(tmp_path, monkeypatch):

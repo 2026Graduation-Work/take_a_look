@@ -93,6 +93,9 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.chart == 'true' }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [experiments, serving]
     steps:
       - uses: actions/checkout@v7
 
@@ -100,24 +103,33 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/analysis/chart/requirements.txt
+          cache-dependency-path: |
+            backend/analysis/chart/shared/requirements.txt
+            backend/analysis/chart/${{ matrix.environment }}/requirements.txt
 
-      - name: Install dependencies
+      - name: Install selected environment
         run: |
           python -m pip install --upgrade pip
           pip install ruff pytest
-          pip install -r backend/analysis/chart/requirements.txt
+          pip install -r backend/analysis/chart/${{ matrix.environment }}/requirements.txt
 
-      - name: Lint (ruff)
+      - name: Lint active chart code
         run: ruff check backend/analysis/chart/
 
-      - name: Run tests (pytest)
+      - name: Test research pipeline and export
+        if: matrix.environment == 'experiments'
+        run: python -m pytest backend/analysis/chart/ -v
+
+      - name: Test serving without experiments code or dependencies
+        if: matrix.environment == 'serving'
+        working-directory: backend/analysis/chart
         run: |
-          if find backend/analysis/chart -name "test_*.py" -o -name "*_test.py" | grep -q .; then
-            pytest backend/analysis/chart/ -v
-          else
-            echo "No test files in backend/analysis/chart — lint-only pass."
-          fi
+          chart_serving_root="$RUNNER_TEMP/chart-serving"
+          mkdir -p "$chart_serving_root"
+          cp -R shared serving conftest.py "$chart_serving_root/"
+          cd "$chart_serving_root"
+          python -m pytest shared/tests serving/tests -v
+          python -m serving.run_daily --help
 
   # ── backend/analysis/text 블록 ─────────────────────────────────────────────────────
   text-test:

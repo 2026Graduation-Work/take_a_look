@@ -7,10 +7,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
-from core.local_config import CHART_ROOT, atomic_json, atomic_parquet, load_experiment_config
-from core.local_dataset import preprocess_dataset, sha256, validate_flow, validate_prices
-from core.local_features import build_feature_frame, normalize_trading_halts
 from experiments.backtest.local_execution import simulate
+from experiments.config import CHART_ROOT, atomic_json, atomic_parquet, load_experiment_config
+from experiments.dataset.pipeline import preprocess_dataset, sha256, validate_flow, validate_prices
 from experiments.features.flow import build_flow_features
 from experiments.features.local_panel import prepare_local_panel
 from experiments.features.registry import BASE_FEATURES, FLOW_FEATURES, resolve_feature_columns
@@ -19,6 +18,7 @@ from experiments.train_src.labels import (
     apply_fixed_barrier_labeling,
 )
 from experiments.train_src.loaders import load_parquet_data
+from shared.features.builder import build_feature_frame, normalize_trading_halts
 
 
 @pytest.fixture
@@ -127,7 +127,7 @@ def test_local_features_are_causal_and_161_explicit(local_dataset):
 
 
 def test_partial_collection_uses_only_verified_files(local_dataset):
-    from core.local_dataset import validate_processed_inputs
+    from experiments.dataset.pipeline import validate_processed_inputs
 
     _, settings, dataset_path, config_path = local_dataset
     root = Path(settings["root"])
@@ -387,13 +387,14 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
     for name in ("train.py", "run_ml_evaluation.py", "run_backtest.py"):
         command = [
             str(Path(__import__("sys").executable)),
-            str(CHART_ROOT / "experiments" / name),
+            "-m",
+            "experiments." + Path(name).stem,
             "--config",
             str(config_path),
         ]
         result = subprocess.run(
             command,
-            cwd=CHART_ROOT.parents[2],
+            cwd=CHART_ROOT,
             env=environment,
             text=True,
             capture_output=True,
@@ -420,15 +421,16 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
 
 
 def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch):
-    from core.local_dataset import build_calendar
-    from data_collectors import price_collector, trading_calendar
+    from experiments.dataset.pipeline import build_calendar
+    from shared.data import providers as price_collector
+    from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05")
     frame = pd.DataFrame({"Close": 100.0}, index=dates)
     monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: frame)
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: frame)
     monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: frame)
-    monkeypatch.setattr("core.local_dataset.fetch_authenticated_index", lambda *_: frame)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: frame)
     collection = {"start_date": "2024-01-02", "end_date": "2024-01-07"}
     calendar = build_calendar(tmp_path, collection)
     assert calendar["verified_end"] == "2024-01-05"
@@ -442,15 +444,15 @@ def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: old)
     monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: old)
     monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: old)
-    monkeypatch.setattr("core.local_dataset.fetch_authenticated_index", lambda *_: old)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: old)
     collection["end_date"] = "2024-01-19"
     with pytest.raises(ValueError, match="boundary coverage"):
         build_calendar(tmp_path, collection)
 
 
 def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, monkeypatch):
-    from core import local_dataset as module
-    from data_collectors import price_collector
+    from experiments.dataset import pipeline as module
+    from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
     raw = raw.iloc[:3].copy()
@@ -471,7 +473,7 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
         atomic_json(root / "calendar.json", result)
         return result
 
-    monkeypatch.setattr(module, "supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
+    monkeypatch.setattr("shared.data.prices.supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
     monkeypatch.setattr(
@@ -578,8 +580,8 @@ def test_class_weights_and_binary_cache_manifest(tmp_path):
 
 @pytest.mark.parametrize("flow_status", ["interrupted", "partial", "request_failed"])
 def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path, monkeypatch, flow_status):
-    from core import local_dataset as module
-    from data_collectors import price_collector
+    from experiments.dataset import pipeline as module
+    from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
     raw = raw.iloc[:260 if flow_status == "partial" else 3].copy()
@@ -598,7 +600,7 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
         atomic_json(root / "calendar.json", result)
         return result
 
-    monkeypatch.setattr(module, "supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
+    monkeypatch.setattr("shared.data.prices.supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
     monkeypatch.setattr(
@@ -672,8 +674,9 @@ def test_short_selected_features_do_not_force_sixty_day_warmup(local_dataset):
 
 
 def test_stale_calendar_cache_retries_direct_index(tmp_path, monkeypatch):
-    from core.local_dataset import build_calendar
-    from data_collectors import price_collector, trading_calendar
+    from experiments.dataset.pipeline import build_calendar
+    from shared.data import providers as price_collector
+    from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-12")
     full = pd.DataFrame({"Close": 100.0}, index=dates)
@@ -687,7 +690,7 @@ def test_stale_calendar_cache_retries_direct_index(tmp_path, monkeypatch):
         return stale if symbol == "KQ11" else full
 
     monkeypatch.setattr(price_collector.fdr, "DataReader", fdr)
-    monkeypatch.setattr("core.local_dataset.fetch_authenticated_index", lambda *_: full)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: full)
     monkeypatch.setattr(price_collector.krx, "get_index_ohlcv_by_date", lambda *_: full)
     result = build_calendar(tmp_path, {"start_date": "2024-01-02", "end_date": "2024-01-12"})
     assert result["verified_end"] == "2024-01-12"
@@ -699,8 +702,8 @@ def test_stale_calendar_cache_retries_direct_index(tmp_path, monkeypatch):
 
 
 def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypatch):
-    from core.local_dataset import fetch_authenticated_index
-    from data_collectors import price_collector
+    from experiments.dataset.pipeline import fetch_authenticated_index
+    from shared.data import providers as price_collector
 
     calls = []
 
@@ -727,8 +730,9 @@ def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypat
 
 
 def test_calendar_rejects_missing_day_shared_by_price_providers(tmp_path, monkeypatch):
-    from core.local_dataset import build_calendar
-    from data_collectors import price_collector, trading_calendar
+    from experiments.dataset.pipeline import build_calendar
+    from shared.data import providers as price_collector
+    from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05").delete(1)
     incomplete = pd.DataFrame({"Close": 100.0}, index=dates)
@@ -742,7 +746,7 @@ def test_calendar_rejects_missing_day_shared_by_price_providers(tmp_path, monkey
 
 
 def test_independent_schedule_announced_closures_and_end_boundary():
-    from core.local_dataset import scheduled_sessions, verify_calendar_schedule
+    from experiments.dataset.pipeline import scheduled_sessions, verify_calendar_schedule
 
     expected = scheduled_sessions(pd.Timestamp("2026-06-01"), pd.Timestamp("2026-07-20"))
     assert pd.Timestamp("2026-06-03") not in expected
@@ -755,7 +759,7 @@ def test_independent_schedule_announced_closures_and_end_boundary():
 
 
 def test_revision_detection_preserves_snapshot_and_records_non_close_changes(local_dataset):
-    from core.local_dataset import reject_price_revision
+    from experiments.dataset.pipeline import reject_price_revision
 
     previous, settings, _, _ = local_dataset
     root = Path(settings["root"])
@@ -774,8 +778,8 @@ def test_revision_detection_preserves_snapshot_and_records_non_close_changes(loc
 
 
 def test_active_listing_dates_are_per_security_including_preferred_and_global(monkeypatch):
-    from core.local_dataset import fetch_active_listing_intervals
-    from data_collectors import price_collector
+    from experiments.dataset.pipeline import fetch_active_listing_intervals
+    from shared.data import providers as price_collector
 
     rows = [
         {"ISU_SRT_CD": "001040", "ISU_ABBRV": "Common", "MKT_TP_NM": "KOSPI",
@@ -812,8 +816,8 @@ def test_active_listing_dates_are_per_security_including_preferred_and_global(mo
 
 
 def test_incomplete_fdr_listing_response_falls_back_to_security_metadata(monkeypatch):
-    from core import local_dataset as module
-    from data_collectors import price_collector
+    from experiments.dataset import pipeline as module
+    from shared.data import providers as price_collector
 
     incomplete = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [None]})
     complete = incomplete.assign(ListingDate=pd.Timestamp("2019-08-09"))
@@ -828,8 +832,8 @@ def test_incomplete_fdr_listing_response_falls_back_to_security_metadata(monkeyp
 def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_path, monkeypatch):
     from contextlib import nullcontext
 
-    from core import local_dataset as module
-    from data_collectors import price_collector
+    from experiments.dataset import pipeline as module
+    from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
     raw = raw.iloc[:3].copy()
@@ -959,3 +963,16 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     assert summary["years"][1]["unclosed_positions"] == 1
     equity = pd.read_csv(tmp_path / "equity_curve.csv")
     assert equity.loc[equity.year.eq(2020), "Equity"].iloc[0] == 1000
+
+
+def test_previous_builder_processed_data_is_preserved(local_dataset):
+    _, settings, dataset_path, _ = local_dataset
+    root = Path(settings["root"])
+    manifest_path = root / "processed_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest.pop("processing_contract")
+    atomic_json(manifest_path, manifest)
+    before = {path: sha256(path) for path in [manifest_path, root / "processed/005930.parquet", root / "raw/005930.parquet"]}
+    with pytest.raises(ValueError, match="new dataset root"):
+        preprocess_dataset(dataset_path)
+    assert {path: sha256(path) for path in before} == before

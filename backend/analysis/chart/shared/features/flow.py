@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from .registry import FLOW_FEATURES
+from .columns import FLOW_FEATURES
 
 
 def build_flow_features(raw, market_days):

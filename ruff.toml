@@ -3,6 +3,7 @@
 
 target-version = "py311"
 line-length = 100
+extend-exclude = ["backend/analysis/chart/archive", "backend/analysis/chart/workspace"]
 
 [lint]
 # E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade, B: flake8-bugbear

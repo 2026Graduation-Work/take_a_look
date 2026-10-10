@@ -15,14 +15,13 @@ class LGBMWrapper(BaseModel):
         self.params = config.get("model", {}).get("params", {})
         # 현재 파일(lgbm_wrapper.py)의 절대경로 기준 cache 디렉토리 지정
         CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-        self.cache_dir = config.get("cache_dir", os.path.join(CURRENT_DIR, "cache"))
+        self.cache_dir = config.get("cache_dir", str(Path(CURRENT_DIR).parents[1] / "workspace/experiments/cache/training"))
         os.makedirs(self.cache_dir, exist_ok=True)
 
     def _write_cache_manifest(self, path, feature_names, kind, parameters):
         if self.config.get("contract_version") != 3:
             return
-        from core.local_config import atomic_json
-        from core.local_dataset import sha256
+        from shared.io import atomic_json, sha256
 
         atomic_json(
             str(path) + ".manifest.json",
@@ -31,13 +30,14 @@ class LGBMWrapper(BaseModel):
                 "feature_columns": list(feature_names),
                 "parameters": parameters,
                 "sha256": sha256(path),
+                "processing_contract": self.config.get("processing_contract"),
             },
         )
 
     def _validate_cache(self, path, kind):
         if self.config.get("contract_version") != 3:
             return
-        from core.local_dataset import sha256
+        from shared.io import sha256
 
         manifest_path = Path(str(path) + ".manifest.json")
         if not manifest_path.exists():
@@ -49,6 +49,7 @@ class LGBMWrapper(BaseModel):
             manifest.get("kind") != kind
             or manifest.get("feature_columns") != self.config["feature_columns"]
             or manifest.get("sha256") != sha256(path)
+            or manifest.get("processing_contract") != self.config.get("processing_contract")
         ):
             raise ValueError(f"Invalid {kind} cache; remove and rerun train.py: {path}")
 

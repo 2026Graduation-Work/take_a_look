@@ -12,7 +12,7 @@ if [[ ${1:-} == "--wait-for-collection" ]]; then
     echo "Collection wait disabled; using currently collected data."
 fi
 
-python -u data_collectors/preprocess_data.py --config configs/dataset_kospi.yaml --mode full --allow-partial
+python -u -m experiments.dataset.preprocess --config experiments/configs/datasets/dataset_kospi.yaml --mode full --allow-partial
 
 failed=0
 
@@ -24,8 +24,8 @@ for config in \
 do
     echo "Running KOSPI experiment: ${config}"
     if python -u -m experiments.features.build_feature_panel --config "${config}" &&
-        python -u experiments/train.py --config "${config}" &&
-        python -u experiments/run_experiment_analysis.py --config "${config}"
+        python -u -m experiments.train --config "${config}" &&
+        python -u -m experiments.run_experiment_analysis --config "${config}"
     then
         echo "Completed KOSPI experiment: ${config}"
     else

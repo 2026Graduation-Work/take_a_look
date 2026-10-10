@@ -1,21 +1,19 @@
 # ruff: noqa: I001
 
 import argparse
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import json
 import os
 
 import numpy as np
 import pandas as pd
-from evaluation.metrics import (
+from experiments.evaluation.metrics import (
     calculate_calibration_table,
     calculate_classification_metrics,
     calculate_rank_ic,
 )
-from experiment_utils import (
+from experiments.experiment_utils import (
     build_fold_alignment,
     find_processed_dir,
     filter_to_test_fold_rows,
@@ -28,7 +26,7 @@ from experiment_utils import (
     result_dir,
     test_date_bounds,
 )
-from train_src.loaders import load_parquet_data  # noqa: F401
+from experiments.train_src.loaders import load_parquet_data  # noqa: F401
 
 
 def _json_safe(value):
@@ -69,10 +67,10 @@ def _restrict_predictions_to_labeled_rows(
 
 def main(config_path, predictions_path=None):
     print(f"[*] Loading config from {config_path}...")
-    from core.local_config import load_experiment_config
+    from experiments.config import load_experiment_config
     config = load_experiment_config(config_path)
     from functools import partial
-    from train_src.loaders import load_parquet_data as base_loader
+    from experiments.train_src.loaders import load_parquet_data as base_loader
     global load_parquet_data
     load_parquet_data = partial(base_loader, feature_columns=config["feature_columns"], sample_only=True)
 
@@ -220,8 +218,8 @@ def main(config_path, predictions_path=None):
 
     # Save files
     out_dir = result_dir(config, __file__)
-    from core.local_config import atomic_json, atomic_parquet
-    from core.local_dataset import sha256
+    from shared.io import atomic_json, atomic_parquet
+    from shared.io import sha256
 
     history = all_oos_predictions.merge(actual_df[["Date", "Code", "Y_Label"]],
                                         on=["Date", "Code"], how="left", validate="one_to_one")

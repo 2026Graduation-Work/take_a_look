@@ -1,6 +1,4 @@
-import argparse
 import os
-import sys
 import time
 from contextlib import contextmanager
 from datetime import datetime, timedelta
@@ -13,7 +11,7 @@ from dotenv import load_dotenv
 from tqdm import tqdm
 
 # pykrx는 import 시점에 로그인 세션을 만들므로 .env를 먼저 읽어야 합니다.
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 class _KrxProvider:
     def __getattr__(self, name):
@@ -34,10 +32,9 @@ try:
 except ImportError:  # 직접 스크립트 실행: python data_collectors/price_collector.py
     from trading_calendar import get_krx_trading_days
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # 데이터 저장 경로 설정
-DATA_DIR = str(Path(__file__).resolve().parents[1] / "data/raw")
+DATA_DIR = str(Path(__file__).resolve().parents[2] / "workspace/archive/data/raw")
 
 # 기본 전체 수집 시작일 (최근 10년 기준, 실행 연도 자동 반영)
 _DEFAULT_START_DATE = f"{datetime.now().year - 10}-01-01"
@@ -48,7 +45,7 @@ _FLOW_SOURCE = {
     "매수거래대금": "BuyAmount", "매도거래대금": "SellAmount",
 }
 _FLOW_COLUMNS = [f"{prefix}_{suffix}" for prefix in _INVESTORS for suffix in _FLOW_SOURCE.values()]
-FLOW_CACHE_DIR = str(Path(__file__).resolve().parents[1] / "data/investor_flow_cache")
+FLOW_CACHE_DIR = str(Path(__file__).resolve().parents[2] / "workspace/archive/data/investor_flow_cache")
 
 
 def _has_complete_actual_vwap(df: pd.DataFrame) -> bool:
@@ -783,57 +780,3 @@ def download_ohlcv_full(start_date: str = _DEFAULT_START_DATE, repair_only: bool
     print("\n✅ 전체 가격·수급 데이터 다운로드 및 갭 보정 완료.")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="KRX 가격·투자자 수급 원천 데이터 수집기",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-사용 예시:
-  # [최초 구축 / 전체 갭 복구] 특정 날짜부터 전체 수집 및 중간 갭 완벽 복구
-  python price_collector.py --mode full --start-date 2020-01-01
-
-  # [매일 자동화] 최신 거래일 가격·수급 동기화
-  python price_collector.py --mode update
-        """,
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["full", "update"],
-        default="update",
-        help="full: 전체 가격·수급 이력 및 갭 보정 | update: 최신 거래일 가격·수급 갱신 (기본값)",
-    )
-    parser.add_argument(
-        "--start-date",
-        default=None,
-        metavar="YYYY-MM-DD",
-        help="--mode full 전용: 수집 및 보정 시작일. 미지정 시 실행 연도 기준 최근 10년 적용.",
-    )
-    parser.add_argument(
-        "--repair-only",
-        action="store_true",
-        help="--mode full 전용: 누락된 갭이 있는 종목만 골라서 복구 작업을 수행합니다.",
-    )
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--rebuild", action="store_true")
-    parser.add_argument("--verify-flows", action="store_true",
-                        help="가격 재수집 없이 기존 수급 캐시·커버리지·1/5/20일 창 검증")
-    args = parser.parse_args()
-    from core.local_dataset import collect_dataset, verify_cached_flows
-
-    if args.start_date or args.repair_only:
-        parser.error("Use collection settings in --config")
-    if args.verify_flows:
-        if args.rebuild:
-            parser.error("--verify-flows cannot be combined with --rebuild")
-        verify_cached_flows(args.config)
-        sys.exit(0)
-    collect_dataset(args.config, mode=args.mode, rebuild=args.rebuild)
-    sys.exit(0)
-
-    if args.mode == "full":
-        start = args.start_date if args.start_date else _DEFAULT_START_DATE
-        print(f"[실행] 전체 이력 구축 및 갭 복구 모드 (Full) | 시작일: {start}")
-        download_ohlcv_full(start_date=start, repair_only=args.repair_only)
-    else:
-        print("[실행] 데일리 업데이트 모드 (Update)")
-        update_ohlcv_daily()

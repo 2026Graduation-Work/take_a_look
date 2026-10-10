@@ -5,10 +5,9 @@ from types import SimpleNamespace
 
 import pandas as pd
 import pytest
-from core import bulk_prices
-from core.local_config import atomic_json, atomic_parquet
-from core.local_dataset import sha256
-from data_collectors import price_collector
+from shared.data import bulk_prices
+from shared.data import providers as price_collector
+from shared.io import atomic_json, atomic_parquet, sha256
 
 
 def test_bulk_cache_resume_corruption_and_missing_stock(tmp_path, monkeypatch):
@@ -155,8 +154,8 @@ def test_continuous_provider_failure_stops_dates_without_cache(tmp_path, monkeyp
 def test_failure_history_records_every_attempt_and_survives_rerun(tmp_path, monkeypatch):
     import json
 
-    from core.local_config import append_collection_event
-    from data_collectors.price_collector import KrxResponseError
+    from experiments.config import append_collection_event
+    from shared.data.providers import KrxResponseError
 
     days = pd.bdate_range("2024-01-02", periods=4)
     codes = [f"{n:06d}" for n in range(10)]

@@ -5,9 +5,7 @@ import io
 import json
 import os
 import re
-import time
 from datetime import datetime, timedelta
-from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -15,14 +13,15 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
+from shared.settings import serving_root
 
 from .calendar import refresh_krx_trading_days
 from .distribution import SampleIndex
 from .features import BUILDER_ID, build_feature_frame
 from .flows import collect_flows
-from .hashing import canonical_hash
+from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
-from .pack import load_pack
+from .pack import config_path, load_pack
 from .prices import fetch_prices, price_snapshot
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
@@ -39,7 +38,7 @@ def official_day(requested=None):
 
 
 def fetch_universe(as_of, code=None):
-    from pykrx import stock
+    from shared.data.providers import krx as stock
 
     if code:
         if not re.fullmatch(r"[0-9A-Z]{6}", code):
@@ -63,15 +62,7 @@ def frame_hash(frame):
 
 
 def _retry_fetch(code, start, as_of):
-    for attempt in range(3):
-        try:
-            return fetch_prices(code, start, as_of)
-        except ValueError:
-            raise
-        except (OSError, TimeoutError, ConnectionError):
-            if attempt == 2:
-                raise
-            time.sleep(2 * (attempt + 1))
+    return fetch_prices(code, start, as_of)
 
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
@@ -81,7 +72,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         universe = store.load_universe(as_of)
         if universe.empty:
             raise ValueError("Historical date lacks an archived universe")
-        days = refresh_krx_trading_days(start, as_of)
+        days = store.load_calendar(as_of)
         if pd.Timestamp(as_of).date() not in days:
             return None
     else:
@@ -90,6 +81,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             return None
         universe = fetch_universe(as_of, code=code)
         if not historical_test:
+            store.save_calendar(as_of, days)
             store.save_universe(as_of, universe)
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
@@ -151,7 +143,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         except ValueError as exc:
             if replay:
                 raise
-            if "KRX prices unavailable" not in str(exc):
+            if not str(exc).startswith(("KRX prices unavailable", "Price providers exhausted:")):
                 raise
             unavailable[code] = "price_source_unavailable"
     if not frames:
@@ -220,7 +212,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
 
 
 def run(args):
-    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
+    root = serving_root()
     root.mkdir(parents=True, exist_ok=True)
     as_of = official_day(args.as_of)
     historical_test = getattr(args, "historical_test", False)
@@ -230,7 +222,7 @@ def run(args):
             raise ValueError("--historical-test is dry-run only")
         if as_of == datetime.now(KST).date().isoformat():
             raise ValueError("--historical-test requires a past date")
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
+    config = yaml.safe_load(config_path().read_text())["active_pack"]
     pack, paths = load_pack(root / "packs" / config["pack_id"])
     if pack["feature_builder_id"] != BUILDER_ID:
         raise ValueError("Daily inference requires a pack matching the corrected feature builder")
@@ -291,13 +283,19 @@ def run_preview(args):
         raise ValueError("Invalid stock code")
     if not args.compute_only:
         require_local_url(os.environ.get("SUPABASE_URL", ""))
-    root = Path(os.environ.get("CHART_SERVING_DATA_DIR", Path(__file__).parents[1] / "data"))
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())["active_pack"]
+    root = serving_root()
+    config = yaml.safe_load(config_path().read_text())["active_pack"]
     pack_dir = root / "packs" / config["pack_id"]
     pack, paths = load_pack(pack_dir)
     if pack["feature_builder_id"] == BUILDER_ID:
-        dataset = Path(getattr(args, "dataset_root", None) or Path(__file__).parents[2] / "data/datasets/local_2016_kospi_v1")
-        raw = pd.read_parquet(dataset / "raw" / f"{args.code}.parquet")
+        dataset = root / "inputs"
+        input_path = dataset / "raw" / f"{args.code}.parquet"
+        input_manifest = json.loads(input_path.with_suffix(".manifest.json").read_text())
+        if (input_manifest["source_sha256"] != sha256_file(input_path)
+                or input_manifest["processing_contract_sha256"] != pack["processing_contract"]["sha256"]
+                or input_manifest["pack_id"] != pack["pack_id"]):
+            raise ValueError("Operational preview input provenance mismatch")
+        raw = pd.read_parquet(input_path)
         if "PriceBasis" not in raw or not raw.PriceBasis.eq("krx_raw_ohlc_uniform_close_ratio_v1").all():
             raise ValueError("Corrected pack requires verified corrected raw prices")
         raw["Date"] = pd.to_datetime(raw.Date)
@@ -313,9 +311,7 @@ def run_preview(args):
             raise ValueError("No complete corrected feature row")
         as_of = as_of.date().isoformat()
     else:
-        as_of, name, raw, current = load_cached_input(root, args.code, args.as_of)
-        pack = dict(pack, pack_id=pack["pack_id"] + "_legacy_preview",
-                    feature_builder_id="legacy_processed_unverified_preview")
+        raise ValueError("Preview requires a pack compatible with the shared builder")
     digest = frame_hash(raw)
     universe = pd.DataFrame({"Code": [args.code], "Name": [name]})
     if not args.compute_only:

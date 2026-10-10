@@ -2,8 +2,9 @@ from datetime import date
 
 import pandas as pd
 import pytest
-from core import features
-from data_collectors import preprocess_data, trading_calendar
+from experiments.dataset import preprocess as preprocess_data
+from experiments.train_src import legacy_features as features
+from shared.data import trading_calendar
 
 
 @pytest.fixture

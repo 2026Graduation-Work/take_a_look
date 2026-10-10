@@ -10,7 +10,7 @@ def main(config_path, predictions_path=None):
 
     # 1. Run ML Evaluation
     print("\n📊 [Step 1/2] Running ML Evaluation...")
-    import run_ml_evaluation
+    from experiments import run_ml_evaluation
     try:
         run_ml_evaluation.main(config_path, predictions_path)
     except Exception as e:
@@ -19,7 +19,7 @@ def main(config_path, predictions_path=None):
 
     # 2. Run Backtest
     print("\n📈 [Step 2/2] Running Backtest Simulation...")
-    import run_backtest
+    from experiments import run_backtest
     try:
         run_backtest.main(config_path, predictions_path)
     except Exception as e:

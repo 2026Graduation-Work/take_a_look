@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import math
-import os
 from pathlib import Path
 
 import pandas as pd
 import yaml
+from shared.io import append_collection_event, atomic_json, atomic_parquet, identity  # noqa: F401
+from shared.settings import CONTRACT_VERSION, PREPROCESSING, processing_contract
 
 CHART_ROOT = Path(__file__).resolve().parents[1]
-CONTRACT_VERSION = 3
 
 
 def chart_path(value):
@@ -47,18 +46,22 @@ def load_dataset_config(path):
     config = read_yaml(path)
     keys(config, "contract_version dataset_id root collection preprocessing", "dataset")
     if config.get("contract_version") != CONTRACT_VERSION:
-        raise ValueError("Use contract_version: 3; see configs/dataset.yaml")
+        raise ValueError("Use contract_version: 3; see experiments/configs/datasets/dataset.yaml")
     for name in ("dataset_id", "root", "collection", "preprocessing"):
         if name not in config:
             raise ValueError(f"Missing dataset.{name}")
     root = chart_path(config["root"])
     # Rebuild must never touch the historical serving/source dataset.
     if (
-        root == CHART_ROOT / "data"
+        root == CHART_ROOT / "workspace/serving"
+        or CHART_ROOT / "workspace/serving" in root.parents
+        or root == CHART_ROOT / "workspace/archive"
+        or CHART_ROOT / "workspace/archive" in root.parents
+        or root == CHART_ROOT / "data"
         or CHART_ROOT / "data" in root.parents
         and root.name in {"raw", "processed"}
     ):
-        raise ValueError("Use a distinct dataset root, e.g. data/datasets/local_v1")
+        raise ValueError("Use a distinct experiment dataset root, e.g. workspace/experiments/datasets/local_v1")
     config["root"] = str(root)
     collection = config["collection"]
     keys(
@@ -78,6 +81,8 @@ def load_dataset_config(path):
         if not isinstance(collection.get(flag), bool):
             raise ValueError(f"collection.{flag} must be a boolean")
     pre = config["preprocessing"]
+    if pre == "shared_v3":
+        pre = config["preprocessing"] = dict(PREPROCESSING)
     keys(
         pre,
         "sigma_window sigma_min_periods barrier_feature_up_mult barrier_feature_down_mult",
@@ -299,7 +304,7 @@ def load_experiment_config(path):
     if features.get("matched_sample_file"):
         features["matched_sample_file"] = str(chart_path(features["matched_sample_file"]))
         input_files.append(Path(features["matched_sample_file"]))
-    from core.local_dataset import sha256
+    from shared.io import sha256
 
     feature_id = identity(
         {
@@ -314,35 +319,5 @@ def load_experiment_config(path):
     config["data"]["price_dir"] = str(store)
     config["data"]["version"] = dataset["dataset_id"]
     config["contract_version"] = CONTRACT_VERSION
+    config["processing_contract"] = processing_contract(dataset["preprocessing"])
     return config
-
-
-def identity(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()[:16]
-
-
-def atomic_json(path, value):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
-    )
-    temporary.replace(path)
-
-
-def atomic_parquet(path, frame):
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    frame.to_parquet(temporary, index=False)
-    temporary.replace(path)
-
-
-def append_collection_event(root, event):
-    """Append failure/retry history across executions without raw HTTP payloads."""
-    path = Path(root) / "collection_events.jsonl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"timestamp": pd.Timestamp.now(tz="UTC").isoformat(), "pid": os.getpid(), **event}
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")

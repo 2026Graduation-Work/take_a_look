@@ -1,23 +1,20 @@
 import argparse
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
-from backtest.engine import VectorBTEngine, configured_benchmark, kospi_index_returns
-from evaluation.backtest_metrics import calculate_trading_metrics
-from evaluation.baselines import (
+from experiments.backtest.engine import VectorBTEngine, configured_benchmark, kospi_index_returns
+from experiments.evaluation.backtest_metrics import calculate_trading_metrics
+from experiments.evaluation.baselines import (
     generate_ma_breakout_signals,
     generate_momentum_signals,
     generate_random_top_k_signals,
     restrict_signals_to_test_folds,
 )
-from experiment_utils import (
+from experiments.experiment_utils import (
     build_fold_alignment,
     find_processed_dir,
     generate_predictions_hash,
@@ -29,8 +26,8 @@ from experiment_utils import (
     test_date_bounds,
     validate_embargo,
 )
-from train_src.loaders import load_parquet_data
-from train_src.swing_strategy import SwingStrategy
+from experiments.train_src.loaders import load_parquet_data
+from experiments.train_src.swing_strategy import SwingStrategy
 
 
 def _json_safe(value):
@@ -111,8 +108,8 @@ def add_kospi_benchmark(out_dir, config):
 
 
 def _run_local_period(config, predictions, prices, out):
-    from backtest.local_execution import save_execution
-    from core.local_config import atomic_json
+    from experiments.backtest.local_execution import save_execution
+    from shared.io import atomic_json
 
     if predictions.empty or prices.empty:
         raise ValueError("Backtest period has no predictions/prices")
@@ -146,7 +143,7 @@ def _run_local_period(config, predictions, prices, out):
 
 
 def run_local_backtest(config, predictions_path=None):
-    from core.local_config import atomic_json
+    from shared.io import atomic_json
 
     splits = resolve_splits(config)
     if not validate_embargo(splits, config["data"].get("embargo_days", 7)):
@@ -198,7 +195,7 @@ def run_local_backtest(config, predictions_path=None):
 
 def main(config_path, predictions_path=None, benchmarks_only=False):
     print(f"[*] Loading config from {config_path}...")
-    from core.local_config import load_experiment_config
+    from experiments.config import load_experiment_config
 
     config = load_experiment_config(config_path)
     if config.get("contract_version") == 3:

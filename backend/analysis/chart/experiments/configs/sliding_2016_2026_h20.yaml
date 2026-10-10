@@ -1,5 +1,5 @@
 contract_version: 3
-dataset: configs/dataset_kospi.yaml
+dataset: experiments/configs/datasets/dataset_kospi.yaml
 experiment_name: sliding_2016_2026_h20_kospi
 description: Three-year sliding training from 2016; annual OOS 2019..2026; independent
   annual capital.
@@ -70,7 +70,7 @@ backtest:
   signal_lag_days: 1
   up_mult: 3.75
 evaluation:
-  benchmark_file: data/datasets/local_2016_kospi_v1/benchmarks/KOSPI.parquet
+  benchmark_file: workspace/experiments/datasets/shared_v3_kospi_2016/benchmarks/KOSPI.parquet
   benchmark_strategies:
   - market_index
   probability_bins:

@@ -37,24 +37,24 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
             raise ValueError(f"Duplicate price date: {code}")
         indexed = prices.set_index("Date")
         joined = group.join(indexed, on="Date", how="left")
-        valid = joined.Close.notna() & joined.Sigma.notna()
+        valid = pd.Series(True, index=joined.index)
+        def exclude(mask, reason):
+            nonlocal valid
+            rejected = valid & mask
+            excluded[reason] += int(rejected.sum())
+            valid &= ~mask
         if official is not None:
-            session = joined.Date.isin(official)
-            excluded["non_krx_prediction_date"] += int((~session).sum())
-            valid &= session
-        excluded["price_join_failure"] += int(joined.Close.isna().sum())
-        halted = joined.Trading_Halt.eq(1)
-        excluded["base_halted"] += int((valid & halted).sum())
-        valid &= ~halted
+            exclude(~joined.Date.isin(official), "non_krx_prediction_date")
+        exclude(joined.Close.isna(), "price_join_failure")
+        exclude(joined.Sigma.isna(), "sigma_missing")
+        exclude(joined.Trading_Halt.eq(1), "base_halted")
         numeric = np.isfinite(joined[["Close", "Sigma"]].fillna(0).to_numpy(dtype=float)).all(axis=1)
         numeric &= joined.Close.gt(0) & joined.Sigma.ge(0)
-        excluded["invalid_base_number"] += int((valid & ~numeric).sum())
-        valid &= numeric
+        exclude(~numeric, "invalid_base_number")
         group = joined.loc[valid].copy()
         if group.empty:
             continue
-        # Search the stock's own trade rows. The legacy Trading_Halt marker is
-        # used as given; correcting historical holidays requires new research data.
+        # Outcomes use observed executable rows after normalization, skipping unavailable sessions.
         traded = prices.loc[prices.Trading_Halt.ne(1)].copy()
         dates = traded.Date.to_numpy()
         positions = np.searchsorted(dates, group.Date.to_numpy())
@@ -90,4 +90,9 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
     report = {"prediction_rows": len(predictions), "sample_rows": len(samples),
               "excluded": {k: int(v) for k, v in sorted(excluded.items()) if v}}
     report["excluded_total"] = report["prediction_rows"] - report["sample_rows"]
+    if sum(report["excluded"].values()) != report["excluded_total"]:
+        raise ValueError("Historical exclusion counts do not reconcile")
+    report["prediction_period"] = {"start": predictions.Date.min().date().isoformat(), "end": predictions.Date.max().date().isoformat()}
+    report["completed_outcome_period"] = {"start": samples.outcome_date.min().date().isoformat(), "end": samples.outcome_date.max().date().isoformat()}
+    report["partial_years"] = [2026] if predictions.Date.max().year == 2026 else []
     return samples.reset_index(drop=True), report

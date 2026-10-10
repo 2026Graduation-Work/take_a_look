@@ -4,8 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
-from .internal.hashing import sha256_file
-from .internal.pack import build_pack
+from shared.io import sha256_file
+
+from .pack import build_pack
 
 
 def main(argv=None):

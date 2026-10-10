@@ -152,3 +152,12 @@ backend/analysis/chart/data/datasets/
 
 # Chart research and serving artifacts are explicitly separate local workspaces.
 /backend/analysis/chart/workspace/
+
+!backend/analysis/chart/shared/data/
+!backend/analysis/chart/shared/data/*.py
+!backend/analysis/chart/shared/data/requirements.txt
+!backend/analysis/chart/experiments/configs/datasets/
+!backend/analysis/chart/experiments/configs/datasets/*.yaml
+!backend/analysis/chart/experiments/configs/local_h5.yaml
+!backend/analysis/chart/experiments/configs/local_h20.yaml
+backend/analysis/chart/serving/config.local.yaml

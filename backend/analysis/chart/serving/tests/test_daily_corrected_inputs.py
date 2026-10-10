@@ -39,7 +39,6 @@ def test_flow_windows_keep_missing_market_sessions():
 
 
 def test_daily_cache_and_query_failure_are_separate(monkeypatch, tmp_path):
-    monkeypatch.setattr(flows, "LOCAL_FLOW_CACHE", tmp_path)
     days = pd.to_datetime(["2024-01-02", "2024-01-03"])
     frame = pd.DataFrame({"Date": [days[0]], "Code": ["005930"],
                           **{c: [1] for c in flows._FLOW_COLUMNS}})
@@ -62,6 +61,8 @@ def test_replay_uses_archive_without_network(monkeypatch):
                         "High": np.arange(75)+101., "Low": np.arange(75)+99.,
                         "Close": np.arange(75)+100., "Volume": 10., "VWAP": np.arange(75)+100.})
     class Store:
+        def load_calendar(self, day):
+            return set(dates.date)
         def load_universe(self, day):
             return pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
         def load_raw_prices(self, code, day):
@@ -74,7 +75,8 @@ def test_replay_uses_archive_without_network(monkeypatch):
     assert list(result[1]) == ["005930"]
 
 
-def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
+@pytest.mark.parametrize("provider_failure", [False, True])
+def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provider_failure):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Open": np.arange(75)+100., "High": np.arange(75)+101.,
                         "Low": np.arange(75)+99., "Close": np.arange(75)+100., "Volume": 10.,
@@ -85,6 +87,8 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
         flow[f"{investor}_SellAmount"] = 100.
     archived = []
     class Store:
+        def save_calendar(self, *args):
+            pass
         def save_universe(self, *args):
             pass
         def load_price_history(self, code):
@@ -98,14 +102,18 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
         def upload_features(self, *args):
             pass
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
-    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]}))
+    universe = pd.DataFrame({"Code": ["005930", "000660"], "Name": ["삼성전자", "SK하이닉스"]}) if provider_failure else pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (flow, {"available_days": 20}))
     requests = []
     def fetch(code, start, end):
+        if code == "000660":
+            raise ValueError("Price providers exhausted: mocked missing provider inputs")
         requests.append(start)
         return raw.copy()
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     result = pipeline.collect(dates[-1].date().isoformat(), Store())
+    assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
     assert requests == ["2016-01-01"]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
     assert result[-1]["complete_current_rows"] == 1
@@ -149,7 +157,10 @@ def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
 
 
 def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
-    from pykrx import stock
+    from serving.internal import calendar
+    from shared.data.providers import krx as stock
+    monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: {pd.Timestamp("2026-10-06").date()})
+    monkeypatch.setattr(flows, "_fetch_investor_day", lambda *_: pytest.fail("unexpected flow query"))
     from serving.internal.prices import fetch_prices
 
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: "한화3우B")
@@ -158,4 +169,7 @@ def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
                            "거래량": [10], "거래대금": [1000], "등락률": [0]},
                           index=pd.to_datetime(["2026-10-06"]))
     monkeypatch.setattr(stock, "get_market_ohlcv_by_date", lambda *args, **kwargs: source.copy())
+    from shared.data import providers
+    monkeypatch.setattr(providers.fdr, "DataReader", lambda *_: pd.DataFrame())
+    monkeypatch.setattr(providers.time, "sleep", lambda *_: None)
     assert fetch_prices("00088K", "2026-10-06", "2026-10-06").Close.iloc[0] == 100

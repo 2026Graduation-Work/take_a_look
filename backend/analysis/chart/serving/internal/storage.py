@@ -130,6 +130,21 @@ class SupabaseStore:
                       data.getvalue(), content_type="application/octet-stream",
                       extra_headers={"x-upsert": "true"})
 
+    def save_calendar(self, as_of, days):
+        self._save_private_frame(f"calendars-v3/{as_of}.parquet",
+            pd.DataFrame({"Date": pd.to_datetime(sorted(days))}))
+
+    def load_calendar(self, as_of):
+        frame = self._load_private_frame(f"calendars-v3/{as_of}.parquet")
+        if frame is None or frame.empty or frame.Date.duplicated().any():
+            raise ValueError("Archived operational calendar absent or invalid")
+        from shared.data.calendar import scheduled_sessions
+        observed = pd.DatetimeIndex(pd.to_datetime(frame.Date)).normalize().sort_values()
+        expected = scheduled_sessions(observed.min(), pd.Timestamp(as_of))
+        if not observed.equals(expected):
+            raise ValueError("Archived operational calendar has missing or unexpected sessions")
+        return set(observed.date)
+
     def load_flow_day(self, day):
         return self._load_private_frame(f"investor-flows-v3/{day}.parquet")
 

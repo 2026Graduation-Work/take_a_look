@@ -291,7 +291,7 @@ def data_fingerprint(config: dict) -> dict:
         stat = file_path.stat()
         digest.update(str(file_path.relative_to(source_dir)).encode())
         if config.get("contract_version") == 3:
-            from core.local_dataset import sha256
+            from shared.io import sha256
 
             digest.update(sha256(file_path).encode())
         else:
@@ -329,7 +329,7 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
         "labels": config.get("labels", {}),
     }
     if config.get("contract_version") == 3:
-        from core.local_dataset import sha256
+        from shared.io import sha256
 
         root = Path(__file__).resolve().parent
         implementations = [
@@ -339,6 +339,7 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
         payload["implementation"] = {str(p.name): sha256(p) for p in implementations}
         payload["feature_columns"] = config["feature_columns"]
         payload["dataset"] = config["dataset"]
+        payload["processing_contract"] = config["processing_contract"]
         payload["class_weight"] = config.get("model", {}).get("params", {}).get("class_weight")
         payload["max_bin"] = config.get("model", {}).get("params", {}).get("max_bin", 255)
     if include_model:
@@ -373,7 +374,7 @@ def chart_root(anchor_file: str) -> str:
 def find_processed_dir(config: dict, anchor_file: str) -> str:
     path = _candidate_price_dirs(config)[0]
     if config.get("contract_version") == 3:
-        from core.local_dataset import sha256
+        from shared.io import sha256
 
         manifest_path = path / "feature_manifest.json"
         if not manifest_path.exists():
@@ -390,7 +391,7 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
 
 
 def cache_dir(anchor_file: str) -> str:
-    path = os.path.join(experiments_dir(anchor_file), "cache")
+    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "predictions")
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -401,7 +402,7 @@ def model_cache_dir(anchor_file: str) -> str:
     Keep this path in one place so the dashboard reads the same models that
     ``train.py`` writes through ``train_src.lgbm_wrapper.LGBMWrapper``.
     """
-    return os.path.join(experiments_dir(anchor_file), "train_src", "cache", "models")
+    return os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "training", "models")
 
 
 def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_file: str) -> str:
@@ -412,13 +413,13 @@ def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_fil
 def result_dir(config: dict, anchor_file: str) -> str:
     exp_name = config.get("experiment_name", "default_exp")
     if config.get("contract_version") == 3:
-        from core.local_config import identity
+        from experiments.config import identity
 
         exp_name += "_" + identity(config)
-    path = os.path.join(experiments_dir(anchor_file), "results", exp_name)
+    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "runs", exp_name)
     os.makedirs(path, exist_ok=True)
     if config.get("contract_version") == 3:
-        from core.local_config import atomic_json
+        from shared.io import atomic_json
 
         atomic_json(
             Path(path) / "run_manifest.json",
@@ -426,6 +427,7 @@ def result_dir(config: dict, anchor_file: str) -> str:
                 "config": config,
                 "predictions_hash": generate_predictions_hash(config, resolve_splits(config)),
                 "feature_columns": config["feature_columns"],
+                "processing_contract": config["processing_contract"],
             },
         )
     return path
@@ -479,7 +481,7 @@ def load_predictions(
         ):
             raise ValueError("Predictions belong to another run")
     if config.get("contract_version") == 3:
-        from core.local_dataset import sha256
+        from shared.io import sha256
 
         if manifest.get("sha256") != sha256(path):
             raise ValueError("Prediction file changed; rerun train.py")

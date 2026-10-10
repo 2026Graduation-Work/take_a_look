@@ -11,30 +11,20 @@ REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
     """Use the same raw OHLC scaling and VWAP calculation as collection."""
-    from data_collectors.price_collector import _attach_actual_vwap
+    from shared.data.providers import _attach_actual_vwap
 
     return _attach_actual_vwap(adjusted, raw)
 
 
 def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
-    """Fetch both price bases from KRX; imports pykrx only when collection runs."""
-    from pykrx import stock
+    from shared.data.prices import fetch_price_window
+    from shared.settings import serving_root
 
+    from .calendar import get_krx_trading_days
     if not re.fullmatch(r"[0-9A-Z]{6}", code):
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
-    start, end = start_date.replace("-", ""), end_date.replace("-", "")
-    adjusted = stock.get_market_ohlcv_by_date(start, end, code, adjusted=True)
-    raw = stock.get_market_ohlcv_by_date(start, end, code, adjusted=False)
-    if adjusted.empty or raw.empty:
-        raise ValueError(f"KRX prices unavailable for {code}")
-    adjusted = adjusted.rename(columns={"시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "등락률": "Change"})
-    required = ["Open", "High", "Low", "Close", "Volume", "Change"]
-    if not set(required).issubset(adjusted):
-        raise ValueError(f"Adjusted KRX fields missing: {sorted(set(required) - set(adjusted))}")
-    adjusted = adjusted[required].copy()
-    adjusted["Change"] = adjusted["Close"].pct_change(fill_method=None) * 100
-    adjusted.index.name = "Date"
-    return attach_actual_vwap(adjusted, raw).reset_index()
+    days = get_krx_trading_days(start_date, end_date)
+    return fetch_price_window(code, sorted(days), root=serving_root() / "cache/prices")
 
 
 def load_prices(path: str | Path) -> pd.DataFrame:

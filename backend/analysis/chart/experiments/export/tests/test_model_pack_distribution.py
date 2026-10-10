@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
+from experiments.export.samples import build_samples
 from serving.internal.distribution import SampleIndex
-from serving.internal.samples import build_samples
 
 
 def test_historical_returns_follow_traded_rows(tmp_path):

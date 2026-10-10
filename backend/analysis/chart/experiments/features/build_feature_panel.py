@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from core.local_config import load_experiment_config
+from experiments.config import load_experiment_config
 
 from .local_panel import prepare_local_panel
 

@@ -2,7 +2,8 @@
 
 import numpy as np
 import pandas as pd
-from data_collectors.trading_calendar import reindex_to_krx_trading_days
+
+from shared.data.trading_calendar import reindex_to_krx_trading_days
 
 
 def generate_full_alpha158_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -185,6 +186,8 @@ def generate_full_alpha158_features(df: pd.DataFrame) -> pd.DataFrame:
 def normalize_trading_halts(df, trading_days):
     """Normalize unavailable session bars for features, retaining raw turnover."""
     original = df.copy()
+    if "RawVolume" not in original:
+        original["RawVolume"] = original.Volume
     dates = pd.to_datetime(original.Date).dt.normalize()
     if dates.duplicated().any():
         raise ValueError("Duplicate source dates")
@@ -217,8 +220,31 @@ def normalize_trading_halts(df, trading_days):
     return indexed.reset_index()
 
 
-def build_feature_frame(raw, trading_days, settings):
+def build_feature_frame(raw, trading_days, settings=None):
+    from shared.settings import PREPROCESSING
+
+    from .flow import build_flow_features
+    settings = dict(PREPROCESSING if settings is None else settings)
+    if "VWAP" not in raw:
+        raise ValueError("Actual VWAP is required")
     frame = generate_full_alpha158_features(normalize_trading_halts(raw, trading_days))
+    frame = add_sigma_barriers(frame, settings)
+    if "Change" not in frame:
+        frame["Change"] = frame.Close.pct_change(fill_method=None) * 100
+    frame = frame.drop(columns=["Y_Label", "y_label"], errors="ignore")
+    numeric = frame.select_dtypes(include="number").columns
+    frame[numeric] = frame[numeric].replace([np.inf, -np.inf], np.nan)
+    if "Amount" in raw and "Code" in raw:
+        flow = build_flow_features(raw, pd.to_datetime(sorted(trading_days))).drop(columns=["Code", "AvailableDate"])
+        frame = frame.drop(columns=[c for c in flow if c.startswith("flow_")], errors="ignore")
+        frame = frame.merge(flow, on="Date", how="left", validate="one_to_one")
+    return frame
+
+
+def add_sigma_barriers(frame, settings=None):
+    from shared.settings import PREPROCESSING
+    settings = PREPROCESSING if settings is None else settings
+    frame = frame.copy()
     frame["Log_Ret"] = np.log(frame.Close / frame.Close.shift(1))
     halt = frame.Trading_Halt.eq(1)
     frame.loc[halt, "Log_Ret"] = 0.0
@@ -229,9 +255,4 @@ def build_feature_frame(raw, trading_days, settings):
     )
     frame["Barrier_Up"] = frame.Close * (1 + settings["barrier_feature_up_mult"] * frame.Sigma)
     frame["Barrier_Down"] = frame.Close * (1 - settings["barrier_feature_down_mult"] * frame.Sigma)
-    if "Change" not in frame:
-        frame["Change"] = frame.Close.pct_change(fill_method=None) * 100
-    frame = frame.drop(columns=["Y_Label", "y_label"], errors="ignore")
-    numeric = frame.select_dtypes(include="number").columns
-    frame[numeric] = frame[numeric].replace([np.inf, -np.inf], np.nan)
     return frame

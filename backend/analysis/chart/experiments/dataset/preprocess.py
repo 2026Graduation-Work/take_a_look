@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from core.local_features import (
+from shared.data.trading_calendar import get_krx_trading_days  # noqa: E402
+from shared.features.builder import (
     generate_full_alpha158_features as generate_full_alpha158_features,  # noqa: E402
 )
-from core.local_features import normalize_trading_halts as normalize_trading_halts  # noqa: E402
-from data_collectors.trading_calendar import get_krx_trading_days  # noqa: E402
+from shared.features.builder import normalize_trading_halts as normalize_trading_halts  # noqa: E402
 
 
 def _load_trading_days_for_files(raw_files: list[str]) -> set:
@@ -47,7 +47,7 @@ def _processed_has_actual_vwap(file_path: str) -> bool:
 
 
 def main():
-    from core.local_dataset import preprocess_dataset
+    from experiments.dataset.pipeline import preprocess_dataset
     parser = argparse.ArgumentParser(description="Local past-only preprocessing")
     parser.add_argument("--config", required=True)
     parser.add_argument("--mode", choices=["full", "update"], default="full")

@@ -27,7 +27,7 @@ jobs:
       run:
         working-directory: backend/analysis/chart
     env:
-      CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/serving/data
+      CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/workspace/serving
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       KRX_ID: ${{ secrets.KRX_ID }}
@@ -40,7 +40,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/analysis/chart/serving/requirements.txt
+          cache-dependency-path: |
+            backend/analysis/chart/shared/requirements.txt
+            backend/analysis/chart/serving/requirements.txt
 
       - name: Install serving dependencies
         run: python -m pip install -r serving/requirements.txt
