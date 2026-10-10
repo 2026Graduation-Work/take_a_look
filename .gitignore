@@ -151,7 +151,7 @@ backend/analysis/text/value_pipeline/llm_cache/
 backend/analysis/chart/data/datasets/
 
 # Chart research and serving artifacts are explicitly separate local workspaces.
-/backend/analysis/chart/workspace/
+/backend/analysis/chart/workspace
 
 !backend/analysis/chart/shared/data/
 !backend/analysis/chart/shared/data/*.py

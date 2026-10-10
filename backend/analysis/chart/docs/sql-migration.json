@@ -1,0 +1,16 @@
+[
+  {
+    "old": "supabase/migrations/0005_chart_signal_detail_v1.sql",
+    "new": "backend/analysis/chart/archive/sql/0005_chart_signal_detail_v1.sql",
+    "bytes": 7694,
+    "sha256": "cb64eb2dfde45e3b003e8dbc5401ef1b20d5fbe3d1dd12d521ee0abd62e85cc0",
+    "reason": "Superseded branch migrations conflict with current main migration numbering. Preserve SQL originals without executing duplicate version migrations."
+  },
+  {
+    "old": "supabase/migrations/0006_chart_signal_detail_v2.sql",
+    "new": "backend/analysis/chart/archive/sql/0006_chart_signal_detail_v2.sql",
+    "bytes": 3173,
+    "sha256": "a68be0079bf86542b52816f2bb4eb75e79bdde4c71eebd48ae959f40c4e65330",
+    "reason": "Superseded branch migrations conflict with current main migration numbering. Preserve SQL originals without executing duplicate version migrations."
+  }
+]

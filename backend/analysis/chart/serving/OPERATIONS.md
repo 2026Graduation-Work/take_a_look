@@ -44,3 +44,5 @@ Storage에는 날짜별 최근 원본 60행과 전체 입력 해시를 보관하
 `serving/config.yaml`의 기존 원격 설정은 보존했다. 이번 작업은 로컬 전환까지만 수행한다. 원격 배포 전 새 코드와 정확히 일치하는 pack을 Release로 올리고 원격 활성 설정도 함께 바꿔야 한다. 이전 설정으로 새 builder를 실행하면 호환성 검사에서 중단한다.
 
 시장 상태 갱신·수급·종목 마스터·기존 보존 정책은 최신 main 동작을 유지했다. 별도 운영 명령은 `python -m serving.supply`, `python -m serving.stock_master`, `python -m serving.retention`이다. 이번 작업에서 실행하거나 발행하지 않았다. 이전 표시용 preview는 호환 pack이 있어야 검증·발행할 수 있다.
+
+main 통합 직전 공통 v3 코드 기준은 `e5a0fe4`이며 최초 전환 전 기준은 `095584b`다. 새 pack의 `previous_active_pack.json`에는 이전 설정·처리 계약·builder 소스 경로가 있다. 이전 pack의 builder와 해당 코드 기준을 함께 사용한다.
