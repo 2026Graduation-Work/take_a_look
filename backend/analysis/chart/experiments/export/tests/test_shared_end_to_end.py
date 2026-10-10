@@ -14,12 +14,13 @@ from serving.internal.pack import load_pack
 from shared.data import providers
 from shared.data.prices import fetch_price_window
 from shared.features.builder import build_feature_frame
-from shared.features.columns import BASE_FEATURES
+from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json
 from shared.settings import BUILDER_ID, processing_contract
 
 
-def test_collection_training_export_and_serving(tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_flows", [False, True])
+def test_collection_training_export_and_serving(tmp_path, monkeypatch, with_flows):
     days = pd.bdate_range("2019-01-07", periods=230)
     close = 100 + np.sin(np.arange(len(days)) / 4) * 8
     raw = pd.DataFrame({"RawOpen": close - .2, "RawHigh": close + .8, "RawLow": close - .8,
@@ -34,7 +35,12 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch):
     research = fetch_price_window("005930", days, root=tmp_path / "research", raw=raw)
     operational = prices.fetch_prices("005930", str(days[0].date()), str(days[-1].date()))
     pd.testing.assert_frame_equal(research, operational)
-    frame = build_feature_frame(research.assign(Code="005930"), days)
+    inputs = research.assign(Code="005930")
+    for investor in ("Individual", "Institution", "Foreign"):
+        inputs[f"{investor}_BuyAmount"] = inputs.Amount * .2
+        inputs[f"{investor}_SellAmount"] = inputs.Amount * .1
+    frame = build_feature_frame(inputs, days)
+    names = list(BASE_FEATURES) + (list(FLOW_FEATURES) if with_flows else [])
     processed = tmp_path / "processed"
     processed.mkdir()
     frame.to_parquet(processed / "005930.parquet", index=False)
@@ -48,12 +54,12 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch):
         model = lgb.train({"objective": "multiclass", "num_class": 3, "num_threads": 1,
                            "seed": 42, "deterministic": True, "verbosity": -1,
                            "min_data_in_leaf": 5},
-                          lgb.Dataset(train[list(BASE_FEATURES)], label=labels.loc[train.index]),
+                          lgb.Dataset(train[names], label=labels.loc[train.index]),
                           num_boost_round=5)
         models[horizon] = tmp_path / f"h{horizon}.txt"
         model.save_model(str(models[horizon]))
         test = frame.loc[eligible].iloc[110:]
-        probabilities = model.predict(test[list(BASE_FEATURES)])
+        probabilities = model.predict(test[names])
         metrics = calculate_classification_metrics(labels.loc[test.index], pd.Series(probabilities[:, 2], index=test.index))
         assert metrics["sample_count"] == len(test) > 0
         predictions[horizon] = tmp_path / f"p{horizon}.parquet"
@@ -69,6 +75,7 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch):
     pack, paths = load_pack(root)
     assert archive.is_file() and all(report[f"h{h}"]["sample_rows"] > 0 for h in (5, 20))
     for horizon in (5, 20):
+        assert lgb.Booster(model_file=str(paths[horizon][0])).feature_name() == names
         scores = infer_batch(paths[horizon][0], frame.tail(1))[0][0]
         assert sum(scores.values()) == pytest.approx(1)
     # A changed setting must fail before collection, Storage or publication.

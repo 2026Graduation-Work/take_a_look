@@ -16,7 +16,7 @@ from shared.data.calendar import verify_calendar_schedule
 from shared.data.providers import _attach_actual_vwap
 from shared.data.validation import validate_prices
 from shared.features.builder import build_feature_frame
-from shared.features.columns import BASE_FEATURES
+from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256_file
 from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS, processing_contract
 
@@ -63,6 +63,9 @@ def verify_inputs(dataset, names, feature_store=None):
     days = pd.to_datetime(calendar["trading_days"])
     checked_rows, unavailable_rows, range_rows = 0, 0, 0
     cases = []
+    base_names = [name for name in names if name not in FLOW_FEATURES]
+    flow_names = [name for name in names if name in FLOW_FEATURES]
+    flow_missing_rows = 0
     comparison = list(dict.fromkeys(["Open", "High", "Low", "Close", "Volume", "VWAP",
                                     "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount",
                                     "RegularSessionUnavailable", "Trading_Halt", "Log_Ret", "Sigma", *names]))
@@ -75,7 +78,7 @@ def verify_inputs(dataset, names, feature_store=None):
         if feature_store is not None:
             trained = pd.read_parquet(feature_store / name, columns=["Date", *names])
             if (not pd.to_datetime(trained.Date).equals(pd.to_datetime(expected.Date))
-                    or not np.allclose(trained[names].to_numpy(dtype=float), expected[names].to_numpy(dtype=float), rtol=1e-8, atol=1e-10, equal_nan=True)):
+                    or not np.allclose(trained[base_names].to_numpy(dtype=float), expected[base_names].to_numpy(dtype=float), rtol=1e-8, atol=1e-10, equal_nan=True)):
                 raise ValueError(f"Model training store/v3 processed input mismatch: {name}")
         indexed = raw.set_index("Date")
         fields = [f"Raw{c}" for c in ("Open", "High", "Low", "Close", "Volume")] + ["Amount"]
@@ -94,9 +97,17 @@ def verify_inputs(dataset, names, feature_store=None):
         rebuilt = pd.concat(pieces, ignore_index=True)
         if not pd.to_datetime(rebuilt.Date).equals(pd.to_datetime(expected.Date)):
             raise ValueError(f"Shared/v3 session or listing interval mismatch: {name}")
-        if not np.allclose(rebuilt[comparison].to_numpy(dtype=float), expected[comparison].to_numpy(dtype=float),
+        base_comparison = [name for name in comparison if name not in FLOW_FEATURES]
+        if not np.allclose(rebuilt[base_comparison].to_numpy(dtype=float), expected[base_comparison].to_numpy(dtype=float),
                            rtol=1e-8, atol=1e-10, equal_nan=True):
             raise ValueError(f"Shared/v3 price or feature mismatch: {name}")
+        if flow_names:
+            if feature_store is None or not np.allclose(
+                rebuilt[flow_names].to_numpy(dtype=float), trained[flow_names].to_numpy(dtype=float),
+                rtol=1e-8, atol=1e-10, equal_nan=True
+            ):
+                raise ValueError(f"Shared/training flow feature mismatch: {name}")
+            flow_missing_rows += int(rebuilt[flow_names].isna().any(axis=1).sum())
         checked_rows += len(raw)
         unavailable_rows += int(expected.RegularSessionUnavailable.sum())
         range_rows += int(expected.VWAPOutsideDailyRange.sum())
@@ -107,23 +118,26 @@ def verify_inputs(dataset, names, feature_store=None):
     return {"files": len(processed["files"]), "rows": checked_rows, "columns": comparison,
             "rtol": 1e-8, "atol": 1e-10, "regular_session_unavailable_rows": unavailable_rows,
             "vwap_outside_range_rows": range_rows, "cases": cases,
+            "flow_feature_columns": flow_names, "flow_incomplete_rows": flow_missing_rows,
             "original_builder_sha256": sha256_file(builder_source),
             "dataset_manifest_sha256": sha256_file(dataset / "dataset_manifest.json"),
             "processed_manifest_sha256": sha256_file(dataset / "processed_manifest.json"),
             "calendar_sha256": sha256_file(dataset / "calendar.json")}
 
 
-def verify_runs(result_dirs):
+def verify_runs(result_dirs, *, with_flows=False):
     models, predictions, provenance = {}, {}, {}
     configs = []
+    groups = ["base", "flow"] if with_flows else ["base"]
+    names = list(BASE_FEATURES) + (list(FLOW_FEATURES) if with_flows else [])
     for horizon, result in result_dirs.items():
         manifest_path = result / "run_manifest.json"
         manifest = json.loads(manifest_path.read_text())
         cfg = manifest["config"]
-        if (cfg.get("contract_version") != 3 or cfg["features"]["groups"] != ["base"]
-                or cfg["labels"]["horizon"] != horizon or manifest["feature_columns"] != list(BASE_FEATURES)
+        if (cfg.get("contract_version") != 3 or cfg["features"]["groups"] != groups
+                or cfg["labels"]["horizon"] != horizon or manifest["feature_columns"] != names
                 or cfg["dataset"]["preprocessing"] != PREPROCESSING):
-            raise ValueError("Expected completed basic v3 H5/H20 runs in common feature order")
+            raise ValueError("Expected completed v3 H5/H20 runs with the requested common feature groups/order")
         folds = resolve_splits(cfg)
         last = folds[-1]
         if (last["train_start"], last["train_end"], last["test_end"]) != ("2023-01-01", "2025-12-31", "2026-10-06"):
@@ -154,6 +168,8 @@ def verify_runs(result_dirs):
         store = preserved_path(cfg["features"]["materialized_dir"])
         feature_manifest_path = store / "feature_manifest.json"
         feature_manifest = json.loads(feature_manifest_path.read_text())
+        if feature_manifest["feature_columns"] != names:
+            raise ValueError("Training feature store order differs from the models")
         for name, digest in feature_manifest["file_hashes"].items():
             if sha256_file(store / name) != digest:
                 raise ValueError(f"Training feature store checksum mismatch: {name}")
@@ -164,7 +180,8 @@ def verify_runs(result_dirs):
             "model_sha256": model_meta["sha256"], "model_manifest_sha256": sha256_file(model_meta_path),
             "feature_manifest_sha256": sha256_file(feature_manifest_path), "training_feature_store": str(store), "fold": last,
             "oos_period": {"start": prediction.Date.min().date().isoformat(), "end": "2026-10-06"},
-            "labels": cfg["labels"], "prediction_rows": len(prediction)}
+            "labels": cfg["labels"], "prediction_rows": len(prediction),
+            "feature_groups": groups, "feature_columns": names}
         configs.append(cfg)
     if configs[0]["dataset"] != configs[1]["dataset"]:
         raise ValueError("H5/H20 datasets disagree")
@@ -176,13 +193,14 @@ def main(argv=None):
     parser.add_argument("--h5-result", type=Path, required=True)
     parser.add_argument("--h20-result", type=Path, required=True)
     parser.add_argument("--pack-id", required=True)
+    parser.add_argument("--with-flows", action="store_true", help="Export base + investor-flow H5/H20 runs")
     parser.add_argument("--activate", action="store_true")
     args = parser.parse_args(argv)
-    models, predictions, sources, dataset = verify_runs({5: args.h5_result, 20: args.h20_result})
+    models, predictions, sources, dataset = verify_runs({5: args.h5_result, 20: args.h20_result}, with_flows=args.with_flows)
     stores = {source["training_feature_store"] for source in sources.values()}
     if len(stores) != 1:
-        raise ValueError("Base H5/H20 training feature stores disagree")
-    evidence = verify_inputs(dataset, list(BASE_FEATURES), Path(next(iter(stores))))
+        raise ValueError("H5/H20 training feature stores disagree")
+    evidence = verify_inputs(dataset, sources["h5"]["feature_columns"], Path(next(iter(stores))))
     info = {"feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
             "training_period": {"start": "2023-01-01", "end": "2025-12-31"},
             "data_period": {"start": "2016-01-04", "end": "2026-10-06", "partial_years": [2026]},
@@ -191,7 +209,8 @@ def main(argv=None):
                              "Past KOSPI membership history is not fully verified.",
                              "KRX turnover aggregation scope is unverified; out-of-range VWAP is retained.",
                              "Regular-session unavailable rows exclude execution but do not establish official suspension.",
-                             "Missing investor ranking rows stay null; base H5/H20 models do not use flows.",
+                             ("Missing investor ranking rows stay null; incomplete flow windows block flow-model inference."
+                              if args.with_flows else "Missing investor ranking rows stay null; base H5/H20 models do not use flows."),
                              "2026 results are partial through 2026-10-06."],
             "models": sources, "feature_parity": evidence}
     output = CHART_ROOT / "workspace/serving/packs"
@@ -202,6 +221,8 @@ def main(argv=None):
     raw = pd.read_parquet(dataset / "raw/005930.parquet")
     days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
     features = build_feature_frame(raw, set(days.date)).tail(1)
+    if args.with_flows and features[list(FLOW_FEATURES)].isna().any(axis=None):
+        raise ValueError("Flow-model activation requires a complete operational preview input")
     scores = {str(h): infer_batch(paths[h][0], features)[0][0] for h in (5, 20)}
     atomic_json(root / "serving_check.json", {"feature_parity": evidence, "stock_code": "005930", "scores": scores})
     if args.activate:
@@ -213,7 +234,7 @@ def main(argv=None):
         atomic_json(root / "previous_active_pack.json", {"config": previous,
                     "previous_processing_contract": previous_manifest.get("processing_contract"),
                     "previous_builder_sources": previous_manifest.get("builder_sources"),
-                    "builder_baseline_commit": "0c474ff" if previous_manifest.get("processing_contract", {}).get("sha256") == "4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867" else ("e5a0fe4" if previous_manifest.get("processing_contract") else "095584b"), "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
+                    "builder_baseline_commit": "dc67769" if previous_manifest.get("processing_contract") == processing_contract() else ("0c474ff" if previous_manifest.get("processing_contract", {}).get("sha256") == "4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867" else ("e5a0fe4" if previous_manifest.get("processing_contract") else "095584b")), "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
                     "policy": "Restore this pack together with its recorded compatible builder."})
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,
