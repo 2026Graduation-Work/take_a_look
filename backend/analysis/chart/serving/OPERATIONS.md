@@ -1,99 +1,42 @@
-# 실행 방법
+# Serving 운영
 
-현재 계산·DB·화면 데이터 규격은 [README.md](README.md)에 있다. 모든 명령은 `backend/analysis/chart`에서 실행한다. `serving/data/`는 Git에서 제외한 작업 공간이다.
+모든 명령은 chart 디렉터리에서 실행한다. 운영 파일은 기본 `workspace/serving/`에 저장하며 `CHART_SERVING_DATA_DIR`로 운영 저장소만 명시적으로 바꿀 수 있다.
 
-## 1. 로컬 Supabase에서 저장된 실제 입력 확인
-
-저장소 루트에서 Docker가 실행 중인지 확인하고 로컬 Supabase를 시작한다. CLI 전역 설치는 필요 없다.
+## 환경과 로컬 검증
 
 ```bash
-docker info
-npx --yes supabase@latest start
-npx --yes supabase@latest status
-```
-
-`start`는 저장소 migration을 적용한다. `status`에 표시된 Project URL과 Secret key(구 CLI에서는 service_role key)를 사용한다. `db reset`은 데이터를 지우므로 확인용 실행에 사용하지 않는다. `serving/data/packs/hold2022_2024_wf2019_2025_v1/`, `serving/data/raw/005930.parquet`, `serving/data/processed/005930.parquet`가 있어야 한다. 다른 컴퓨터라면 파일을 별도로 준비해야 하며 **로컬 pack이 있으면 GitHub Release가 필요 없다.**
-
-```bash
-cd backend/analysis/chart
-python3 -m venv /tmp/chart-serving-venv
-source /tmp/chart-serving-venv/bin/activate
+python -m venv workspace/serving/.venv
+source workspace/serving/.venv/bin/activate
 python -m pip install -r serving/requirements.txt
-export SUPABASE_URL=http://127.0.0.1:54321
-read -rsp '로컬 Secret 또는 service_role key: ' SUPABASE_SECRET_KEY; echo
-export SUPABASE_SECRET_KEY
-python -m serving.local_preview --compute-only
-python -m serving.local_preview --publish
+python -m serving.pack validate --path workspace/serving/packs/kospi_shared_v3_train2023_2025_20261010
+python -m serving.local_preview --code 005930 --as-of 2026-10-06 --compute-only
 ```
 
-첫 명령은 DB 없이 snapshot을 계산한다. 둘째 명령은 가격 DB·비공개 피처 Storage·H5/H20 공개 snapshot을 기록한다. 기본 입력은 **2026-06-12 삼성전자** 캐시이며, 기존 가공 피처 계산 버전은 미확인이다. `--as-of`는 raw와 processed 양쪽에 있는 날만, `--code`는 해당 두 캐시 파일이 있는 종목만 허용한다. 이 미리보기는 최신 KRX 수집을 검증하지 않는다.
+프리뷰는 `workspace/serving/inputs/raw/`의 명시적으로 내보낸 운영 입력과 해당 출처·해시 manifest만 읽는다. 연구 데이터셋 자동 탐색은 없다. `--compute-only`는 Supabase에 접속하지 않고 결과를 운영 `batches/`에 기록한다.
 
-로컬 Studio SQL Editor(보통 `http://127.0.0.1:54323`)에서 확인한다.
-
-```sql
-select count(*) from public.chart_prices where stock_code = '005930';
-select as_of, builder_id, storage_path from public.chart_feature_snapshots where stock_code = '005930';
-select id, as_of, status, pack_id from public.chart_batches order by created_at desc limit 3;
-select horizon, payload->'distribution'->>'sample_count' as cases,
-       payload->'distribution'->>'stock_count' as stocks
-from public.latest_chart_signal_snapshots where stock_code = '005930' order by horizon;
-```
-
-검증 당시 가격 162행, 피처 1건, 공개 snapshot 2행이었고 H5/H20 사례 수는 각각 699/615건이었다. `main` 프론트는 아직 이 공개 view를 읽지 않으므로 DB에 보이는 것과 화면에 보이는 것을 구분한다. 작업 후 저장소 루트에서 `npx --yes supabase@latest stop`으로 서비스를 종료할 수 있다.
-
-## 2. 최신 거래일 수집·추론
-
-거래일 **18:00 KST 이후** KRX 접근과 인터넷이 가능한 환경에서 실행한다. 현재 runner는 전체 KOSPI를 처리한다. `--dry-run`도 가격·피처를 Supabase에 저장하지만 새 공개 batch는 만들지 않는다.
+## 일일 실행과 재실행
 
 ```bash
-cd backend/analysis/chart
-read -rp 'KRX ID: ' KRX_ID
-read -rsp 'KRX password: ' KRX_PW; echo
-export KRX_ID KRX_PW
+python -m serving.pack download --config serving/config.yaml
 python -m serving.run_daily --dry-run
+# 별도 운영 발행 단계에서만:
 python -m serving.run_daily --publish
 ```
 
-`SUPABASE_URL`, `SUPABASE_SECRET_KEY`와 활성 pack도 필요하다. 같은 날 입력을 재실행하면 batch ID가 같고, 가격이나 pack이 바뀌면 새 batch가 된다. 과거 날짜 `--as-of YYYY-MM-DD`는 Supabase에 그날의 종목 목록과 해당 날짜까지의 가격이 저장된 경우에만 실행한다. 휴장일에는 당일 batch가 생성되지 않는다. 수집 또는 공개 전에 실패하면 이전 공개 batch가 남는다.
+KRX 인증과 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. 기본 활성 설정은 로컬 파일이 있으면 `serving/config.local.yaml`, 없으면 `serving/config.yaml`이다. `CHART_SERVING_CONFIG`를 지정하면 그 파일만 쓴다. 배포 작업은 설정을 명시한다.
 
-## 수정된 기본 모델 pack 재생성과 검증
+당일 가격은 한국 시간 18시 이후에 확정된 날짜만 실행한다. 첫 수집은 2016년부터 전체 관측 이력, 이후 갱신은 최근 240일이다. 겹치는 종가·원종가·거래량·거래대금의 변경을 확인하면 전체 이력을 다시 받는다. 과거 rolling 상관의 수치 재현을 위해 전체 이력을 유지한다.
 
-현재 pack은 로컬에서 생성·활성화했다. 재학습 없이 완료된 연구 실행의 2026 fold 모델과 저장된 walk-forward 예측으로 재생성할 수 있다.
+과거 날짜의 `--as-of YYYY-MM-DD` 재실행은 보관된 운영 universe·달력·raw 입력을 요구한다. 공급자 재조회나 연구 캐시 fallback은 하지 않는다. 달력은 동일 공통 거래일 검증을 다시 적용한다. 과거 운영 입력이 없으면 중단한다. 부분 snapshot 업로드 실패는 공개 publish RPC를 호출하지 않으며 이전 공개 batch를 유지한다.
 
-```bash
-python -m serving.refresh_local_pack \
-  --h5-result experiments/results/sliding_2016_2026_h5_kospi_739166ce0d474177 \
-  --h20-result experiments/results/sliding_2016_2026_h20_kospi_1734679be11d0369 \
-  --pack-id kospi_uniform_v3_train2023_2025_20261009 --activate
-python -m serving.local_preview --compute-only
-```
+`--historical-test --as-of ... --code ... --dry-run`은 loopback HTTP Supabase에서만 사용할 수 있는 별도 수집 점검 경로다. 운영 재실행과 다르며 원격 발행은 금지한다. 프리뷰의 `--publish`도 loopback HTTP에서만 허용한다.
 
-동일한 검증된 pack이 이미 있으면 재사용한다. 새 pack에는 공식 calendar, 2023~2025 학습 기간, 모델·예측 해시, 2019~2026 walk-forward 표본, 피처 동등성 증거가 들어간다. 기존 학습/수집 캐시와 이전 pack은 지우지 않는다. `previous_active_pack.json`으로 이전 설정을 확인할 수 있다. 이전 pack으로 실제 되돌리려면 피처 생성 코드도 그 버전에 맞춰야 하며, 새 daily 경로는 구형 피처 pack을 거부한다.
+## 로컬 전환과 되돌리기
 
-새 runner에는 로컬 pack이 없으므로 다음 asset을 Release에 올리고 이 코드 변경을 PR로 배포해야 한다. `serving/config.yaml`은 새 태그와 archive SHA를 이미 가리킨다. Release를 준비하기 전에 새 설정만 원격에 반영하면 pack 다운로드가 실패한다.
+새 pack은 `python -m experiments.export.refresh_pack ... --activate`로 검증 후 활성화한다. pack·tar.gz·builder 소스·이전 설정은 보존한다. pack 내부 `processing_contract`에 설정·코드 SHA-256이 있고 `builder/`에는 해당 공통 구현 원본이 있다.
 
-```bash
-gh release create chart-serving-kospi_uniform_v3_train2023_2025_20261009 \
-  serving/data/packs/kospi_uniform_v3_train2023_2025_20261009.tar.gz \
-  --title "Corrected KOSPI basic H5/H20 models" \
-  --notes "Uniform raw OHLC adjustment and actual VWAP; trained 2023-2025."
-```
+같은 공통 builder와 호환되는 이전 pack으로 돌아갈 때는 그 pack을 검증한 뒤 보관된 설정을 `serving/config.local.yaml`로 복원한다. 다른 builder의 pack은 설정만 되돌리면 실행되지 않는다. 기록된 builder 코드와 pack을 함께 복구해야 한다.
 
-기본 모델을 교체한 상태이므로 수급은 수집·피처 계산·저장되지만 기본 모델 점수에는 쓰이지 않는다. 수급 모델 적용에는 해당 모델과 과거 표본을 함께 담은 별도의 pack이 필요하다.
+전환 이전 v3 구현의 기준 커밋은 `095584b`, 원본은 `workspace/archive/pre-refactor/originals/`이다. 해당 커밋의 별도 checkout에서 호환 구현과 이전 설정을 사용하고 `CHART_SERVING_DATA_DIR`를 보관된 운영 workspace로 지정하면 이전 pack을 검증할 수 있다. 현재 builder에 이전 모델만 끼우지 않는다.
 
-## 3. 새 pack과 Actions
-
-`config.yaml`의 `active_pack`이 pack ID·Release 태그·첨부 파일명·압축 파일 SHA-256을 고정한다. 로컬에 같은 pack 디렉터리가 있으면 다운로드를 생략한다. 새 Actions runner에는 로컬 pack이 없으므로 GitHub Release 첨부 파일에서 내려받는다.
-
-```bash
-python -m serving.build_pack --pack-id PACK_ID --output serving/data/packs \
-  --model-h5 H5_MODEL.txt --model-h20 H20_MODEL.txt \
-  --predictions-h5 H5_OOS.parquet --predictions-h20 H20_OOS.parquet \
-  --processed-dir PROCESSED_DATA_DIR
-sha256sum serving/data/packs/PACK_ID.tar.gz
-gh release create RELEASE_TAG serving/data/packs/PACK_ID.tar.gz --title "Chart pack PACK_ID" --notes "H5/H20 serving pack"
-```
-
-pack 생성 보고서의 원본 예측 수·사용 표본 수·제외 사유를 확인한다. 기존 태그라면 `gh release upload`를 사용한다. 새 pack으로 바꿀 때 H5/H20을 함께 교체하고 `config.yaml` 네 값을 한 번에 변경한다. 이전 설정으로 되돌리면 이전 pack을 다시 쓸 수 있다.
-
-Actions secrets는 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `KRX_ID`, `KRX_PW`가 필요하다. `.github/workflows/chart-serving.yml`은 평일 **18:30 KST** 예약과 수동 실행을 제공한다. 설정 작성과 실제 실행 성공은 다르다. 현재 Release 업로드, 원격 migration, Actions 수동·예약 실행은 확인되지 않았다. 운영 Supabase migration 적용 뒤 수동 실행으로 공개 batch ID, H5/H20 두 snapshot, 기준일을 확인해야 한다. 서비스 키는 브라우저나 로그에 넣지 않는다.
+`serving/config.yaml`의 기존 원격 설정은 보존했다. 이번 작업은 로컬 전환까지만 수행한다. 원격 배포 전 새 코드와 정확히 일치하는 pack을 Release로 올리고 원격 활성 설정도 함께 바꿔야 한다. 이전 설정으로 새 builder를 실행하면 호환성 검사에서 중단한다.
