@@ -82,7 +82,7 @@ jobs:
         run: pytest . -v
 
   # ── backend/analysis/chart 블록 ────────────────────────────────────────────────────
-  chart-test:
+  chart-environments:
     needs: changes
     if: ${{ needs.changes.outputs.chart == 'true' }}
     runs-on: ubuntu-24.04
@@ -123,6 +123,23 @@ jobs:
           cd "$chart_serving_root"
           python -m pytest shared/tests serving/tests -v
           python -m serving.run_daily --help
+
+  # Keep the required check name stable while testing both installations.
+  chart-test:
+    needs: [changes, chart-environments]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require both selected chart environments to pass
+        env:
+          CHANGE_RESULT: ${{ needs.changes.result }}
+          CHART_CHANGED: ${{ needs.changes.outputs.chart }}
+          ENVIRONMENT_RESULT: ${{ needs.chart-environments.result }}
+        run: |
+          test "$CHANGE_RESULT" = success
+          if [ "$CHART_CHANGED" = true ]; then
+            test "$ENVIRONMENT_RESULT" = success
+          fi
 
   # ── backend/analysis/text 블록 ─────────────────────────────────────────────────────
   text-test:
