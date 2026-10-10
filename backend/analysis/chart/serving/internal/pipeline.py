@@ -38,21 +38,8 @@ def official_day(requested=None):
 
 
 def fetch_universe(as_of, code=None):
-    from shared.data.providers import krx as stock
-
-    if code:
-        if not re.fullmatch(r"[0-9A-Z]{6}", code):
-            raise ValueError("Stock code must be six uppercase alphanumeric characters")
-        codes = [code]
-    else:
-        codes = stock.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI")
-        if not 500 <= len(codes) <= 1200:
-            raise ValueError("Invalid KOSPI universe size")
-    rows = pd.DataFrame({"Code": codes, "Name": [stock.get_market_ticker_name(item) for item in codes]})
-    if (rows.Code.duplicated().any() or not rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all()
-            or rows.Name.isna().any() or not rows.Name.astype(str).str.strip().all()):
-        raise ValueError("Invalid KOSPI universe")
-    return rows.sort_values("Code").reset_index(drop=True)
+    from shared.data.metadata import fetch_current_universe
+    return fetch_current_universe(as_of, code=code, root=serving_root() / "cache/listings")
 
 
 def frame_hash(frame):
@@ -100,8 +87,16 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
                 raw = stored
             else:
+                listing = pd.to_datetime(getattr(row, "ListingDate", None))
+                if pd.isna(listing):
+                    raise ValueError(f"Verified listing interval absent for {code}")
                 previous = None if historical_test else store.load_price_history(code)
-                request_start = start if previous is None else recent_start
+                if previous is not None:
+                    previous = previous.loc[pd.to_datetime(previous.Date).ge(listing)].copy()
+                    if previous.empty:
+                        previous = None
+                first = max(pd.Timestamp(start), listing).date().isoformat()
+                request_start = first if previous is None else max(pd.Timestamp(recent_start), listing).date().isoformat()
                 fresh = _retry_fetch(code, request_start, as_of)
                 if previous is not None:
                     previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
@@ -112,7 +107,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                                                       rtol=1e-10, atol=1e-10, equal_nan=True)
                         for col in ("Close", "RawClose", "RawVolume", "Amount"))
                     if revised:
-                        fresh = _retry_fetch(code, start, as_of)
+                        fresh = _retry_fetch(code, first, as_of)
                     else:
                         fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
                 if fresh.Date.max().date().isoformat() != as_of:

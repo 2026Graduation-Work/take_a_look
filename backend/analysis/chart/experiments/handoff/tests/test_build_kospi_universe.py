@@ -1,5 +1,4 @@
 from pathlib import Path
-from types import ModuleType
 from urllib.error import HTTPError
 
 import pandas as pd
@@ -75,38 +74,22 @@ def test_build_history_keeps_active_intervals_and_excludes_other_markets(tmp_pat
     assert history.iloc[2].DelistingDate == pd.Timestamp("2025-02-01")
 
 
-def test_listing_cache_404_falls_back_to_direct_krx_readers(monkeypatch: pytest.MonkeyPatch) -> None:
-    fdr = ModuleType("FinanceDataReader")
-    fdr.__path__ = []
-    fdr.StockListing = lambda *args: (_ for _ in ()).throw(
-        HTTPError("https://example.test/listing.csv", 404, "missing", None, None)
-    )
-    krx = ModuleType("FinanceDataReader.krx")
-    krx.__path__ = []
-    listing = ModuleType("FinanceDataReader.krx.listing")
+def test_listing_cache_404_uses_shared_verified_krx_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from shared.data import metadata, providers
+    active, delisted = _frames()
+    active = active.loc[active.Market.eq("KOSPI")].copy()
+    active["Code"] = active.Code.str.zfill(6)
+    delisted["Symbol"] = delisted.Symbol.str.upper().str.zfill(6)
     calls = []
-
-    class DirectActive:
-        def __init__(self, market):
-            calls.append(("active_init", market))
-
-        def read(self):
-            calls.append(("active_read",))
-            return "active"
-
-    class DirectDelisted:
-        def __init__(self, market, start, end):
-            calls.append(("delisted_init", market, start, end))
-
-        def read(self):
-            calls.append(("delisted_read",))
-            return "delisted"
-
-    listing.KrxStockListing = DirectActive
-    listing.KrxDelisting = DirectDelisted
-    monkeypatch.setitem(__import__("sys").modules, "FinanceDataReader", fdr)
-    monkeypatch.setitem(__import__("sys").modules, "FinanceDataReader.krx", krx)
-    monkeypatch.setitem(__import__("sys").modules, "FinanceDataReader.krx.listing", listing)
-
-    assert fetch_listing_inputs("2016-01-01") == ("active", "delisted")
-    assert ("delisted_init", "KRX-DELISTING", "2016-01-01", calls[-2][3]) in calls
+    monkeypatch.setattr(providers.fdr, "StockListing", lambda *args: (_ for _ in ()).throw(
+        HTTPError("https://example.test/listing.csv", 404, "missing", None, None)))
+    def fallback(market):
+        calls.append(market)
+        return active
+    monkeypatch.setattr(metadata, "fetch_active_listing_intervals", fallback)
+    monkeypatch.setattr(providers, "_fetch_delisted_list", lambda start: delisted)
+    current, past = fetch_listing_inputs("2016-01-01")
+    assert calls == ["KOSPI"]
+    assert set(current.Code) == set(active.Code)
+    assert set(past.Symbol) == set(delisted.loc[delisted.Market.eq("KOSPI") & delisted.SecuGroup.eq("주권"), "Symbol"])
+    assert current.ListingDate.notna().all() and past.DelistingDate.notna().all()

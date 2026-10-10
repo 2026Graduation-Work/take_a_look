@@ -6,15 +6,17 @@
 """
 
 import argparse
-import html
 import json
 import re
 from datetime import UTC, date, datetime, timedelta
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
+from shared.data.metadata import (  # noqa: F401
+    fetch_managed_names,
+    fetch_security_listing,
+    parse_managed_names,
+)
 
 from serving.internal.storage import SupabaseStore
 
@@ -31,27 +33,10 @@ LARGE_CAP_RANK = 100  # KRX 대형주 기준(시가총액 상위 100)
 # spac·managed_stock은 1로 내린다.
 KOSDAQ_CODES = {"247540"}  # serving/internal/pipeline.py EXTRA_CODES (코스피 밖 서비스 종목)
 PREFERRED_NAME = re.compile(r"\d?우[B-C]?(\(전환\))?$")
-KIND_URL = "https://kind.krx.co.kr/investwarn/adminissue.do"
 
 
 def is_preferred(code, name):
     return code[-1] != "0" and bool(PREFERRED_NAME.search(name))
-
-
-def parse_managed_names(page):
-    names = re.findall(r'<td class="first">(.*?)</td>', page, re.S)
-    return {html.unescape(re.sub(r"<[^>]+>", " ", cell)).strip() for cell in names} - {""}
-
-
-def fetch_managed_names():
-    body = urlencode({"method": "searchAdminIssueSub", "currentPageSize": 3000, "pageIndex": 1,
-                      "orderMode": 1, "orderStat": "D", "marketType": "", "forward": "adminissue_sub"})
-    request = Request(KIND_URL, data=body.encode(), headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=30) as response:
-        names = parse_managed_names(response.read().decode("utf-8"))
-    if not names:
-        raise RuntimeError("KIND 관리종목 목록이 비어 있습니다")
-    return names
 
 
 def grade_for(volatility, large_cap):
@@ -63,9 +48,7 @@ def grade_for(volatility, large_cap):
 
 def fetch_large_caps():
     """시가총액 상위 LARGE_CAP_RANK 종목 코드(KRX 상장 목록, 로그인 불필요)."""
-    import FinanceDataReader as fdr
-
-    listing = fdr.StockListing("KRX")
+    listing = fetch_security_listing("KRX")
     if listing.empty or "Marcap" not in listing:
         raise RuntimeError("KRX 상장 목록(시가총액)을 받지 못했습니다")
     return set(listing.nlargest(LARGE_CAP_RANK, "Marcap")["Code"].astype(str))

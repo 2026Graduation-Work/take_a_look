@@ -213,7 +213,7 @@ def main(argv=None):
         atomic_json(root / "previous_active_pack.json", {"config": previous,
                     "previous_processing_contract": previous_manifest.get("processing_contract"),
                     "previous_builder_sources": previous_manifest.get("builder_sources"),
-                    "builder_baseline_commit": "e5a0fe4" if previous_manifest.get("processing_contract") else "095584b", "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
+                    "builder_baseline_commit": "0c474ff" if previous_manifest.get("processing_contract", {}).get("sha256") == "4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867" else ("e5a0fe4" if previous_manifest.get("processing_contract") else "095584b"), "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
                     "policy": "Restore this pack together with its recorded compatible builder."})
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,

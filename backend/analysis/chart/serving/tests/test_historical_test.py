@@ -21,7 +21,7 @@ def test_historical_test_fetches_selected_stock_instead_of_replaying(monkeypatch
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *_: {pd.Timestamp(as_of).date()})
     def selected_universe(date, code=None):
         assert date == as_of and code == "005930"
-        return pd.DataFrame({"Code": [code], "Name": ["삼성전자"]})
+        return pd.DataFrame({"Code": [code], "Name": ["삼성전자"], "ListingDate": pd.Timestamp("2000-01-01")})
 
     monkeypatch.setattr(pipeline, "fetch_universe", selected_universe)
     monkeypatch.setattr(pipeline, "_retry_fetch", lambda *_: pd.DataFrame(
@@ -50,16 +50,16 @@ def test_historical_test_fetches_selected_stock_instead_of_replaying(monkeypatch
     assert not unavailable
 
 
-def test_single_stock_universe_skips_full_listing(monkeypatch):
+def test_single_stock_universe_skips_full_listing(monkeypatch, verified_listing_provider):
     from shared.data.providers import krx as stock
 
     monkeypatch.setattr(stock, "get_market_ticker_list", lambda *_args, **_kwargs: pytest.fail("full listing requested"))
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: "삼성전자" if code == "005930" else "")
-    assert pipeline.fetch_universe("2026-09-21", code="005930").to_dict("records") == [
+    assert pipeline.fetch_universe("2026-09-21", code="005930").drop(columns="ListingDate").to_dict("records") == [
         {"Code": "005930", "Name": "삼성전자"}]
 
 
-def test_daily_universe_uses_requested_krx_date(monkeypatch):
+def test_daily_universe_uses_requested_krx_date(monkeypatch, verified_listing_provider):
     from shared.data.providers import krx as stock
 
     def listing(date, market):

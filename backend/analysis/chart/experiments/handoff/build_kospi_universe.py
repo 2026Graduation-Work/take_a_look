@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import ssl
-from datetime import date
 from pathlib import Path
-from urllib.error import HTTPError
 
 import pandas as pd
 
@@ -14,30 +11,14 @@ from .package_processed import HandoffContractError
 
 
 def fetch_listing_inputs(history_start: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Use FDR's daily cache, falling back to its direct KRX readers on a cache 404."""
-    import FinanceDataReader as fdr
+    """Use the shared verified listing adapters for historical universe inputs."""
+    from datetime import date
 
-    try:
-        return fdr.StockListing("KOSPI-DESC"), fdr.StockListing("KRX-DELISTING")
-    except HTTPError as exc:
-        if exc.code != 404:
-            raise
-        print(
-            "FinanceDataReader listing cache returned HTTP 404; "
-            "retrying through its direct KRX readers.",
-            flush=True,
-        )
-
-    from FinanceDataReader.krx.listing import KrxDelisting, KrxStockListing
-
-    default_ssl_context = ssl._create_default_https_context
-    try:
-        active = KrxStockListing("KOSPI-DESC").read()
-    finally:
-        ssl._create_default_https_context = default_ssl_context
-    delisted = KrxDelisting(
-        "KRX-DELISTING", start=history_start or "1960-01-01", end=date.today().isoformat()
-    ).read()
+    from shared.data.metadata import load_metadata
+    metadata = load_metadata({"start_date": history_start or "1960-01-01",
+                              "markets": ["KOSPI"], "include_delisted": True}, date.today().isoformat())
+    active = metadata.loc[~metadata.IsDelisted].copy()
+    delisted = metadata.loc[metadata.IsDelisted].rename(columns={"Code": "Symbol"}).assign(SecuGroup="주권")
     return active, delisted
 
 

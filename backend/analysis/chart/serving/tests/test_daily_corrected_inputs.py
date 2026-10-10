@@ -90,7 +90,8 @@ def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
 
 
 @pytest.mark.parametrize("provider_failure", [False, True])
-def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provider_failure):
+@pytest.mark.parametrize("recently_listed", [False, True])
+def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provider_failure, recently_listed):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Open": np.arange(75)+100., "High": np.arange(75)+101.,
                         "Low": np.arange(75)+99., "Close": np.arange(75)+100., "Volume": 10.,
@@ -117,6 +118,7 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
             pass
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
     universe = pd.DataFrame({"Code": ["005930", "000660"], "Name": ["삼성전자", "SK하이닉스"]}) if provider_failure else pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
+    universe["ListingDate"] = dates[0] if recently_listed else pd.Timestamp("2000-01-01")
     monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (flow, {"available_days": 20}))
     requests = []
@@ -128,7 +130,7 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     result = pipeline.collect(dates[-1].date().isoformat(), Store())
     assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
-    assert requests == ["2016-01-01"]
+    assert requests == [dates[0].date().isoformat() if recently_listed else "2016-01-01"]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
     assert result[-1]["complete_current_rows"] == 1
     assert pd.isna(archived[0].Foreign_BuyAmount.iloc[0])
@@ -170,7 +172,7 @@ def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
     assert batch["result"]["unavailable_count"] == 1
 
 
-def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
+def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch, verified_listing_provider):
     from serving.internal import calendar
     from shared.data.providers import krx as stock
     monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: {pd.Timestamp("2026-10-06").date()})
@@ -187,3 +189,12 @@ def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
     monkeypatch.setattr(providers.fdr, "DataReader", lambda *_: pd.DataFrame())
     monkeypatch.setattr(providers.time, "sleep", lambda *_: None)
     assert fetch_prices("00088K", "2026-10-06", "2026-10-06").Close.iloc[0] == 100
+
+
+@pytest.mark.parametrize("listing", [None, pd.NaT, "2026-10-07"])
+def test_current_universe_rejects_unknown_or_future_listing(monkeypatch, tmp_path, listing):
+    from shared.data import metadata
+    monkeypatch.setattr(metadata, "load_metadata", lambda *args: pd.DataFrame({
+        "Code": ["005930"], "ListingDate": [listing]}))
+    with pytest.raises(ValueError, match="listing intervals"):
+        metadata.fetch_current_universe("2026-10-06", root=tmp_path, code="005930")

@@ -190,9 +190,9 @@ def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) ->
         if os.path.exists(cache_path):
             closes = pd.read_parquet(cache_path).set_index("Date")["Close"]
         else:
-            import FinanceDataReader as fdr
+            from shared.data.metadata import fetch_index_prices
 
-            raw = fdr.DataReader(
+            raw = fetch_index_prices(
                 "KS11",
                 (index.min() - pd.Timedelta(days=10)).strftime("%Y-%m-%d"),
                 (index.max() + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),

@@ -822,7 +822,8 @@ def test_incomplete_fdr_listing_response_falls_back_to_security_metadata(monkeyp
     incomplete = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [None]})
     complete = incomplete.assign(ListingDate=pd.Timestamp("2019-08-09"))
     monkeypatch.setattr(price_collector.fdr, "StockListing", lambda *_: incomplete)
-    monkeypatch.setattr(module, "fetch_active_listing_intervals", lambda *_: complete)
+    from shared.data import metadata as shared_metadata
+    monkeypatch.setattr(shared_metadata, "fetch_active_listing_intervals", lambda *_: complete)
     result = module.load_metadata({"start_date": "2016-01-01", "markets": ["KOSPI"],
                                    "include_delisted": False}, "2026-10-06")
     assert result.ListingDate.iloc[0] == pd.Timestamp("2019-08-09")
