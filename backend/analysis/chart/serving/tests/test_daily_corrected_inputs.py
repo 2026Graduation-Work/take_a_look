@@ -55,7 +55,8 @@ def test_daily_cache_and_query_failure_are_separate(monkeypatch, tmp_path):
     assert pd.isna(merged.Institution_BuyAmount.iloc[0])
 
 
-def test_replay_uses_archive_without_network(monkeypatch):
+@pytest.mark.parametrize("archive_mode", ["full_raw", "paired_features", "missing_features"])
+def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Code": "005930", "Open": np.arange(75)+100.,
                         "High": np.arange(75)+101., "Low": np.arange(75)+99.,
@@ -66,13 +67,26 @@ def test_replay_uses_archive_without_network(monkeypatch):
         def load_universe(self, day):
             return pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
         def load_raw_prices(self, code, day):
-            return raw
+            if archive_mode == "full_raw":
+                return raw
+            saved = raw.tail(60).copy()
+            saved.attrs["input_sha256"] = "a" * 64
+            return saved
+        def load_features(self, code, day, builder, digest):
+            from shared.settings import processing_contract
+            assert builder == pipeline.BUILDER_ID + "_" + processing_contract()["sha256"][:16]
+            assert digest == "a" * 64
+            return None if archive_mode == "missing_features" else build_feature_frame(raw, set(dates.date)).tail(1)
         def upload_features(self, *args):
             pass
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: pytest.fail("Replay fetched flows"))
-    result = pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
-    assert list(result[1]) == ["005930"]
+    if archive_mode == "missing_features":
+        with pytest.raises(ValueError, match="Archived compatible feature input absent"):
+            pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+    else:
+        result = pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+        assert list(result[1]) == ["005930"]
 
 
 @pytest.mark.parametrize("provider_failure", [False, True])
@@ -141,7 +155,7 @@ def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
     monkeypatch.setattr(pipeline, "SampleIndex", History)
     def infer(model, frame):
         calls.append(len(frame))
-        return [({"up": .4, "down": .3, "neutral": .3}, [], "a"*64)]
+        return [({"up": .4, "down": .3, "neutral": .3}, [], "a"*64, 0.)]
     monkeypatch.setattr(pipeline, "infer_batch", infer)
     monkeypatch.setattr(pipeline, "build_snapshot", lambda **kwargs: {"inference": kwargs["inference"]})
     monkeypatch.setattr(pipeline, "unavailable_snapshot", lambda **kwargs: {"inference": {"status": "unavailable", "reason": kwargs["reason"]}})

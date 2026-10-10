@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SignalMeta } from "@/lib/display";
+import { clipReturnBins } from "@/lib/chart-detail";
 import type { ReturnBand, ReturnBin } from "@/lib/types";
 
 // 과거 유사 신호 N건의 실현 수익률 분포. 부채꼴(미래 경로) 대신 쓰는 핵심 근거 시각화 —
@@ -40,17 +41,30 @@ interface ReturnHistogramProps {
 }
 
 export default function ReturnHistogram({
-  bins,
+  bins: rawBins,
   band,
   caseCount,
   signal,
   horizonLabel,
 }: ReturnHistogramProps) {
+  // 누른 막대의 건수를 보인다. 다시 누르거나 바깥을 누르거나 Esc로 닫는다(올리기만으로는 열지 않음)
   const [hovered, setHovered] = useState<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (hovered === null) return;
+    const outside = (event: PointerEvent) => !root.current?.contains(event.target as Node) && setHovered(null);
+    const escape = (event: KeyboardEvent) => event.key === "Escape" && setHovered(null);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [hovered]);
 
   if (
-    bins.length === 0 ||
-    bins.some(
+    rawBins.length === 0 ||
+    rawBins.some(
       (bin) =>
         !Number.isFinite(bin.from) ||
         !Number.isFinite(bin.to) ||
@@ -65,12 +79,17 @@ export default function ReturnHistogram({
     return null;
   }
 
+  // x축은 분포의 1~99% 구간. 밖은 양 끝 "이하"·"이상" 칸으로 묶는다.
+  const bins = clipReturnBins(rawBins);
   const xMin = bins[0].from;
   const xMax = bins[bins.length - 1].to;
   if (xMax <= xMin) return null;
 
   const maxCount = Math.max(...bins.map((bin) => bin.count));
-  const yStep = maxCount > 12 ? 5 : 2;
+  // 격자는 4줄 안팎: 1·2·5×10ⁿ 중 maxCount/4 이상인 가장 작은 값. 실제 배치 분포는 한 칸에 수천 건이다
+  const rawStep = maxCount / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(Math.max(rawStep, 1)));
+  const yStep = maxCount <= 12 ? 2 : [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rawStep)!;
   const yMax = Math.max(yStep, Math.ceil(maxCount / yStep) * yStep);
 
   const plotW = VB_W - PAD.left - PAD.right;
@@ -88,18 +107,25 @@ export default function ReturnHistogram({
     return center >= band.low && center <= band.high;
   };
 
-  const edges = [xMin, ...bins.map((bin) => bin.to)];
-  const labelledEdges = bins.length <= 10 ? edges : edges.filter((_, i) => i % 2 === 0);
+  const rawXStep = (xMax - xMin) / 6;
+  const xMagnitude = 10 ** Math.floor(Math.log10(rawXStep));
+  const xStep = [1, 2, 5, 10].map(n => n * xMagnitude).find(n => n >= rawXStep)!;
+  const keptMin = bins[0].tail ? bins[0].to : xMin;
+  const keptMax = bins[bins.length - 1].tail ? bins[bins.length - 1].from : xMax;
+  const labelledEdges = [];
+  for (let tick = Math.ceil(keptMin / xStep) * xStep; tick <= keptMax; tick += xStep) labelledEdges.push(tick);
+  const binLabel = (bin: (typeof bins)[number]) =>
+    bin.tail === "low" ? `${formatSigned(bin.to)} 이하` : bin.tail === "high" ? `${formatSigned(bin.from)} 이상` : `${formatSigned(bin.from)} ~ ${formatSigned(bin.to)}`;
   const maxIndex = bins.findIndex((bin) => bin.count === maxCount);
   const ciPercent = Math.round(band.ciLevel * 100);
 
   return (
-    <div className="relative">
+    <div ref={root} className="relative">
       <svg
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`과거 유사 신호 ${caseCount}건의 실현 수익률 분포. ${ciPercent}% 구간은 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
+        aria-label={`과거 유사 신호 ${caseCount.toLocaleString("ko-KR")}건의 실현 수익률 분포. ${ciPercent}% 구간은 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지`}
       >
         {/* 68% 구간 음영 + 경계선 */}
         <rect
@@ -146,7 +172,7 @@ export default function ReturnHistogram({
               strokeWidth={1}
             />
             <text x={PAD.left - 6} y={y(count) + 4} textAnchor="end" fontSize={11} style={{ fill: "var(--color-muted)" }}>
-              {count}
+              {count.toLocaleString("ko-KR")}
             </text>
           </g>
         ))}
@@ -166,8 +192,10 @@ export default function ReturnHistogram({
 
         {/* 막대: 구간 안은 신호 색, 밖은 회색 */}
         {bins.map((bin, i) => {
-          const left = x(bin.from) + BAR_GAP;
-          const width = x(bin.to) - x(bin.from) - BAR_GAP * 2;
+          const bucketWidth = x(bin.to) - x(bin.from);
+          const gap = Math.min(BAR_GAP, bucketWidth / 4);
+          const left = x(bin.from) + gap;
+          const width = bucketWidth - gap * 2;
           const top = y(bin.count);
           return (
             <path
@@ -188,7 +216,7 @@ export default function ReturnHistogram({
           fontWeight={600}
           style={{ fill: "var(--color-ink)" }}
         >
-          {bins[maxIndex].count}건
+          {bins[maxIndex].count.toLocaleString("ko-KR")}건
         </text>
 
         {/* 베이스라인 + x축 라벨 */}
@@ -205,11 +233,23 @@ export default function ReturnHistogram({
             {formatSigned(edge)}
           </text>
         ))}
+        {bins.filter((bin) => bin.tail).map((bin) => (
+          <text
+            key={bin.tail}
+            x={(x(bin.from) + x(bin.to)) / 2}
+            y={baseline + 16}
+            textAnchor="middle"
+            fontSize={11}
+            style={{ fill: "var(--color-muted)" }}
+          >
+            {bin.tail === "low" ? "이하" : "이상"}
+          </text>
+        ))}
         <text x={VB_W - PAD.right} y={baseline + 30} textAnchor="end" fontSize={11} style={{ fill: "var(--color-muted)" }}>
           실제 수익률 ({horizonLabel})
         </text>
 
-        {/* 호버 히트 영역 (막대보다 넓게, 플롯 전체 높이) */}
+        {/* 누르는 영역 (막대보다 넓게, 플롯 전체 높이) */}
         {bins.map((bin, i) => (
           <rect
             key={bin.from}
@@ -218,25 +258,29 @@ export default function ReturnHistogram({
             width={x(bin.to) - x(bin.from)}
             height={plotH + 14}
             fill="transparent"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
+            className="cursor-pointer"
+            onClick={() => setHovered((current) => (current === i ? null : i))}
           />
         ))}
       </svg>
+      {bins.every(bin => Math.abs(bin.to - bin.from - 2) < 1e-8) && (
+        <p className="m-0 text-2xs text-muted">
+          막대 한 칸은 수익률 2%p 구간이에요. 68% 범위는 별도로 표시해요.
+          {bins.some((bin) => bin.tail) && " 양 끝 칸은 그 바깥을 모두 묶었어요."}
+        </p>
+      )}
 
       {hovered !== null && (
         <div
-          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-2.5 py-1.5 shadow-lift"
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-3 py-2 shadow-lift"
           style={{
             left: `${(((x(bins[hovered].from) + x(bins[hovered].to)) / 2) / VB_W) * 100}%`,
             top: `${((y(bins[hovered].count) - 8) / VB_H) * 100}%`,
           }}
         >
-          <span className="text-xs font-medium tabular-nums">
-            {formatSigned(bins[hovered].from)} ~ {formatSigned(bins[hovered].to)}
-          </span>
-          <span className="ml-1.5 text-xs text-muted">
-            {bins[hovered].count}건 / {caseCount}건
+          <span className="text-xs font-medium tabular-nums">{binLabel(bins[hovered])}</span>
+          <span className="ml-2 text-xs text-muted">
+            {bins[hovered].count.toLocaleString("ko-KR")}건 / {caseCount.toLocaleString("ko-KR")}건
           </span>
         </div>
       )}

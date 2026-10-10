@@ -58,11 +58,6 @@ from psychology.market_psychology import build_psychology_features  # noqa: E402
 # 재무 수집·지표·검증은 text 블록 코드를 그대로 쓴다. 주식수 기준연도는 import 전에 고정해야 한다.
 os.environ["SHARES_ASOF_YEAR"] = "2024"
 sys.path.insert(0, str(ROOT / "backend/analysis/text"))
-import opendartreader  # noqa: E402
-
-# ponytail: opendartreader 0.3.x는 모듈 이름이 소문자라 text 블록의 `import OpenDartReader`가 실패한다.
-# 블록 코드가 새 이름을 쓰게 되면 이 두 줄을 지운다.
-sys.modules.setdefault("OpenDartReader", opendartreader.OpenDartReader)
 from value_pipeline import collectors, metrics  # noqa: E402
 from value_pipeline.agents import validation_agent  # noqa: E402
 from value_pipeline.config import SETTINGS  # noqa: E402
@@ -248,7 +243,7 @@ def financial_snapshot(closes: dict[str, int]) -> dict:
     """종목별 기준일 시점 사업보고서 재무 6지표. 검증에 걸린 지표는 value=None."""
     if not SETTINGS.has_dart:
         raise SystemExit("루트 .env에 DART_API_KEY가 없습니다.")
-    dart = opendartreader.OpenDartReader(SETTINGS.dart_api_key)
+    dart = collectors.OpenDartReader(SETTINGS.dart_api_key)
     year = collectors.select_fiscal_year(AS_OF)
     after = (pd.Timestamp(AS_OF) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
     result = {}

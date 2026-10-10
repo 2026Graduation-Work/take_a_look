@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "track": "financial",
+  "scope": {
+    "ticker": "005930",
+    "company_name": "삼성전자"
+  },
+  "source": "dart",
+  "as_of": "2025-12-30",
+  "status": "ok",
+  "filing": {
+    "fiscal_year": 2024,
+    "statement": "CFS",
+    "receipt_no": "20250311001085",
+    "filed_at": "2025-03-11",
+    "shares_basis": "2024-12-31 common_shares"
+  },
+  "price": {
+    "value": 119900.0,
+    "as_of": "2025-12-30",
+    "source": "fdr"
+  },
+  "metrics": [
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "per",
+      "value": 20.6019,
+      "unit": "multiple",
+      "basis": "주가 119,900원 ÷ 주당순이익(당기순이익 34.5조원 ÷ 발행주식수 5,919,637,922주)",
+      "note": null
+    },
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "pbr",
+      "value": 1.7647,
+      "unit": "multiple",
+      "basis": "주가 119,900원 ÷ 주당순자산(자본총계 402.2조원 ÷ 발행주식수 5,919,637,922주)",
+      "note": null
+    },
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "roe",
+      "value": 8.5659,
+      "unit": "percent",
+      "basis": "당기순이익 34.5조원 ÷ 자본총계 402.2조원",
+      "note": null
+    },
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "operating_margin",
+      "value": 10.8771,
+      "unit": "percent",
+      "basis": "영업이익 32.7조원 ÷ 매출 300.9조원",
+      "note": null
+    },
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "debt_ratio",
+      "value": 27.9319,
+      "unit": "percent",
+      "basis": "부채총계 112.3조원 ÷ 자본총계 402.2조원",
+      "note": null
+    },
+    {
+      "ticker": "005930",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "revenue_growth",
+      "value": 16.1953,
+      "unit": "percent",
+      "basis": "2024년 매출 300.9조원 ÷ 2023년 매출 258.9조원 − 1",
+      "note": null
+    }
+  ],
+  "validation": {
+    "errors": []
+  }
+}

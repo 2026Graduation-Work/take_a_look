@@ -161,3 +161,7 @@ backend/analysis/chart/data/datasets/
 !backend/analysis/chart/experiments/configs/local_h5.yaml
 !backend/analysis/chart/experiments/configs/local_h20.yaml
 backend/analysis/chart/serving/config.local.yaml
+
+# Preserve the current main local CLI and team permission rules.
+supabase/.temp/
+!.claude/settings.json

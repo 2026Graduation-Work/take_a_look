@@ -16,6 +16,13 @@ KST = ZoneInfo("Asia/Seoul")
 Fetcher = Callable[..., newsapi_ai.ArticleBatch | list[dict[str, Any]]]
 Loader = Callable[..., list[dict[str, Any]]]
 
+# NewsAPI.ai의 한국어 색인은 '삼성전자' 붙임말 검색을 0건으로 반환한다.
+# 수집은 '삼성'으로 넓히되, 삼성생명·삼성 라이온즈 등을 제외하도록
+# 관련성 판정은 '삼성전자' 정확 키워드를 유지한다.
+LIVE_QUERY_OVERRIDES: dict[str, tuple[str, str]] = {
+    "005930": ("삼성", "삼성전자"),
+}
+
 
 def run_live_cycle(
     targets: Mapping[str, str],
@@ -23,44 +30,59 @@ def run_live_cycle(
     fetcher: Fetcher = newsapi_ai.fetch_article_batch,
     as_of: datetime | None = None,
     page_size: int = 100,
+    require_finbert: bool = False,
+    extra_page: bool = False,
 ) -> dict[str, dict[str, Any]]:
-    """여러 종목을 API 1회로 수집한 뒤 종목별 결과로 나눈다."""
+    """종목별 API 검색으로 각 종목의 직전 24시간 트랙을 만든다.
+
+    extra_page면 첫 페이지가 꽉 차고 잘렸을 때만 2페이지(그다음 오래된 100건)를 더 받는다.
+    """
     if not targets:
         raise ValueError("최소 하나의 대상 종목이 필요합니다.")
     now = as_of or datetime.now(KST)
     now = now.replace(tzinfo=KST) if now.tzinfo is None else now.astimezone(KST)
     end = now.date()
-    start = end - timedelta(days=6)
+    start = (now - timedelta(hours=24)).date()
     # KST 자정은 UTC 전날 15시이므로 공급자 날짜 범위를 하루 넓힌 뒤
     # build_live_track에서 KST 날짜로 정확히 잘라낸다.
     query_start = start - timedelta(days=1)
-    fetched = fetcher(
-        list(targets.values()),
-        query_start.isoformat(),
-        end.isoformat(),
-        page_size=page_size,
-    )
-    if isinstance(fetched, newsapi_ai.ArticleBatch):
-        items = fetched.articles
-        provider_metadata = {
-            "total_results": fetched.total_results,
-            "returned_count": fetched.returned_count,
-            "pages": fetched.pages,
-            "truncated": fetched.truncated,
-        }
-    else:
-        items = fetched
-        provider_metadata = None
-    return {
-        ticker: news_tracks.build_live_track(
+    outputs: dict[str, dict[str, Any]] = {}
+    for ticker, company_name in targets.items():
+        search_keyword, relevance_key_override = LIVE_QUERY_OVERRIDES.get(
+            ticker, (company_name, None)
+        )
+        fetched = fetcher(
+            [search_keyword],
+            query_start.isoformat(),
+            end.isoformat(),
+            page_size=page_size,
+        )
+        if isinstance(fetched, newsapi_ai.ArticleBatch):
+            items = fetched.articles
+            if extra_page and fetched.truncated and fetched.returned_count >= page_size:
+                more = fetcher([search_keyword], query_start.isoformat(), end.isoformat(), page_size=page_size, page=2)
+                seen = {item["news_id"] for item in items}
+                items = items + [item for item in more.articles if item["news_id"] not in seen]
+            total = fetched.total_results
+            provider_metadata = {
+                "total_results": total,
+                "returned_count": len(items),
+                "pages": fetched.pages,
+                "truncated": total is not None and total > len(items),
+            }
+        else:
+            items = fetched
+            provider_metadata = None
+        outputs[ticker] = news_tracks.build_live_track(
             items,
             ticker,
             company_name,
             as_of=now,
             provider_metadata=provider_metadata,
+            relevance_key_override=relevance_key_override,
+            require_finbert=require_finbert,
         )
-        for ticker, company_name in targets.items()
-    }
+    return outputs
 
 
 def write_live_outputs(outputs: Mapping[str, dict[str, Any]], out_dir: Path) -> None:
@@ -76,6 +98,8 @@ def run_historical_cycle(
     *,
     loader: Loader = collectors.preprocess.load_news_range,
     data_dir: Path = collectors.DATA_DIR,
+    require_finbert: bool = False,
+    inference_batch_size: int = 16,
 ) -> dict[str, Any]:
     """BigKinds 워크북에서 기간 기사를 읽어 과거 트랙을 만든다."""
     start = date.fromisoformat(date_start)
@@ -95,6 +119,8 @@ def run_historical_cycle(
         company_name,
         date_start=date_start,
         date_end=date_end,
+        require_finbert=require_finbert,
+        inference_batch_size=inference_batch_size,
     )
 
 
@@ -112,7 +138,11 @@ def _live_command(args: argparse.Namespace) -> None:
     failure_count = 0
     while True:
         try:
-            outputs = run_live_cycle(targets, page_size=args.page_size)
+            outputs = run_live_cycle(
+                targets,
+                page_size=args.page_size,
+                require_finbert=getattr(args, "require_finbert", False),
+            )
         except newsapi_ai.NewsApiAiConfigurationError:
             raise
         except newsapi_ai.NewsApiAiError as exc:
@@ -165,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     live.add_argument("--out-dir", type=Path, default=Path("out/news_tracks"))
     live.add_argument("--page-size", type=int, default=100)
+    live.add_argument("--require-finbert", action="store_true")
     live.add_argument("--watch", action="store_true", help="1시간 주기 반복 수집")
     live.add_argument("--interval-minutes", type=int, default=60)
     live.set_defaults(handler=_live_command)

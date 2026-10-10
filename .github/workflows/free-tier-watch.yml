@@ -1,0 +1,37 @@
+name: Free tier watch
+
+# 주 1회: 무료 한도(DB·Storage·NewsAPI.ai·차트 게시 지연)와 인증 Site URL을 재고, 벗어나면 이슈를 남긴다.
+# 같이 예약 워크플로를 다시 켜서 공개 레포 60일 비활성 자동 꺼짐을 막는다. 서드파티 액션 없이 gh·GITHUB_TOKEN만.
+on:
+  schedule:
+    - cron: "7 1 * * 1" # 월 10:07 KST(정각 회피)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Keep scheduled workflows enabled
+        run: |
+          for file in $(grep -l "^  schedule:" .github/workflows/*.yml); do
+            gh api -X PUT "repos/$GH_REPO/actions/workflows/$(basename "$file")/enable"
+            echo "enabled $(basename "$file")"
+          done
+
+      - name: Measure free tier usage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NEWSAPI_AI_KEY: ${{ secrets.NEWSAPI_AI_KEY }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: python3 .github/scripts/free_tier_watch.py

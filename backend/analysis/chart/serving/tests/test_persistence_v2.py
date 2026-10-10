@@ -13,7 +13,7 @@ def v2_snapshot():
     value = json.loads((Path(__file__).parents[1] / "contracts/examples/normal.json").read_text())
     value["contract"] = "chart_signal_detail_v2"
     value["pack_id"] = "pack-1"
-    del value["cases"]
+    value.pop("cases", None)
     value["distribution"] = {
         "status": "available", "reason": None,
         "policy_id": "multi_stock_up_sigma_001_005_v1",

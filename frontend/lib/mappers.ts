@@ -1,5 +1,6 @@
 import { AVOIDED_ASSET_LABELS, summaryFromStyleAxes } from "./profiling-rules";
-import { CLOSING_PRICE } from "./closing-prices.ts";
+import type { LatestCloses } from "./latest-closes.ts";
+import { chartProvenance } from "./chart-detail.ts";
 import { costBasis } from "./holdings-rules.ts";
 import type {
   DataProvenance,
@@ -42,6 +43,9 @@ export interface StockRow {
   market: "KOSPI" | "KOSDAQ";
   risk_grade: number;
   risk_flags: string[];
+  volatility_annual?: number | null;
+  volatility_percentile?: number | null;
+  risk_as_of?: string | null;
 }
 
 export interface PredictionRow {
@@ -170,7 +174,15 @@ export function mapStockDetail(
     asOf: prediction.data_asof ?? prediction.prediction_date,
     ...(prediction.horizon ? { returnHorizon: prediction.horizon } : {}),
     reasons: mapPredictionReasons(featureRows),
+    ...masterVolatility(stock),
   };
+}
+
+// 종목 마스터의 1년 변동성·백분위(0014). 없으면 넣지 않는다.
+export function masterVolatility(stock: StockRow): Pick<StockDetail, "volatilityAnnual" | "volatilityPercentile" | "riskAsOf"> {
+  return stock.volatility_annual != null && stock.volatility_percentile != null
+    ? { volatilityAnnual: stock.volatility_annual, volatilityPercentile: stock.volatility_percentile, riskAsOf: stock.risk_as_of ?? undefined }
+    : {};
 }
 
 export function mapPredictionReasons(
@@ -213,17 +225,18 @@ export function mapPortfolioHolding(
   holding: PortfolioHoldingRow,
   stock: StockRow,
   prediction?: PredictionRow,
+  closes: LatestCloses = new Map(),
 ): PortfolioHolding {
+  const live = closes.get(holding.stock_code);
   return {
     code: holding.stock_code,
     name: stock.name,
     signalLight:
-      prediction && includes(SIGNAL_LIGHTS, prediction.signal_light)
-        ? prediction.signal_light
-        : "neutral",
+      live?.signal ??
+      (prediction && includes(SIGNAL_LIGHTS, prediction.signal_light) ? prediction.signal_light : "neutral"),
     quantity: holding.quantity,
-    ...weightPrice(holding),
-    provenance: SUPABASE_DEMO,
+    ...weightPrice(holding, closes),
+    provenance: live?.signal ? chartProvenance(live.asOf) : SUPABASE_DEMO,
   };
 }
 
@@ -258,7 +271,7 @@ export function toRiskFlags(values: string[]): RiskFlag[] {
   return values.filter((value): value is RiskFlag => includes(RISK_FLAGS, value));
 }
 
-function toRiskGrade(value: number): RiskGrade {
+export function toRiskGrade(value: number): RiskGrade {
   if (![1, 2, 3, 4, 5].includes(value)) {
     throw new Error(`지원하지 않는 위험 등급입니다: ${value}`);
   }
@@ -290,8 +303,9 @@ function includes<T extends string>(values: readonly T[], value: unknown): value
   return typeof value === "string" && values.includes(value as T);
 }
 
-// 평균 매입가가 비어 있으면 기준일 종가로 비중을 센다(화면에 "현재가 기준"으로 표시).
-function weightPrice(holding: PortfolioHoldingRow): Pick<PortfolioHolding, "avgBuyPrice" | "priceBasis"> {
-  const { price, basis } = costBasis(holding.avg_buy_price, CLOSING_PRICE[holding.stock_code]);
-  return { avgBuyPrice: price, priceBasis: basis };
+// 최신 종가가 있으면 평가금액, 없으면 매입금액으로 비중을 센다.
+function weightPrice(holding: PortfolioHoldingRow, closes: LatestCloses): Pick<PortfolioHolding, "avgBuyPrice" | "priceBasis" | "priceAsOf"> {
+  const latest = closes.get(holding.stock_code);
+  const { price, basis } = costBasis(holding.avg_buy_price, latest?.close);
+  return { avgBuyPrice: price, priceBasis: basis, ...(latest ? { priceAsOf: latest.asOf } : {}) };
 }

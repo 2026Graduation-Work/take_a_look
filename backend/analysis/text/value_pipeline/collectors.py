@@ -22,6 +22,15 @@ from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from pathlib import Path
 
+try:
+    # 0.2.4+/0.3.x: 패키지·모듈명이 소문자로 변경됐다.
+    from opendartreader import OpenDartReader
+except ModuleNotFoundError as exc:
+    if exc.name != "opendartreader":
+        raise
+    # Python 3.12에서 설치되는 마지막 호환 버전(0.2.2)은 대문자 모듈명을 쓴다.
+    import OpenDartReader  # type: ignore[no-redef]
+
 from . import newsapi_ai
 from .config import SETTINGS
 
@@ -368,8 +377,6 @@ def _fetch_dart_by_fiscal_year(ticker: str, year: int) -> dict:
     DART 계정명/구조가 회사마다 달라 best-effort 매핑이며,
     매핑 실패 항목은 결측(None)으로 남아 지표가 부분 계산된다.
     """
-    import OpenDartReader
-
     dart = OpenDartReader(SETTINGS.dart_api_key)
     fs = dart.finstate_all(ticker, year)  # 연결재무제표(CFS) 전체 계정
     if fs is None or len(fs) == 0:
@@ -465,8 +472,6 @@ def _fetch_latest_shares(ticker: str) -> float | None:
     같은 계열 사고의 회귀 테스트: test_select_fiscal_year_does_not_depend_on_today).
     유효값이 하나도 없으면 None → per/pbr/altman_z가 결측으로 남는다(정직한 결측).
     """
-    import OpenDartReader
-
     start = SETTINGS.shares_asof_year
     stale_by = dt.date.today().year - 1 - start
     if stale_by > 0:

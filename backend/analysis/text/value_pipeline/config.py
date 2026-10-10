@@ -3,7 +3,7 @@
 .env 파일(있으면 자동 로드)에 다음을 넣으면 실데이터로 전환된다:
     GEMINI_API_KEY=...          # https://aistudio.google.com (무료 티어)
     DART_API_KEY=...            # https://opendart.fss.or.kr (무료)
-    NEWSAPI_AI_KEY=...          # https://newsapi.ai (Event Registry)
+    NEWSAPI_AI_KEY              # https://newsapi.ai (Event Registry) 발급 키
 """
 from __future__ import annotations
 

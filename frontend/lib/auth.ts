@@ -4,8 +4,10 @@ import type { User } from "@supabase/supabase-js";
 import {
   PROFILE_STORAGE_KEY,
   PROFILE_UPDATED_EVENT,
+  displayNameFor,
   parseSavedProfile,
 } from "./save-profile";
+import { isRecord } from "./profiling-rules";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 
@@ -24,6 +26,7 @@ export interface OnboardingState {
   mode: "demo" | "supabase";
   userId?: string;
   displayName?: string;
+  email?: string;
   error?: string;
 }
 
@@ -84,6 +87,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
       mode: "supabase",
       userId: user.id,
       displayName,
+      email: user.email,
     };
   }
 
@@ -102,6 +106,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
       mode: "supabase",
       userId: user.id,
       displayName,
+      email: user.email,
     };
   }
 
@@ -111,6 +116,7 @@ async function resolveSupabaseProfile(user: User): Promise<OnboardingState> {
     mode: "supabase",
     userId: user.id,
     displayName,
+    email: user.email,
   };
 }
 
@@ -140,31 +146,20 @@ export function startDemoSession(): void {
   window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
 }
 
-export async function requestMagicLink(email: string): Promise<void> {
-  const client = getSupabaseClient();
-  if (!client) throw new Error("계정 기능이 아직 연결되지 않았어요.");
 
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login`,
-    },
-  });
-  if (error) throw new Error(`로그인 링크 전송 실패: ${koreanAuthError(error.message)}`);
-}
-
-// 비밀번호 가입. 메일 발송 한도에 막혀도 시연할 수 있도록 매직링크와 별도로 둔다.
+// 비밀번호 가입.
 // Supabase에서 이메일 확인이 켜져 있으면 세션 없이 돌아오고, 확인 메일을 눌러야 로그인된다.
 export async function signUpWithPassword(
   email: string,
   password: string,
+  name: string,
 ): Promise<{ needsEmailConfirmation: boolean }> {
   const client = getSupabaseClient();
   if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
   const { data, error } = await client.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${window.location.origin}/login` },
+    options: { emailRedirectTo: `${window.location.origin}/login`, data: { full_name: name } },
   });
   if (error) throw new Error(`가입 실패: ${koreanAuthError(error.message)}`);
   return { needsEmailConfirmation: !data.session };
@@ -192,9 +187,18 @@ export function koreanAuthError(message: string): string {
   return message;
 }
 
+// 계정과 Supabase에 저장된 성향·보유·관심·메모를 모두 지운다(0008 delete_my_account, cascade).
+export async function deleteAccount(): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
+  const { error } = await client.rpc("delete_my_account");
+  if (error) throw new Error(`계정 삭제 실패: ${error.message}`);
+}
+
 export async function signOut(): Promise<void> {
   // 데모 계정은 Supabase 세션이 없으므로 로컬만 지운다.
-  const client = readDemoSession() ? null : getSupabaseClient();
+  const demo = readDemoSession() !== null;
+  const client = demo ? null : getSupabaseClient();
   let signOutError: Error | null = null;
   if (client) {
     const { error } = await client.auth.signOut({ scope: "local" });
@@ -202,6 +206,9 @@ export async function signOut(): Promise<void> {
   }
 
   window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
+  // 보유 종목은 개인 금융 정보라 계정과 관계없이 지운다. 공용 PC에서 다음 사람에게 남지 않게.
+  // 로그인 계정은 다시 로그인하면 Supabase에서 읽어 온다.
+  window.localStorage.removeItem(STORAGE_KEYS.holdings);
   clearSavedProfile();
   window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));
 
@@ -260,12 +267,6 @@ function readDemoSession(): DemoSession | null {
   }
 }
 
-function displayNameFor(user: User, storedName?: string | null): string {
-  if (storedName?.trim()) return storedName.trim();
-  const fullName = user.user_metadata.full_name;
-  if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
-  return user.email?.split("@")[0] || "사용자";
-}
 
 function syncSavedProfile(value: unknown): void {
   const serialized = JSON.stringify(value);
@@ -279,11 +280,10 @@ function syncSavedProfile(value: unknown): void {
 }
 
 function clearSavedProfile(): void {
+  window.localStorage.removeItem(STORAGE_KEYS.surveyAnswers);
+  window.localStorage.removeItem(STORAGE_KEYS.watchlist);
+  window.localStorage.removeItem(STORAGE_KEYS.stockNotes);
   if (!window.localStorage.getItem(PROFILE_STORAGE_KEY)) return;
   window.localStorage.removeItem(PROFILE_STORAGE_KEY);
   window.dispatchEvent(new Event(PROFILE_UPDATED_EVENT));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

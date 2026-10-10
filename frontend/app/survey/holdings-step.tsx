@@ -7,6 +7,7 @@ import { useState } from "react";
 import { isValidHolding, saveHoldings, type SavedHolding } from "@/lib/save-holdings";
 import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import { useStockOptions } from "../portfolio/use-stock-options";
+import StepNav from "../components/step-nav";
 
 // 데모 계정은 김민지 예시 보유 종목을 미리 채워 둔다.
 const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity, avgBuyPrice }) => ({
@@ -17,7 +18,7 @@ const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity,
 }));
 
 const field =
-  "h-11 w-full rounded-md bg-field px-3.5 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
+  "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
 
 function parseCount(value: string): number {
   const parsed = Number.parseInt(value.replaceAll(",", "").trim(), 10);
@@ -26,9 +27,11 @@ function parseCount(value: string): number {
 
 export default function HoldingsStep({
   mode,
+  onBack,
   onDone,
 }: {
   mode: "demo" | "supabase";
+  onBack: () => void;
   onDone: () => void;
 }) {
   const demo = mode === "demo";
@@ -73,15 +76,14 @@ export default function HoldingsStep({
       await saveHoldings(next, mode);
       onDone();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "저장하지 못했어요.");
+      setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
       setSaving(false);
     }
   }
 
   return (
     <section aria-labelledby="holdings-step-title" className="surface flex flex-col gap-6 px-6 py-8 sm:px-10">
-      <div className="flex flex-col gap-1.5">
-        <span className="eyebrow">2단계 · 보유 종목</span>
+      <div className="flex flex-col gap-2">
         <h1 id="holdings-step-title" className="text-3xl font-semibold">
           지금 가진 주식이 있나요?
         </h1>
@@ -114,10 +116,10 @@ export default function HoldingsStep({
                   <button
                     type="button"
                     onClick={() => setRows((current) => current.filter(({ code }) => code !== row.code))}
-                    className="text-xs font-medium text-danger hover:underline"
-                    aria-label={`${row.name} 빼기`}
+                    className="btn-remove"
+                    aria-label={`${row.name} 삭제`}
                   >
-                    빼기
+                    삭제
                   </button>
                 </li>
               ))}
@@ -131,7 +133,7 @@ export default function HoldingsStep({
             }}
             className="flex flex-col gap-3"
           >
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">종목 검색</span>
               <input
                 list="onboarding-stock-catalog"
@@ -149,11 +151,11 @@ export default function HoldingsStep({
               </datalist>
             </label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">수량(주)</span>
                 <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="10" className={field} />
               </label>
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
                 <input
                   inputMode="numeric"
@@ -175,14 +177,14 @@ export default function HoldingsStep({
             </p>
           )}
 
-          <div className="flex flex-col-reverse gap-3 border-t border-line-soft pt-6 sm:flex-row sm:items-center sm:justify-end">
-            <button type="button" onClick={() => void finish([])} disabled={saving} className="btn-text text-sm sm:mr-auto">
-              아직 없어요
-            </button>
-            <button type="button" onClick={() => void finish(rows)} disabled={saving || rows.length === 0} className="btn-primary">
-              {saving ? "저장 중" : "저장하고 시작"}
-            </button>
-          </div>
+          <StepNav
+            className="border-t border-line-soft pt-6"
+            onBack={() => setAnswer(null)}
+            backDisabled={saving}
+            nextLabel={saving ? "저장 중" : "저장하고 시작"}
+            onNext={() => void finish(rows)}
+            nextDisabled={saving || rows.length === 0}
+          />
         </>
       )}
 
@@ -191,6 +193,7 @@ export default function HoldingsStep({
           {error}
         </p>
       )}
+      {answer === null && <StepNav className="border-t border-line-soft pt-6" onBack={onBack} backDisabled={saving} />}
     </section>
   );
 }

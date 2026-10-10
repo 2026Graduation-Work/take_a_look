@@ -1,8 +1,9 @@
 "use client";
 
+import type { User } from "@supabase/supabase-js";
 import type { ProfilingOutput } from "./types";
-import { isStyleAxes, threeAxisSummary } from "./profiling-rules";
-import { getSupabaseClient } from "./supabase";
+import { isRecord, isStyleAxes, threeAxisSummary } from "./profiling-rules";
+import { assertOk, getSupabaseClient } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
 
 export const PROFILE_STORAGE_KEY = STORAGE_KEYS.profile;
@@ -22,15 +23,11 @@ export async function saveProfile(
   }
 
   const { data, error: userAuthError } = await client.auth.getUser();
-  assertSupabaseResult(userAuthError, "로그인 사용자 확인");
+  assertOk(userAuthError, "로그인 사용자 확인");
   if (!data.user) throw new Error("로그인 후 설문 결과를 저장할 수 있습니다.");
 
   const now = new Date().toISOString();
-  const metadata = data.user.user_metadata;
-  const displayName =
-    typeof metadata.full_name === "string" && metadata.full_name.trim()
-      ? metadata.full_name.trim()
-      : profile.user_id;
+  const displayName = displayNameFor(data.user);
   const avatarLabel = Array.from(displayName)[0] ?? "";
 
   const authUserId = data.user.id;
@@ -39,7 +36,7 @@ export async function saveProfile(
     .select("id")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  assertSupabaseResult(existingUserError, "기존 사용자 확인");
+  assertOk(existingUserError, "기존 사용자 확인");
 
   // Supabase Auth ID를 최초 DB 사용자 ID로 사용하고, 재설문 시 기존 ID를 재사용한다.
   const userId = (existingUser as { id: string } | null)?.id ?? authUserId;
@@ -54,7 +51,7 @@ export async function saveProfile(
     },
     { onConflict: "auth_user_id" },
   );
-  assertSupabaseResult(userError, "사용자 저장");
+  assertOk(userError, "사용자 저장");
 
   const investor = profile.investor_profile;
   const psychology = profile.psychological_state;
@@ -102,31 +99,16 @@ export async function saveProfile(
     },
     { onConflict: "user_id" },
   );
-  assertSupabaseResult(profileError, "IPS 프로필 저장");
+  assertOk(profileError, "IPS 프로필 저장");
 
-  const [avoidedReset, holdingsReset, watchlistReset] = await Promise.all([
-    client
-      .from("avoided_assets")
-      .update({ is_active: false, updated_at: now })
-      .eq("user_id", userId),
-    client
-      .from("portfolio_holdings")
-      .update({ is_active: false, updated_at: now })
-      .eq("user_id", userId),
-    client
-      .from("watchlist")
-      .update({ is_active: false, updated_at: now })
-      .eq("user_id", userId),
-  ]);
-  assertSupabaseResult(avoidedReset.error, "기존 회피 설정 비활성화");
-  assertSupabaseResult(holdingsReset.error, "기존 보유 종목 비활성화");
-  assertSupabaseResult(watchlistReset.error, "기존 관심 종목 비활성화");
-
-  await Promise.all([
-    upsertAvoidedAssets(profile, userId, now),
-    upsertPortfolioHoldings(profile, userId, now),
-    upsertWatchlist(profile, userId, now),
-  ]);
+  // 보유 종목(save-holdings.ts)·관심 종목(watchlist.ts)은 각자 저장한다. 성향을 다시 저장해도 건드리지 않는다
+  // (전에는 여기서 둘 다 비활성화한 뒤 설문 payload의 빈 목록으로 덮어 다시 진단할 때마다 지워졌다).
+  const { error: avoidedResetError } = await client
+    .from("avoided_assets")
+    .update({ is_active: false, updated_at: now })
+    .eq("user_id", userId);
+  assertOk(avoidedResetError, "기존 회피 설정 비활성화");
+  await upsertAvoidedAssets(profile, userId, now);
 
   persistProfile(storedProfile);
 }
@@ -153,77 +135,9 @@ async function upsertAvoidedAssets(
     })),
     { onConflict: "user_id,asset_type" },
   );
-  assertSupabaseResult(error, "회피 설정 저장");
+  assertOk(error, "회피 설정 저장");
 }
 
-async function upsertPortfolioHoldings(
-  profile: ProfilingOutput,
-  userId: string,
-  updatedAt: string,
-): Promise<void> {
-  if (!profile.portfolio.holdings.length) return;
-  const client = getSupabaseClient();
-  if (!client) return;
-
-  const tickers = profile.portfolio.holdings.map(({ ticker }) => ticker);
-  const { data, error: stockError } = await client
-    .from("stocks")
-    .select("code")
-    .in("code", tickers);
-  assertSupabaseResult(stockError, "보유 종목 마스터 확인");
-  const knownCodes = new Set(
-    ((data ?? []) as { code: string }[]).map(({ code }) => code),
-  );
-  const rows = profile.portfolio.holdings.flatMap((holding, index) =>
-    knownCodes.has(holding.ticker)
-      ? [
-          {
-            user_id: userId,
-            stock_code: holding.ticker,
-            quantity: holding.quantity,
-            avg_buy_price: holding.avg_buy_price,
-            display_order: index + 1,
-            is_active: true,
-            updated_at: updatedAt,
-          },
-        ]
-      : [],
-  );
-  if (!rows.length) return;
-
-  const { error } = await client.from("portfolio_holdings").upsert(rows, {
-    onConflict: "user_id,stock_code",
-  });
-  assertSupabaseResult(error, "보유 종목 저장");
-}
-
-async function upsertWatchlist(
-  profile: ProfilingOutput,
-  userId: string,
-  updatedAt: string,
-): Promise<void> {
-  if (!profile.portfolio.watchlist.length) return;
-  const client = getSupabaseClient();
-  if (!client) return;
-  const { error } = await client.from("watchlist").upsert(
-    profile.portfolio.watchlist.map((stockCode, index) => ({
-      user_id: userId,
-      stock_code: stockCode,
-      display_order: index + 1,
-      is_active: true,
-      updated_at: updatedAt,
-    })),
-    { onConflict: "user_id,stock_code" },
-  );
-  assertSupabaseResult(error, "관심 종목 저장");
-}
-
-function assertSupabaseResult(
-  error: { message: string } | null,
-  operation: string,
-): asserts error is null {
-  if (error) throw new Error(`${operation} 실패: ${error.message}`);
-}
 
 export function getSavedProfileSnapshot(): string | null {
   if (typeof window === "undefined") return null;
@@ -296,6 +210,11 @@ function isProfilingOutput(value: unknown): value is ProfilingOutput {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+// 헤더 이름: 저장된 이름 → 가입 때 받은 이름 → 이메일 앞부분.
+export function displayNameFor(user: User, storedName?: string | null): string {
+  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다. 그 값은 건너뛴다.
+  if (storedName?.trim() && storedName !== "u_minji_001") return storedName.trim();
+  const fullName = user.user_metadata.full_name;
+  if (typeof fullName === "string" && fullName.trim()) return fullName.trim();
+  return user.email?.split("@")[0] || "사용자";
 }

@@ -1,4 +1,4 @@
-"""H5/H20 inference and signed class-2 raw-margin explanations."""
+"""H5/H20 inference and signed explanations of the highest-scoring class."""
 
 import hashlib
 import json
@@ -7,6 +7,8 @@ import math
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+
+from .progress import stage
 
 BASE_INFO = {
     "Change": ("전일 대비 등락", "수정종가의 전일 대비 변화율"),
@@ -58,6 +60,7 @@ WINDOW_INFO = {
     "vsumd": ("거래량 증감 차이", "증가 비중에서 감소 비중을 뺀 값"),
 }
 
+
 for investor, label in (("individual", "개인"), ("institution", "기관"), ("foreign", "외국인")):
     for window in (1, 5, 20):
         BASE_INFO[f"flow_{investor}_{window}"] = (
@@ -76,7 +79,7 @@ def feature_info(name):
     raise ValueError(f"Unreviewed feature name: {name}")
 
 
-def infer_batch(model, features):
+def infer_batch(model, features, *, class_index=None):
     """One model call per horizon for all valid current stock rows."""
     if isinstance(model, (str, bytes)) or hasattr(model, "__fspath__"):
         model = lgb.Booster(model_file=str(model))
@@ -86,21 +89,27 @@ def infer_batch(model, features):
     frame = features[names].astype(float)
     values = frame.to_numpy()
     if np.isinf(values).any():
-        raise ValueError("Infinite feature input")
-    scores = np.asarray(model.predict(frame, num_threads=2), dtype=float)
-    raw = np.asarray(model.predict(frame, raw_score=True, num_threads=2), dtype=float)
-    contributions = np.asarray(model.predict(frame, pred_contrib=True, num_threads=2), dtype=float)
+        bad = [(str(frame.index[row]), names[column]) for row, column in zip(*np.where(np.isinf(values)))]
+        raise ValueError(f"Infinite feature input (stock, feature): {bad[:20]}")
+    with stage("prediction_scores", rows=len(frame)):
+        scores = np.asarray(model.predict(frame, num_threads=2), dtype=float)
+    with stage("prediction_raw_scores", rows=len(frame)):
+        raw = np.asarray(model.predict(frame, raw_score=True, num_threads=2), dtype=float)
+    with stage("prediction_contributions", rows=len(frame)):
+        contributions = np.asarray(model.predict(frame, pred_contrib=True, num_threads=2), dtype=float)
     if (scores.shape != (len(frame), 3) or raw.shape != (len(frame), 3)
         or contributions.shape != (len(frame), 3 * (len(names) + 1))
         or not np.isfinite(scores).all() or not np.isfinite(raw).all()
         or not np.isfinite(contributions).all() or not np.allclose(scores.sum(axis=1), 1)):
         raise ValueError("Invalid multiclass output")
-    up_contrib = contributions.reshape(len(frame), 3, len(names) + 1)[:, 2]
+    all_contrib = contributions.reshape(len(frame), 3, len(names) + 1)
     result = []
-    for row_index, (row_values, row_contrib) in enumerate(zip(values, up_contrib)):
-        if not math.isclose(float(row_contrib.sum()), float(raw[row_index, 2]),
+    for row_index, row_values in enumerate(values):
+        target = int(np.argmax(scores[row_index])) if class_index is None else class_index
+        row_contrib = all_contrib[row_index, target]
+        if not math.isclose(float(row_contrib.sum()), float(raw[row_index, target]),
                             rel_tol=1e-6, abs_tol=1e-8):
-            raise ValueError("Class-2 contributions do not sum to raw score")
+            raise ValueError("Selected-class contributions do not sum to raw score")
         ordered = sorted(range(len(names)), key=lambda i: (-abs(row_contrib[i]), names[i]))[:5]
         features_top = []
         for index in ordered:
@@ -113,7 +122,8 @@ def infer_batch(model, features):
         feature_hash = hashlib.sha256(canonical.encode()).hexdigest()
         result.append(({"down": float(scores[row_index, 0]),
                         "neutral": float(scores[row_index, 1]),
-                        "up": float(scores[row_index, 2])}, features_top, feature_hash))
+                        "up": float(scores[row_index, 2])}, features_top, feature_hash,
+                       float(np.abs(row_contrib[:-1]).sum())))
     return result
 
 

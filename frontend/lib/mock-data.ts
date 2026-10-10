@@ -55,7 +55,7 @@ const hyundaiMotor: RecommendedStock = {
 const celltrion: RecommendedStock = {
   code: "068270",
   name: "셀트리온",
-  market: "KOSDAQ",
+  market: "KOSPI",
   riskGrade: 2,
   signalLight: "neutral",
   rankPercentile: 0.59,
@@ -245,7 +245,7 @@ export const stockDetails: Record<string, StockDetail> = {
       },
     ],
     aiAdvice:
-      "삼성전자의 모델 신호는 긍정이고, 1주·2주·4주 뒤 방향이 모두 오르는 쪽이에요. 과거 비슷한 신호 128건의 2주 뒤 수익률은 -0.8%에서 +4.2% 사이였고, 실제로 오른 경우는 61%였어요. 위험도는 낮음으로 김민지님이 답한 위험 감수(33) 범위 안에 있고, 범위가 좁은 편이라 흔들림 민감도(65)가 높은 김민지님에게 오르내림 부담이 덜한 편이에요.",
+      "삼성전자의 모델 신호는 상방이고, 1주·2주·4주 뒤 방향이 모두 오르는 쪽이에요. 과거 비슷한 신호 128건의 2주 뒤 수익률은 -0.8%에서 +4.2% 사이였고, 실제로 오른 경우는 61%였어요. 위험도는 낮음으로 김민지님이 답한 위험 감수(33) 범위 안에 있고, 범위가 좁은 편이라 흔들림 민감도(65)가 높은 김민지님에게 오르내림 부담이 덜한 편이에요.",
   },
   [hyundaiMotor.code]: {
     ...hyundaiMotor,
@@ -286,7 +286,7 @@ export const stockDetails: Record<string, StockDetail> = {
       },
     ],
     aiAdvice:
-      "현대차의 모델 신호는 강한 긍정으로, 오늘 분석한 종목 중 상위 5%예요. 과거 비슷한 신호 52건의 2주 뒤 수익률은 +0.6%에서 +7.2% 사이로 아래쪽 끝도 0% 위였고, 실제로 오른 경우는 66%였어요. 다만 비슷한 사례가 52건으로 많지 않아, 사례가 더 많은 신호보다 범위를 덜 믿을 만해요. 위험도는 낮음이에요.",
+      "현대차의 모델 신호는 강한 상방으로, 오늘 분석한 종목 중 상위 5%예요. 과거 비슷한 신호 52건의 2주 뒤 수익률은 +0.6%에서 +7.2% 사이로 아래쪽 끝도 0% 위였고, 실제로 오른 경우는 66%였어요. 다만 비슷한 사례가 52건으로 많지 않아, 사례가 더 많은 신호보다 범위를 덜 믿을 만해요. 위험도는 낮음이에요.",
   },
 };
 
@@ -301,3 +301,9 @@ export const KNOWN_STOCKS: { code: string; name: string }[] = [
   celltrion,
   kakao,
 ].map(({ code, name }) => ({ code, name }));
+
+// 코드 → 이름. 로그인 사용자의 관심 종목(Supabase에는 코드만 있다)에 이름을 붙일 때 쓴다.
+export const STOCK_NAMES: Record<string, string> = Object.fromEntries([
+  ...KNOWN_STOCKS.map(({ code, name }) => [code, name]),
+  ...Object.values(stockDetails).map(({ code, name }) => [code, name]),
+]);

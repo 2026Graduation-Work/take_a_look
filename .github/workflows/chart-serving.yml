@@ -2,14 +2,34 @@ name: Daily chart serving
 
 on:
   schedule:
-    # GitHub cron uses UTC: weekdays 18:30 Asia/Seoul.
-    - cron: "30 9 * * 1-5"
+    # GitHub cron uses UTC: weekdays 18:47 Asia/Seoul. :00/:30 are avoided (queue delays, 10/08 started 7h late).
+    - cron: "47 9 * * 1-5"
   workflow_dispatch:
     inputs:
       as_of:
         description: "Confirmed KRX date (YYYY-MM-DD); leave empty for latest"
         required: false
         type: string
+      diagnose:
+        description: "Check KRX login and reads only (no database writes)"
+        type: boolean
+        default: false
+      publish_preview:
+        description: "Publish the recorded 2026-09-21 display-test batch only"
+        type: boolean
+        default: false
+      replay:
+        description: "Use archived inputs; requires as_of"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Store price/feature inputs and validate results without publishing a new batch"
+        type: boolean
+        default: false
+      supply_only:
+        description: "Collect investor net purchases only (skip serving)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,18 +41,19 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
     defaults:
       run:
         working-directory: backend/analysis/chart
     env:
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
       CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/workspace/serving
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
       KRX_ID: ${{ secrets.KRX_ID }}
       KRX_PW: ${{ secrets.KRX_PW }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
 
@@ -47,31 +68,76 @@ jobs:
       - name: Install serving dependencies
         run: python -m pip install -r serving/requirements.txt
 
-      - name: Check publishing secrets
+      - name: Validate execution mode
+        env:
+          DIAGNOSE: ${{ inputs.diagnose }}
+          PREVIEW: ${{ inputs.publish_preview }}
+          REPLAY: ${{ inputs.replay }}
+          AS_OF: ${{ inputs.as_of }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
-          test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
+          if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ -n "$AS_OF" ]; }; then
+            echo "Preview cannot combine with diagnose, replay, dry_run or as_of"; exit 1
+          fi
+
+      - name: Check required secrets
+        run: |
           test -n "$KRX_ID" || { echo "KRX_ID secret is missing"; exit 1; }
           test -n "$KRX_PW" || { echo "KRX_PW secret is missing"; exit 1; }
+          test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
+          test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
+
+      - name: Diagnose KRX authentication and reads
+        if: ${{ inputs.diagnose == true }}
+        run: python -m serving.run_daily --diagnose
 
       - name: Download and verify configured model pack
-        run: |
-          for attempt in 1 2 3; do
-            if python -m serving.pack download --config serving/config.yaml; then
-              exit 0
-            fi
-            if [ "$attempt" -eq 3 ]; then
-              exit 1
-            fi
-            sleep 15
-          done
+        if: ${{ inputs.diagnose != true && inputs.supply_only != true }}
+        run: python -m serving.pack download --config serving/config.yaml
 
-      - name: Collect, infer, and publish
+      - name: Publish recorded display-test batch
+        if: ${{ inputs.publish_preview == true }}
+        run: python -m serving.publish_preview --publish
+
+      - name: Collect, archive and publish confirmed daily results
+        if: ${{ inputs.diagnose != true && inputs.publish_preview != true && inputs.supply_only != true }}
         env:
+          REPLAY: ${{ inputs.replay }}
           REQUESTED_AS_OF: ${{ inputs.as_of }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           args=(--publish)
+          if [ "$DRY_RUN" = "true" ]; then args=(--dry-run); fi
+          if [ "$REPLAY" = "true" ]; then args+=(--replay); fi
           if [ -n "$REQUESTED_AS_OF" ]; then
             args+=(--as-of "$REQUESTED_AS_OF")
           fi
           python -m serving.run_daily "${args[@]}"
+
+      # 무료 한도 보존 정리(요약 로그 적재, 게시 배치 5개, 입력 파일 30일, 뉴스 원문 90일). 실패해도 게시는 그대로다.
+      - name: Retention (prediction log, batches, inputs, articles)
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
+        continue-on-error: true
+        run: python -m serving.retention
+
+      # 투자자별 순매수(시장 전체, 하루 3회 호출). 실패해도 게시는 그대로다.
+      - name: Investor net purchases
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        continue-on-error: true
+        run: python -m serving.supply
+
+      - name: Save validation outputs
+        if: ${{ always() && inputs.diagnose != true && inputs.supply_only != true }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: chart-validation-${{ github.run_id }}
+          path: backend/analysis/chart/workspace/serving/batches/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # 종목 마스터(stocks)를 오늘 universe로 넣고 고친다(지우지 않음). 서빙 결과와 별개 step이라 실패해도 게시는 그대로다.
+      - name: Sync stock master from universe
+        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
+        run: |
+          python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
+          python -m serving.stock_master

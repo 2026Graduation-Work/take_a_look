@@ -19,7 +19,8 @@ export interface NudgeMarket {
   volatilityPercentile: number; // 0~1, 시장 내 변동성 백분위. 1 = 가장 큼
   drawdownFrom3mHigh: number; // 3개월 고점 대비. -0.15 = -15%
   return3d: number; // 최근 3거래일 누적. 0.10 = +10%
-  sentimentChange: number; // 뉴스 감성 점수(-1~1)의 전일 대비 변화량
+  sentimentChange: number | null; // 뉴스 감성(-1~1) 최근 두 수집일(Live 일별) 변화량. 두 날이 없거나 기사가 적으면 null
+  sentimentDayLabel: string; // 최근 수집일 말: 오늘 수집이면 "오늘", 아니면 "10.08에" — 지난 날을 "오늘"이라 부르지 않는다
   isTopHolding: boolean; // 보유 종목 중 비중 1위
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
@@ -51,7 +52,7 @@ interface NudgeRule {
   axis: StyleAxisId;
   side: 1 | -1;
   market: (m: NudgeMarket) => boolean;
-  text: string;
+  text: string | ((m: NudgeMarket) => string);
 }
 
 const always = () => true;
@@ -110,8 +111,8 @@ export const NUDGES: readonly NudgeRule[] = [
     // urgency: -1=여유, +1=조급함
     axis: "urgency",
     side: 1,
-    market: (m) => Math.abs(m.sentimentChange) >= SENTIMENT_SHIFT,
-    text: "오늘 이 종목의 뉴스 분위기가 어제와 크게 달라졌어요. 여러 기사가 같은 일을 다루고 있을 수 있어요.",
+    market: (m) => m.sentimentChange !== null && Math.abs(m.sentimentChange) >= SENTIMENT_SHIFT,
+    text: (m) => `${m.sentimentDayLabel} 이 종목의 뉴스 분위기가 직전 수집일과 크게 달라졌어요. 여러 기사가 같은 일을 다루고 있을 수 있어요.`,
   },
   {
     id: "N08",
@@ -136,7 +137,7 @@ export const NUDGES: readonly NudgeRule[] = [
     axis: "rule_adherence",
     side: 1,
     market: always,
-    text: "미리 정한 매매 기준을 지키기 어려운 편이라고 답하셨어요. 다시 볼 가격(손절선·목표가)을 정해 두셨다면 지금 확인해 보세요.",
+    text: "미리 정한 매매 기준을 지키기 어려운 편이라고 답하셨어요. 이 종목에 적어 둔 판단 메모가 있다면 지금 다시 읽어 보세요.",
   },
   {
     id: "N11",
@@ -147,6 +148,14 @@ export const NUDGES: readonly NudgeRule[] = [
     text: "이 종목의 위험도는 높은 편이에요. 원금이 줄어드는 데 민감한 편이라고 답하셨어요.",
   },
 ];
+
+// 체크포인트 줄(최대 MAX_VISIBLE_NUDGES). 위험도 안내는 한 줄만(#256): 성향 숫자가 들어간 riskNote가 있으면
+// N11 자리를 대신하고, N11이 없으면 뒤에 붙는다.
+export function checkpointItems(nudges: FiredNudge[], riskNote: string | null): { key: string; text: string }[] {
+  const items = nudges.map(({ id, text }) => (id === "N11" && riskNote ? { key: "risk", text: riskNote } : { key: id, text }));
+  if (riskNote && !nudges.some(({ id }) => id === "N11")) items.push({ key: "risk", text: riskNote });
+  return items.slice(0, MAX_VISIBLE_NUDGES);
+}
 
 // 넛지가 아니라 화면 하단 안내 배너(기존 N12). BIT 스펙트럼 수동 쪽 두 유형에만 보인다.
 export const SCREEN_GUIDE_NOTICE: { appliesTo: readonly BitType[]; text: string } = {
@@ -177,5 +186,5 @@ export function selectNudges(
       return true;
     })
     .slice(0, limit)
-    .map(({ id, text, axis }) => ({ id, text, axis, ratio: bit.ratios[axis] }));
+    .map(({ id, text, axis }) => ({ id, text: typeof text === "function" ? text(market) : text, axis, ratio: bit.ratios[axis] }));
 }

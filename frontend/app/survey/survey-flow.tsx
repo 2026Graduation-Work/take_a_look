@@ -29,12 +29,14 @@ import type { ProfilingOutput, RiskFlag, StyleAxes, StyleAxisId } from "@/lib/ty
 import { useOnboarding } from "../components/onboarding-provider";
 import SignOutButton from "../components/sign-out-button";
 import HoldingsStep from "./holdings-step";
+import StepNav from "../components/step-nav";
 import Wordmark from "@/components/brand/Wordmark";
 import LogoMark from "@/components/brand/LogoMark";
-import { SERVICE_NAME, SERVICE_TAGLINE } from "@/lib/brand";
+import { SERVICE_NAME } from "@/lib/brand";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 
 const DRAFT_KEY = STORAGE_KEYS.surveyDraft;
+const ANSWERS_KEY = STORAGE_KEYS.surveyAnswers;
 const ADVANCE_DELAY_MS = 180; // 고른 답이 눌린 것을 보여 준 뒤 다음 문항으로
 
 type SurveyMode = "short" | "quick";
@@ -115,9 +117,9 @@ const DEMO_PORTFOLIO: ProfilingOutput["portfolio"] = {
 // https·localhost는 secure context라 randomUUID가 항상 있다.
 const createSessionId = () => `s_${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
 
-function readDraft(): Draft | null {
+function readDraft(key: string = DRAFT_KEY): Draft | null {
   try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(DRAFT_KEY) ?? "null");
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? "null");
     if (!parsed || typeof parsed !== "object") return null;
     const draft = { ...EMPTY_DRAFT, ...(parsed as Partial<Draft>) };
     if (draft.mode !== "short" && draft.mode !== "quick") draft.mode = "short";
@@ -128,10 +130,10 @@ function readDraft(): Draft | null {
   }
 }
 
-function writeDraft(draft: Draft | null) {
+function writeDraft(draft: Draft | null, key: string = DRAFT_KEY) {
   try {
-    if (draft) window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    else window.localStorage.removeItem(DRAFT_KEY);
+    if (draft) window.localStorage.setItem(key, JSON.stringify(draft));
+    else window.localStorage.removeItem(key);
   } catch {
     // 저장이 막힌 브라우저(시크릿 모드 등)에서는 중간 저장만 건너뛴다.
   }
@@ -147,20 +149,25 @@ export default function SurveyFlow() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [result, setResult] = useState<ProfilingOutput | null>(null);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // 중간 저장 불러오기. localStorage는 브라우저에서만 읽을 수 있어 마운트 후에 한 번 읽는다.
+  // 다시 진단은 지난 답이 채워진 상태로 1번부터 시작한다(답하던 중간 저장이 있으면 그쪽이 먼저).
   useEffect(() => {
     const stored = readDraft();
-    if (!stored) return;
+    const previous = firstRun ? null : readDraft(ANSWERS_KEY);
+    if (!stored && !previous) return;
     /* eslint-disable react-hooks/set-state-in-effect -- 외부 저장소에서 한 번 복원 */
-    setDraft(stored);
-    setRestored(true);
+    if (stored) {
+      setDraft(stored);
+      setRestored(true);
+    } else {
+      setDraft({ ...previous!, page: 0 });
+    }
     setStage("survey");
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, []);
+  }, [firstRun]);
 
   function update(next: Partial<Draft>) {
     setDraft((current) => {
@@ -221,7 +228,7 @@ export default function SurveyFlow() {
     });
     const parsed = (await response.json()) as ProfilingOutput | { error: string };
     if (!response.ok) {
-      throw new Error("error" in parsed ? parsed.error : "프로필을 만들지 못했습니다.");
+      throw new Error("error" in parsed ? parsed.error : "결과를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     }
     return parsed as ProfilingOutput;
   }
@@ -232,7 +239,7 @@ export default function SurveyFlow() {
     try {
       await task();
     } catch (taskError) {
-      setError(taskError instanceof Error ? taskError.message : "프로필을 만들지 못했습니다.");
+      setError(taskError instanceof Error ? taskError.message : "결과를 만들지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -245,14 +252,16 @@ export default function SurveyFlow() {
     });
   }
 
-  // 확인 단계에서 확정해야 저장한다. 조정했으면 조정값으로 다시 계산해 저장한다.
+  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했으면 조정값으로 다시 계산해 저장한다.
   function confirm(adjusted: Partial<Record<StyleAxisId, number>>) {
     void run(async () => {
       const profile = Object.keys(adjusted).length ? await requestProfile(payload(adjusted)) : result!;
       await saveProfile(profile, onboardingState.mode);
+      writeDraft({ ...draft, page: 0 }, ANSWERS_KEY);
       writeDraft(null);
       setResult(profile);
-      setSaved(true);
+      if (firstRun) setStage("holdings");
+      else router.push("/");
     });
   }
 
@@ -264,15 +273,14 @@ export default function SurveyFlow() {
     );
     update({ mode: "quick", page: Math.max(0, firstOpen) });
     setResult(null);
-    setSaved(false);
     setStage("survey");
   }
 
   function restart() {
     writeDraft(null);
+    writeDraft(null, ANSWERS_KEY);
     setDraft(EMPTY_DRAFT);
     setResult(null);
-    setSaved(false);
     setRestored(false);
     setError("");
     setStage("survey");
@@ -282,9 +290,9 @@ export default function SurveyFlow() {
 
   return (
     <div className="min-h-dvh bg-page">
-      <header className="sticky top-0 z-50 border-b border-line/70 bg-white/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-50 glass-bar">
         <div className="mx-auto flex min-h-14 w-full max-w-[880px] items-center gap-3 px-4 sm:px-8">
-          <Link href="/" className="flex-none whitespace-nowrap text-lg hover:no-underline">
+          <Link href="/" className="flex min-h-11 flex-none items-center whitespace-nowrap text-lg hover:no-underline">
             <Wordmark size={26} compact />
           </Link>
           {firstRun ? (
@@ -334,19 +342,21 @@ export default function SurveyFlow() {
         {stage === "result" && result && (
           <ResultView
             result={result}
-            saved={saved}
             submitting={submitting}
             error={error}
-            nextLabel={firstRun ? "다음: 보유 종목" : "대시보드로 이동"}
+            nextLabel={firstRun ? "다음" : "저장"}
             canBeMoreAccurate={draft.mode === "short"}
             onConfirm={confirm}
-            onRestart={restart}
             onMoreAccurate={moreAccurate}
-            onNext={() => (firstRun ? setStage("holdings") : router.push("/"))}
+            onBack={() => setStage("survey")}
           />
         )}
         {stage === "holdings" && (
-          <HoldingsStep mode={onboardingState.mode === "supabase" ? "supabase" : "demo"} onDone={() => router.push("/")} />
+          <HoldingsStep
+            mode={onboardingState.mode}
+            onBack={() => setStage("result")}
+            onDone={() => router.push("/")}
+          />
         )}
       </main>
     </div>
@@ -363,11 +373,9 @@ function Welcome({ onStart }: { onStart: () => void }) {
     <section aria-labelledby="welcome-title" className="surface flex flex-col gap-8 px-6 py-10 sm:px-10">
       <div className="flex flex-col gap-2">
         <LogoMark size={48} className="mb-2" />
-        <span className="eyebrow">처음 오셨네요</span>
         <h1 id="welcome-title" className="text-3xl font-semibold">
           {SERVICE_NAME}은 이렇게 도와줘요
         </h1>
-        <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
       </div>
       <ol className="m-0 flex list-none flex-col gap-5 p-0">
         {steps.map(([title, body], index) => (
@@ -375,19 +383,15 @@ function Welcome({ onStart }: { onStart: () => void }) {
             <span className="grid size-8 flex-none place-items-center rounded-full bg-track text-sm font-semibold tabular-nums">
               {index + 1}
             </span>
-            <span className="flex flex-col gap-0.5">
+            <span className="flex flex-col gap-1">
               <span className="text-base font-medium">{title}</span>
               <span className="text-sm text-body">{body}</span>
             </span>
           </li>
         ))}
       </ol>
-      <div className="flex flex-col gap-2">
-        <button type="button" onClick={onStart} className="btn-primary w-full sm:w-auto sm:self-start">
-          시작하기
-        </button>
-        <p className="m-0 text-xs text-muted">맞고 틀린 답은 없어요. 요즘의 나와 가까운 쪽을 고르면 돼요.</p>
-      </div>
+      <p className="-mt-2 m-0 text-sm text-body">맞고 틀린 답은 없어요. 요즘의 나와 가까운 쪽을 고르면 돼요.</p>
+      <StepNav nextLabel="시작하기" onNext={onStart} />
     </section>
   );
 }
@@ -418,6 +422,13 @@ function QuestionPage({
   onRestart: () => void;
 }) {
   const total = PAGES[draft.mode].length;
+  // 고르면 자동으로 넘어가므로 "다음"은 이전으로 돌아왔다가 다시 앞으로 갈 때 쓴다. 답한 문항에서만 켜진다.
+  const answered =
+    page.kind === "style"
+      ? draft.style[page.question.id] !== undefined
+      : page.kind === "experience"
+        ? draft.experience !== ""
+        : true; // 제외 항목·걱정되는 점은 비워 둬도 된다
   const progress = ((draft.page + 1) / total) * 100;
   const label =
     page.kind === "style"
@@ -430,6 +441,9 @@ function QuestionPage({
         <div className="flex items-baseline gap-3">
           <span className="text-xs font-medium text-ink tabular-nums">{label}</span>
           {page.kind === "style" && <span className="text-xs text-muted">{page.axis.section}</span>}
+          <button type="button" onClick={onRestart} className="btn-text ml-auto text-xs">
+            처음부터 새로 하기
+          </button>
         </div>
         <div
           className="h-1 overflow-hidden rounded-full bg-track"
@@ -444,12 +458,7 @@ function QuestionPage({
       </div>
 
       {restored && draft.page > 0 && (
-        <p className="mb-0 mt-5 flex items-center gap-3 rounded-md bg-field px-4 py-3 text-sm text-body">
-          저장해 둔 응답을 불러왔어요. 이어서 답하면 돼요.
-          <button type="button" onClick={onRestart} className="btn-text ml-auto text-xs">
-            처음부터
-          </button>
-        </p>
+        <p className="mb-0 mt-5 rounded-md bg-field px-4 py-3 text-sm text-body">저장해 둔 응답을 불러왔어요. 이어서 답하면 돼요.</p>
       )}
 
       <div className="mt-8 flex flex-1 flex-col">
@@ -457,7 +466,7 @@ function QuestionPage({
           <fieldset key={page.question.id} className="m-0 flex flex-col gap-5 border-0 p-0">
             <p className="m-0 text-sm text-muted">{page.axis.help}</p>
             <legend className="sr-only">{page.question.text}</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               {page.question.text}
             </h1>
             <div className="flex flex-col gap-2">
@@ -478,7 +487,7 @@ function QuestionPage({
         {page.kind === "experience" && (
           <fieldset className="m-0 flex flex-col gap-5 border-0 p-0">
             <legend className="sr-only">직접 투자한 경험은 얼마나 되나요?</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               직접 투자한 경험은 얼마나 되나요?
             </h1>
             <p className="m-0 text-sm text-muted">주식이나 ETF를 직접 사고판 기간으로 골라 주세요.</p>
@@ -500,7 +509,7 @@ function QuestionPage({
         {page.kind === "avoided" && (
           <fieldset className="m-0 flex flex-col gap-5 border-0 p-0">
             <legend className="sr-only">목록에서 빼고 싶은 종목 유형이 있나요?</legend>
-            <h1 aria-hidden className="text-2xl font-semibold leading-snug">
+            <h1 aria-hidden className="text-xl font-semibold">
               목록에서 빼고 싶은 종목 유형이 있나요?
             </h1>
             <p className="m-0 text-sm text-muted">
@@ -530,7 +539,7 @@ function QuestionPage({
 
         {page.kind === "freeText" && (
           <div className="flex flex-col gap-5">
-            <h1 className="text-2xl font-semibold leading-snug">요즘 투자하면서 걱정되는 점이 있나요?</h1>
+            <h1 className="text-xl font-semibold">요즘 투자하면서 걱정되는 점이 있나요?</h1>
             <p className="m-0 text-sm text-muted">점수 계산에는 쓰지 않고 결과를 설명할 때 참고만 해요. 비워 둬도 돼요.</p>
             <textarea
               value={draft.freeText}
@@ -550,17 +559,14 @@ function QuestionPage({
           </p>
         )}
 
-        <div className="mt-auto flex items-center gap-3 pt-8">
-          <button type="button" onClick={onBack} disabled={draft.page === 0 || submitting} className="btn-secondary disabled:opacity-40">
-            이전
-          </button>
-          <span className="text-xs text-muted">답은 자동으로 저장돼요</span>
-          {(page.kind === "avoided" || page.kind === "freeText") && (
-            <button type="button" onClick={onNext} disabled={submitting} className="btn-primary ml-auto min-w-[112px]">
-              {submitting ? "계산 중" : last ? "결과 확인" : "다음"}
-            </button>
-          )}
-        </div>
+        <StepNav
+          className="mt-auto pt-8"
+          onBack={onBack}
+          backDisabled={draft.page === 0 || submitting}
+          nextLabel={submitting ? "계산 중" : last ? "완료" : "다음"}
+          onNext={onNext}
+          nextDisabled={!answered || submitting}
+        />
       </div>
     </section>
   );
@@ -596,7 +602,7 @@ function ChoiceRow({
         onClick={type === "radio" && selected ? onChange : undefined}
         className="size-4 flex-none accent-[var(--color-brand)]"
       />
-      <span className="flex flex-col gap-0.5">
+      <span className="flex flex-col gap-1">
         <span>{label}</span>
         {detail && <span className="text-xs font-normal text-muted">{detail}</span>}
       </span>
@@ -637,28 +643,27 @@ function AxisGauge({
 
 const HORIZON_LABEL = { short: "단기", mid: "중기", long: "장기" } as const;
 
-function ResultView({
+// 설문 결과. readOnly는 저장된 결과를 다시 보는 화면(/profile): 조정·24문항 없이 뒤로 / 다시 진단만.
+export function ResultView({
   result,
-  saved,
-  submitting,
-  error,
+  submitting = false,
+  error = "",
   nextLabel,
-  canBeMoreAccurate,
+  canBeMoreAccurate = false,
   onConfirm,
-  onRestart,
   onMoreAccurate,
-  onNext,
+  onBack,
+  readOnly = false,
 }: {
   result: ProfilingOutput;
-  saved: boolean;
-  submitting: boolean;
-  error: string;
+  submitting?: boolean;
+  error?: string;
   nextLabel: string;
-  canBeMoreAccurate: boolean;
+  canBeMoreAccurate?: boolean;
   onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>) => void;
-  onRestart: () => void;
-  onMoreAccurate: () => void;
-  onNext: () => void;
+  onMoreAccurate?: () => void;
+  onBack: () => void;
+  readOnly?: boolean;
 }) {
   const [adjusting, setAdjusting] = useState(false);
   const [adjusted, setAdjusted] = useState<Partial<Record<StyleAxisId, number>>>({});
@@ -672,9 +677,7 @@ function ResultView({
   return (
     <section className="surface overflow-hidden">
       <div className="border-b border-line-soft px-6 py-7 sm:px-10">
-        <span className="text-xs font-semibold text-brand">
-          {saved ? "프로필 저장 완료" : "진단 결과 · 아직 저장 전이에요"}
-        </span>
+        <span className="text-xs font-semibold text-brand">{readOnly ? "내 투자 성향" : "진단 결과"}</span>
         <h1 data-bit-type={bit.lowConfidence ? "low_confidence" : bit.type} className="mt-2 text-3xl font-semibold text-ink sm:text-3xl">
           {bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type]}
         </h1>
@@ -683,7 +686,7 @@ function ResultView({
             ? "몇몇 질문의 답이 서로 엇갈려 유형을 단정하지 않았어요. 다시 답하거나 아래에서 직접 조정할 수 있어요."
             : BIT_SUMMARY[bit.type]}
         </p>
-        <p className="mt-3 text-xs leading-5 text-muted">
+        <p className="mt-3 text-xs text-muted">
           행동투자자 유형에서 착안한 분류예요. 금융회사의 투자자 등급과는 다른 것이고, 정보를 보여 주는
           순서와 체크포인트에만 쓰며 종목을 거르지 않아요.
         </p>
@@ -723,7 +726,7 @@ function ResultView({
           <div className="mt-8 flex flex-col gap-2 rounded-lg bg-field px-4 py-3">
             <span className="text-sm font-medium text-body">답변 중 서로 부딪히는 부분이 있어요</span>
             {result.contradictions!.map((item) => (
-              <p key={item.id} className="m-0 text-sm leading-6 text-body">
+              <p key={item.id} className="m-0 text-sm text-body">
                 {item.observation} <span className="text-body">→ {item.follow_up_question}</span>
               </p>
             ))}
@@ -735,7 +738,7 @@ function ResultView({
             <span className="mr-2 text-sm font-medium text-ink">제외할 종목 유형</span>
             {avoidedLabels.length ? (
               avoidedLabels.map((label) => (
-                <span key={label} className="rounded-sm bg-track px-2.5 py-1 text-xs text-body">
+                <span key={label} className="rounded-sm bg-track px-3 py-1 text-xs text-body">
                   {label}
                 </span>
               ))
@@ -745,7 +748,7 @@ function ResultView({
           </div>
         </div>
 
-        {adjusting && !saved && (
+        {adjusting && (
           <div id="style-axes-adjust" className="mt-8 flex flex-col gap-3 rounded-md bg-field px-5 py-5">
             <p className="m-0 text-sm text-body">
               결과가 나와 다르다고 느껴지는 축만 옮겨 주세요. 유형과 위의 요약이 바로 다시 계산돼요.
@@ -791,60 +794,37 @@ function ResultView({
           </p>
         )}
 
-        {saved ? (
-          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <span className="text-sm text-muted sm:mr-auto">
-              저장했어요. 대시보드와 종목 화면이 이 결과를 기준으로 정보를 보여 줘요.
-            </span>
-            <button type="button" onClick={onNext} className="btn-primary">
-              {nextLabel}
-            </button>
-          </div>
-        ) : (
-          <div className="mt-8 flex flex-col gap-3 border-t border-line-soft pt-6">
-            <span className="text-base font-semibold text-ink">이 결과가 나와 맞나요?</span>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="mt-8 flex flex-col gap-4 border-t border-line-soft pt-6">
+          {!readOnly && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {adjusting ? (
               <button
                 type="button"
-                onClick={onRestart}
+                onClick={() => {
+                  setAdjusted({});
+                  setAdjusting(false);
+                }}
                 disabled={submitting}
-                className="btn-secondary"
+                className="btn-text text-sm"
               >
-                다시 응답하기
+                조정 취소
               </button>
-              {adjusting ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAdjusted({});
-                    setAdjusting(false);
-                  }}
-                  disabled={submitting}
-                  className="btn-secondary"
-                >
-                  조정 취소
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setAdjusting(true)}
-                  aria-controls="style-axes-adjust"
-                  className="btn-secondary"
-                >
-                  직접 조정하기
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => onConfirm(changed ? adjusted : {})}
-                disabled={submitting}
-                className="btn-primary"
-              >
-                {submitting ? "저장 중" : changed ? "조정한 값으로 저장" : "네, 이대로 저장"}
+            ) : (
+              <button type="button" onClick={() => setAdjusting(true)} aria-controls="style-axes-adjust" className="btn-text text-sm">
+                결과가 나와 다르면 직접 조정하기
               </button>
-            </div>
+            )}
           </div>
-        )}
+          )}
+          <StepNav
+            onBack={onBack}
+            backLabel={readOnly ? "뒤로" : "이전"}
+            backDisabled={submitting}
+            nextLabel={submitting ? "저장 중" : nextLabel}
+            onNext={() => onConfirm(changed ? adjusted : {})}
+            nextDisabled={submitting}
+          />
+        </div>
       </div>
     </section>
   );

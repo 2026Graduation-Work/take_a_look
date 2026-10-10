@@ -14,7 +14,7 @@
 보안 취약점을 발견했다면 공개 이슈 대신 아래 방법으로 알려주세요.
 
 1. **GitHub Private Vulnerability Reporting** (권장)
-   이 레포의 [Security 탭 → "Report a vulnerability"](https://github.com/2026Graduation-Work/Stock_Prediction_v2/security/advisories/new) 를 통해 비공개로 제보해 주세요.
+   이 레포의 [Security 탭 → "Report a vulnerability"](https://github.com/2026Graduation-Work/take_a_look/security/advisories/new) 를 통해 비공개로 제보해 주세요.
 
 2. **팀 직접 연락**
    팀 노션 또는 슬랙으로 직접 연락 주시면 됩니다.

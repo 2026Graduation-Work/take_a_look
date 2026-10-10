@@ -16,7 +16,8 @@
 - `frontend/` — Next.js 대시보드. 담당: 성우(🔵)
   화면 규칙은 `frontend/DESIGN.md`, 값(색·타이포·간격)은 `frontend/app/globals.css`의 `@theme`가 SSOT
 - `schema/` — 블록 간 JSON 계약 (SSOT, freeze됨). 변경 시 전원 합의 필수.
-- `.github/` — CI(블록별 3-job), Dependabot, CodeQL
+- `supabase/` — 마이그레이션(0001~0014)·시드. 새 마이그레이션은 CLI(`supabase db push`, 사용법 `docs/auth-setup.md`)로 적용하고 `docs/erd.md`·`docs/auth-setup.md` 표를 함께 고친다.
+- `.github/` — CI(블록별 3-job), Dependabot, CodeQL. 예약 실행: 차트 서빙(평일 18:47 KST), 뉴스·공시(평일 09:13)·재무(월 07:37), 무료 한도 감시(월 10:07) — 정각·30분은 GitHub 예약이 몰려 늦어서 피함
 
 ## 개발 환경
 - Python: 각 블록 디렉토리 기준. dev 의존성은 `backend/profiling/survey/requirements-dev.txt` (ruff 등)
@@ -31,7 +32,11 @@
 
 ## PR 규칙
 - 항상 새 브랜치 → PR → 봇 리뷰 → 머지. main 직접 push 금지.
+- 기능 추가·수정은 로컬 구현·검증 후 확인용 주소, 작업 브랜치, 변경 요약을 먼저 전달한다. 사용자가 로컬 화면을 확인하고 직접 PR을 만드는 것이 기본이다. 명시적인 요청 없이 push·PR 생성·머지·배포하지 않는다.
+- 기존 인터페이스·UI의 배치, 탭, 컴포넌트 구성을 최대한 유지한다. 데이터나 기능 연결을 이유로 화면을 재구성하지 않는다. 구조 변경이 필요하면 로컬에서 먼저 검토받는다.
 - 2026 2학기 한정: 상호 승인(approve) 없이 작성자 셀프 머지 허용 (ruleset 필수 승인 0). 학기 종료 후 1로 복구.
+- 머지는 `gh pr checks <번호> --watch --fail-fast && gh pr merge <번호> --squash --delete-branch` 형태로만 한다.
+- main 규칙(Rulesets)이 필수 체크 `lint-and-build`(Web CI)·`profiling-test`·`chart-test`·`text-test`(Python CI) 통과를 강제한다. 변경 없는 블록은 건너뜀(=통과)으로 보고된다. 실패하면 머지 버튼 자체가 막힌다(#202·#242 재발 방지).
 - 브랜치명: `feat/`, `fix/`, `chore/`, `refactor/` 접두
 - 스키마 변경 PR은 제목에 `[schema]` + 전원 멘션
 - 커밋: 이동/리네임과 로직 수정은 분리
@@ -83,7 +88,7 @@
   (위 아키텍처 원칙을 value_pipeline에 적용한 PASS/FAIL 기준·금지 패턴. 출력을
   데이터셋에 넣기 전 필독. 규칙 본문이 아니라 검증 절차이므로 별도 문서로 둔다.)
 - 성향별 2모델: `profile_type`(stable/aggressive) ↔ chart `model_type` 매칭
-- 회피 태그 체계 통일: profiling `avoided_assets` == chart `risk_flags` enum
+- 회피 태그 체계 통일: profiling `avoided_assets` == chart `risk_flags` enum. `stocks.risk_flags`·`risk_grade`는 `serving/stock_master.py` 규칙으로 매일 계산(`docs/stock-master-rules.md`)
 - Supabase: 프론트가 DB 직접 조회(별도 API 서버 없음). 스키마 = 사실상 API 계약.
 
 ## 에이전트 안전·동기화 규칙
@@ -97,6 +102,7 @@
 |---|---|---|
 | `redesign-existing-projects`, `minimalist-ui` | https://github.com/Leonxlnx/taste-skill (MIT) | `5217fb45be2c0b302f29c9cd31cbd3237501c684` |
 | `baseline-ui`, `fixing-motion-performance` | https://github.com/ibelick/ui-skills (MIT) | `b1cc8e0073ac64b09b3d38cd604407aa20c2b7ad` |
+| `frontend-design` | https://github.com/anthropics/skills (Apache-2.0, Anthropic 공식) | `33375500bcea98d610eb30ce10ac4e59b89c390d` |
 
 - 우선순위: **AGENTS.md > `frontend/DESIGN.md` > 스킬.** 스킬이 표현 규칙·색의 의미·화이트박스·결정론과 부딪히면 우리 규칙을 따른다.
 - 미러·포크본은 설치하지 않는다(내용이 빈 복제본이 있다). 새 스킬·새 버전은 SKILL.md를 읽고 PR에 요약과 SHA를 남긴 뒤 이 표에 추가한다.
@@ -109,4 +115,10 @@
 - 팀 산출물에 **참고한 다른 팀·조직의 프로젝트명**을 쓰지 않는다 → "참고 자료"로 표현
   - 사용한 도구·라이브러리·데이터 원천의 이름(예: FinanceDataReader, BigKinds, 허용 목록의 디자인 스킬)은 출처 표기로 쓴다
 - 유료 기능 활성화 금지 (GitHub Advanced Security 등)
-- schema/ 파일을 단독 판단으로 수정 금지 (freeze 상태, 전원 합의 필요)
+- schema/ 파일을 단독 판단으로 수정 금지 (freeze 상태, 전원 합의 필요). Claude Code는 `.claude/settings.json`이 수정 전에 묻는다
+
+## 무료 운영 규칙 (2027-02-01까지)
+- 결제 수단은 등록하지 않은 채로 둔다. 플랜·컴퓨트·애드온·브랜치·프로젝트 생성/일시정지는 다루지 않는다.
+- 외부 API는 무료 한도 안에서만 쓴다(NewsAPI.ai 하루 20회 상한, DART 일 한도).
+- 새 의존성은 무료 라이선스(MIT·Apache-2.0·BSD 등)만 쓴다.
+- 대량 백필·적재 전에는 `docs/ops/free-tier-budget.md`의 남은 한도를 먼저 확인한다.

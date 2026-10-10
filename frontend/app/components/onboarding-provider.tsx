@@ -18,6 +18,7 @@ import {
   type OnboardingState,
 } from "@/lib/auth";
 import Wordmark from "@/components/brand/Wordmark";
+import { isChartPreview } from "@/lib/chart-preview-config";
 
 interface OnboardingContextValue {
   state: OnboardingState;
@@ -109,7 +110,7 @@ function DemoAccountBanner() {
   return (
     <div
       role="note"
-      className="bg-track px-4 py-1.5 text-center text-xs font-medium text-body"
+      className="bg-track px-4 py-2 text-center text-xs font-medium text-body"
     >
       데모 계정 · 예시 데이터
       <span className="font-normal"> — 가입 없이 둘러보는 중이에요. 설문 결과는 이 브라우저에만 저장돼요.</span>
@@ -130,6 +131,7 @@ function onboardingDestination(
   status: OnboardingState["status"],
 ): string | null {
   if (status === "loading" || status === "error") return null;
+  if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";
@@ -168,7 +170,7 @@ function OnboardingError({
       <section className="w-full max-w-[460px] surface p-7">
         <BrandMark />
         <h1 className="mt-8 text-xl font-semibold text-ink">연결을 확인해 주세요</h1>
-        <p role="alert" className="mt-2 text-sm leading-6 text-muted">
+        <p role="alert" className="mt-2 text-sm text-muted">
           {message}
         </p>
         <button

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +22,7 @@ from analysis.text.value_pipeline import llm as llm_mod
 from analysis.text.value_pipeline import metrics as metrics_mod
 from analysis.text.value_pipeline import run as run_mod
 from analysis.text.value_pipeline import schema as schema_mod
+from analysis.text.value_pipeline import sentiment as sentiment_mod
 from analysis.text.value_pipeline import staleness as staleness_mod
 
 
@@ -65,6 +65,36 @@ def _patch_collectors(monkeypatch: pytest.MonkeyPatch, news: list, fin: dict) ->
     monkeypatch.setattr(
         graph_mod.collectors, "collect_financials", lambda t, d: (fin, "dart")
     )
+
+
+def test_finbert_batch_scores_all_texts_in_one_call_and_preserves_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[list[str], int]] = []
+
+    def classifier(texts: list[str], *, batch_size: int):
+        calls.append((texts, batch_size))
+        return [
+            [{"label": "positive", "score": 0.8}, {"label": "negative", "score": 0.2}],
+            [{"label": "positive", "score": 0.1}, {"label": "negative", "score": 0.7}],
+        ]
+
+    monkeypatch.setattr(sentiment_mod, "_load_finbert", lambda: classifier)
+
+    scores, backend = sentiment_mod.score_texts(["첫 기사", "둘째 기사"])
+
+    assert calls == [(["첫 기사", "둘째 기사"], 16)]
+    assert scores == pytest.approx([0.6, -0.6])
+    assert backend == "kr-finbert"
+
+
+def test_require_finbert_raises_instead_of_using_lexicon(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sentiment_mod, "_load_finbert", lambda: None)
+
+    with pytest.raises(sentiment_mod.SentimentBackendError, match="KR-FinBERT"):
+        sentiment_mod.score_texts(["상승 호재"], require_finbert=True)
 
 
 # ── Point-in-time 뉴스 로더 ────────────────────────────────────────
@@ -281,8 +311,13 @@ def test_select_fiscal_year_does_not_depend_on_today() -> None:
     assert collectors_mod.select_fiscal_year("2022-06-15") != dt.date.today().year - 1
 
 
+def test_opendartreader_exposes_callable_client() -> None:
+    """설치된 Python·패키지 버전에 맞는 DART 클라이언트를 사용한다."""
+    assert callable(collectors_mod.OpenDartReader)
+
+
 class _FakeDart:
-    """OpenDartReader 대역. 함수 내 지역 import라 sys.modules 치환이 먹는다."""
+    """OpenDartReader 대역."""
 
     seen: dict = {}
 
@@ -305,7 +340,7 @@ def test_fetch_dart_financials_uses_point_in_time_fiscal_year(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _FakeDart.seen = {}
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _FakeDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _FakeDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(collectors_mod.SETTINGS, dart_api_key="x"),
@@ -346,7 +381,7 @@ def test_dart_falls_back_to_separate_statements(
             return pd.DataFrame([{"se": "보통주", "istc_totqy": "1000"}])
 
     _OfsOnlyDart.seen = []
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _OfsOnlyDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _OfsOnlyDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(collectors_mod.SETTINGS, dart_api_key="x"),
@@ -398,7 +433,7 @@ def test_latest_shares_searches_back_past_empty_years(
     """기준연도가 '-'뿐이면(공시 전 등) 유효값이 나올 때까지 거슬러 찾는다."""
     asof = collectors_mod.SETTINGS.shares_asof_year
     _SharesDart.seen, _SharesDart.empty_years = [], {asof}
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _SharesDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _SharesDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(collectors_mod.SETTINGS, dart_api_key="x"),
@@ -414,7 +449,7 @@ def test_latest_shares_do_not_depend_on_today(
     같은 입력의 per/pbr → signal이 달라져 재현성이 깨진다. 탐색 시작 연도는
     SHARES_ASOF_YEAR 고정값이어야 한다."""
     _SharesDart.seen, _SharesDart.empty_years = [], set()
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _SharesDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _SharesDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(
@@ -431,7 +466,7 @@ def test_latest_shares_warns_when_snapshot_year_is_stale(
 ) -> None:
     """고정 연도가 낡으면(이후 분할 미반영 위험) 숫자는 유지하되 경고를 낸다."""
     _SharesDart.seen, _SharesDart.empty_years = [], set()
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _SharesDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _SharesDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(

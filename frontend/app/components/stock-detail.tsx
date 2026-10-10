@@ -14,7 +14,7 @@ import EvidenceTabs, {
   SourceList,
   useDemoStyleAxes,
 } from "./insight-cards";
-import SourceChip from "./source-chip";
+import StockMarks from "./stock-marks";
 import PriceHistoryChart from "./price-history-chart";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
@@ -28,8 +28,11 @@ import {
   topPercentLabel,
 } from "@/lib/copy-glossary";
 import { HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
+import { chartDirection } from "@/lib/chart-detail";
+import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
 import type { InvestorProfileSummary, MarketStatus, StockDetail, StyleAxes } from "@/lib/types";
+import { staleLabel } from "@/lib/market-status";
 
 function formatPercent(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
@@ -44,7 +47,7 @@ function RiskMeter({ grade }: { grade: StockDetail["riskGrade"] }) {
   return (
     <span className="inline-flex items-center gap-2 text-sm text-body">
       위험도 <strong className="font-semibold text-ink">{word}</strong>
-      <span className="flex gap-0.5" aria-hidden>
+      <span className="flex gap-1" aria-hidden>
         {Array.from({ length: 5 }, (_, index) => (
           <span key={index} className={`h-2 w-3 rounded-[2px] ${index < filled ? "bg-ink" : "bg-track"}`} />
         ))}
@@ -66,6 +69,7 @@ interface StockDetailViewProps {
   loading?: boolean;
   dataError?: string;
   onRetry?: () => void;
+  chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
 }
 
 export default function StockDetailView({
@@ -79,12 +83,19 @@ export default function StockDetailView({
   loading = false,
   dataError = "",
   onRetry,
+  chartSnapshots,
 }: StockDetailViewProps) {
   const demo = useDemoStyleAxes(styleAxes);
   const [query, setQuery] = useState("");
-  const [choice, setChoice] = useState<"watch" | "reduce" | "drop" | null>(null);
 
-  const signal = SIGNAL_META[detail.signalLight];
+  const preview = chartSnapshots !== undefined;
+  const chart = chartSnapshots?.get(20);
+  const direction = chartDirection(chart);
+  const signal = preview
+    ? { ...SIGNAL_META[direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral"],
+        label: direction === "up" ? "상방" : direction === "down" ? "하방" : direction === "flat" ? "중립" : "미제공" }
+    : SIGNAL_META[detail.signalLight];
+  const hasBand = !preview || Boolean(chart?.distribution.histogram.central_68);
   const horizon = detail.returnHorizon ?? "h10";
   const ciPercent = Math.round(detail.returnBand.ciLevel * 100);
   const priceHistory = detail.priceHistory ?? [];
@@ -105,13 +116,10 @@ export default function StockDetailView({
     detail.riskGrade < safeMaxRiskTier
       ? `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요. 설문에서 답한 위험 감수 정도(${profile.riskTolerance})보다 가격이 크게 흔들릴 수 있어요.`
       : null;
-  const horizons = (["h5", "h10", "h20"] as const).map((key) => [key, detail.horizonAgreement[key]] as const);
-  const choiceLabels = {
-    watch: "관심 종목에 두기",
-    reduce: "비중을 다시 볼 종목",
-    drop: "관심 해제",
-  } as const;
-
+  // #170: 공개 모델은 1주·4주 둘. 하락 시 이탈 쪽으로 답한 성향(체크포인트와 같은 0.3 기준)은 단기 흔들림보다 4주를 먼저 본다.
+  const drawdownFirst = (demo.styleAxes?.axes.find(({ axis_id }) => axis_id === "drawdown_reaction")?.ratio ?? 0) > 0.3;
+  const horizonKeys = preview ? (drawdownFirst ? (["h20", "h5"] as const) : (["h5", "h20"] as const)) : (["h5", "h10", "h20"] as const);
+  const horizons = horizonKeys.map((key) => [key, detail.horizonAgreement[key]] as const);
   return (
     <div className="w-full">
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} />
@@ -129,7 +137,7 @@ export default function StockDetailView({
         {dataError && (
           <div role="alert" className="surface flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
             <p className="m-0 min-w-0 text-sm text-body">
-              내 데이터를 불러오지 못해 예시 화면을 보여 드려요.
+              {!preview && "내 데이터를 불러오지 못해 예시 화면을 보여 드려요."}
               <span className="mt-1 block break-words text-xs text-muted">{dataError}</span>
             </p>
             {onRetry && (
@@ -142,7 +150,7 @@ export default function StockDetailView({
 
         {/* 1. 헤더 */}
         <section aria-labelledby="stock-name" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             <span className="eyebrow tabular-nums">
               {detail.code} · {detail.market}
               {detail.riskFlags.length > 0 && ` · ${detail.riskFlags.map((flag) => RISK_FLAG_LABEL[flag]).join(" · ")}`}
@@ -152,7 +160,7 @@ export default function StockDetailView({
             </h1>
             <RiskMeter grade={detail.riskGrade} />
           </div>
-          <div className="flex flex-col items-start gap-0.5 sm:items-end">
+          <div className="flex flex-col items-start gap-1 sm:items-end">
             {hasCurrentPrice ? (
               <>
                 <span className="text-4xl font-semibold tabular-nums">
@@ -160,8 +168,8 @@ export default function StockDetailView({
                 </span>
                 <span className="text-base font-medium tabular-nums" style={{ color: changeColor }}>
                   {changeArrow} {formatPercent(changePercent)}
-                  <span className="ml-1.5 text-xs font-normal text-muted">
-                    전일 대비 · {formatDate(detail.asOf)} 기준
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    전일 대비{detail.asOf && staleLabel(detail.asOf) && ` · ${formatDate(detail.asOf)} 기준`}
                   </span>
                 </span>
               </>
@@ -171,25 +179,26 @@ export default function StockDetailView({
           </div>
         </section>
 
+        <StockMarks code={detail.code} name={detail.name} />
+
         {/* 2. 한눈에 보기 */}
         <section aria-labelledby="glance-title" className="surface flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
-            <span className="eyebrow">한눈에 보기</span>
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
-              <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>
+              {!preview && <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
               <strong className="font-semibold tabular-nums text-ink">
-                {formatPercent(detail.returnBand.low)} ~ {formatPercent(detail.returnBand.high)}
+                {hasBand ? `${formatPercent(detail.returnBand.low)} ~ ${formatPercent(detail.returnBand.high)}` : "미제공"}
               </strong>
             </p>
           </div>
           {priceHistory.length >= 2 ? (
             <PriceHistoryChart
               prices={priceHistory}
-              band={detail.returnBand}
+              band={hasBand ? detail.returnBand : undefined}
               signal={signal}
               asOfLabel={formatDate(detail.asOf).slice(5)}
               horizonLabel={HORIZON_LABEL[horizon]}
@@ -199,25 +208,27 @@ export default function StockDetailView({
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
-          <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-            <span>지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
-            <span>주가: <SourceChip provenance={detail.priceProvenance ?? detail.provenance} /></span>
-            <span>신호·범위: <SourceChip provenance={detail.provenance} /></span>
-          </p>
+          <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+            {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
+            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
+          </div>
         </section>
 
         {/* 3. 나에게 맞춘 체크포인트 */}
         <Checkpoints demo={demo} detail={detail} insights={insights} holdings={holdings} extra={riskNote} />
 
         {/* 4. 판단 근거 4가지 */}
-        <EvidenceTabs detail={detail} insights={insights} demo={demo} />
+        <EvidenceTabs detail={detail} insights={insights} demo={demo}
+          contributionSpace={chart?.inference.contribution_space}
+          contributionTotal={chart?.inference.contribution_abs_sum}
+          modelFeatures={preview ? chart?.inference.features ?? [] : undefined} />
 
         {/* 5. 더 알아보기 */}
         <details className="disclosure surface p-6">
           <summary>
-            <span className="flex flex-col gap-0.5">
+            <span className="flex flex-col gap-1">
               <span className="text-lg font-semibold">더 알아보기</span>
-              <span className="text-xs text-muted">수익률 분포 · 기간별 비교 · 계산 근거 · 데이터 출처</span>
+              <span className="text-xs text-muted">수익률 분포 · 기간별 비교 · 계산 근거 · 데이터 출처·기준</span>
             </span>
           </summary>
           <div className="mt-6 flex flex-col gap-8">
@@ -247,19 +258,24 @@ export default function StockDetailView({
               <h3 id="more-horizons" className="text-base font-semibold">
                 {TERM.horizonAgreement}
               </h3>
-              <p className="m-0 text-sm text-body">{AGREEMENT_ANSWER[detail.horizonAgreement.agreement]}</p>
-              <ul className="m-0 grid list-none grid-cols-3 gap-3 p-0">
-                {horizons.map(([key, direction]) => (
-                  <li key={key} className="flex flex-col gap-0.5 rounded-md bg-field px-4 py-3">
-                    <span className="text-xs text-muted">{HORIZON_LABEL[key]}</span>
-                    <span className="text-sm font-semibold" style={{ color: HORIZON_META[direction].ink }}>
-                      {HORIZON_META[direction].arrow} {DIRECTION_WORD[direction]}
+              <p className="m-0 text-sm text-body">{preview
+                ? "각 모델에서 가장 높은 분류 점수의 방향이에요. 미래 상승·하락 확률을 뜻하지 않아요."
+                : AGREEMENT_ANSWER[detail.horizonAgreement.agreement]}</p>
+              <ul className={`m-0 grid list-none gap-3 p-0 ${preview ? "grid-cols-2" : "grid-cols-3"}`}>
+                {horizons.map(([key, legacyDirection]) => {
+                  const direction = preview ? chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
+                  return (
+                  <li key={key} className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
+                    <span className="text-xs text-muted">{preview ? key === "h5" ? "1주 · 5거래일" : "4주 · 20거래일" : HORIZON_LABEL[key]}</span>
+                    <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
+                      {direction ? `${HORIZON_META[direction].arrow} ${preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : "중립" : DIRECTION_WORD[direction]}` : "미제공"}
                     </span>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
               <p className="m-0 text-xs text-muted tabular-nums">
-                과거 비슷한 신호 {detail.similarCaseCount}건 중 {Math.round(detail.hitRate * 100)}%가 실제로 올랐어요.
+                {preview ? `과거 상승 비율은 제공하지 않아요.${drawdownFirst ? " 하락 때 정리하는 편이라고 답해 4주를 먼저 놓았어요." : ""}` : `과거 비슷한 신호 ${detail.similarCaseCount}건 중 ${Math.round(detail.hitRate * 100)}%가 실제로 올랐어요.`}
               </p>
             </section>
 
@@ -268,7 +284,7 @@ export default function StockDetailView({
                 <h3 id="more-ai" className="text-base font-semibold">
                   숫자를 풀어 쓴 설명 <span className="text-xs font-normal text-muted">AI 작성 · 매매 조언 아님</span>
                 </h3>
-                <p className="m-0 text-sm leading-relaxed text-body">{detail.aiAdvice}</p>
+                <p className="m-0 text-sm text-body">{detail.aiAdvice}</p>
               </section>
             )}
 
@@ -281,36 +297,11 @@ export default function StockDetailView({
 
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">
               <h3 id="more-sources" className="text-base font-semibold">
-                데이터 출처
+                데이터 출처·기준
               </h3>
               <SourceList detail={detail} insights={insights} />
             </section>
 
-            <section aria-labelledby="more-note" className="flex flex-col gap-3">
-              <h3 id="more-note" className="text-base font-semibold">
-                내 판단 메모
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(choiceLabels) as (keyof typeof choiceLabels)[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    aria-pressed={choice === key}
-                    onClick={() => setChoice(key)}
-                    className={`min-h-10 rounded-md px-4 text-sm font-medium ${
-                      choice === key ? "bg-brand-soft text-brand" : "bg-track text-body hover:bg-line"
-                    }`}
-                  >
-                    {choiceLabels[key]}
-                  </button>
-                ))}
-              </div>
-              <p className="m-0 text-xs text-muted" role="status">
-                {choice
-                  ? `'${choiceLabels[choice]}'로 이 화면에만 메모했어요. 실제 주문은 실행되지 않아요.`
-                  : "최종 판단은 직접 해요. 여기서 고른 메모로 주문이 나가지 않아요."}
-              </p>
-            </section>
           </div>
         </details>
 

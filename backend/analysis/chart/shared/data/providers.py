@@ -15,7 +15,13 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 class _KrxProvider:
     def __getattr__(self, name):
-        from pykrx import stock
+        import contextlib
+        import io
+
+        from .krx import install_request_timeout
+        install_request_timeout()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            from pykrx import stock
         return getattr(stock, name)
 
 
@@ -23,8 +29,14 @@ krx = _KrxProvider()
 
 
 def get_krx_session():
-    from pykrx.website.comm.webio import get_session
-    return get_session()
+    import contextlib
+    import io
+
+    from .krx import install_request_timeout
+    install_request_timeout()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        from pykrx.website.comm.webio import get_session
+        return get_session()
 
 
 try:
@@ -778,5 +790,3 @@ def download_ohlcv_full(start_date: str = _DEFAULT_START_DATE, repair_only: bool
 
     _backfill_investor_flows(start_date=start_date, end_date=today_str)
     print("\n✅ 전체 가격·수급 데이터 다운로드 및 갭 보정 완료.")
-
-

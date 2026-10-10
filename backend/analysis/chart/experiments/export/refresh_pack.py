@@ -28,12 +28,17 @@ def preserved_path(value):
     old = Path(value)
     if not old.is_absolute():
         old = CHART_ROOT / old
-    relative = str(old.relative_to(CHART_ROOT))
-    moves = json.loads((CHART_ROOT / "docs/migration.json").read_text())["moves"]
+    migration = json.loads((CHART_ROOT / "docs/migration.json").read_text())
+    original_root = Path(migration.get("original_chart_root", str(CHART_ROOT)))
+    try:
+        relative = str(old.relative_to(CHART_ROOT))
+    except ValueError:
+        relative = str(old.relative_to(original_root))
+    moves = migration["moves"]
     for source, target in moves:
         if relative == source or relative.startswith(source + "/"):
-            return CHART_ROOT / (target + relative[len(source):])
-    return old
+            return (CHART_ROOT / (target + relative[len(source):])).resolve()
+    return old.resolve()
 
 
 def verify_inputs(dataset, names, feature_store=None):
@@ -203,8 +208,12 @@ def main(argv=None):
         config_path = CHART_ROOT / "serving/config.local.yaml"
         previous_path = config_path if config_path.exists() else CHART_ROOT / "serving/config.yaml"
         previous = yaml.safe_load(previous_path.read_text())
+        previous_pack = output / previous["active_pack"]["pack_id"] / "manifest.json"
+        previous_manifest = json.loads(previous_pack.read_text()) if previous_pack.exists() else {}
         atomic_json(root / "previous_active_pack.json", {"config": previous,
-                    "builder_baseline_commit": "095584b", "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
+                    "previous_processing_contract": previous_manifest.get("processing_contract"),
+                    "previous_builder_sources": previous_manifest.get("builder_sources"),
+                    "builder_baseline_commit": "e5a0fe4" if previous_manifest.get("processing_contract") else "095584b", "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
                     "policy": "Restore this pack together with its recorded compatible builder."})
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,
@@ -217,9 +226,12 @@ def main(argv=None):
         source = dataset / "raw/005930.parquet"
         destination = inputs / "005930.parquet"
         if destination.exists():
-            backup = CHART_ROOT / "workspace/archive/previous-operational-inputs" / sha256_file(destination)
+            backup = CHART_ROOT / "workspace/archive/previous-operational-inputs" / args.pack_id / sha256_file(destination)
             backup.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(destination, backup)
+            previous_metadata = destination.with_suffix(".manifest.json")
+            if previous_metadata.exists():
+                shutil.copy2(previous_metadata, backup.with_suffix(".manifest.json"))
         shutil.copy2(source, destination)
         atomic_json(destination.with_suffix(".manifest.json"), {"source": str(source), "source_sha256": sha256_file(source),
                     "processing_contract_sha256": processing_contract()["sha256"], "pack_id": args.pack_id,

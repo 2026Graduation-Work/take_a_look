@@ -154,5 +154,6 @@
     "skipped": 3,
     "seconds": 107.38
   },
-  "baseline_ruff": "passed"
+  "baseline_ruff": "passed",
+  "original_chart_root": "/home/jinse/projects/Grduation/Stock_Prediction_v2/backend/analysis/chart"
 }

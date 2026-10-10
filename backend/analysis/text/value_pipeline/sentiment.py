@@ -21,6 +21,10 @@ _NEG = {
 }
 
 
+class SentimentBackendError(RuntimeError):
+    """요청된 감성 백엔드를 사용할 수 없을 때 발생한다."""
+
+
 @lru_cache(maxsize=1)
 def _load_finbert():
     """KR-FinBERT 파이프라인 로드. 실패 시 None (폴백 신호)."""
@@ -44,28 +48,55 @@ def _lexicon_score(text: str) -> float:
     return (pos - neg) / (pos + neg)
 
 
-def _finbert_score(clf, text: str) -> float:
-    """KR-FinBERT 확률 → (긍정확률 - 부정확률), -1..1."""
-    out = clf(text[:512])
-    rows = out[0] if (out and isinstance(out[0], list)) else out
+def _score_label_rows(rows: list[dict[str, object]]) -> float:
     probs = {str(d["label"]).lower(): float(d["score"]) for d in rows}
     pos = next((v for k, v in probs.items() if "pos" in k or "긍정" in k), 0.0)
     neg = next((v for k, v in probs.items() if "neg" in k or "부정" in k), 0.0)
     return pos - neg
 
 
-def score_texts(texts: list[str]) -> tuple[list[float], str]:
+def _normalize_batch_output(output: object, expected: int) -> list[list[dict[str, object]]]:
+    """transformers 단건/배치 출력 모양을 입력별 label 행으로 통일한다."""
+    if isinstance(output, dict):
+        return [[output]]
+    if not isinstance(output, list):
+        raise TypeError("unexpected KR-FinBERT output")
+    if expected == 1 and (not output or isinstance(output[0], dict)):
+        return [output]
+    normalized: list[list[dict[str, object]]] = []
+    for item in output:
+        if isinstance(item, dict):
+            normalized.append([item])
+        elif isinstance(item, list) and all(isinstance(row, dict) for row in item):
+            normalized.append(item)
+        else:
+            raise TypeError("unexpected KR-FinBERT batch row")
+    if len(normalized) != expected:
+        raise ValueError("KR-FinBERT output count does not match input count")
+    return normalized
+
+
+def score_texts(
+    texts: list[str], *, require_finbert: bool = False, batch_size: int = 16
+) -> tuple[list[float], str]:
     """각 텍스트 감성(-1..1) 리스트와 사용 백엔드명 반환."""
     texts = [t for t in texts if t and t.strip()]
     if not texts:
         return [], "none"
     clf = _load_finbert()
+    if clf is None and require_finbert:
+        raise SentimentBackendError("KR-FinBERT를 불러오지 못했습니다")
     if clf is not None:
         try:
-            scores = [max(-1.0, min(1.0, _finbert_score(clf, t))) for t in texts]
+            output = clf([text[:512] for text in texts], batch_size=batch_size)
+            rows_by_text = _normalize_batch_output(output, len(texts))
+            scores = [
+                max(-1.0, min(1.0, _score_label_rows(rows))) for rows in rows_by_text
+            ]
             return scores, "kr-finbert"
-        except Exception:
-            pass
+        except Exception as exc:
+            if require_finbert:
+                raise SentimentBackendError("KR-FinBERT 추론에 실패했습니다") from exc
     return [_lexicon_score(t) for t in texts], "lexicon"
 
 

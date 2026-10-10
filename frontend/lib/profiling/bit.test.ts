@@ -48,6 +48,7 @@ const CALM: NudgeMarket = {
   drawdownFrom3mHigh: -0.02,
   return3d: 0,
   sentimentChange: 0,
+  sentimentDayLabel: "오늘",
   isTopHolding: false,
   riskGrade: 3,
 };
@@ -62,6 +63,7 @@ const ALL_MARKET: NudgeMarket = {
   drawdownFrom3mHigh: -0.2,
   return3d: 0.12,
   sentimentChange: 2, // 감성 점수 폭(-1~1)의 최대 변화. N07 임계 산출값과 무관하게 참
+  sentimentDayLabel: "오늘",
   isTopHolding: true,
   riskGrade: 2,
 };
@@ -123,7 +125,7 @@ test("넛지 11종(N12는 화면 안내로 분리), id 중복 없음, 권유 표
   const nudgeIds = NUDGES.map(({ id }) => id);
   assert.equal(new Set(nudgeIds).size, 11);
   assert.ok(!(nudgeIds as string[]).includes("N12"));
-  for (const text of [...NUDGES.map((rule) => rule.text), SCREEN_GUIDE_NOTICE.text]) {
+  for (const text of [...NUDGES.map((rule) => (typeof rule.text === "function" ? rule.text(ALL_MARKET) : rule.text)), SCREEN_GUIDE_NOTICE.text]) {
     assert.doesNotMatch(text, /사세요|파세요|매수하|매도하|권장|추천/);
   }
 });
@@ -246,4 +248,13 @@ test("다른 성향으로 보기: 프리셋은 해당 유형으로 분류되고 
       assert.equal(result.ratios[axisId], classifyBit(investorStyleAxes).ratios[axisId]);
     }
   }
+});
+
+test("위험도 안내는 한 줄(#256): riskNote가 N11 자리를 대신하고, 없을 때만 N11", async () => {
+  const { checkpointItems } = await import("./nudges.ts");
+  const n11 = { id: "N11" as const, text: "위험도는 높은 편이에요", axis: "loss_tolerance" as const, ratio: -0.5 };
+  const n07 = { id: "N07" as const, text: "뉴스", axis: "urgency" as const, ratio: 0.5 };
+  assert.deepEqual(checkpointItems([n11, n07], "위험 감수 정도(38)").map(({ key }) => key), ["risk", "N07"]);
+  assert.deepEqual(checkpointItems([n07], "위험 감수 정도(38)").map(({ key }) => key), ["N07", "risk"]);
+  assert.deepEqual(checkpointItems([n11, n07], null).map(({ key }) => key), ["N11", "N07"]);
 });

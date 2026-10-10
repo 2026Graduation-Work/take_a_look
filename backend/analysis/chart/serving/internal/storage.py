@@ -4,14 +4,17 @@ import hashlib
 import io
 import json
 import os
-from urllib.error import HTTPError
+import time
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import pandas as pd
 
 from ..contracts import validate_snapshot
+from .distribution import POLICY_ID
 from .hashing import canonical_hash
+from .progress import report
 
 
 def service_headers(key):
@@ -50,19 +53,34 @@ class SupabaseStore:
         if body is not None and not isinstance(body, bytes):
             body = json.dumps(body, allow_nan=False).encode()
         request = Request(self.url + path, data=body, headers=headers, method=method)
-        try:
-            with urlopen(request, timeout=60) as response:
-                data = response.read()
-                return json.loads(data) if data and "json" in response.headers.get("Content-Type", "") else data
-        except HTTPError as exc:
-            if path.startswith("/storage/v1/object/authenticated/"):
-                try:
-                    error = json.loads(exc.read())
-                except (ValueError, OSError):
-                    error = {}
-                if exc.code == 404 or str(error.get("statusCode")) == "404" or error.get("code") == "NoSuchKey":
-                    raise FileNotFoundError("Private storage object absent") from None
-            raise RuntimeError(f"Supabase {method} {path.split('?')[0]} failed: HTTP {exc.code}") from None
+        # Retry only reads and idempotent writes; never repeat a publish RPC.
+        retryable = method == "GET" or (
+            method == "POST" and ("resolution=merge-duplicates" in (prefer or "")
+                                  or headers.get("x-upsert") == "true"))
+        for attempt in range(3):
+            try:
+                with urlopen(request, timeout=60) as response:
+                    data = response.read()
+                    return json.loads(data) if data and "json" in response.headers.get("Content-Type", "") else data
+            except (HTTPError, URLError, TimeoutError) as exc:
+                status = exc.code if isinstance(exc, HTTPError) else None
+                transient = status is None or status in {408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524}
+                if isinstance(exc, HTTPError):
+                    if path.startswith("/storage/v1/object/authenticated/"):
+                        try:
+                            error = json.loads(exc.read())
+                        except (ValueError, OSError):
+                            error = {}
+                        if exc.code == 404 or str(error.get("statusCode")) == "404" or error.get("code") == "NoSuchKey":
+                            exc.close()
+                            raise FileNotFoundError("Private storage object absent") from None
+                    exc.close()
+                if not retryable or not transient or attempt == 2:
+                    detail = f"HTTP {status}" if status else type(exc).__name__
+                    raise RuntimeError(f"Supabase {method} {path.split('?')[0]} failed: {detail}") from None
+                report("supabase_retry", method=method, resource=path.split("?")[0],
+                       attempt=attempt + 1, http_status=status)
+                time.sleep(2 * (attempt + 1))
 
     def save_universe(self, as_of, rows):
         values = [{"as_of": as_of, "stock_code": str(row["Code"]).zfill(6),
@@ -79,21 +97,29 @@ class SupabaseStore:
         return pd.DataFrame([{"Code": row["stock_code"], "Name": row["stock_name"],
                               "AsOf": as_of} for row in rows])
 
+    def upsert_market_status(self, row):
+        self._request("POST", "/rest/v1/market_status?on_conflict=status_date", [row],
+                      prefer="resolution=merge-duplicates,return=minimal")
+
     def upsert_prices(self, code, frame):
-        missing = set(PRICE_COLUMNS) - set(frame)
-        if missing:
-            raise ValueError(f"Raw prices missing: {sorted(missing)}")
-        dates = pd.to_datetime(frame["Date"], errors="raise")
-        if dates.isna().any() or dates.duplicated().any():
-            raise ValueError("Invalid or duplicate price dates")
+        self.upsert_price_panel({code: frame})
+
+    def upsert_price_panel(self, frames):
         values = []
-        for row in frame.to_dict("records"):
-            item = {"stock_code": code}
-            for source, target in PRICE_COLUMNS.items():
-                value = row[source]
-                item[target] = pd.Timestamp(value).date().isoformat() if source == "Date" else (
-                    None if pd.isna(value) else float(value))
-            values.append(item)
+        for code, frame in frames.items():
+            missing = set(PRICE_COLUMNS) - set(frame)
+            if missing:
+                raise ValueError(f"Raw prices missing: {sorted(missing)}")
+            dates = pd.to_datetime(frame["Date"], errors="raise")
+            if dates.isna().any() or dates.duplicated().any():
+                raise ValueError("Invalid or duplicate price dates")
+            for row in frame.to_dict("records"):
+                item = {"stock_code": code}
+                for source, target in PRICE_COLUMNS.items():
+                    value = row[source]
+                    item[target] = pd.Timestamp(value).date().isoformat() if source == "Date" else (
+                        None if pd.isna(value) else float(value))
+                values.append(item)
         for offset in range(0, len(values), 500):
             self._request("POST", "/rest/v1/chart_prices?on_conflict=stock_code,trade_date",
                           values[offset:offset + 500], prefer="resolution=merge-duplicates,return=minimal")
@@ -115,6 +141,41 @@ class SupabaseStore:
         if not frame.empty:
             frame["Date"] = pd.to_datetime(frame["Date"])
         return frame
+
+    def load_price_panel(self, start, end):
+        rows = []
+        while True:
+            page = self._request("GET", "/rest/v1/chart_prices?trade_date=gte." + quote(start) +
+                                 "&trade_date=lte." + quote(end) +
+                                 "&select=*&order=stock_code,trade_date&limit=1000&offset=" + str(len(rows)))
+            rows.extend(page)
+            if len(page) < 1000:
+                break
+        if not rows:
+            return {}
+        panel = pd.DataFrame(rows).rename(columns={target: source for source, target in PRICE_COLUMNS.items()})
+        panel["Date"] = pd.to_datetime(panel["Date"])
+        return {code: frame[list(PRICE_COLUMNS)].reset_index(drop=True)
+                for code, frame in panel.groupby("stock_code", sort=True)}
+
+    def upload_feature_panel(self, as_of, builder_id, raw_hashes, frames):
+        """Archive current model inputs in one file; raw history remains in chart_prices."""
+        if not frames or set(frames) != set(raw_hashes):
+            raise ValueError("Feature panel/input identities mismatch")
+        frame = pd.DataFrame([dict(frames[code][1], stock_code=code) for code in sorted(frames)])
+        data = io.BytesIO()
+        frame.to_parquet(data, index=False)
+        key = f"{builder_id}/{as_of}/{canonical_hash(raw_hashes)}/batch.parquet"
+        self._request("POST", "/storage/v1/object/chart-features/" + quote(key, safe="/"),
+                      data.getvalue(), content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
+        digest = hashlib.sha256(data.getvalue()).hexdigest()
+        rows = [{"stock_code": code, "as_of": as_of, "builder_id": builder_id,
+                 "input_sha256": raw_hashes[code], "storage_path": key,
+                 "feature_sha256": digest} for code in sorted(frames)]
+        for offset in range(0, len(rows), 500):
+            self._request("POST", "/rest/v1/chart_feature_snapshots?on_conflict=stock_code,as_of,builder_id,input_sha256",
+                          rows[offset:offset + 500], prefer="resolution=merge-duplicates,return=minimal")
+
 
     def _load_private_frame(self, key):
         try:
@@ -179,6 +240,7 @@ class SupabaseStore:
         self._request("POST", "/rest/v1/chart_feature_snapshots?on_conflict=stock_code,as_of,builder_id,input_sha256",
                       [record], prefer="resolution=merge-duplicates,return=minimal")
         return record
+
 
     def load_features(self, code, as_of, builder_id, input_hash):
         path = ("/rest/v1/chart_feature_snapshots?stock_code=eq." + quote(code) +
@@ -292,7 +354,7 @@ def _pack_releases(manifest):
             raise ValueError("Pack horizon mismatch")
         releases.append({"release_id": f"{manifest['pack_id']}:{key}",
                          "horizon": horizon, "profile": item["profile"],
-                         "policy_id": "multi_stock_up_sigma_001_005_v1",
+                         "policy_id": POLICY_ID,
                          "model_sha256": item["model_sha256"],
                          "features_sha256": canonical_hash({
                              "builder": manifest["feature_builder_id"],

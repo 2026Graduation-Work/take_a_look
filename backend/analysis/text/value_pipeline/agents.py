@@ -171,7 +171,9 @@ def relevance_key(company: str) -> str:
     return key
 
 
-def relevant_indices(items: list[dict], company: str) -> list[int]:
+def relevant_indices(
+    items: list[dict], company: str, *, key_override: str | None = None
+) -> list[int]:
     """해당 기업 관련 기사의 인덱스. 100% 결정론 — LLM을 쓰지 않는다.
 
     제목+본문에 회사 키워드가 있으면 관련으로 본다. 빅카인즈 본문은 200자로
@@ -180,7 +182,7 @@ def relevant_indices(items: list[dict], company: str) -> list[int]:
 
     회사명이 비면 전량을 관련으로 본다 — 거를 근거가 없는데 임의로 거르면 안 된다.
     """
-    key = relevance_key(company)
+    key = (key_override or "").replace(" ", "") or relevance_key(company)
     if not key:
         return list(range(len(items)))
     return [

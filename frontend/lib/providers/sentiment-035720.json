@@ -1,0 +1,191 @@
+{
+  "schema_version": "1.0",
+  "track": "historical",
+  "scope": {
+    "ticker": "035720",
+    "company_name": "카카오"
+  },
+  "source": "bigkinds",
+  "as_of": "2025-12-19T23:59:59.999999+09:00",
+  "backend": "kr-finbert",
+  "status": "ok",
+  "coverage": {
+    "fetched_count": 153,
+    "relevant_count": 82,
+    "publisher_count": 2,
+    "newest_published_at": null,
+    "lag_minutes": null
+  },
+  "window": {
+    "start": "2025-11-26",
+    "end": "2025-12-19",
+    "status": "ok",
+    "sentiment_mean": -0.1264,
+    "sentiment_std": null,
+    "article_count": 82,
+    "publisher_count": 2
+  },
+  "timeline": [
+    {
+      "status": "ok",
+      "sentiment_mean": 0.0,
+      "sentiment_std": null,
+      "article_count": 5,
+      "publisher_count": 2,
+      "date": "2025-11-26"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.0001,
+      "sentiment_std": null,
+      "article_count": 2,
+      "publisher_count": 1,
+      "date": "2025-11-27"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.3333,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 2,
+      "date": "2025-11-28"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.0698,
+      "sentiment_std": null,
+      "article_count": 1,
+      "publisher_count": 1,
+      "date": "2025-11-29"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.9705,
+      "sentiment_std": null,
+      "article_count": 1,
+      "publisher_count": 1,
+      "date": "2025-11-30"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.0001,
+      "sentiment_std": null,
+      "article_count": 2,
+      "publisher_count": 1,
+      "date": "2025-12-01"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.4838,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 2,
+      "date": "2025-12-02"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.4928,
+      "sentiment_std": null,
+      "article_count": 2,
+      "publisher_count": 1,
+      "date": "2025-12-03"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.2414,
+      "sentiment_std": null,
+      "article_count": 4,
+      "publisher_count": 2,
+      "date": "2025-12-04"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.0001,
+      "sentiment_std": null,
+      "article_count": 1,
+      "publisher_count": 1,
+      "date": "2025-12-07"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.2497,
+      "sentiment_std": null,
+      "article_count": 4,
+      "publisher_count": 2,
+      "date": "2025-12-08"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.0008,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 2,
+      "date": "2025-12-09"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.0009,
+      "sentiment_std": null,
+      "article_count": 5,
+      "publisher_count": 2,
+      "date": "2025-12-10"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.6665,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 2,
+      "date": "2025-12-11"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.6599,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 2,
+      "date": "2025-12-12"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.5721,
+      "sentiment_std": null,
+      "article_count": 7,
+      "publisher_count": 2,
+      "date": "2025-12-15"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.1139,
+      "sentiment_std": null,
+      "article_count": 8,
+      "publisher_count": 2,
+      "date": "2025-12-16"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.6619,
+      "sentiment_std": null,
+      "article_count": 3,
+      "publisher_count": 1,
+      "date": "2025-12-17"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": -0.8327,
+      "sentiment_std": null,
+      "article_count": 18,
+      "publisher_count": 2,
+      "date": "2025-12-18"
+    },
+    {
+      "status": "ok",
+      "sentiment_mean": 0.3559,
+      "sentiment_std": null,
+      "article_count": 4,
+      "publisher_count": 2,
+      "date": "2025-12-19"
+    }
+  ],
+  "articles": []
+}

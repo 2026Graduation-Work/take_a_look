@@ -1,4 +1,4 @@
-"""뉴스 감성 생성: BigKinds 코퍼스 실데이터 → 삼성전자 sentiment-fixture.ts / 그 외 sentiment-<코드>.json
+"""뉴스 감성 생성: BigKinds 코퍼스 실데이터 → 삼성전자 sentiment-fixture.ts / 그 외 백엔드 track JSON
 
 backend value_pipeline news_agent와 같은 규칙으로 일별 감성을 낸다.
     관련성 필터(relevant_indices) → 하루 최대 max_daily_articles건
@@ -11,8 +11,9 @@ N07 "뉴스 감성 급변" 임계는 전체 기간 일별 감성 변화량 |Δ|�
 점수를 만들지 않고 실제 코퍼스에서 그런 날짜 구간을 찾는다.
 
 종목(--ticker): 005930(기본)은 기존 sentiment-fixture.ts(대표 기사 제목 포함)를 만든다.
-그 외 종목은 frontend/lib/providers/sentiment-<코드>.json에 **날짜별 집계만** 쓴다(기사 제목·본문 없음,
-docs/decisions/bigkinds-acquisition.md). 코퍼스는 preprocess로 만든 news_corpus_<코드>.csv이고,
+그 외 종목은 frontend/lib/providers/sentiment-<코드>.json에 news_tracks.py와 같은
+historical track 계약을 쓴다. 일별 표준편차는 기사별 점수가 없는 재사용 경로에서는 null이다.
+기사 제목·본문은 커밋하지 않는다(docs/decisions/bigkinds-acquisition.md). 코퍼스는 preprocess로 만든 news_corpus_<코드>.csv이고,
 삼성전자와 같은 기간(2025-10-29~12-31)만 쓴다.
     cd backend && python -m analysis.text.preprocess --ticker 005380 --out news_corpus_005380.csv
     python frontend/scripts/build_sentiment_fixture.py --ticker 005380 \\
@@ -173,6 +174,66 @@ def delta(days: list[dict], index: int) -> float:
     return abs(days[index]["score"] - days[index - 1]["score"])
 
 
+def build_historical_track(window: list[dict], corpus: dict[str, list[dict]], backend: str) -> dict:
+    """프론트 픽스처도 백엔드 news_tracks historical 계약으로 낸다.
+
+    재사용하는 일별 CSV에는 기사별 점수가 없으므로 sentiment_std는
+    0으로 지어내지 않고 null로 남긴다.
+    """
+    relevant_count = sum(day["articleCount"] for day in window)
+    publishers = {
+        item["press"]
+        for day in window
+        for item in day["items"]
+        if item.get("press")
+    }
+    weighted_mean = round(
+        sum(day["score"] * day["articleCount"] for day in window) / relevant_count,
+        4,
+    )
+    timeline = []
+    for day in window:
+        day_publishers = {item["press"] for item in day["items"] if item.get("press")}
+        timeline.append(
+            {
+                "status": "ok",
+                "sentiment_mean": day["score"],
+                "sentiment_std": None,
+                "article_count": day["articleCount"],
+                "publisher_count": len(day_publishers),
+                "date": day["date"],
+            }
+        )
+    start, end = window[0]["date"], window[-1]["date"]
+    return {
+        "schema_version": "1.0",
+        "track": "historical",
+        "scope": {"ticker": TICKER, "company_name": COMPANY},
+        "source": "bigkinds",
+        "as_of": f"{end}T23:59:59.999999+09:00",
+        "backend": backend,
+        "status": "ok",
+        "coverage": {
+            "fetched_count": sum(len(corpus[day["date"]]) for day in window),
+            "relevant_count": relevant_count,
+            "publisher_count": len(publishers),
+            "newest_published_at": None,
+            "lag_minutes": None,
+        },
+        "window": {
+            "start": start,
+            "end": end,
+            "status": "ok",
+            "sentiment_mean": weighted_mean,
+            "sentiment_std": None,
+            "article_count": relevant_count,
+            "publisher_count": len(publishers),
+        },
+        "timeline": timeline,
+        "articles": [],
+    }
+
+
 def main() -> None:
     args = parse_args()
     placeholder = args.scorer != "finbert" or args.limit is not None
@@ -216,19 +277,12 @@ def main() -> None:
     window = days[end - WINDOW_DAYS + 1 : end + 1]
     last = window[-1]
 
-    last_scores = last.get("scores") or score([_text_of(item) for item in last["items"]], args.scorer)
-    if "scores" not in last and abs(aggregate(last_scores)[0] - last["score"]) > 1e-4:
-        raise SystemExit(f"{last['date']}: 재채점 평균이 일별 점수와 다릅니다.")
-    ranked = sorted(zip(last["items"], last_scores), key=lambda pair: abs(pair[1]), reverse=True)
     series = {
         "days": [
             {"date": day["date"], "score": day["score"], "articleCount": day["articleCount"]}
             for day in window
         ],
-        "headlines": [
-            {"date": last["date"], "title": item["title"], "press": item["press"]}
-            for item, _score in ranked[:HEADLINES]
-        ],
+        "headlines": [],
     }
     scored = sum(day["articleCount"] for day in days)
 
@@ -246,23 +300,27 @@ def main() -> None:
     if args.daily_log:
         flags += f" --daily-log {display_path(args.daily_log)}"
     previous = window[-2]
+    payload = build_historical_track(
+        window,
+        corpus,
+        "kr-finbert" if args.scorer == "finbert" else "dictionary",
+    )
+    track_out = PROVIDERS / f"sentiment-{TICKER}.json"
+    track_out.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     if TICKER != "005930":
-        # 기사 제목·본문은 커밋하지 않는다. 날짜별 평균 점수와 기사 수만 남긴다.
-        payload = {
-            "$comment": [
-                f"{COMPANY}({TICKER}) 뉴스 감성. 자동 생성 파일이므로 직접 고치지 않는다.",
-                f"생성: python frontend/scripts/build_sentiment_fixture.py --ticker {TICKER} {flags}",
-                f"원천: BigKinds {display_path(CORPUS)}, {days[0]['date']} ~ {days[-1]['date']} 중 관련 기사가 있는 {len(days)}일, 채점 {scored}건",
-                f"감성 백엔드: {backend}, 기사 텍스트 = 제목 + 본문 앞 {BODY_CHARS}자 (backend value_pipeline news_agent와 같은 규칙)",
-                f"20일 창: {window[0]['date']} ~ {last['date']}. 이 종목 |Δ| p90 = {p90}인 가장 늦은 날로 끝나게 골랐다(삼성전자와 같은 규칙)",
-            ],
-            "source": "real" if not placeholder else "placeholder",
-            "days": series["days"],
-            "headlines": [],
-        }
-        OUT.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"wrote {OUT} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})", file=sys.stderr)
+        print(f"wrote {track_out} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})", file=sys.stderr)
         return
+    last_scores = last.get("scores") or score([_text_of(item) for item in last["items"]], args.scorer)
+    if "scores" not in last and abs(aggregate(last_scores)[0] - last["score"]) > 1e-4:
+        raise SystemExit(f"{last['date']}: 재채점 평균이 일별 점수와 다릅니다.")
+    ranked = sorted(zip(last["items"], last_scores), key=lambda pair: abs(pair[1]), reverse=True)
+    series["headlines"] = [
+        {"date": last["date"], "title": item["title"], "press": item["press"]}
+        for item, _score in ranked[:HEADLINES]
+    ]
     OUT.write_text(
         "\n".join(
             [
@@ -291,7 +349,8 @@ def main() -> None:
         encoding="utf-8",
     )
     print(
-        f"wrote {OUT} (days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})",
+        f"wrote {OUT} and {track_out} "
+        f"(days={len(days)}, scored={scored}, p90={p90}, window_end={last['date']})",
         file=sys.stderr,
     )
 

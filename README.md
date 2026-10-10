@@ -5,8 +5,8 @@
 행동재무학 기반 투자 판단 보조 플랫폼 · 성균관대 소프트웨어학과 2026 졸업작품.
 투자 성향을 진단해 근거를 보여 주는 순서를 사람마다 다르게 하고, 주가 예측 모델은 여러 근거 중 하나로만 씁니다.
 
-[![Web CI](https://github.com/2026Graduation-Work/Stock_Prediction_v2/actions/workflows/web-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/Stock_Prediction_v2/actions/workflows/web-ci.yml)
-[![Python CI](https://github.com/2026Graduation-Work/Stock_Prediction_v2/actions/workflows/python-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/Stock_Prediction_v2/actions/workflows/python-ci.yml)
+[![Web CI](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/web-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/web-ci.yml)
+[![Python CI](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 **라이브 데모 → https://takealook-skku.vercel.app** (기존 주소 https://stock-prediction-v2-chi.vercel.app 도 그대로 동작합니다. 가입 없이 "데모로 둘러보기"로 모든 화면을 볼 수 있습니다)
@@ -20,7 +20,8 @@
 - **성향 진단** — 16문항(8축) 진단으로 투자 유형을 정합니다. 더 정확히 하고 싶으면 24문항 진단도 있습니다.
 - **성향에 맞춘 근거** — 종목마다 네 가지 근거(시장 분위기 · 누가 사고팔았나 · 회사 체력 · 모델이 본 이유)를 성향에 맞는 순서와 체크포인트로 보여 줍니다. 종목을 걸러 내지는 않습니다.
 - **설명 가능한 숫자** — 모든 수치에 비교 기준과 출처를 붙입니다. "상승 확률 70%" 대신 "과거 비슷한 경우 10번 중 7번은 이 범위였어요"처럼 말하고, 미래 가격 곡선은 그리지 않습니다.
-- **대시보드** — 맨 위 한 줄로 "오늘 확인할 것"을 알려 주고, 보유 종목 맵과 신호가 강한 종목을 보여 줍니다.
+- **대시보드** — 맨 위 한 줄로 "오늘 확인할 것"을 알려 주고, 보유 종목 맵(최신 종가 기준 평가금액)과 신호가 강한 종목을 보여 줍니다.
+- **코스피 전 종목** — 헤더 검색으로 코스피 전 종목의 상세(모델 신호·최근 공시·수급·가격 흔들림)를 볼 수 있고 보유 종목으로 등록할 수 있습니다. 보유·관심 종목은 뉴스 분위기와 최신 정기보고서 재무도 매일·매주 채워집니다.
 
 <p>
   <img src="docs/images/onboarding-welcome-mobile.png" alt="모바일 환영 화면" width="30%" />
@@ -41,8 +42,8 @@
 Node 22 이상과 pnpm이 필요합니다.
 
 ```bash
-git clone https://github.com/2026Graduation-Work/Stock_Prediction_v2.git
-cd Stock_Prediction_v2/frontend
+git clone https://github.com/2026Graduation-Work/take_a_look.git
+cd take_a_look/frontend
 pnpm install
 cp .env.example .env.local
 pnpm dev   # http://localhost:3000
@@ -77,7 +78,7 @@ API 키(`DART_API_KEY`, `NEWSAPI_AI_KEY` 등)는 저장소 루트의 `.env`에 �
 
 ```mermaid
 flowchart LR
-  src[("시세·뉴스·공시<br/>FinanceDataReader · BigKinds · DART")]
+  src[("시세·수급·뉴스·공시<br/>KRX(pykrx) · FinanceDataReader · BigKinds · NewsAPI.ai · DART")]
   subgraph backend["backend (Python)"]
     chart["analysis/chart<br/>단기 예측"]
     text["analysis/text<br/>뉴스·재무"]
@@ -109,6 +110,7 @@ docs/               설계·데이터·설정 문서 (색인: docs/README.md)
 
 - 별도 API 서버 없이 프론트가 Supabase를 직접 조회하고, 블록 사이는 `schema/`의 JSON 스키마로만 주고받습니다.
 - 새 데이터 소스나 모델을 붙이려면 해당 스키마를 맞춰 출력하면 화면에 그대로 연결됩니다.
+- 모든 서비스는 2027-02-01까지 무료 한도 안에서 돌립니다. 한도·보존 정책은 [docs/ops/free-tier-budget.md](docs/ops/free-tier-budget.md), 주 1회 감시 워크플로가 기준을 넘으면 이슈를 남깁니다.
 
 **기술 스택**: Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Recharts · Supabase · Vercel / Python · LightGBM · KR-FinBERT · FinanceDataReader
 

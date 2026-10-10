@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "track": "financial",
+  "scope": {
+    "ticker": "005380",
+    "company_name": "현대차"
+  },
+  "source": "dart",
+  "as_of": "2025-12-30",
+  "status": "ok",
+  "filing": {
+    "fiscal_year": 2024,
+    "statement": "CFS",
+    "receipt_no": "20250312001148",
+    "filed_at": "2025-03-12",
+    "shares_basis": "2024-12-31 common_shares"
+  },
+  "price": {
+    "value": 296500.0,
+    "as_of": "2025-12-30",
+    "source": "fdr"
+  },
+  "metrics": [
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "per",
+      "value": 4.5889,
+      "unit": "multiple",
+      "basis": "주가 296,500원 ÷ 주당순이익(당기순이익 13.2조원 ÷ 발행주식수 204,757,766주)",
+      "note": null
+    },
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "pbr",
+      "value": 0.5048,
+      "unit": "multiple",
+      "basis": "주가 296,500원 ÷ 주당순자산(자본총계 120.3조원 ÷ 발행주식수 204,757,766주)",
+      "note": null
+    },
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "roe",
+      "value": 10.9996,
+      "unit": "percent",
+      "basis": "당기순이익 13.2조원 ÷ 자본총계 120.3조원",
+      "note": null
+    },
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "operating_margin",
+      "value": 8.1262,
+      "unit": "percent",
+      "basis": "영업이익 14.2조원 ÷ 매출 175.2조원",
+      "note": null
+    },
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "debt_ratio",
+      "value": 182.5157,
+      "unit": "percent",
+      "basis": "부채총계 219.5조원 ÷ 자본총계 120.3조원",
+      "note": null
+    },
+    {
+      "ticker": "005380",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "revenue_growth",
+      "value": 7.7261,
+      "unit": "percent",
+      "basis": "2024년 매출 175.2조원 ÷ 2023년 매출 162.7조원 − 1",
+      "note": null
+    }
+  ],
+  "validation": {
+    "errors": []
+  }
+}

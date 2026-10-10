@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "track": "financial",
+  "scope": {
+    "ticker": "068270",
+    "company_name": "셀트리온"
+  },
+  "source": "dart",
+  "as_of": "2025-12-30",
+  "status": "ok",
+  "filing": {
+    "fiscal_year": 2024,
+    "statement": "CFS",
+    "receipt_no": "20250317000929",
+    "filed_at": "2025-03-17",
+    "shares_basis": "2024-12-31 common_shares"
+  },
+  "price": {
+    "value": 172523.0,
+    "as_of": "2025-12-30",
+    "source": "fdr"
+  },
+  "metrics": [
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "per",
+      "value": 95.1245,
+      "unit": "multiple",
+      "basis": "주가 172,523원 ÷ 주당순이익(당기순이익 4,189억원 ÷ 발행주식수 230,960,969주)",
+      "note": null
+    },
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "pbr",
+      "value": 2.2665,
+      "unit": "multiple",
+      "basis": "주가 172,523원 ÷ 주당순자산(자본총계 17.6조원 ÷ 발행주식수 230,960,969주)",
+      "note": null
+    },
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "roe",
+      "value": 2.3827,
+      "unit": "percent",
+      "basis": "당기순이익 4,189억원 ÷ 자본총계 17.6조원",
+      "note": null
+    },
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "operating_margin",
+      "value": 13.8311,
+      "unit": "percent",
+      "basis": "영업이익 4,920억원 ÷ 매출 3.6조원",
+      "note": null
+    },
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "debt_ratio",
+      "value": 19.7676,
+      "unit": "percent",
+      "basis": "부채총계 3.5조원 ÷ 자본총계 17.6조원",
+      "note": null
+    },
+    {
+      "ticker": "068270",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "revenue_growth",
+      "value": 63.4466,
+      "unit": "percent",
+      "basis": "2024년 매출 3.6조원 ÷ 2023년 매출 2.2조원 − 1",
+      "note": null
+    }
+  ],
+  "validation": {
+    "errors": []
+  }
+}

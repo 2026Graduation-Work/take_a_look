@@ -13,7 +13,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
-from shared.settings import serving_root
+from shared.settings import processing_contract, serving_root
 
 from .calendar import refresh_krx_trading_days
 from .distribution import SampleIndex
@@ -87,6 +87,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         raise ValueError("Duplicate archived universe")
     flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
     frames, unavailable, raw_hashes = {}, {}, {}
+    archive_builder = BUILDER_ID + "_" + processing_contract()["sha256"][:16]
     for row in universe.itertuples():
         code = row.Code
         try:
@@ -99,7 +100,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
                 raw = stored
             else:
-                previous = store.load_price_history(code)
+                previous = None if historical_test else store.load_price_history(code)
                 request_start = start if previous is None else recent_start
                 fresh = _retry_fetch(code, request_start, as_of)
                 if previous is not None:
@@ -125,19 +126,30 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 if not flow.empty:
                     raw = raw.merge(flow.loc[flow.Code.eq(code)].drop(columns="Code"),
                                     on="Date", how="left", validate="one_to_one")
-                store.save_price_history(code, raw)
-                store.save_raw_prices(code, as_of, raw)
+                if not historical_test:
+                    store.save_price_history(code, raw)
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"
                 continue
-            features = build_feature_frame(raw, days)
-            current = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
+            digest = raw.attrs.get("input_sha256") if replay else None
+            if digest:
+                current = store.load_features(code, as_of, archive_builder, digest)
+                if current is None:
+                    raise ValueError(f"Archived compatible feature input absent for {code}/{as_of}")
+            else:
+                features = build_feature_frame(raw, days)
+                current = features.loc[pd.to_datetime(features.Date).eq(pd.Timestamp(as_of))]
             if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
                 unavailable[code] = "feature_row_missing"
                 continue
-            digest = frame_hash(raw)
-            store.upload_features(code, as_of, BUILDER_ID, digest, current)
+            digest = digest or frame_hash(raw)
+            if not replay and not historical_test:
+                archive = raw.tail(60).copy()
+                archive.attrs["input_sha256"] = digest
+                store.save_raw_prices(code, as_of, archive)
+            if not hasattr(store, "upload_feature_panel"):
+                store.upload_features(code, as_of, archive_builder, digest, current)
             frames[code] = (raw, current.iloc[0].to_dict(), current)
             raw_hashes[code] = digest
         except ValueError as exc:
@@ -152,6 +164,8 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         all(pd.notna(row.get(f"flow_{investor}_{window}"))
             for investor in ("individual", "institution", "foreign") for window in (1, 5, 20))
         for _, row, _ in frames.values())
+    if hasattr(store, "upload_feature_panel"):
+        store.upload_feature_panel(as_of, archive_builder, raw_hashes, frames)
     return universe, frames, unavailable, raw_hashes, flow_report
 
 
@@ -159,6 +173,7 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
     names = dict(zip(universe.Code, universe.Name))
     codes = sorted(names)
     batch_id = canonical_hash({"as_of": as_of, "pack_id": pack["pack_id"],
+                               "output_policy": "winning_class_contribution_hist2_v2",
                                "builder": pack["feature_builder_id"], "names": names,
                                "raw_hashes": raw_hashes, "unavailable": unavailable})
     snapshots = []
@@ -183,15 +198,17 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
                     samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack)))
                 continue
             raw, row, _ = frames[code]
-            scores, contributions, features_hash = by_code[code]
+            scores, contributions, features_hash, contribution_total = by_code[code]
+            target = max(range(3), key=lambda i: scores[("down", "neutral", "up")[i]])
             sigma, close = float(row["Sigma"]), float(row["Close"])
             up, down = (item["label_barriers"][key] for key in ("up_mult", "down_mult"))
             inference = {"status": "available", "reason": None, "scores": scores,
                          "score_event": "class_2_upper_barrier_first", "close": close,
                          "sigma": sigma, "barriers": {"up": close * (1 + up * sigma),
                                                        "down": close * (1 - down * sigma)},
-                         "contribution_space": "class_2_raw_margin", "features": contributions}
-            price = price_snapshot(raw, code, as_of, "KRX adjusted daily OHLCV")
+                         "contribution_space": f"class_{target}_raw_margin", "features": contributions,
+                         "contribution_abs_sum": contribution_total}
+            price = price_snapshot(raw, code, as_of, "KRX 비수정 OHLC·거래대금, 동일 수정계수 적용")
             if price["status"] != "available":
                 raise ValueError(f"Stale price in batch: {code}")
             distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
@@ -222,12 +239,11 @@ def run(args):
             raise ValueError("--historical-test is dry-run only")
         if as_of == datetime.now(KST).date().isoformat():
             raise ValueError("--historical-test requires a past date")
-    config = yaml.safe_load(config_path().read_text())["active_pack"]
-    pack, paths = load_pack(root / "packs" / config["pack_id"])
+    pack, paths = active_pack(root)
     if pack["feature_builder_id"] != BUILDER_ID:
         raise ValueError("Daily inference requires a pack matching the corrected feature builder")
     store = SupabaseStore()
-    replay = pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test
+    replay = getattr(args, "replay", False) or (pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test)
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:
@@ -242,6 +258,13 @@ def run(args):
     (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))
     if args.publish:
         store.publish(batch, snapshots, pack)
+        try:
+            from shared.data.providers import krx
+
+            from .market import market_status_row
+            store.upsert_market_status(market_status_row(krx, as_of))
+        except Exception as exc:
+            print(json.dumps({"event": "market_status", "status": "failed", "error_type": type(exc).__name__}))
     print(json.dumps({"event": "published" if args.publish else ("historical_test" if historical_test else "dry_run"), "as_of": as_of,
                       "pack_id": pack["pack_id"], "stock_count": len(batch["expected_stock_codes"]),
                       "batch_id": batch["id"], **batch["result"]}))
@@ -333,3 +356,19 @@ def run_preview(args):
                       "as_of": as_of, "stock_code": args.code, "batch_id": batch["id"],
                       "sample_counts": {str(item["horizon"]): item["distribution"]["sample_count"]
                                         for item in snapshots}}))
+
+
+def data_root():
+    return serving_root()
+
+
+def active_pack(root=None):
+    config = yaml.safe_load(config_path().read_text())["active_pack"]
+    return load_pack((root or data_root()) / "packs" / config["pack_id"])
+
+
+def write_batch(root, batch, snapshots):
+    out = root / "batches" / batch["id"]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "batch.json").write_text(json.dumps(batch, ensure_ascii=False, indent=2))
+    (out / "snapshots.json").write_text(json.dumps(snapshots, ensure_ascii=False))

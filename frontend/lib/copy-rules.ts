@@ -14,12 +14,17 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /(오를|내릴)\s*것/, reason: "수익률 전망 (AGENTS.md 근거 서술)" },
   { pattern: /적중률/, reason: "모델 지표(ROC-AUC 등)를 적중률로 오표기할 수 있는 용어" },
   { pattern: /정확도\s*[\d{$]/, reason: "'정확도 N%' 표기 (ROC-AUC 오표기)" },
-  // 쉬운 말 규칙(copy-glossary.ts). "계산 근거" 영역은 copy-rules:계산근거 시작/끝 표시로 예외 처리한다.
+  // 쉬운 말 규칙(copy-glossary.ts). "계산 근거" 영역도 예외 없이 검사한다.
   { pattern: /추천/, reason: "모델 신호 순 목록을 '추천'으로 부르지 않는다 → '오늘 신호가 강한 종목'" },
   { pattern: /넛지/, reason: "개발 용어 → '체크포인트'" },
   { pattern: /\bH(5|10|20)\b/, reason: "개발 용어 → '1주 뒤/2주 뒤/4주 뒤'" },
   { pattern: /신뢰구간/, reason: "개발 용어 → '10번 중 N번 이 범위'" },
   { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다" },
-  { pattern: /composite/, reason: "개발 용어 — 계산 근거 영역에서만" },
+  // 화면에 값과 함께 쓴 경우만 잡는다(코드 식별자 bit.composite는 통과)
+  { pattern: /composite\s*[+\-\d{=]/, reason: "개발 용어 → '유형 점수'" },
+  { pattern: /psych_[a-z]/, reason: "개발 변수명 → '가격 흐름 분위기'" },
+  { pattern: /prob_up/, reason: "개발 변수명 → '과거 비슷한 신호 구간'" },
+  { pattern: /BIT\b|Pompian 행동투자자 유형\(BIT\)/, reason: "개발 용어 → '투자 유형'" },
+  { pattern: /실데이터/, reason: "실데이터가 기본이라 표시하지 않는다. 예시 값에만 '예시'를 단다(DESIGN.md 0장)" },
   { pattern: /시그널랩|signal ?lab(?!el)/i, reason: "옛 서비스명 → Take a Look (docs/CHANGELOG.md)" },
 ];

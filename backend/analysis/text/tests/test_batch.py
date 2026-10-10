@@ -9,7 +9,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
-import sys
 from pathlib import Path
 
 import pandas as pd
@@ -162,7 +161,7 @@ class _CountingDart:
 def test_dart_fetch_is_cached_per_fiscal_year(monkeypatch: pytest.MonkeyPatch) -> None:
     """같은 사업연도의 날짜들은 DART를 재호출하지 않아야 한다 (배치 한도 보호)."""
     _CountingDart.calls = {"finstate": 0, "report": 0}
-    monkeypatch.setitem(sys.modules, "OpenDartReader", _CountingDart)
+    monkeypatch.setattr(collectors_mod, "OpenDartReader", _CountingDart)
     monkeypatch.setattr(
         collectors_mod, "SETTINGS",
         dataclasses.replace(collectors_mod.SETTINGS, dart_api_key="x"),

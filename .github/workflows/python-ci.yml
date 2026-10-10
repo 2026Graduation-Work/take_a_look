@@ -15,13 +15,6 @@ on:
       - "ruff.toml"
       - ".github/workflows/python-ci.yml"
   pull_request:
-    paths:
-      - "backend/profiling/**"
-      - "frontend/lib/profiling/style-questions.json"
-      - "backend/analysis/**"
-      - "schema/**"
-      - "ruff.toml"
-      - ".github/workflows/python-ci.yml"
 
 permissions:
   contents: read
@@ -29,7 +22,7 @@ permissions:
 jobs:
   # ── 경로 감지 ──────────────────────────────────────────────────────────────
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       profiling: ${{ steps.filter.outputs.profiling }}
       chart: ${{ steps.filter.outputs.chart }}
@@ -61,7 +54,7 @@ jobs:
   profiling-test:
     needs: changes
     if: ${{ needs.changes.outputs.profiling == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend/profiling/survey
@@ -92,7 +85,7 @@ jobs:
   chart-test:
     needs: changes
     if: ${{ needs.changes.outputs.chart == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         environment: [experiments, serving]
@@ -135,7 +128,7 @@ jobs:
   text-test:
     needs: changes
     if: ${{ needs.changes.outputs.text == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 

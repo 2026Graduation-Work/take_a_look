@@ -1,0 +1,16 @@
+{
+  "id": "18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48",
+  "as_of": "2026-09-21",
+  "pack_id": "hold2022_2024_wf2019_2025_v1",
+  "release_h5": "hold2022_2024_wf2019_2025_v1:h5",
+  "release_h20": "hold2022_2024_wf2019_2025_v1:h20",
+  "expected_stock_codes": [
+    "005930"
+  ],
+  "status": "staging",
+  "result": {
+    "snapshot_count": 2,
+    "unavailable_count": 0,
+    "historical_test": true
+  }
+}

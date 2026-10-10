@@ -156,7 +156,16 @@
           ]
         },
         "contribution_space": {
-          "const": "class_2_raw_margin"
+          "enum": [
+            "class_0_raw_margin",
+            "class_1_raw_margin",
+            "class_2_raw_margin"
+          ]
+        },
+        "contribution_abs_sum": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of absolute contributions to the class identified by contribution_space over every feature, excluding the expected-value column. Optional for archived v2 snapshots."
         },
         "features": {
           "type": "array",

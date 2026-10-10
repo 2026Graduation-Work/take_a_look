@@ -46,7 +46,9 @@ def _articles() -> list[dict]:
     ]
 
 
-def _fixed_scores(texts: list[str]) -> tuple[list[float], str]:
+def _fixed_scores(
+    texts: list[str], *, require_finbert: bool = False, batch_size: int = 16
+) -> tuple[list[float], str]:
     scores = []
     for text in texts:
         scores.append(0.8 if "개선" in text else -0.2)
@@ -166,29 +168,177 @@ class _CountingFetcher:
         )
 
 
-def test_live_cycle_fetches_once_for_multiple_targets(
+def test_live_cycle_fetches_once_per_stock_with_no_combined_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """한 시간 주기마다 종목 수만큼 토큰을 쓰는 회귀를 막는다."""
+    """인기 종목이 다른 종목의 100건을 잠식하지 않도록 검색을 분리한다."""
     monkeypatch.setattr(news_tracks.sentiment, "score_texts", _fixed_scores)
     fetcher = _CountingFetcher()
 
     outputs = news_run.run_live_cycle(
-        {"005930": "삼성전자", "000660": "SK하이닉스"},
+        {
+            "005930": "삼성전자",
+            "005380": "현대차",
+            "035720": "카카오",
+            "068270": "셀트리온",
+        },
         fetcher=fetcher,
         as_of=datetime(2026, 9, 18, 12, 0, tzinfo=KST),
     )
 
-    assert len(fetcher.calls) == 1
-    assert fetcher.calls[0]["keywords"] == ["삼성전자", "SK하이닉스"]
-    assert fetcher.calls[0]["date_start"] == "2026-09-11"
-    assert fetcher.calls[0]["date_end"] == "2026-09-18"
-    assert set(outputs) == {"005930", "000660"}
-    assert outputs["005930"]["coverage"]["relevant_count"] == 2
-    assert outputs["000660"]["coverage"]["relevant_count"] == 1
+    assert [call["keywords"] for call in fetcher.calls] == [
+        ["삼성"],
+        ["현대차"],
+        ["카카오"],
+        ["셀트리온"],
+    ]
+    assert all(call["page_size"] == 100 for call in fetcher.calls)
+    assert all(call["date_start"] == "2026-09-16" for call in fetcher.calls)
+    assert all(call["date_end"] == "2026-09-18" for call in fetcher.calls)
+    assert set(outputs) == {"005930", "005380", "035720", "068270"}
     assert outputs["005930"]["coverage"]["provider_total_results"] == 150
     assert outputs["005930"]["coverage"]["provider_truncated"] is True
     assert outputs["005930"]["status"] == "partial"
+
+
+def test_samsung_live_query_collects_broadly_but_keeps_exact_company_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(news_tracks.sentiment, "score_texts", _fixed_scores)
+    captured_keywords: list[list[str]] = []
+
+    def fetcher(keywords, date_start, date_end, *, page_size):
+        captured_keywords.append(keywords)
+        return [
+            {
+                "news_id": "electronics-title",
+                "title": "삼성전자 반도체 실적 개선",
+                "summary": "영업이익이 증가했다.",
+                "press": "A",
+                "published_at": "2026-09-18T01:00:00Z",
+            },
+            {
+                "news_id": "electronics-body",
+                "title": "반도체 업계 실적 개선",
+                "summary": "삼성전자의 영업이익이 증가했다.",
+                "press": "A",
+                "published_at": "2026-09-18T00:45:00Z",
+            },
+            {
+                "news_id": "insurance",
+                "title": "삼성생명 실적 발표",
+                "summary": "삼성생명보험 관련 뉴스",
+                "press": "B",
+                "published_at": "2026-09-18T00:30:00Z",
+            },
+            {
+                "news_id": "baseball",
+                "title": "삼성 라이온즈 5연승",
+                "summary": "프로야구 경기 결과",
+                "press": "C",
+                "published_at": "2026-09-18T00:00:00Z",
+            },
+        ]
+
+    output = news_run.run_live_cycle(
+        {"005930": "삼성전자"},
+        fetcher=fetcher,
+        as_of=datetime(2026, 9, 18, 12, 0, tzinfo=KST),
+    )["005930"]
+
+    assert captured_keywords == [["삼성"]]
+    assert output["coverage"]["fetched_count"] == 4
+    assert output["coverage"]["relevant_count"] == 2
+    assert [article["news_id"] for article in output["articles"]] == [
+        "electronics-title",
+        "electronics-body",
+    ]
+
+
+def test_live_track_uses_exact_preceding_24_hours_and_scores_all_remaining(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    as_of = datetime(2026, 9, 18, 12, 0, tzinfo=KST)
+    captured: list[str] = []
+
+    def capture_scores(texts: list[str], **kwargs) -> tuple[list[float], str]:
+        captured.extend(texts)
+        return [0.25] * len(texts), "kr-finbert"
+
+    monkeypatch.setattr(news_tracks.sentiment, "score_texts", capture_scores)
+    articles = [
+        {
+            "news_id": "boundary",
+            "title": "삼성전자 경계 기사",
+            "summary": "정확히 24시간 전",
+            "press": "A",
+            "published_at": "2026-09-17T12:00:00+09:00",
+        },
+        {
+            "news_id": "newest",
+            "title": "삼성전자 최신 기사",
+            "summary": "기준 시각",
+            "press": "B",
+            "published_at": "2026-09-18T12:00:00+09:00",
+        },
+        {
+            "news_id": "too-old",
+            "title": "삼성전자 오래된 기사",
+            "summary": "경계보다 1초 전",
+            "press": "C",
+            "published_at": "2026-09-17T11:59:59+09:00",
+        },
+    ]
+
+    out = news_tracks.build_live_track(articles, "005930", "삼성전자", as_of=as_of)
+
+    assert len(captured) == 2
+    assert out["window"] == {
+        "start": "2026-09-17T12:00:00+09:00",
+        "end": "2026-09-18T12:00:00+09:00",
+        "status": "ok",
+        "sentiment_mean": 0.25,
+        "sentiment_std": 0.0,
+        "article_count": 2,
+        "publisher_count": 2,
+    }
+    assert [article["news_id"] for article in out["articles"]] == ["boundary", "newest"]
+    _assert_no_raw_text_fields(out)
+
+
+def test_live_track_marks_truncated_provider_sample_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(news_tracks.sentiment, "score_texts", _fixed_scores)
+
+    out = news_tracks.build_live_track(
+        _articles(),
+        "005930",
+        "삼성전자",
+        as_of=datetime(2026, 9, 18, 12, 0, tzinfo=KST),
+        provider_metadata={
+            "total_results": 101,
+            "returned_count": 100,
+            "pages": 2,
+            "truncated": True,
+        },
+    )
+
+    assert out["status"] == "partial"
+    assert {
+        key: out["coverage"][key]
+        for key in (
+            "provider_total_results",
+            "provider_returned_count",
+            "provider_pages",
+            "provider_truncated",
+        )
+    } == {
+        "provider_total_results": 101,
+        "provider_returned_count": 100,
+        "provider_pages": 2,
+        "provider_truncated": True,
+    }
 
 
 def test_live_track_groups_utc_boundary_by_kst_date(
@@ -294,3 +444,15 @@ def test_historical_cycle_loads_bigkinds_days_and_builds_one_track(
     assert out["track"] == "historical"
     assert out["coverage"]["fetched_count"] == 3
     assert out["coverage"]["relevant_count"] == 2
+
+
+def test_historical_inference_batch_size_is_forwarded_without_changing_scores(monkeypatch):
+    sizes = []
+    def score(texts, **kwargs):
+        sizes.append(kwargs['batch_size'])
+        return [0.25] * len(texts), 'kr-finbert'
+    monkeypatch.setattr(news_tracks.sentiment, 'score_texts', score)
+    output = news_run.run_historical_cycle('005930','삼성전자','2026-09-18','2026-09-18',
+        loader=lambda *args, **kwargs: _articles(), require_finbert=True, inference_batch_size=32)
+    assert sizes == [32]
+    assert output['window']['sentiment_mean'] == 0.25

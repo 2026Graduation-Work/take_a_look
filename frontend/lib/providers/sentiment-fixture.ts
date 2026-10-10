@@ -1,136 +1,136 @@
 // FIXTURE — 실데이터 아님.
 // 단, 삼성전자(005930) 감성 점수와 기사 제목은 실제 기사에서 집계했다. 자동 생성 파일이므로 직접 고치지 않는다.
-// 생성: python frontend/scripts/build_sentiment_fixture.py --scorer finbert --daily-log backend/analysis/text/data/processed/news_sentiment_daily.csv
+// 생성: python frontend/scripts/build_sentiment_fixture.py --scorer finbert
 //       (backend value_pipeline news_agent와 같은 규칙)
-// 원천: backend/analysis/text/data/processed/news_corpus.csv, 2025-10-29 ~ 2025-12-31 중 관련 기사가 있는 64일, 채점 8920건
+// 원천: backend/analysis/text/data/processed/news_corpus.csv, 2025-10-29 ~ 2025-12-31 중 관련 기사가 있는 62일, 채점 1150건
 // 감성 백엔드: kr-finbert (snunlp/KR-FinBert-SC), 기사 텍스트 = 제목 + 본문 앞 1000자
-// N07 임계: 일별 감성 변화량 |Δ| 63개의 상위 10% 분위수(p90, inclusive 보간) = 0.3443
-// 20일 창: 2025-12-02 ~ 2025-12-21. |Δ| >= p90인 가장 늦은 날로 끝나게 실제 날짜 구간을 골랐다.
-//   마지막 날 |Δ| = 0.3942 (2025-12-20 +0.2095 → 2025-12-21 +0.6037)
+// N07 임계: 일별 감성 변화량 |Δ| 61개의 상위 10% 분위수(p90, inclusive 보간) = 0.5044
+// 20일 창: 2025-11-28 ~ 2025-12-18. |Δ| >= p90인 가장 늦은 날로 끝나게 실제 날짜 구간을 골랐다.
+//   마지막 날 |Δ| = 0.6005 (2025-12-17 +0.8119 → 2025-12-18 +0.2114)
 // 데모 기준일(2025-12-30)은 코퍼스 기간 안이라 주가 기간(최근 60거래일)과 겹친다.
 
 import type { SentimentSeries } from "./index";
 
-export const SENTIMENT_SHIFT_P90 = 0.3443;
+export const SENTIMENT_SHIFT_P90 = 0.5044;
 
 export const SAMSUNG_SENTIMENT: SentimentSeries = {
   "days": [
     {
+      "date": "2025-11-28",
+      "score": 0.0294,
+      "articleCount": 16
+    },
+    {
+      "date": "2025-11-30",
+      "score": -0.1197,
+      "articleCount": 6
+    },
+    {
+      "date": "2025-12-01",
+      "score": 0.4749,
+      "articleCount": 15
+    },
+    {
       "date": "2025-12-02",
-      "score": 0.4096,
-      "articleCount": 200
+      "score": 0.1164,
+      "articleCount": 20
     },
     {
       "date": "2025-12-03",
-      "score": 0.4806,
-      "articleCount": 182
+      "score": 0.5355,
+      "articleCount": 29
     },
     {
       "date": "2025-12-04",
-      "score": 0.2929,
-      "articleCount": 169
-    },
-    {
-      "date": "2025-12-05",
-      "score": 0.2199,
-      "articleCount": 60
-    },
-    {
-      "date": "2025-12-06",
-      "score": 0.2966,
-      "articleCount": 21
-    },
-    {
-      "date": "2025-12-07",
-      "score": 0.4217,
-      "articleCount": 74
-    },
-    {
-      "date": "2025-12-08",
-      "score": 0.4138,
-      "articleCount": 107
-    },
-    {
-      "date": "2025-12-09",
-      "score": 0.4095,
-      "articleCount": 178
-    },
-    {
-      "date": "2025-12-10",
-      "score": 0.3015,
-      "articleCount": 125
-    },
-    {
-      "date": "2025-12-11",
-      "score": 0.3465,
-      "articleCount": 167
-    },
-    {
-      "date": "2025-12-12",
-      "score": 0.468,
-      "articleCount": 188
-    },
-    {
-      "date": "2025-12-13",
-      "score": 0.3971,
-      "articleCount": 22
-    },
-    {
-      "date": "2025-12-14",
-      "score": 0.3463,
-      "articleCount": 88
-    },
-    {
-      "date": "2025-12-15",
-      "score": 0.2369,
-      "articleCount": 200
-    },
-    {
-      "date": "2025-12-16",
-      "score": 0.2554,
-      "articleCount": 146
-    },
-    {
-      "date": "2025-12-17",
-      "score": 0.5362,
-      "articleCount": 116
-    },
-    {
-      "date": "2025-12-18",
-      "score": 0.1613,
-      "articleCount": 200
-    },
-    {
-      "date": "2025-12-19",
-      "score": 0.4688,
-      "articleCount": 146
-    },
-    {
-      "date": "2025-12-20",
-      "score": 0.2095,
+      "score": 0.1975,
       "articleCount": 14
     },
     {
-      "date": "2025-12-21",
-      "score": 0.6037,
-      "articleCount": 55
+      "date": "2025-12-05",
+      "score": 0.273,
+      "articleCount": 9
+    },
+    {
+      "date": "2025-12-06",
+      "score": -0.0264,
+      "articleCount": 6
+    },
+    {
+      "date": "2025-12-07",
+      "score": 0.5477,
+      "articleCount": 7
+    },
+    {
+      "date": "2025-12-08",
+      "score": 0.3948,
+      "articleCount": 13
+    },
+    {
+      "date": "2025-12-09",
+      "score": 0.3545,
+      "articleCount": 19
+    },
+    {
+      "date": "2025-12-10",
+      "score": 0.2644,
+      "articleCount": 18
+    },
+    {
+      "date": "2025-12-11",
+      "score": 0.2383,
+      "articleCount": 20
+    },
+    {
+      "date": "2025-12-12",
+      "score": 0.192,
+      "articleCount": 14
+    },
+    {
+      "date": "2025-12-13",
+      "score": 0.0,
+      "articleCount": 2
+    },
+    {
+      "date": "2025-12-14",
+      "score": 0.3432,
+      "articleCount": 8
+    },
+    {
+      "date": "2025-12-15",
+      "score": 0.1964,
+      "articleCount": 23
+    },
+    {
+      "date": "2025-12-16",
+      "score": 0.1867,
+      "articleCount": 15
+    },
+    {
+      "date": "2025-12-17",
+      "score": 0.8119,
+      "articleCount": 17
+    },
+    {
+      "date": "2025-12-18",
+      "score": 0.2114,
+      "articleCount": 26
     }
   ],
   "headlines": [
     {
-      "date": "2025-12-21",
-      "title": "[기고] 반도체 공정 화공약품 전문  업황 수혜 '기대'",
-      "press": "무등일보"
+      "date": "2025-12-18",
+      "title": "삼성, 데이터센터용 '소캠2' 엔비디아 손잡고 시장 선점",
+      "press": "매일경제"
     },
     {
-      "date": "2025-12-21",
-      "title": "HBM4 승부수 삼성전자, 엔비디아가 품질 테스트서 가장 좋은 평가",
-      "press": "한국일보"
+      "date": "2025-12-18",
+      "title": "삼성, 엔비디아에 '소캠2' 샘플 공급 차세대 AI 메모리 시장 선점",
+      "press": "머니투데이"
     },
     {
-      "date": "2025-12-21",
-      "title": "중남미 데이터센터 증가에 삼성, 냉난방공조 시장 공략",
-      "press": "서울경제"
+      "date": "2025-12-18",
+      "title": "삼성전자, 주름제거 기능 탑재 '비스포크 AI 에어드레서' 출시",
+      "press": "머니투데이"
     }
   ]
 };

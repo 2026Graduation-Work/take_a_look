@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import SiteHeader from "../components/site-header";
+import { WatchlistEditor } from "../components/stock-marks";
 import { useOnboarding } from "../components/onboarding-provider";
 import { useStockOptions } from "./use-stock-options";
 import {
@@ -72,6 +73,16 @@ export default function HoldingsEditor({
         })));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
+  const [baseline, setBaseline] = useState<SavedHolding[]>(initial); // 마지막으로 저장된 목록
+  const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
+
+  // 새로고침·탭 닫기 때만 막는다. ponytail: 앱 안 링크 이동은 못 막음, 필요해지면 라우터 가드 추가
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState(""); // 종목 추가 시트 안 오류
@@ -131,11 +142,12 @@ export default function HoldingsEditor({
     setSaveError("");
     setStatus("saving");
     try {
-      await saveHoldings(rows, onboardingState.mode === "supabase" ? "supabase" : "demo");
+      await saveHoldings(rows, onboardingState.mode);
+      setBaseline(rows);
       setStatus("saved");
     } catch (cause) {
       setStatus("idle");
-      setSaveError(cause instanceof Error ? cause.message : "저장하지 못했습니다.");
+      setSaveError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
     }
   }
 
@@ -143,7 +155,7 @@ export default function HoldingsEditor({
   const total = rows.reduce((sum, row) => sum + row.quantity * (row.avgBuyPrice ?? 0), 0);
 
   const field =
-    "h-11 w-full rounded-md bg-field px-3.5 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
+    "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
 
   return (
     <div className="w-full">
@@ -176,7 +188,7 @@ export default function HoldingsEditor({
             </div>
             <ul className="group-list m-0 list-none p-0">
               {rows.map((row) => (
-                <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-3.5 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
+                <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-4 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
                   <div className="col-span-2 flex items-baseline gap-2 sm:col-span-1">
                     <span className="text-base font-medium">{row.name}</span>
                     <span className="text-xs text-muted tabular-nums">{row.code}</span>
@@ -188,7 +200,7 @@ export default function HoldingsEditor({
                       aria-label={`${row.name} 수량`}
                       value={String(row.quantity)}
                       onChange={(event) => updateRow(row.code, { quantity: toInt(event.target.value) })}
-                      className="h-9 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
                   <label className="flex flex-col gap-1">
@@ -199,13 +211,14 @@ export default function HoldingsEditor({
                       value={row.avgBuyPrice === null ? "" : String(row.avgBuyPrice)}
                       placeholder="모름 · 현재가 기준"
                       onChange={(event) => updateRow(row.code, { avgBuyPrice: toOptionalInt(event.target.value) })}
-                      className="h-9 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
                   <button
                     type="button"
                     onClick={() => removeRow(row.code)}
-                    className="col-span-2 justify-self-start text-xs font-medium text-danger hover:underline sm:col-span-1 sm:justify-self-end"
+                    aria-label={`${row.name} 삭제`}
+                    className="btn-remove col-span-2 justify-self-start sm:col-span-1 sm:justify-self-end"
                   >
                     삭제
                   </button>
@@ -221,19 +234,30 @@ export default function HoldingsEditor({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-3 px-1">
-          <button type="button" onClick={submit} disabled={status === "saving"} className="btn-primary">
-            {status === "saving" ? "저장 중…" : "저장"}
-          </button>
+        <div className="flex flex-wrap items-center justify-end gap-3 px-1">
+          {dirty ? (
+            <span className="mr-auto flex items-center gap-2 text-xs text-body">
+              저장하지 않은 변경이 있어요
+              <button type="button" onClick={() => setRows(baseline)} className="btn-text min-h-11 text-xs">
+                되돌리기
+              </button>
+            </span>
+          ) : (
+            <span className="mr-auto text-xs text-muted">
+              {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
+            </span>
+          )}
           {status === "saved" && (
             <span role="status" className="text-sm text-body">
               저장했어요. <Link href="/">대시보드에서 보기</Link>
             </span>
           )}
-          <span className="ml-auto text-xs text-muted">
-            {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
-          </span>
+          <button type="button" onClick={submit} disabled={status === "saving"} className="btn-primary">
+            {status === "saving" ? "저장 중…" : "저장"}
+          </button>
         </div>
+
+        <WatchlistEditor />
       </main>
 
       {/* 종목 추가 시트 — 네이티브 dialog라 포커스 가두기·Esc 닫기를 브라우저가 맡는다 */}
@@ -253,7 +277,7 @@ export default function HoldingsEditor({
           <h2 id="add-sheet-title" className="text-lg font-semibold">
             종목 추가
           </h2>
-          <label className="flex flex-col gap-1.5">
+          <label className="flex flex-col gap-2">
             <span className="text-xs text-muted">종목명 또는 코드</span>
             <input
               list="stock-catalog"
@@ -272,7 +296,7 @@ export default function HoldingsEditor({
             </datalist>
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">수량(주)</span>
               <input
                 inputMode="numeric"
@@ -282,7 +306,7 @@ export default function HoldingsEditor({
                 className={field}
               />
             </label>
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
               <input
                 inputMode="numeric"

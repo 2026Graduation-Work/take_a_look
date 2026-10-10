@@ -1,0 +1,104 @@
+name: News Supabase Sync
+
+on:
+  schedule:
+    # GitHub cron은 UTC 기준: 평일 00:13 UTC = 09:13 KST. 정각·30분은 몰려서 늦게 도는 경우가 많아 피한다.
+    - cron: "13 0 * * 1-5"
+    # 월 07:37 KST: 최신 정기보고서 재무(바뀐 종목만)
+    - cron: "37 22 * * 0"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 실행할 적재 작업
+        required: true
+        default: live
+        type: choice
+        options:
+          - live
+          - live-samsung
+          - reset-live
+          - backfill
+          - financial
+
+permissions:
+  contents: read
+
+concurrency:
+  group: news-supabase-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60 # 대상 최대 20종목 × KR-FinBERT
+    defaults:
+      run:
+        working-directory: backend/analysis/text
+    env:
+      NEWSAPI_AI_KEY: ${{ secrets.NEWSAPI_AI_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      HF_HOME: ~/.cache/huggingface
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/analysis/text/requirements.txt
+
+      - name: Cache Hugging Face model
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-kr-finbert-${{ hashFiles('backend/analysis/text/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      # 대상: 기본 6 + 전체 사용자의 보유 ∪ 관심 종목, 하루 20회 상한(supabase_sync.dynamic_targets)
+      - name: Collect, analyze, and persist target stocks
+        if: github.event.schedule == '13 0 * * 1-5' || inputs.mode == 'live'
+        run: python -m value_pipeline.supabase_sync live --dynamic
+
+      # DART 하루 전체 공시 → 종목 마스터에 맞춰 적재(제목·날짜·유형만). 실패해도 뉴스 적재는 그대로
+      - name: Collect DART disclosures
+        if: github.event.schedule == '13 0 * * 1-5' || inputs.mode == 'live'
+        continue-on-error: true
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: python -m value_pipeline.supabase_sync disclosures
+
+      - name: Latest periodic-report financials (changed stocks only)
+        if: github.event.schedule == '37 22 * * 0' || inputs.mode == 'financial'
+        env:
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+        run: python -m value_pipeline.supabase_sync financial-latest
+
+      - name: Retry Samsung live sync with safe diagnostics
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'live-samsung'
+        run: python -m value_pipeline.supabase_sync live --target 005930:삼성전자
+
+      - name: Reset live rows, then collect target stocks
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'reset-live'
+        run: python -m value_pipeline.supabase_sync reset-live --dynamic
+
+      - name: Backfill four-stock historical news and DART snapshots
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'backfill'
+        run: |
+          python -m value_pipeline.supabase_sync backfill-news \
+            ../../../frontend/lib/providers/sentiment-005930.json \
+            ../../../frontend/lib/providers/sentiment-005380.json \
+            ../../../frontend/lib/providers/sentiment-035720.json \
+            ../../../frontend/lib/providers/sentiment-068270.json
+          python -m value_pipeline.supabase_sync backfill-financial \
+            value_pipeline/output_sample/financial_tracks/005930_financial.json \
+            value_pipeline/output_sample/financial_tracks/005380_financial.json \
+            value_pipeline/output_sample/financial_tracks/035720_financial.json \
+            value_pipeline/output_sample/financial_tracks/068270_financial.json

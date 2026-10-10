@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.0",
+  "track": "financial",
+  "scope": {
+    "ticker": "035720",
+    "company_name": "카카오"
+  },
+  "source": "dart",
+  "as_of": "2025-12-30",
+  "status": "ok",
+  "filing": {
+    "fiscal_year": 2024,
+    "statement": "CFS",
+    "receipt_no": "20250324000901",
+    "filed_at": "2025-03-24",
+    "shares_basis": "2024-12-31 common_shares"
+  },
+  "price": {
+    "value": 60100.0,
+    "as_of": "2025-12-30",
+    "source": "fdr"
+  },
+  "metrics": [
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "per",
+      "value": null,
+      "unit": "multiple",
+      "basis": "주가 60,100원 ÷ 주당순이익(당기순이익 -1,619억원 ÷ 발행주식수 442,495,220주)",
+      "note": "negative_earnings"
+    },
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "pbr",
+      "value": 1.9073,
+      "unit": "multiple",
+      "basis": "주가 60,100원 ÷ 주당순자산(자본총계 13.9조원 ÷ 발행주식수 442,495,220주)",
+      "note": null
+    },
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "roe",
+      "value": -1.161,
+      "unit": "percent",
+      "basis": "당기순이익 -1,619억원 ÷ 자본총계 13.9조원",
+      "note": null
+    },
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "operating_margin",
+      "value": 5.8464,
+      "unit": "percent",
+      "basis": "영업이익 4,602억원 ÷ 매출 7.9조원",
+      "note": null
+    },
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "debt_ratio",
+      "value": 84.847,
+      "unit": "percent",
+      "basis": "부채총계 11.8조원 ÷ 자본총계 13.9조원",
+      "note": null
+    },
+    {
+      "ticker": "035720",
+      "as_of": "2025-12-30",
+      "fiscal_year": 2024,
+      "metric_key": "revenue_growth",
+      "value": 4.1642,
+      "unit": "percent",
+      "basis": "2024년 매출 7.9조원 ÷ 2023년 매출 7.6조원 − 1",
+      "note": null
+    }
+  ],
+  "validation": {
+    "errors": []
+  }
+}

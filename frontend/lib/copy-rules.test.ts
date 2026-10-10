@@ -14,9 +14,6 @@ const EXCLUDED = new Set([
   "lib/storage-keys.ts", // 옛 저장 키(signallab.*) 이전 코드 — 2027-02 이후 제거
 ]);
 
-// "계산 근거" 영역: 이 표시 사이의 줄은 개발 용어를 쓸 수 있다.
-const EXEMPT_START = "copy-rules:계산근거 시작";
-const EXEMPT_END = "copy-rules:계산근거 끝";
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(path.join(ROOT, dir), { withFileTypes: true, recursive: true })
@@ -36,13 +33,8 @@ test("사용자 노출 문구에 금지 표현이 없다", () => {
   const hits: string[] = [];
   for (const file of [...sourceFiles("app"), ...sourceFiles("lib")]) {
     const raw = readFileSync(path.join(ROOT, file), "utf8");
-    const rawLines = raw.split("\n");
     const lines = stripComments(raw).split("\n");
-    let exempt = false;
     lines.forEach((line, index) => {
-      if (rawLines[index].includes(EXEMPT_START)) exempt = true;
-      if (rawLines[index].includes(EXEMPT_END)) exempt = false;
-      if (exempt) return;
       for (const { pattern, reason } of FORBIDDEN_COPY) {
         if (pattern.test(line)) hits.push(`${file}:${index + 1} ${reason} — ${line.trim()}`);
       }
@@ -68,9 +60,13 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     "68% 신뢰구간",
     "Supabase 조회값",
     "composite +0.2",
+    "psych_greed_fear_axis +0.94",
+    "prob_up 0.61",
+    "Pompian 행동투자자 유형(BIT)",
     "시그널랩 로그인",
     "SignalLab",
     "signallab",
+    "KRX · 2025.12.30 · 실데이터",
   ]) {
     assert.ok(caught(text), text);
   }
