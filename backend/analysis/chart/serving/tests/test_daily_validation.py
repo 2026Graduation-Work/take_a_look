@@ -17,7 +17,7 @@ def test_confirmed_day_handles_delayed_schedule(monkeypatch, hour, expected):
 
 
 @pytest.mark.parametrize("replay", [False, True])
-def test_past_date_only_replays_when_requested(monkeypatch, tmp_path, replay):
+def test_past_date_requires_archived_inputs(monkeypatch, tmp_path, replay):
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}))
     monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
@@ -27,7 +27,7 @@ def test_past_date_only_replays_when_requested(monkeypatch, tmp_path, replay):
         return None
     monkeypatch.setattr(pipeline, "collect", collect)
     pipeline.run(Namespace(as_of="2026-09-21", replay=replay, historical_test=False, publish=False, dry_run=True))
-    assert calls == [replay]
+    assert calls == [True]
 
 
 def test_replay_requires_date():
@@ -35,7 +35,7 @@ def test_replay_requires_date():
         run_daily.main(["--replay", "--dry-run"])
 
 
-def test_preview_validates_both_horizons_and_never_publishes_by_default(monkeypatch):
+def test_preview_validates_both_horizons_and_never_publishes_by_default(monkeypatch, legacy_preview_pack):
     batch, snapshots, _ = publish_preview.load_preview()
     assert batch["as_of"] == "2026-09-21"
     assert {s["horizon"] for s in snapshots} == {5, 20}
@@ -43,7 +43,7 @@ def test_preview_validates_both_horizons_and_never_publishes_by_default(monkeypa
     publish_preview.main([])
 
 
-def test_preview_rejects_modified_provenance(monkeypatch, tmp_path):
+def test_preview_rejects_modified_provenance(monkeypatch, tmp_path, legacy_preview_pack):
     import json
     batch, snapshots, _ = publish_preview.load_preview()
     snapshots[0]["sources"]["model_sha256"] = "0" * 64

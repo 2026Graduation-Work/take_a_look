@@ -38,56 +38,6 @@ def test_baselines_never_enter_before_a_stock_is_listed() -> None:
         assert not entries.loc[entries.index < listing_date, "000002"].any()
 
 
-def test_rolling_baselines_reset_when_a_code_is_reused() -> None:
-    dates = pd.date_range("2024-01-02", periods=8, freq="B")
-    rows = []
-    for date in dates:
-        rows.append(
-            {
-                "Date": date,
-                "Code": "000002",
-                "Open": 50.0,
-                "Close": 50.0,
-                "Trading_Halt": 0,
-            }
-        )
-    for date, close in zip([*dates[:2], *dates[5:]], [100.0, 100.0, 200.0, 202.0, 204.0]):
-        rows.append(
-            {
-                "Date": date,
-                "Code": "000001",
-                "Open": close,
-                "Close": close,
-                "Trading_Halt": 0,
-            }
-        )
-    market = pd.DataFrame(rows)
-    master = pd.DataFrame(
-        {
-            "Code": ["000001", "000001", "000002"],
-            "Name": ["Old", "New", "Control"],
-            "Market": ["KOSPI"] * 3,
-            "SecuGroup": ["주권"] * 3,
-            "ListingDate": [dates[0], dates[5], dates[0]],
-            "DelistingDate": [dates[2], pd.NaT, pd.NaT],
-            "Source": ["test"] * 3,
-            "SnapshotDate": [pd.Timestamp("2026-01-01")] * 3,
-        }
-    )
-
-    momentum, _ = generate_momentum_signals(
-        market, top_n=1, horizon=1, universe_master=master
-    )
-    moving_average, _ = generate_ma_breakout_signals(
-        market, top_n=1, window=2, universe_master=master
-    )
-
-    assert not momentum.loc[dates[6], "000001"]
-    assert not moving_average.loc[dates[6], "000001"]
-    assert momentum.loc[dates[7], "000001"]
-    assert moving_average.loc[dates[7], "000001"]
-
-
 def test_strategy_keeps_embargo_market_dates_so_shift_cannot_cross_fold_boundary() -> None:
     dates = pd.date_range("2024-01-02", periods=5, freq="B")
     market = pd.DataFrame(
@@ -96,6 +46,7 @@ def test_strategy_keeps_embargo_market_dates_so_shift_cannot_cross_fold_boundary
             "Code": ["000001"] * len(dates),
             "Open": [100.0] * len(dates),
             "Trading_Halt": [0] * len(dates),
+            "Sigma": [0.1] * len(dates),
         }
     )
     # Jan 3 is a fold's final prediction day. Jan 4/5 are embargo market days;

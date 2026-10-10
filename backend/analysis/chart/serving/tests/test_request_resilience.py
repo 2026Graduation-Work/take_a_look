@@ -3,8 +3,9 @@ from urllib.error import HTTPError
 
 import pytest
 import requests
-from serving.internal import krx, storage
+from serving.internal import storage
 from serving.internal.progress import stage
+from shared.data import krx
 
 
 @pytest.mark.parametrize('path,kwargs,retry', [

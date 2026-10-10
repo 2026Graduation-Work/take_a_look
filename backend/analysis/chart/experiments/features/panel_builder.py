@@ -94,8 +94,8 @@ def _normalize_date(series: pd.Series, column: str, source_name: str) -> pd.Seri
 
 
 def _normalize_code(series: pd.Series, source_name: str) -> pd.Series:
-    raw = series.astype("string").str.strip()
-    invalid = raw.isna() | ~raw.str.fullmatch(r"\d{1,6}")
+    raw = series.astype("string").str.strip().str.upper()
+    invalid = raw.isna() | ~raw.str.fullmatch(r"(?:\d{1,6}|\d{4}[0-9A-Z]{2})")
     if invalid.any():
         sample = raw[invalid].head(3).tolist()
         raise FeatureContractError(

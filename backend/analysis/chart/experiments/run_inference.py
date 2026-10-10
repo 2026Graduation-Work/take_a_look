@@ -29,7 +29,7 @@ def resolve_model_path(profile, model_path=None, registry_path=None):
         return resolved
 
     registry_path = registry_path or os.path.join(
-        project_root, "core", "models", "registry.yaml"
+        project_root, "workspace", "archive", "legacy-models", "registry.yaml"
     )
     with open(registry_path, encoding="utf-8") as file:
         registry = yaml.safe_load(file)
@@ -66,7 +66,8 @@ def init_worker(model_path):
 
 def process_ticker(file_path, target_date, threshold):
     """
-    개별 종목의 과거 입력으로 serving의 공통 피처·추론을 수행합니다.
+    개별 종목 데이터를 로드하여 shared.features.builder를 수행합니다.
+    전처리 및 피처 생성은 shared.features.builder에 위임합니다.
     """
     global _model
     ticker = os.path.basename(file_path).replace(".parquet", "")
@@ -89,17 +90,18 @@ def process_ticker(file_path, target_date, threshold):
         if len(df_slice) < 65:
             return None
 
-        from data_collectors.trading_calendar import get_krx_trading_days
-        from serving.internal.features import build_feature_frame
-        from serving.internal.inference import infer_batch
+        # shared.features.builder에 전처리 및 예측을 위임 — 중복 로직 없음
+        from shared.data.trading_calendar import get_krx_trading_days
+        from shared.features.builder import build_feature_frame
+        days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
+        frame = build_feature_frame(df_slice, days)
+        prob_series = pd.Series(_model.predict(frame[_model.feature_name()])[:, 2], index=frame.index)
 
-        days = get_krx_trading_days(
-            df_slice.Date.min().strftime("%Y-%m-%d"), df_slice.Date.max().strftime("%Y-%m-%d"))
-        features = build_feature_frame(df_slice, days)
-        current = features.loc[features.Date.eq(df_slice.Date.max())]
-        if len(current) != 1 or pd.isna(current.iloc[0].Sigma):
+        if prob_series.empty:
             return None
-        model_score = infer_batch(_model, current)[0][0]["up"]
+
+        # class 2 모델 스코어. 미래 상승을 보장하는 확률이 아닙니다.
+        model_score = float(prob_series.iloc[-1])
         last_row = df_slice.iloc[-1]
 
         return {

@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import json
 import os
@@ -5,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 
 
 def _normalize_split(split: dict, fold_id: int) -> dict:
@@ -96,7 +97,9 @@ def resolve_splits(config: dict) -> list[dict]:
         end_year = cfg.get("end_year", 2025)
 
         if train_window_years < 1 or test_window_years < 1:
-            raise ValueError("sliding train_window_years/test_window_years must be positive integers")
+            raise ValueError(
+                "sliding train_window_years/test_window_years must be positive integers"
+            )
 
         folds = []
         for y in range(
@@ -105,7 +108,7 @@ def resolve_splits(config: dict) -> list[dict]:
             test_window_years,
         ):
             test_start = (
-                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(days=embargo_days)
             ).strftime("%Y-%m-%d")
             folds.append(
                 {
@@ -126,7 +129,9 @@ def resolve_splits(config: dict) -> list[dict]:
         end_year = cfg.get("end_year", 2025)
 
         if initial_train_years < 1 or test_window_years < 1:
-            raise ValueError("expanding initial_train_years/test_window_years must be positive integers")
+            raise ValueError(
+                "expanding initial_train_years/test_window_years must be positive integers"
+            )
 
         folds = []
         for y in range(
@@ -135,7 +140,7 @@ def resolve_splits(config: dict) -> list[dict]:
             test_window_years,
         ):
             test_start = (
-                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(days=embargo_days)
             ).strftime("%Y-%m-%d")
             folds.append(
                 {
@@ -155,7 +160,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2016-01-01",
                 "train_end": "2016-12-31",
                 "test_start": (
-                    pd.to_datetime("2016-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                    pd.to_datetime("2016-12-31") + pd.Timedelta(days=embargo_days)
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2018-06-30",
             },
@@ -164,7 +169,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2017-01-01",
                 "train_end": "2019-12-31",
                 "test_start": (
-                    pd.to_datetime("2019-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                    pd.to_datetime("2019-12-31") + pd.Timedelta(days=embargo_days)
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2021-06-30",
             },
@@ -173,7 +178,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2019-01-01",
                 "train_end": "2021-12-31",
                 "test_start": (
-                    pd.to_datetime("2021-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                    pd.to_datetime("2021-12-31") + pd.Timedelta(days=embargo_days)
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2022-12-31",
             },
@@ -182,7 +187,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2020-01-01",
                 "train_end": "2022-12-31",
                 "test_start": (
-                    pd.to_datetime("2022-12-31") + pd.Timedelta(int(embargo_days), unit="D")
+                    pd.to_datetime("2022-12-31") + pd.Timedelta(days=embargo_days)
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2024-12-31",
             },
@@ -213,38 +218,58 @@ def _candidate_price_dirs(config: dict) -> list[Path]:
     if configured.is_absolute():
         return [configured]
 
-    module_experiments_dir = Path(__file__).resolve().parent
-    candidates = [
-        module_experiments_dir.parent / configured,
-        Path.cwd() / configured,
-        module_experiments_dir / configured,
-    ]
-    unique: list[Path] = []
-    for candidate in candidates:
-        resolved = candidate.resolve()
-        if resolved not in unique:
-            unique.append(resolved)
-    return unique
+    return [(Path(__file__).resolve().parent.parent / configured).resolve()]
 
 
-def find_universe_file(config: dict, anchor_file: str) -> str | None:
-    """설정한 PIT security master를 CWD와 무관하게 찾고, 설정 시 fail closed 한다."""
-    configured_value = config.get("data", {}).get("universe_file")
-    if not configured_value:
+def _universe_path(config: dict) -> Path:
+    path = Path(config["data"]["universe_file"])
+    return path if path.is_absolute() else Path(__file__).resolve().parent.parent / path
+
+
+def resolve_tickers(config: dict, anchor_file: str) -> str | list[str]:
+    """Use the frozen experiment universe when one is configured."""
+    data = config.get("data", {})
+    universe_file = data.get("universe_file")
+    if not universe_file:
+        return data.get("tickers", "")
+    if data.get("tickers"):
+        raise ValueError("Set either data.tickers or data.universe_file")
+    path = _universe_path(config)
+    with path.open(newline="", encoding="utf-8-sig") as source:
+        rows = csv.DictReader(source)
+        if "Code" not in (rows.fieldnames or []):
+            raise ValueError(f"Universe file needs a Code column: {path}")
+        codes = [row["Code"].strip().upper().zfill(6) for row in rows]
+    has_intervals = {"ListingDate", "DelistingDate"} <= set(rows.fieldnames or [])
+    if (
+        not codes
+        or (not has_intervals and len(codes) != len(set(codes)))
+        or any(not code.isalnum() for code in codes)
+    ):
+        raise ValueError(f"Empty, duplicate or invalid universe codes: {path}")
+    codes = list(dict.fromkeys(codes))
+    processed = Path(find_processed_dir(config, anchor_file))
+    missing = [code for code in codes if not (processed / f"{code}.parquet").is_file()]
+    if missing:
+        raise ValueError(
+            f"Missing processed files for universe: {missing[:10]} ({len(missing)} total)"
+        )
+    return codes
+
+
+def load_universe_intervals(config: dict) -> pd.DataFrame | None:
+    """Read the existing listing/delisting metadata used for point-in-time membership."""
+    if not config.get("data", {}).get("universe_file"):
         return None
-    configured = Path(configured_value)
-    if configured.is_absolute():
-        candidates = [configured]
-    else:
-        chart_dir = Path(anchor_file).resolve().parent
-        while chart_dir.name != "chart" and chart_dir != chart_dir.parent:
-            chart_dir = chart_dir.parent
-        candidates = [chart_dir / configured, Path.cwd() / configured]
-    for candidate in candidates:
-        if candidate.is_file():
-            return str(candidate.resolve())
-    rendered = ", ".join(str(path.resolve()) for path in candidates)
-    raise FileNotFoundError(f"설정된 PIT security master를 찾을 수 없습니다: {rendered}")
+    frame = pd.read_csv(_universe_path(config), dtype={"Code": str})
+    if not {"Code", "ListingDate", "DelistingDate"} <= set(frame):
+        raise ValueError("Point-in-time universe needs Code, ListingDate and DelistingDate columns")
+    frame["Code"] = frame.Code.str.strip().str.upper().str.zfill(6)
+    frame["ListingDate"] = pd.to_datetime(frame.ListingDate, errors="coerce")
+    frame["DelistingDate"] = pd.to_datetime(frame.DelistingDate, errors="coerce")
+    if frame.ListingDate.isna().any():
+        raise ValueError("Universe ListingDate values must be valid")
+    return frame
 
 
 def data_fingerprint(config: dict) -> dict:
@@ -265,22 +290,19 @@ def data_fingerprint(config: dict) -> dict:
     for file_path in sorted(source_dir.rglob("*.parquet")):
         stat = file_path.stat()
         digest.update(str(file_path.relative_to(source_dir)).encode())
-        digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+        if config.get("contract_version") == 3:
+            from shared.io import sha256
+
+            digest.update(sha256(file_path).encode())
+        else:
+            digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
         count += 1
-    result = {
+    return {
         "status": "available",
         "configured_version": configured_version,
         "file_count": count,
         "manifest_sha256": digest.hexdigest(),
     }
-    universe_file = find_universe_file(config, __file__)
-    if universe_file is not None:
-        universe_digest = hashlib.sha256()
-        with open(universe_file, "rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                universe_digest.update(chunk)
-        result["universe_sha256"] = universe_digest.hexdigest()
-    return result
 
 
 def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool) -> dict:
@@ -289,6 +311,11 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
         "cache_schema_version": CACHE_SCHEMA_VERSION,
         "data": {
             "tickers": data_cfg.get("tickers", None),
+            "universe_file_sha256": (
+                hashlib.sha256(_universe_path(config).read_bytes()).hexdigest()
+                if data_cfg.get("universe_file")
+                else None
+            ),
             "universe": data_cfg.get("universe", None),
             "price_dir": data_cfg.get("price_dir", None),
             "data_fingerprint": data_fingerprint(config),
@@ -301,6 +328,20 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
         "features": config.get("features", {}),
         "labels": config.get("labels", {}),
     }
+    if config.get("contract_version") == 3:
+        from shared.io import sha256
+
+        root = Path(__file__).resolve().parent
+        implementations = [
+            root / "train_src" / filename
+            for filename in ("labels.py", "loaders.py", "lgbm_wrapper.py")
+        ]
+        payload["implementation"] = {str(p.name): sha256(p) for p in implementations}
+        payload["feature_columns"] = config["feature_columns"]
+        payload["dataset"] = config["dataset"]
+        payload["processing_contract"] = config["processing_contract"]
+        payload["class_weight"] = config.get("model", {}).get("params", {}).get("class_weight")
+        payload["max_bin"] = config.get("model", {}).get("params", {}).get("max_bin", 255)
     if include_model:
         payload["model"] = config.get("model", {})
         if config.get("training"):
@@ -309,12 +350,16 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
 
 
 def generate_dataset_hash(config: dict, resolved_splits: list[dict]) -> str:
-    hash_str = json.dumps(_hash_payload(config, resolved_splits, include_model=False), sort_keys=True)
+    hash_str = json.dumps(
+        _hash_payload(config, resolved_splits, include_model=False), sort_keys=True
+    )
     return hashlib.md5(hash_str.encode()).hexdigest()[:8]
 
 
 def generate_predictions_hash(config: dict, resolved_splits: list[dict]) -> str:
-    hash_str = json.dumps(_hash_payload(config, resolved_splits, include_model=True), sort_keys=True)
+    hash_str = json.dumps(
+        _hash_payload(config, resolved_splits, include_model=True), sort_keys=True
+    )
     return hashlib.md5(hash_str.encode()).hexdigest()[:8]
 
 
@@ -327,26 +372,26 @@ def chart_root(anchor_file: str) -> str:
 
 
 def find_processed_dir(config: dict, anchor_file: str) -> str:
-    configured = config.get("data", {}).get("price_dir", "data/processed")
-    if os.path.isabs(configured):
-        candidates = [configured]
-    else:
-        root = chart_root(anchor_file)
-        candidates = [
-            os.path.abspath(os.path.join(root, configured)),
-            os.path.abspath(os.path.join(os.getcwd(), configured)),
-            os.path.abspath(os.path.join(experiments_dir(anchor_file), configured)),
-        ]
+    path = _candidate_price_dirs(config)[0]
+    if config.get("contract_version") == 3:
+        from shared.io import sha256
 
-    fallback = candidates[0]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return fallback
+        manifest_path = path / "feature_manifest.json"
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                "Run python -m experiments.features.build_feature_panel --config first"
+            )
+        manifest = json.loads(manifest_path.read_text())
+        if manifest["feature_columns"] != config["feature_columns"]:
+            raise ValueError("Feature list changed; prepare features again")
+        for name, digest in manifest["file_hashes"].items():
+            if not (path / name).exists() or sha256(path / name) != digest:
+                raise ValueError(f"Modified/missing feature input {name}; prepare features again")
+    return str(path)
 
 
 def cache_dir(anchor_file: str) -> str:
-    path = os.path.join(experiments_dir(anchor_file), "cache")
+    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "predictions")
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -357,7 +402,7 @@ def model_cache_dir(anchor_file: str) -> str:
     Keep this path in one place so the dashboard reads the same models that
     ``train.py`` writes through ``train_src.lgbm_wrapper.LGBMWrapper``.
     """
-    return os.path.join(experiments_dir(anchor_file), "train_src", "cache", "models")
+    return os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "training", "models")
 
 
 def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_file: str) -> str:
@@ -367,8 +412,24 @@ def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_fil
 
 def result_dir(config: dict, anchor_file: str) -> str:
     exp_name = config.get("experiment_name", "default_exp")
-    path = os.path.join(experiments_dir(anchor_file), "results", exp_name)
+    if config.get("contract_version") == 3:
+        from experiments.config import identity
+
+        exp_name += "_" + identity(config)
+    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "runs", exp_name)
     os.makedirs(path, exist_ok=True)
+    if config.get("contract_version") == 3:
+        from shared.io import atomic_json
+
+        atomic_json(
+            Path(path) / "run_manifest.json",
+            {
+                "config": config,
+                "predictions_hash": generate_predictions_hash(config, resolve_splits(config)),
+                "feature_columns": config["feature_columns"],
+                "processing_contract": config["processing_contract"],
+            },
+        )
     return path
 
 
@@ -377,6 +438,8 @@ def label_params_from_config(config: dict) -> dict:
     return {
         "type": labels.get("type", "dynamic_sigma"),
         "horizon": labels["horizon"],
+        "tp": labels.get("tp", 3.5),
+        "sl": labels.get("sl", 2.0),
         "up_mult": labels.get("up_mult", 1.5),
         "down_mult": labels.get("down_mult", 1.2),
         "volatility_mode": labels.get("volatility_mode", "current_sigma"),
@@ -394,7 +457,9 @@ def test_date_bounds(splits: list[dict]) -> tuple[str, str]:
     return min(starts).strftime("%Y-%m-%d"), max(ends).strftime("%Y-%m-%d")
 
 
-def load_predictions(config: dict, splits: list[dict], anchor_file: str, predictions_path: str = None) -> pd.DataFrame:
+def load_predictions(
+    config: dict, splits: list[dict], anchor_file: str, predictions_path: str = None
+) -> pd.DataFrame:
     path = predictions_path or predictions_cache_path(config, splits, anchor_file)
     if not os.path.exists(path):
         pred_hash = generate_predictions_hash(config, splits)
@@ -405,14 +470,51 @@ def load_predictions(config: dict, splits: list[dict], anchor_file: str, predict
             "먼저 train.py로 OOS 예측 캐시를 생성하세요."
         )
 
+    if config.get("contract_version") == 3:
+        manifest_path = Path(str(path) + ".manifest.json")
+        if not manifest_path.exists():
+            raise ValueError("Prediction manifest required; rerun train.py")
+        manifest = json.loads(manifest_path.read_text())
+        if (
+            manifest.get("predictions_hash") != generate_predictions_hash(config, splits)
+            or manifest.get("feature_columns") != config["feature_columns"]
+        ):
+            raise ValueError("Predictions belong to another run")
+    if config.get("contract_version") == 3:
+        from shared.io import sha256
+
+        if manifest.get("sha256") != sha256(path):
+            raise ValueError("Prediction file changed; rerun train.py")
     predictions = pd.read_parquet(path)
     required_cols = {"Date", "Code", "Prob"}
+    if config.get("contract_version") == 3:
+        required_cols |= {"fold_id", "prob_down", "prob_neutral", "prob_up"}
     missing = required_cols - set(predictions.columns)
     if missing:
         raise ValueError(f"예측 캐시에 필수 컬럼이 없습니다: {sorted(missing)}")
 
     predictions = predictions.copy()
     predictions["Date"] = pd.to_datetime(predictions["Date"]).dt.tz_localize(None)
+    if config.get("contract_version") == 3:
+        import numpy as np
+
+        probabilities = predictions[["prob_down", "prob_neutral", "prob_up"]].to_numpy()
+        if (
+            predictions.duplicated(["Date", "Code"]).any()
+            or not np.isfinite(probabilities).all()
+            or (probabilities < 0).any()
+            or (probabilities > 1).any()
+            or not np.allclose(probabilities.sum(axis=1), 1)
+        ):
+            raise ValueError("Invalid prediction keys/probabilities")
+        for row in predictions.itertuples():
+            matches = [
+                split
+                for split in splits
+                if pd.Timestamp(split["test_start"]) <= row.Date <= pd.Timestamp(split["test_end"])
+            ]
+            if len(matches) != 1 or int(row.fold_id) != int(matches[0]["fold_id"]):
+                raise ValueError("Prediction fold/date mismatch")
     return predictions.sort_values(["Date", "Code"]).reset_index(drop=True)
 
 
@@ -486,9 +588,7 @@ def build_fold_alignment(
         status["evaluation_total_rows"] = int(len(eval_df))
         status["evaluation_rows_in_config_folds"] = int(eval_covered_mask.sum())
         status["evaluation_rows_outside_config_folds"] = int((~eval_covered_mask).sum())
-        status["folds_with_evaluation_rows"] = int(
-            (alignment_df["evaluation_rows"] > 0).sum()
-        )
+        status["folds_with_evaluation_rows"] = int((alignment_df["evaluation_rows"] > 0).sum())
         status["folds_with_equal_prediction_evaluation_rows"] = int(
             (alignment_df["prediction_rows"] == alignment_df["evaluation_rows"]).sum()
         )
@@ -505,10 +605,9 @@ def build_fold_alignment(
             and status["folds_with_evaluation_rows"] == len(splits)
             and status["evaluation_rows_outside_config_folds"] == 0
         )
-        status["is_exact_row_match"] = (
-            status["is_exact_fold_match"]
-            and status["folds_with_exact_row_match"] == len(splits)
-        )
+        status["is_exact_row_match"] = status["is_exact_fold_match"] and status[
+            "folds_with_exact_row_match"
+        ] == len(splits)
     else:
         status["is_exact_row_match"] = status["is_exact_fold_match"]
 

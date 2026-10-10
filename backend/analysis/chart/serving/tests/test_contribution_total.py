@@ -32,7 +32,7 @@ def test_denominator_includes_omitted_features_but_excludes_bias(target):
     assert total == 21  # Includes the sixth feature; excludes the 100-point bias.
 
 
-def test_preview_denominators_validate_and_old_snapshots_remain_supported():
+def test_preview_denominators_validate_and_old_snapshots_remain_supported(legacy_preview_pack):
     _, snapshots, _ = load_preview()
     for snapshot in snapshots:
         total = snapshot["inference"].pop("contribution_abs_sum")

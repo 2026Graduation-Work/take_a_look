@@ -1,0 +1,77 @@
+{
+  "contract": "chart_signal_detail_v1",
+  "stock_code": "005930",
+  "data_asof": "2026-09-24",
+  "horizon": 5,
+  "profile": "aggressive",
+  "release_id": "example-h5",
+  "batch_id": "example-batch",
+  "inference": {
+    "status": "available",
+    "reason": null,
+    "scores": {
+      "down": 0.3,
+      "neutral": 0.2,
+      "up": 0.5
+    },
+    "score_event": "class_2_upper_barrier_first",
+    "close": 100,
+    "sigma": 0.02,
+    "barriers": {
+      "up": 103.5,
+      "down": 97
+    },
+    "contribution_space": "class_2_raw_margin",
+    "features": []
+  },
+  "cases": {
+    "status": "available",
+    "reason": null,
+    "policy_id": "same_stock_up_down_001_sigma_rel010_v1",
+    "current": {
+      "up": 0.5,
+      "down": 0.3,
+      "sigma": 0.02
+    },
+    "tolerances": {
+      "up_absolute": 0.01,
+      "down_absolute": 0.01,
+      "sigma_relative": 0.1
+    },
+    "sample_count": 1,
+    "up_count": 1,
+    "down_count": 1,
+    "both_count": 1,
+    "neither_count": 0,
+    "up_rate": 1.0,
+    "down_rate": 1.0,
+    "period_start": "2020-01-02",
+    "period_end": "2021-01-02",
+    "observed_through": "2021-01-09",
+    "by_fold": {
+      "2": 1
+    },
+    "by_year": {
+      "2021": 1
+    }
+  },
+  "prices": {
+    "basis": "adjusted_close",
+    "source": "example-adjusted-daily",
+    "history": [
+      {
+        "date": "2026-09-24",
+        "close": 100,
+        "volume": 1000
+      }
+    ]
+  },
+  "sources": {
+    "model_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "features_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "prices_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "cases_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "stock_name": "삼성전자"
+}

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from evaluation.metrics import _pr_auc_score_binary
-from experiment_utils import data_fingerprint, generate_dataset_hash, resolve_splits
+from experiments.evaluation.metrics import _pr_auc_score_binary
+from experiments.experiment_utils import data_fingerprint, generate_dataset_hash, resolve_splits
 
 
 def _window_config(strategy: str) -> dict:

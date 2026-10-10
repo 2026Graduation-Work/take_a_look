@@ -3,224 +3,9 @@ import os
 
 import numpy as np
 import pandas as pd
-from point_in_time_universe import (
-    filter_point_in_time_rows,
-    intervals_overlapping,
-    load_security_master,
-    membership_interval_ids,
-)
 from tqdm import tqdm
 
-
-def apply_fixed_barrier_labeling(
-    df: pd.DataFrame, horizon: int, tp_pct: float, sl_pct: float
-) -> pd.Series:
-    """단일 종목 데이터프레임에 대해 고속 고정 % 배리어 라벨링을 적용합니다. (NumPy 고속화)"""
-    barrier_up = df["Close"] * (1 + tp_pct / 100.0)
-    barrier_down = df["Close"] * (1 - sl_pct / 100.0)
-
-    n = len(df)
-    hit_up_day = np.full(n, 999, dtype=np.int16)
-    hit_down_day = np.full(n, 999, dtype=np.int16)
-
-    halt_flag = df.get("Trading_Halt", pd.Series(0, index=df.index)).values
-    high_vals = df["High"].values
-    close_vals = df["Close"].values
-    up_barrier_vals = barrier_up.values
-    down_barrier_vals = barrier_down.values
-
-    for d in range(1, horizon + 1):
-        future_high = np.zeros(n)
-        future_close = np.zeros(n)
-        future_halt = np.ones(n, dtype=np.int8)
-
-        future_high[:-d] = high_vals[d:]
-        future_close[:-d] = close_vals[d:]
-        future_halt[:-d] = halt_flag[d:]
-
-        active = future_halt == 0
-        is_hit_up = active & (future_high >= up_barrier_vals)
-        is_hit_down = active & (future_close <= down_barrier_vals)
-
-        hit_up_day = np.where(is_hit_up & (hit_up_day == 999), d, hit_up_day)
-        hit_down_day = np.where(is_hit_down & (hit_down_day == 999), d, hit_down_day)
-
-    success_mask = (hit_up_day != 999) & (hit_up_day < hit_down_day)
-    fail_mask = (hit_down_day != 999) & (hit_down_day <= hit_up_day)
-
-    y_label = np.zeros(n, dtype=np.int8)
-    y_label[success_mask] = 1
-    y_label[fail_mask] = -1
-
-    y_label_series = pd.Series(y_label, index=df.index)
-    if n > horizon:
-        y_label_series.iloc[-horizon:] = np.nan
-
-    return y_label_series
-
-
-def apply_dynamic_sigma_barrier_labeling(
-    df: pd.DataFrame, horizon: int, up_mult: float, down_mult: float
-) -> pd.Series:
-    """단일 종목 데이터프레임에 대해 변동성(Sigma) 기반 동적 트리플 배리어 라벨링을 적용합니다. (NumPy 고속화)"""
-    sigma_vals = df["Sigma"].values if "Sigma" in df.columns else np.full(len(df), 0.01)
-
-    barrier_up = df["Close"] * (1 + up_mult * sigma_vals)
-    barrier_down = df["Close"] * (1 - down_mult * sigma_vals)
-
-    n = len(df)
-    hit_up_day = np.full(n, 999, dtype=np.int16)
-    hit_down_day = np.full(n, 999, dtype=np.int16)
-
-    halt_flag = df.get("Trading_Halt", pd.Series(0, index=df.index)).values
-    high_vals = df["High"].values
-    close_vals = df["Close"].values
-    up_barrier_vals = barrier_up.values if hasattr(barrier_up, "values") else barrier_up
-    down_barrier_vals = barrier_down.values if hasattr(barrier_down, "values") else barrier_down
-
-    trading_day_cumsum = np.cumsum(1 - halt_flag)
-    max_search_days = int(horizon * 2.5)
-
-    for d in range(1, max_search_days + 1):
-        future_high = np.zeros(n)
-        future_close = np.zeros(n)
-        future_halt = np.ones(n, dtype=np.int8)
-        passed_trading_days = np.full(n, 999, dtype=np.int16)
-
-        future_high[:-d] = high_vals[d:]
-        future_close[:-d] = close_vals[d:]
-        future_halt[:-d] = halt_flag[d:]
-        passed_trading_days[:-d] = trading_day_cumsum[d:] - trading_day_cumsum[:-d]
-
-        active = (future_halt == 0) & (passed_trading_days <= horizon)
-        is_hit_up = active & (future_high >= up_barrier_vals)
-        is_hit_down = active & (future_close <= down_barrier_vals)
-
-        hit_up_day = np.where(is_hit_up & (hit_up_day == 999), passed_trading_days, hit_up_day)
-        hit_down_day = np.where(
-            is_hit_down & (hit_down_day == 999), passed_trading_days, hit_down_day
-        )
-
-    success_mask = (hit_up_day != 999) & (hit_up_day < hit_down_day)
-    fail_mask = (hit_down_day != 999) & (hit_down_day <= hit_up_day)
-
-    y_label = np.zeros(n, dtype=np.int8)
-    y_label[success_mask] = 1
-    y_label[fail_mask] = -1
-
-    y_label_series = pd.Series(y_label, index=df.index)
-    # Dynamic labels may scan beyond ``horizon`` calendar rows to obtain the
-    # requested number of trading days. Rows inside that incomplete tail must
-    # not be silently treated as neutral.
-    if n > max_search_days:
-        y_label_series.iloc[-max_search_days:] = np.nan
-    else:
-        y_label_series[:] = np.nan
-
-    return y_label_series
-
-
-def _apply_barrier_labeling_by_interval(
-    frame: pd.DataFrame, label_params: dict, master: pd.DataFrame | None
-) -> pd.Series:
-    """동일 코드의 재사용 구간을 넘지 않도록 구간별 라벨을 계산한다."""
-    if master is None:
-        interval_ids = pd.Series(0, index=frame.index, dtype="Int64")
-    else:
-        interval_ids = membership_interval_ids(frame, master)
-        if interval_ids.isna().any():
-            raise ValueError("PIT 필터 뒤에도 상장 구간을 찾을 수 없는 행이 있습니다.")
-
-    result = pd.Series(np.nan, index=frame.index, dtype=float)
-    label_type = label_params.get("type", "fixed")
-    horizon = label_params["horizon"]
-    for interval_id in interval_ids.dropna().unique():
-        mask = interval_ids.eq(interval_id)
-        part = frame.loc[mask]
-        if label_type == "dynamic_sigma":
-            labels = apply_dynamic_sigma_barrier_labeling(
-                part,
-                horizon,
-                label_params.get("up_mult", 1.5),
-                label_params.get("down_mult", 1.2),
-            )
-        else:
-            labels = apply_fixed_barrier_labeling(
-                part,
-                horizon,
-                label_params.get("tp", 3.5),
-                label_params.get("sl", 2.0),
-            )
-        if master is not None:
-            interval = master.reset_index(drop=True).iloc[int(interval_id)]
-            if pd.notna(interval["DelistingDate"]):
-                labels = _resolve_delisting_tail_labels(part, labels, label_params, interval)
-        result.loc[part.index] = labels
-    return result
-
-
-def _resolve_delisting_tail_labels(
-    frame: pd.DataFrame,
-    labels: pd.Series,
-    label_params: dict,
-    interval: pd.Series,
-) -> pd.Series:
-    """완전한 관측 구간이 끝나는 상폐 꼬리는 마지막 거래 가능일까지 라벨링한다."""
-    delisting_date = pd.Timestamp(interval["DelistingDate"]).normalize()
-    last_date = pd.to_datetime(frame["Date"]).dt.tz_localize(None).max().normalize()
-    # 끝 행이 실제 상폐 경계 근처에 있을 때만 데이터가 상폐까지 수집된 것으로 본다.
-    # 중간 시점에서 잘린 학습 요청을 상폐 종가로 오인하지 않도록 여유는 14일로 둔다.
-    if last_date >= delisting_date or (delisting_date - last_date).days > 14:
-        return labels
-
-    result = labels.copy()
-    label_type = label_params.get("type", "fixed")
-    horizon = int(label_params["horizon"])
-    if label_type == "dynamic_sigma":
-        max_rows = int(np.ceil(horizon * 2.5))
-        up_mult = label_params.get("up_mult", 1.5)
-        down_mult = label_params.get("down_mult", 1.2)
-    else:
-        max_rows = horizon
-        up_mult = label_params.get("tp", 3.5) / 100.0
-        down_mult = label_params.get("sl", 2.0) / 100.0
-
-    trading_halt = frame.get("Trading_Halt", pd.Series(0, index=frame.index)).fillna(0)
-    for position in np.flatnonzero(result.isna().to_numpy()):
-        if label_type == "dynamic_sigma":
-            end = min(len(frame), position + max_rows + 1)
-            candidates = np.arange(position + 1, end)
-            active = candidates[trading_halt.iloc[candidates].to_numpy() == 0]
-            future_positions = active[:horizon]
-            sigma = float(frame["Sigma"].iloc[position]) if "Sigma" in frame else 0.01
-            upper = float(frame["Close"].iloc[position]) * (1 + up_mult * sigma)
-            lower = float(frame["Close"].iloc[position]) * (1 - down_mult * sigma)
-        else:
-            future_positions = np.arange(position + 1, min(len(frame), position + horizon + 1))
-            future_positions = future_positions[
-                trading_halt.iloc[future_positions].to_numpy() == 0
-            ]
-            close = float(frame["Close"].iloc[position])
-            upper = close * (1 + up_mult)
-            lower = close * (1 - down_mult)
-
-        if len(future_positions) == 0:
-            # 다음 거래일이 하나도 없으면 판정 근거가 없다. 0(중립)으로 채우지 않고 NaN으로 둔다.
-            continue
-        outcome = None
-        for future_position in future_positions:
-            future_close = float(frame["Close"].iloc[future_position])
-            if future_close <= lower:
-                outcome = -1
-                break
-            if float(frame["High"].iloc[future_position]) >= upper:
-                outcome = 1
-                break
-        if outcome is None:
-            terminal_close = float(frame["Close"].iloc[-1])
-            outcome = 1 if terminal_close >= upper else -1 if terminal_close <= lower else 0
-        result.iloc[position] = outcome
-    return result
+from .labels import apply_dynamic_sigma_barrier_labeling, apply_fixed_barrier_labeling
 
 
 def load_parquet_data(
@@ -233,23 +18,18 @@ def load_parquet_data(
     label_observation_end: str = None,
     training: bool = False,
     keep_date: bool = False,
-    universe_file: str | None = None,
+    universe_only: bool = False,
+    strict: bool = True,
+    universe_intervals: pd.DataFrame = None,
+    feature_columns: list[str] = None,
+    sample_only: bool = False,
 ) -> pd.DataFrame:
     """
     Parquet 파일들을 디스크에서 읽어오는 로더입니다.
     메모리 절약을 위해 종목별 로딩 시점에 Y 라벨 생성 및 피처 분리를 즉시 수행합니다.
     """
-    files = glob.glob(os.path.join(data_dir, "*.parquet"))
-    master = load_security_master(universe_file) if universe_file else None
-    if master is not None:
-        overlap_start = start_date or master["ListingDate"].min()
-        overlap_end = end_date or pd.Timestamp.now().normalize()
-        allowed_codes = set(intervals_overlapping(master, overlap_start, overlap_end)["Code"])
-        files = [
-            path
-            for path in files
-            if os.path.basename(path).split(".")[0].upper().zfill(6) in allowed_codes
-        ]
+    files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+    files = [path for path in files if os.path.basename(path) != "sample_keys.parquet"]
 
     if tickers == "KOSPI_TOP200":
         raise ValueError(
@@ -263,6 +43,9 @@ def load_parquet_data(
             if isinstance(tickers, str)
             else {str(code).strip().zfill(6) for code in tickers}
         )
+        available_codes = {os.path.basename(path).split(".")[0].zfill(6) for path in files}
+        if missing_codes := requested_codes - available_codes:
+            raise FileNotFoundError(f"Missing requested ticker files: {sorted(missing_codes)}")
         files = [
             path
             for path in files
@@ -277,7 +60,6 @@ def load_parquet_data(
     print(f"총 {len(files)}개 종목 데이터 로드 중... (날짜 필터: {start_date} ~ {end_date})")
 
     df_list = []
-    failures = []
     for f in tqdm(files, desc="데이터 파일 로드 중", mininterval=0.5):
         try:
             if columns_only is not None:
@@ -285,6 +67,7 @@ def load_parquet_data(
 
                 file_schema_names = pq.read_schema(f).names
                 required_cols = [
+                    "UniverseEligible",
                     "Date",
                     "Code",
                     "Close",
@@ -295,7 +78,12 @@ def load_parquet_data(
                     "Trading_Halt",
                     "Sigma",
                 ]
-                cols_to_load = list(set(columns_only + required_cols) & set(file_schema_names))
+                required_cols.append("SampleEligible")
+                requested_features = feature_columns or []
+                if missing := set(requested_features) - set(file_schema_names):
+                    raise ValueError(f"Missing selected features: {sorted(missing)}")
+                cols_to_load = list(dict.fromkeys(columns_only + required_cols + requested_features))
+                cols_to_load = [col for col in cols_to_load if col in file_schema_names]
                 temp_df = pd.read_parquet(f, columns=cols_to_load)
             else:
                 temp_df = pd.read_parquet(f)
@@ -305,8 +93,6 @@ def load_parquet_data(
 
             temp_df["Date"] = pd.to_datetime(temp_df["Date"])
             temp_df = temp_df.sort_values("Date").reset_index(drop=True)
-            if master is not None:
-                temp_df = filter_point_in_time_rows(temp_df, master)
             if start_date is not None:
                 temp_df = temp_df[temp_df["Date"] >= pd.to_datetime(start_date)]
 
@@ -342,9 +128,20 @@ def load_parquet_data(
 
             # [실시간 고속 Y 라벨링] 로딩 시점에 종목별로 즉시 라벨 생성 (OOM 원천 방지)
             if label_params is not None:
-                y_label_series = _apply_barrier_labeling_by_interval(
-                    temp_df, label_params, master
-                )
+                label_type = label_params.get("type", "fixed")
+                horizon = label_params["horizon"]
+
+                if label_type == "dynamic_sigma":
+                    up_mult = label_params.get("up_mult", 1.5)
+                    down_mult = label_params.get("down_mult", 1.2)
+                    y_label_series = apply_dynamic_sigma_barrier_labeling(
+                        temp_df, horizon, up_mult, down_mult
+                    )
+                else:
+                    tp = label_params.get("tp", 3.5)
+                    sl = label_params.get("sl", 2.0)
+                    y_label_series = apply_fixed_barrier_labeling(temp_df, horizon, tp, sl)
+
                 temp_df["Y_Label"] = y_label_series.map({-1: 0, 0: 1, 1: 2})
                 temp_df = temp_df.dropna(subset=["Y_Label"])
                 temp_df["Y_Label"] = temp_df["Y_Label"].astype(int)
@@ -354,6 +151,42 @@ def load_parquet_data(
 
             if temp_df.empty:
                 continue
+
+            if universe_intervals is not None:
+                code = os.path.basename(f).split(".")[0].upper().zfill(6)
+                intervals = universe_intervals.loc[universe_intervals.Code.eq(code)]
+                eligible = pd.Series(False, index=temp_df.index)
+                for interval in intervals.itertuples():
+                    active = temp_df.Date.ge(interval.ListingDate)
+                    if pd.notna(interval.DelistingDate):
+                        active &= temp_df.Date.lt(interval.DelistingDate)
+                    eligible |= active
+                temp_df["UniverseEligible"] = eligible
+                if universe_only or training or label_params is not None or sample_only:
+                    temp_df = temp_df.loc[eligible].copy()
+
+            # Keep the full price path until labels have been calculated. Index
+            # exits must not shorten horizons or erase subsequent exit prices.
+            if universe_only:
+                if "UniverseEligible" not in temp_df and universe_intervals is None:
+                    raise ValueError("UniverseEligible is required for PIT filtering")
+                if "UniverseEligible" in temp_df:
+                    temp_df = temp_df.loc[temp_df["UniverseEligible"].eq(True)].copy()
+                if "Trading_Halt" in temp_df:
+                    temp_df = temp_df.loc[temp_df.Trading_Halt.eq(0)].copy()
+
+            if feature_columns is not None:
+                if missing := set(feature_columns) - set(temp_df):
+                    raise ValueError(f"Missing selected features: {sorted(missing)}")
+            if training or sample_only:
+                if "SampleEligible" in temp_df:
+                    temp_df = temp_df.loc[temp_df.SampleEligible.eq(True)].copy()
+                if "Trading_Halt" in temp_df:
+                    temp_df = temp_df.loc[temp_df.Trading_Halt.eq(0)].copy()
+                if "roc_60" in temp_df and "SampleEligible" not in temp_df:
+                    temp_df = temp_df.loc[temp_df.roc_60.notna()].copy()
+                if "Sigma" in temp_df:
+                    temp_df = temp_df.loc[temp_df.Sigma.notna()].copy()
 
             # [훈련 피처 다이어트] 훈련 데이터셋 로딩 시 즉각 피처만 남겨서 peak 메모리 최소화
             if training:
@@ -370,19 +203,13 @@ def load_parquet_data(
                     "Sigma",
                     "Y_Label",
                     "Trading_Halt",
-                    "Amount",
-                    "RawClose",
-                    "RawVolume",
-                    "AdjustmentFactor",
-                    "VWAP",
-                    "ListingDate",
-                    "DelistingDate",
-                    "UniverseSnapshotDate",
-                    "InUniverse",
+                    "UniverseEligible",
+                    "VWAP", "Amount", "RawClose", "RawVolume", "AdjustmentFactor",
                 ]
                 if not keep_date:
                     exclude_cols.append("Date")
-                feature_cols = [c for c in temp_df.columns if c not in exclude_cols]
+                exclude_cols.append("SampleEligible")
+                feature_cols = feature_columns or [c for c in temp_df.columns if c not in exclude_cols]
                 temp_df = temp_df[feature_cols + ["Y_Label"]]
 
             # [메모리 최적화] 카테고리 캐스팅
@@ -393,13 +220,9 @@ def load_parquet_data(
 
             df_list.append(temp_df)
         except Exception as e:
+            if strict:
+                raise ValueError(f"Failed to load {f}: {e}") from e
             print(f"Error loading {f}: {e}")
-            failures.append((f, str(e)))
-
-    if failures:
-        raise RuntimeError(
-            f"데이터 파일 로드/검증 실패 {len(failures)}개: {failures[:5]}"
-        )
 
     if not df_list:
         raise ValueError(f"해당 기간({start_date} ~ {end_date})에 로드된 데이터가 없습니다.")

@@ -53,3 +53,6 @@ def validate_snapshot(value):
     elif distribution["reason"] is None:
         raise ValueError("Unavailable distribution requires reason")
     return value
+
+
+validate_snapshot_v2 = validate_snapshot

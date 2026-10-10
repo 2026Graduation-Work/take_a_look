@@ -1,6 +1,7 @@
 # ruff: noqa: I001
 
 import argparse
+
 import gc
 import json
 import os
@@ -9,20 +10,20 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import yaml
 
-from experiment_utils import (
+from experiments.experiment_utils import (
     cache_dir,
     find_processed_dir,
-    find_universe_file,
     generate_dataset_hash,
     generate_predictions_hash,
+    load_universe_intervals,
     label_params_from_config,
     result_dir,
     resolve_splits,
+    resolve_tickers,
 )
-from train_src.lgbm_wrapper import LGBMWrapper
-from train_src.loaders import load_parquet_data
+from experiments.train_src.lgbm_wrapper import LGBMWrapper
+from experiments.train_src.loaders import load_parquet_data
 
 
 def _json_safe(value):
@@ -36,7 +37,7 @@ def _json_safe(value):
 def _validation_window(train_end: str, embargo_days: int) -> tuple[str, str, str]:
     train_end_dt = pd.to_datetime(train_end)
     pure_train_end_dt = train_end_dt - pd.DateOffset(months=6)
-    val_start_dt = pure_train_end_dt + pd.Timedelta(int(embargo_days), unit="D")
+    val_start_dt = pure_train_end_dt + pd.Timedelta(days=embargo_days)
     return (
         pure_train_end_dt.strftime("%Y-%m-%d"),
         val_start_dt.strftime("%Y-%m-%d"),
@@ -59,11 +60,11 @@ def _training_windows(
         return train_end, train_end, train_end, train_end, None
 
     pure_train_end, val_start, val_end = _validation_window(train_end, embargo_days)
-    train_label_observation_end = (
-        pd.to_datetime(val_start) - pd.Timedelta(1, unit="D")
-    ).strftime("%Y-%m-%d")
+    train_label_observation_end = (pd.to_datetime(val_start) - pd.Timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
     validation_label_observation_end = (
-        pd.to_datetime(split_info["test_start"]) - pd.Timedelta(1, unit="D")
+        pd.to_datetime(split_info["test_start"]) - pd.Timedelta(days=1)
     ).strftime("%Y-%m-%d")
     return (
         pure_train_end,
@@ -101,8 +102,7 @@ def _evaluate_validation(
     missing_metadata = sorted(required_metadata - set(val_df.columns))
     if missing_metadata:
         raise ValueError(
-            "검증 데이터에 실제 거래 가능 여부 판단용 메타데이터가 없습니다: "
-            f"{missing_metadata}"
+            f"검증 데이터에 실제 거래 가능 여부 판단용 메타데이터가 없습니다: {missing_metadata}"
         )
 
     val_eval_cols = ["Date", "Code", "Y_Label", "Close", "Trading_Halt"]
@@ -147,9 +147,7 @@ def _evaluate_validation(
         n_success = (selected_signals["Y_Label"] == 2).sum()
         success_rate = n_success / n_signals
         p_val_binom = (
-            1.0 - stats.binom.cdf(n_success - 1, n_signals, base_rate)
-            if n_success > 0
-            else 1.0
+            1.0 - stats.binom.cdf(n_success - 1, n_signals, base_rate) if n_success > 0 else 1.0
         )
 
     ic_passed = bool(pd.notna(mean_ic) and mean_ic >= 0.02)
@@ -236,7 +234,7 @@ def _load_validation_df(
     tickers_cfg,
     label_params: dict,
     feature_cols: list[str],
-    universe_file: str | None = None,
+    universe_intervals: pd.DataFrame = None,
 ) -> pd.DataFrame:
     val_df = load_parquet_data(
         processed_dir,
@@ -246,7 +244,7 @@ def _load_validation_df(
         label_params=label_params,
         label_observation_end=label_observation_end,
         training=False,
-        universe_file=universe_file,
+        universe_intervals=universe_intervals,
     )
     val_cols = ["Date", "Code", "Y_Label", "Close", "Trading_Halt"] + feature_cols
     return val_df[[c for c in val_cols if c in val_df.columns]].copy()
@@ -276,14 +274,17 @@ def _print_validation_report(fold_number: int, validation_metrics: dict) -> None
 
 
 def main(config_path):
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(
-            f"[ERROR] 설정을 불러올 수 없습니다. 경로를 확인해주세요: {config_path}"
-        )
-
     print(f"[*] Loading config from {config_path}...")
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    from experiments.config import load_experiment_config
+
+    config = load_experiment_config(config_path)
+    from functools import partial
+    from experiments.train_src.loaders import load_parquet_data as base_loader
+
+    global load_parquet_data
+    load_parquet_data = partial(
+        base_loader, feature_columns=config["feature_columns"], sample_only=True
+    )
 
     exp_name = config.get("experiment_name", "default_exp")
     print(f"\n🚀 [*] Starting Quant Experiment: {exp_name}")
@@ -309,14 +310,14 @@ def main(config_path):
 
     # 데이터 경로 자동 탐색
     processed_dir = find_processed_dir(config, __file__)
-    universe_file = find_universe_file(config, __file__)
     print(f"[*] 데이터 소스 디렉토리: {processed_dir}")
     if not os.path.exists(processed_dir) or not os.listdir(processed_dir):
         print(
             f"[!] 경고: {processed_dir}가 비어있거나 존재하지 않습니다. 먼저 수집 및 전처리를 실행해야 할 수 있습니다."
         )
 
-    tickers_cfg = config.get("data", {}).get("tickers", None)
+    tickers_cfg = resolve_tickers(config, __file__)
+    universe_intervals = load_universe_intervals(config)
     skip_validation = bool(config.get("training", {}).get("skip_validation", False))
 
     # OOS 예측 확률 캐시 확인
@@ -324,6 +325,9 @@ def main(config_path):
     predictions_cache_path = os.path.join(exp_cache_dir, f"{predictions_hash}_predictions.parquet")
 
     if os.path.exists(predictions_cache_path):
+        from experiments.experiment_utils import load_predictions
+
+        load_predictions(config, splits, __file__)
         print("\n⚡ [CACHE HIT] 기존 설정 기반 예측 캐시를 찾았습니다!")
         print(f"   -> 캐시 파일: {os.path.basename(predictions_cache_path)}")
         if skip_validation:
@@ -339,7 +343,7 @@ def main(config_path):
             label_params = label_params_from_config(config)
             _, val_start, val_end = _validation_window(train_end, embargo_days)
             label_observation_end = (
-                pd.to_datetime(split_info["test_start"]) - pd.Timedelta(1, unit="D")
+                pd.to_datetime(split_info["test_start"]) - pd.Timedelta(days=1)
             ).strftime("%Y-%m-%d")
             fold_pred_hash = f"{predictions_hash}_fold{idx}"
             model_wrapper = LGBMWrapper(config)
@@ -353,7 +357,7 @@ def main(config_path):
                 )
                 continue
 
-            model_wrapper.model = lgb.Booster(model_file=model_save_path)
+            model_wrapper.load_cached_model(model_save_path)
             feature_cols = model_wrapper.model.feature_name()
             val_df = _load_validation_df(
                 processed_dir,
@@ -363,7 +367,7 @@ def main(config_path):
                 tickers_cfg,
                 label_params,
                 feature_cols,
-                universe_file,
+                universe_intervals,
             )
             validation_metrics = _evaluate_validation(
                 config, split_info, idx, model_wrapper, val_df, feature_cols
@@ -413,7 +417,7 @@ def main(config_path):
                 print(
                     f"\n⚡ [MODEL CACHE HIT] 기존 학습된 모델 파라미터 발견! -> {os.path.basename(model_save_path)}"
                 )
-                model_wrapper.model = lgb.Booster(model_file=model_save_path)
+                model_wrapper.load_cached_model(model_save_path)
                 feature_cols = model_wrapper.model.feature_name()
             else:
                 # ---------------------------------------------------------
@@ -430,7 +434,7 @@ def main(config_path):
                         f"  [CACHE HIT] 기존 Train .bin으로 학습 데이터 로드 -> "
                         f"{os.path.basename(train_bin_path)}"
                     )
-                    train_data = lgb.Dataset(train_bin_path, free_raw_data=False)
+                    train_data = model_wrapper.load_cached_dataset(train_bin_path)
                     train_data.construct()
                     feature_cols = train_data.feature_name
                 else:
@@ -446,11 +450,10 @@ def main(config_path):
                         label_observation_end=train_label_observation_end,
                         training=True,
                         keep_date=False,
-                        universe_file=universe_file,
+                        universe_intervals=universe_intervals,
                     )
 
-                    exclude_cols = ["Y_Label", "Date", "Code"]
-                    feature_cols = [c for c in train_df.columns if c not in exclude_cols]
+                    feature_cols = config["feature_columns"]
 
                     X_train, y_train = train_df[feature_cols], train_df["Y_Label"]
                     train_data = model_wrapper._build_dataset(X_train, y_train, train_bin_path)
@@ -475,7 +478,7 @@ def main(config_path):
                         label_params=label_params,
                         label_observation_end=validation_label_observation_end,
                         training=False,
-                        universe_file=universe_file,
+                        universe_intervals=universe_intervals,
                     )
 
                     val_cols = ["Date", "Code", "Y_Label", "Close", "Trading_Halt"] + feature_cols
@@ -484,9 +487,8 @@ def main(config_path):
                     X_val, y_val = val_df[feature_cols], val_df["Y_Label"]
 
                     print("[LGBM] Validation 데이터셋 준비 중...")
-                    from sklearn.utils.class_weight import compute_sample_weight
 
-                    sample_weights_val = compute_sample_weight("balanced", y_val)
+                    sample_weights_val = model_wrapper.sample_weights(y_val)
                     valid_data = lgb.Dataset(
                         X_val,
                         label=y_val,
@@ -518,7 +520,7 @@ def main(config_path):
                     tickers_cfg,
                     label_params,
                     feature_cols,
-                    universe_file,
+                    universe_intervals,
                 )
 
             if not skip_validation:
@@ -551,7 +553,7 @@ def main(config_path):
                 test_end,
                 columns_only=feature_cols + ["Date", "Code"],
                 tickers=tickers_cfg,
-                universe_file=universe_file,
+                universe_intervals=universe_intervals,
             )
             X_test = test_df[feature_cols]
 
@@ -559,6 +561,10 @@ def main(config_path):
 
             test_preds = test_df[["Date", "Code"]].copy()
             test_preds["Prob"] = probs
+            class_probs = model_wrapper.model.predict(X_test)
+            for class_idx, column in enumerate(("prob_down", "prob_neutral", "prob_up")):
+                test_preds[column] = class_probs[:, class_idx]
+            test_preds["fold_id"] = int(split_info.get("fold_id", idx))
             all_predictions.append(test_preds)
 
             del test_df, X_test
@@ -566,6 +572,19 @@ def main(config_path):
 
         final_predictions = pd.concat(all_predictions, ignore_index=True)
         final_predictions.to_parquet(predictions_cache_path, index=False)
+        from shared.io import atomic_json
+        from shared.io import sha256
+
+        atomic_json(
+            predictions_cache_path + ".manifest.json",
+            {
+                "predictions_hash": predictions_hash,
+                "feature_columns": config["feature_columns"],
+                "config": config,
+                "sha256": sha256(predictions_cache_path),
+                "processing_contract": config["processing_contract"],
+            },
+        )
         print(
             f"\n💾 [CACHE SAVE] 예측 결과 캐시 완료 -> {os.path.basename(predictions_cache_path)}"
         )

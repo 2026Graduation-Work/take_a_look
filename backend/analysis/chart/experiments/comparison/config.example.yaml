@@ -3,7 +3,7 @@ experiment_name: psychology_ab
 
 features:
   # 기준 모델이 기록한 161개 feature_names를 A/B 공통 입력으로 사용한다.
-  baseline_model_file: ../../core/models/baseline_h5_u175_d150_train2022_2024_holdout2025.txt
+  baseline_group: base
   # treatment feature store에 materialize된 외부 피처. 컬럼 추가는 이 목록만 바꾼다.
   treatment:
     - synthetic_psychology_index
@@ -12,9 +12,8 @@ features:
 profiles:
   stable:
     data:
-      baseline_price_dir: ../../data/processed
-      treatment_price_dir: ../../data/feature_store/psychology_news_v1
-      universe_file: ../../data/universe/security_master.parquet
+      baseline_price_dir: ../../workspace/experiments/datasets/local_2016_kospi_v1/processed
+      treatment_price_dir: ../../workspace/experiments/datasets/local_2016_kospi_v1/feature_store/psychology_news_v1
       tickers: []  # 공식 실험에서는 고정한 6자리 코드 목록을 넣는다.
       train_start: "2022-01-01"
       train_end: "2024-12-31"
@@ -28,9 +27,8 @@ profiles:
 
   aggressive:
     data:
-      baseline_price_dir: ../../data/processed
-      treatment_price_dir: ../../data/feature_store/psychology_news_v1
-      universe_file: ../../data/universe/security_master.parquet
+      baseline_price_dir: ../../workspace/experiments/datasets/local_2016_kospi_v1/processed
+      treatment_price_dir: ../../workspace/experiments/datasets/local_2016_kospi_v1/feature_store/psychology_news_v1
       tickers: []
       train_start: "2022-01-01"
       train_end: "2024-12-31"
@@ -66,7 +64,6 @@ strategy:
   position_weighting: equal_weight
 
 backtest:
-  delisting_policy: last_tradable_close
   initial_cash: 10000000
   signal_lag_days: 1
   entry_price: open

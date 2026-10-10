@@ -14,7 +14,6 @@ on:
       - "schema/**"
       - "ruff.toml"
       - ".github/workflows/python-ci.yml"
-  # PR에서는 항상 시작한다(필수 체크가 건너뜀=통과로 보고되게). 블록 선택은 아래 changes job
   pull_request:
 
 permissions:
@@ -83,10 +82,13 @@ jobs:
         run: pytest . -v
 
   # ── backend/analysis/chart 블록 ────────────────────────────────────────────────────
-  chart-test:
+  chart-environments:
     needs: changes
     if: ${{ needs.changes.outputs.chart == 'true' }}
     runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        environment: [experiments, serving]
     steps:
       - uses: actions/checkout@v7
 
@@ -94,25 +96,49 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: backend/analysis/chart/requirements.txt
+          cache-dependency-path: |
+            backend/analysis/chart/shared/requirements.txt
+            backend/analysis/chart/${{ matrix.environment }}/requirements.txt
 
-      - name: Install dependencies
+      - name: Install selected environment
         run: |
           python -m pip install --upgrade pip
           pip install ruff pytest
-          pip install -r backend/analysis/chart/requirements.txt
+          pip install -r backend/analysis/chart/${{ matrix.environment }}/requirements.txt
 
-      - name: Lint (ruff)
+      - name: Lint active chart code
         run: ruff check backend/analysis/chart/
 
-      - name: Run tests (pytest)
-        env:
-          PYTHONPATH: backend/analysis/chart
+      - name: Test research pipeline and export
+        if: matrix.environment == 'experiments'
+        run: python -m pytest backend/analysis/chart/ -v
+
+      - name: Test serving without experiments code or dependencies
+        if: matrix.environment == 'serving'
+        working-directory: backend/analysis/chart
         run: |
-          if find backend/analysis/chart -name "test_*.py" -o -name "*_test.py" | grep -q .; then
-            pytest backend/analysis/chart/ -v
-          else
-            echo "No test files in backend/analysis/chart — lint-only pass."
+          chart_serving_root="$RUNNER_TEMP/chart-serving"
+          mkdir -p "$chart_serving_root"
+          cp -R shared serving conftest.py "$chart_serving_root/"
+          cd "$chart_serving_root"
+          python -m pytest shared/tests serving/tests -v
+          python -m serving.run_daily --help
+
+  # Keep the required check name stable while testing both installations.
+  chart-test:
+    needs: [changes, chart-environments]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require both selected chart environments to pass
+        env:
+          CHANGE_RESULT: ${{ needs.changes.result }}
+          CHART_CHANGED: ${{ needs.changes.outputs.chart }}
+          ENVIRONMENT_RESULT: ${{ needs.chart-environments.result }}
+        run: |
+          test "$CHANGE_RESULT" = success
+          if [ "$CHART_CHANGED" = true ]; then
+            test "$ENVIRONMENT_RESULT" = success
           fi
 
   # ── backend/analysis/text 블록 ─────────────────────────────────────────────────────

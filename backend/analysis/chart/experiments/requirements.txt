@@ -1,0 +1,9 @@
+-r ../shared/requirements.txt
+scikit-learn>=1.9.1
+lightgbm>=4.7.0
+vectorbt>=0.28.5
+matplotlib>=3.11.2
+yfinance>=1.7.0
+quantstats>=0.0.81
+jsonschema>=4.0
+plotly>=5.24.1,<7

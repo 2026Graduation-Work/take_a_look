@@ -1,6 +1,6 @@
 # 종목 마스터 위험 표시 규칙
 
-`backend/analysis/chart/stock_master.py`가 차트 서빙 universe(코스피 전 종목 + 에코프로비엠)로 `stocks`를 넣고 고칩니다. 차트 서빙 워크플로의 마지막 step(`python -m stock_master`)에서 매일 돌고, 행은 지우지 않습니다. 가격은 `chart_prices`(수정주가·거래대금)를 씁니다.
+`backend/analysis/chart/serving/stock_master.py`가 차트 서빙 universe(코스피 전 종목 + 에코프로비엠)로 `stocks`를 넣고 고칩니다. 차트 서빙 워크플로의 마지막 step(`python -m serving.stock_master`)에서 매일 돌고, 행은 지우지 않습니다. 가격은 `chart_prices`(수정주가·거래대금)를 씁니다.
 
 | 표시 | 규칙 | 상수 |
 |---|---|---|

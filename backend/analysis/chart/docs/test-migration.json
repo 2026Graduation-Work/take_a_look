@@ -1,0 +1,16 @@
+[
+  {
+    "old": "shared/tests/test_trading_calendar_preprocessing.py",
+    "new": "experiments/tests/test_trading_calendar_preprocessing.py",
+    "bytes": 4130,
+    "sha256": "1fea23d9ba5005655aa65ee0335edb2feb0816f8fa12bbc1e4954f808c87052e",
+    "verification": "Original bytes preserved in relocation commit before import updates."
+  },
+  {
+    "old": "serving/tests/test_model_pack_distribution.py",
+    "new": "experiments/export/tests/test_model_pack_distribution.py",
+    "bytes": 2215,
+    "sha256": "a2569412597586a5dbb83020b855ad4dedf33f6344ce156e1a70a9a92564f67c",
+    "verification": "Original bytes preserved in relocation commit before import updates."
+  }
+]

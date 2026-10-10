@@ -1,0 +1,81 @@
+experiment_name: sliding_2019_2025_h5_pit_kospi
+description: H5 seven-fold sliding evaluation using KOSPI listing intervals.
+tags:
+- sliding
+- point_in_time_universe
+- dynamic_sigma
+- h5
+data:
+  tickers: ''
+  universe: kospi_common_stock_point_in_time
+  universe_file: experiments/configs/universes/kospi_all_2024-12-30.csv
+  point_in_time: true
+  start_date: '2016-01-01'
+  end_date: '2025-12-31'
+  split_strategy: sliding
+  embargo_days: 7
+  sliding:
+    train_window_years: 3
+    test_window_years: 1
+    start_year: 2016
+    end_year: 2025
+features:
+  groups:
+  - base
+  include: []
+  exclude: []
+labels:
+  type: dynamic_sigma
+  volatility_mode: current_sigma
+  horizon: 5
+  up_mult: 1.75
+  down_mult: 1.5
+  up_class: 2
+  neutral_class: 1
+  down_class: 0
+model:
+  type: LGBM
+  objective: multiclass
+  params:
+    n_estimators: 1000
+    learning_rate: 0.01
+    max_depth: 5
+    num_leaves: 20
+    min_child_samples: 2000
+    colsample_bytree: 0.7
+    subsample: 0.8
+    subsample_freq: 1
+    class_weight: balanced
+    random_state: 42
+    n_jobs: -1
+training:
+  skip_validation: true
+strategy:
+  score_column: prob_up
+  selection: top_k
+  top_n: 5
+  prob_threshold: 0.65
+  position_weighting: equal_weight
+backtest:
+  initial_cash: 10000000
+  signal_lag_days: 1
+  entry_price: open
+  exit_price: rule
+  fee: 0.00105
+  max_holding_days: 5
+  up_mult: 1.75
+  down_mult: 1.5
+  hard_sl_mult: 1.2
+evaluation:
+  probability_bins:
+  - 0
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1
+  benchmark_file: workspace/experiments/datasets/shared_v3_local_2016/benchmarks/KOSPI.parquet
+  benchmark_strategies:
+  - market_index
+contract_version: 3
+dataset: experiments/configs/datasets/dataset.yaml

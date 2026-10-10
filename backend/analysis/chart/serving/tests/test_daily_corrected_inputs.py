@@ -39,7 +39,6 @@ def test_flow_windows_keep_missing_market_sessions():
 
 
 def test_daily_cache_and_query_failure_are_separate(monkeypatch, tmp_path):
-    monkeypatch.setattr(flows, "LOCAL_FLOW_CACHE", tmp_path)
     days = pd.to_datetime(["2024-01-02", "2024-01-03"])
     frame = pd.DataFrame({"Date": [days[0]], "Code": ["005930"],
                           **{c: [1] for c in flows._FLOW_COLUMNS}})
@@ -56,25 +55,43 @@ def test_daily_cache_and_query_failure_are_separate(monkeypatch, tmp_path):
     assert pd.isna(merged.Institution_BuyAmount.iloc[0])
 
 
-def test_replay_uses_archive_without_network(monkeypatch):
+@pytest.mark.parametrize("archive_mode", ["full_raw", "paired_features", "missing_features"])
+def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Code": "005930", "Open": np.arange(75)+100.,
                         "High": np.arange(75)+101., "Low": np.arange(75)+99.,
                         "Close": np.arange(75)+100., "Volume": 10., "VWAP": np.arange(75)+100.})
     class Store:
+        def load_calendar(self, day):
+            return set(dates.date)
         def load_universe(self, day):
             return pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
         def load_raw_prices(self, code, day):
-            return raw
+            if archive_mode == "full_raw":
+                return raw
+            saved = raw.tail(60).copy()
+            saved.attrs["input_sha256"] = "a" * 64
+            return saved
+        def load_features(self, code, day, builder, digest):
+            from shared.settings import processing_contract
+            assert builder == pipeline.BUILDER_ID + "_" + processing_contract()["sha256"][:16]
+            assert digest == "a" * 64
+            return None if archive_mode == "missing_features" else build_feature_frame(raw, set(dates.date)).tail(1)
         def upload_features(self, *args):
             pass
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: pytest.fail("Replay fetched flows"))
-    result = pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
-    assert list(result[1]) == ["005930"]
+    if archive_mode == "missing_features":
+        with pytest.raises(ValueError, match="Archived compatible feature input absent"):
+            pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+    else:
+        result = pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+        assert list(result[1]) == ["005930"]
 
 
-def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
+@pytest.mark.parametrize("provider_failure", [False, True])
+@pytest.mark.parametrize("recently_listed", [False, True])
+def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provider_failure, recently_listed):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Open": np.arange(75)+100., "High": np.arange(75)+101.,
                         "Low": np.arange(75)+99., "Close": np.arange(75)+100., "Volume": 10.,
@@ -85,6 +102,8 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
         flow[f"{investor}_SellAmount"] = 100.
     archived = []
     class Store:
+        def save_calendar(self, *args):
+            pass
         def save_universe(self, *args):
             pass
         def load_price_history(self, code):
@@ -98,15 +117,20 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch):
         def upload_features(self, *args):
             pass
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
-    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]}))
+    universe = pd.DataFrame({"Code": ["005930", "000660"], "Name": ["삼성전자", "SK하이닉스"]}) if provider_failure else pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
+    universe["ListingDate"] = dates[0] if recently_listed else pd.Timestamp("2000-01-01")
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (flow, {"available_days": 20}))
     requests = []
     def fetch(code, start, end):
+        if code == "000660":
+            raise ValueError("Price providers exhausted: mocked missing provider inputs")
         requests.append(start)
         return raw.copy()
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     result = pipeline.collect(dates[-1].date().isoformat(), Store())
-    assert requests == ["2016-01-01"]
+    assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
+    assert requests == [dates[0].date().isoformat() if recently_listed else "2016-01-01"]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
     assert result[-1]["complete_current_rows"] == 1
     assert pd.isna(archived[0].Foreign_BuyAmount.iloc[0])
@@ -148,8 +172,11 @@ def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
     assert batch["result"]["unavailable_count"] == 1
 
 
-def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
-    from pykrx import stock
+def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch, verified_listing_provider):
+    from serving.internal import calendar
+    from shared.data.providers import krx as stock
+    monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: {pd.Timestamp("2026-10-06").date()})
+    monkeypatch.setattr(flows, "_fetch_investor_day", lambda *_: pytest.fail("unexpected flow query"))
     from serving.internal.prices import fetch_prices
 
     monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: "한화3우B")
@@ -158,45 +185,16 @@ def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch):
                            "거래량": [10], "거래대금": [1000], "등락률": [0]},
                           index=pd.to_datetime(["2026-10-06"]))
     monkeypatch.setattr(stock, "get_market_ohlcv_by_date", lambda *args, **kwargs: source.copy())
+    from shared.data import providers
+    monkeypatch.setattr(providers.fdr, "DataReader", lambda *_: pd.DataFrame())
+    monkeypatch.setattr(providers.time, "sleep", lambda *_: None)
     assert fetch_prices("00088K", "2026-10-06", "2026-10-06").Close.iloc[0] == 100
 
 
-def test_bootstrap_shares_market_reads_and_reuses_verified_cache(monkeypatch, tmp_path):
-    from core import bulk_prices
-    from serving.internal.prices import bootstrap_raw_prices
-
-    days = pd.to_datetime(["2024-01-02", "2024-01-03"])
-    calls = []
-    def fetch(source, day, record):
-        calls.append(day)
-        return pd.DataFrame({"Date": [day] * 2, "Code": ["005930", "068270"],
-                             "RawOpen": [100, 100], "RawHigh": [110, 110], "RawLow": [90, 90],
-                             "RawClose": [100, 100], "RawVolume": [10, 10], "Amount": [1000, 1000]})
-    monkeypatch.setattr(bulk_prices, "fetch_day", fetch)
-    bootstrap_raw_prices(tmp_path, ["005930", "068270"], set(days.date))
-    assert len(calls) == 2
-    bootstrap_raw_prices(tmp_path, ["005930", "068270"], set(days.date))
-    assert len(calls) == 2
-    assert len(pd.read_parquet(tmp_path / "bootstrap_raw/005930.parquet")) == 2
-
-
-def test_replay_uses_saved_features_for_compact_price_archive(monkeypatch):
-    days = pd.bdate_range("2024-01-02", periods=75)
-    archive = pd.DataFrame({"Date": days[-60:], "Close": 100., "Volume": 10.})
-    archive.attrs["input_sha256"] = "a" * 64
-    current = pd.DataFrame({"Date": [days[-1]], "Close": [100.], "Sigma": [.02]})
-    class Store:
-        def load_universe(self, day):
-            return pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"]})
-        def load_raw_prices(self, *args):
-            return archive
-        def load_features(self, code, day, builder, digest):
-            assert digest == "a" * 64 and builder == pipeline.BUILDER_ID
-            return current
-        def upload_features(self, *args):
-            pass
-    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(days.date))
-    monkeypatch.setattr(pipeline, "build_feature_frame", lambda *args: pytest.fail("Recomputed a truncated window"))
-    result = pipeline.collect(str(days[-1].date()), Store(), replay=True)
-    assert result[3] == {"005930": "a" * 64}
-    assert result[1]["005930"][1]["Sigma"] == .02
+@pytest.mark.parametrize("listing", [None, pd.NaT, "2026-10-07"])
+def test_current_universe_rejects_unknown_or_future_listing(monkeypatch, tmp_path, listing):
+    from shared.data import metadata
+    monkeypatch.setattr(metadata, "load_metadata", lambda *args: pd.DataFrame({
+        "Code": ["005930"], "ListingDate": [listing]}))
+    with pytest.raises(ValueError, match="listing intervals"):
+        metadata.fetch_current_universe("2026-10-06", root=tmp_path, code="005930")

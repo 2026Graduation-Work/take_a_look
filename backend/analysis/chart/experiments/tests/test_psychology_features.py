@@ -9,11 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from experiments.comparison.runner import (
-    _build_backtest_config,
-    prepare_profile_data,
-    resolve_feature_sets,
-)
+from experiments.comparison.runner import prepare_profile_data, resolve_feature_sets
 from experiments.features.build_psychology_features import main as build_cli
 from experiments.features.panel_builder import build_feature_store, load_feature_sources
 from experiments.features.psychology.demo_panel import build_demo_price_panel
@@ -38,35 +34,6 @@ def demo_prices() -> pd.DataFrame:
 def demo_features(demo_prices: pd.DataFrame) -> pd.DataFrame:
     features, _ = build_psychology_features(demo_prices)
     return features
-
-
-def test_generated_backtest_config_uses_resolved_data_paths(tmp_path) -> None:
-    profile_config = {
-        "data": {
-            "baseline_price_dir": "../../data/processed",
-            "universe_file": "../../data/universe/security_master.parquet",
-            "train_start": "2022-01-01",
-            "train_end": "2024-12-31",
-            "test_start": "2025-01-08",
-            "test_end": "2025-12-31",
-        },
-        "labels": {"type": "dynamic_sigma", "horizon": 5},
-    }
-
-    generated = _build_backtest_config(
-        {"experiment_name": "test"},
-        "aggressive",
-        "A",
-        profile_config,
-        config_dir=tmp_path,
-    )
-
-    assert generated["data"]["price_dir"] == str(
-        (tmp_path / "../../data/processed").resolve()
-    )
-    assert generated["data"]["universe_file"] == str(
-        (tmp_path / "../../data/universe/security_master.parquet").resolve()
-    )
 
 
 # ── 형식 계약 ────────────────────────────────────────────────────────────────

@@ -55,9 +55,6 @@ venv/
 .env.*
 !.env.example
 
-# Supabase CLI 로컬 연결 정보
-supabase/.temp/
-
 # ---------- OS / Editor ----------
 .DS_Store
 *.pem
@@ -73,8 +70,6 @@ supabase/.temp/
 # Claude Code — 개인 설정은 무시하고, 검토한 디자인 스킬(AGENTS.md 허용 목록)만 추적한다
 .claude/*
 !.claude/skills/
-# 팀 공용 권한: schema/(freeze) 수정은 매번 사람에게 묻는다
-!.claude/settings.json
 
 # ---------- 데이터 및 로컬 설정 (Data & Config) ----------
 **/data/
@@ -82,11 +77,6 @@ supabase/.temp/
 *.parquet
 **/config.yaml
 !backend/analysis/chart/serving/config.yaml
-!backend/analysis/chart/serving/data/
-backend/analysis/chart/serving/data/*
-!backend/analysis/chart/serving/data/packs/
-!backend/analysis/chart/serving/data/packs/**
-backend/analysis/chart/serving/data/packs/*.tar.gz
 /chart_handoff_output/
 
 # 기본 Baseline 실험의 모델/캐시/결과는 Git에 올려서 공유 (추적 허용)
@@ -114,6 +104,12 @@ backend/analysis/chart/experiments/configs/*
 !backend/analysis/chart/experiments/configs/base.yaml
 !backend/analysis/chart/experiments/configs/holdout_2025_h5.yaml
 !backend/analysis/chart/experiments/configs/holdout_2025_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2019_2025_h5.yaml
+!backend/analysis/chart/experiments/configs/sliding_2019_2025_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h5.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h20.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h5_flow.yaml
+!backend/analysis/chart/experiments/configs/sliding_2016_2026_h20_flow.yaml
 !backend/analysis/chart/experiments/configs/universes/
 !backend/analysis/chart/experiments/configs/universes/kospi_all_2024-12-30.csv
 
@@ -124,14 +120,12 @@ backend/analysis/chart/experiments/configs/*
 # 차트 분석 블록의 샘플 데이터 및 배포 모델 추적 허용 (협업용 가이드)
 # 상위 디렉토리가 ignore되면 하위 negation이 무효라 디렉토리부터 unignore한다.
 !backend/analysis/chart/data/
-!backend/analysis/chart/data/universe/
-!backend/analysis/chart/data/universe/security_master.parquet
 !backend/analysis/chart/data/raw/005930.parquet
 !backend/analysis/chart/data/processed/005930.parquet
 !backend/analysis/chart/data/ticker_metadata.csv
-# 팀 공유 드라이브에서 받은 전체 processed 묶음(2GB)은 로컬 전용
-backend/analysis/chart/data/processed/*.tar.gz
-backend/analysis/chart/data/krx_trading_calendar.json
+backend/analysis/chart/data/runs/
+backend/analysis/chart/data/runtime_cache/
+backend/analysis/chart/.venv-pipeline/
 backend/analysis/chart/data/raw/corp_code_mapping.json
 !backend/analysis/chart/core/models/
 
@@ -152,3 +146,22 @@ docs_cache/
 backend/analysis/text/data/raw/
 # LLM 캐시는 기사(네이버 검색 결과 포함)를 입력으로 만든 요약이라 함께 제외한다.
 backend/analysis/text/value_pipeline/llm_cache/
+
+# Local experiment datasets and manifests (never tracked)
+backend/analysis/chart/data/datasets/
+
+# Chart research and serving artifacts are explicitly separate local workspaces.
+/backend/analysis/chart/workspace
+
+!backend/analysis/chart/shared/data/
+!backend/analysis/chart/shared/data/*.py
+!backend/analysis/chart/shared/data/requirements.txt
+!backend/analysis/chart/experiments/configs/datasets/
+!backend/analysis/chart/experiments/configs/datasets/*.yaml
+!backend/analysis/chart/experiments/configs/local_h5.yaml
+!backend/analysis/chart/experiments/configs/local_h20.yaml
+backend/analysis/chart/serving/config.local.yaml
+
+# Preserve the current main local CLI and team permission rules.
+supabase/.temp/
+!.claude/settings.json

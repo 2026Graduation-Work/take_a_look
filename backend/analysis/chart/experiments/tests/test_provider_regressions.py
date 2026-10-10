@@ -8,10 +8,10 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-from core.local_dataset import flow_coverage, supplement_raw_ohlc, validate_prices
-from core.local_features import normalize_trading_halts
-from data_collectors import price_collector as source
+from experiments.dataset.pipeline import flow_coverage, supplement_raw_ohlc, validate_prices
 from experiments.features.flow import build_flow_features
+from shared.data import providers as source
+from shared.features.builder import normalize_trading_halts
 
 CAPTURE = json.loads((Path(__file__).parent / "fixtures/provider_failures.json").read_text())
 
@@ -117,8 +117,7 @@ def test_ohlc_supplement_keeps_existing_fields_and_resumes(tmp_path):
 
 
 def test_full_history_is_one_request_and_old_chunks_are_reused(tmp_path):
-    from core.local_config import atomic_json, atomic_parquet
-    from core.local_dataset import sha256
+    from shared.io import atomic_json, atomic_parquet, sha256
 
     days = pd.bdate_range("2016-01-04", "2026-10-06")
     fields = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]

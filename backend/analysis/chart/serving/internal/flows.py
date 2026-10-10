@@ -1,13 +1,11 @@
 """Cached daily investor queries, shared with local research collection."""
 
 import json
-from pathlib import Path
 
 import pandas as pd
-from core.local_dataset import VALIDATION_VERSION, sha256, validate_flow
-from data_collectors.price_collector import _FLOW_COLUMNS, _fetch_investor_day
+from shared.data.providers import _FLOW_COLUMNS, _fetch_investor_day
+from shared.data.validation import validate_flow
 
-LOCAL_FLOW_CACHE = Path(__file__).parents[2] / "data" / "datasets" / "local_2016_kospi_v1" / "investor_flow_cache"
 
 def collect_flows(trading_days, store):
     # Only the last 20 sessions are needed for today's 1/5/20-session inputs.
@@ -19,13 +17,6 @@ def collect_flows(trading_days, store):
         try:
             frame = store.load_flow_day(date)
             archived = frame is not None
-            if frame is None:
-                path = LOCAL_FLOW_CACHE / f"{date}.parquet"
-                metadata = path.with_suffix(".json")
-                if path.is_file() and metadata.is_file():
-                    meta = json.loads(metadata.read_text())
-                    if meta.get("validation_version") == VALIDATION_VERSION and meta.get("sha256") == sha256(path):
-                        frame = validate_flow(pd.read_parquet(path), day, _FLOW_COLUMNS)
             hit = frame is not None
             if not hit:
                 frame = _fetch_investor_day(day)

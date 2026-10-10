@@ -1,60 +1,39 @@
-experiment_name: "base"
-description: "Current H5 Alpha158 baseline template. Copy this file before running a concrete experiment."
-tags: ["baseline", "triple_barrier", "alpha158", "h5"]
-
+experiment_name: base
+description: Current H5 Alpha158 baseline template. Copy this file before running
+  a concrete experiment.
+tags:
+- baseline
+- triple_barrier
+- alpha158
+- h5
 data:
-  tickers: ""
-  universe: "krx_common_stock"
-  universe_file: "data/universe/security_master.parquet"
-  universe_policy:
-    markets: ["KOSPI", "KOSDAQ"]
-    secu_groups: ["주권"]
-    point_in_time: true
-  price_dir: "data/processed"
-  # 일반적으로 비워 둔다. 파일 메타데이터가 같은 상태에서 데이터를 교체했을 때만
-  # local.yaml에 새 식별자를 넣어 학습 캐시를 분리한다.
-  # version: "local-YYYYMMDD"
-  start_date: "2016-01-01"
-  # 2026년은 아직 완료 연도가 아니므로 기본 OOS 평가 범위에서는 제외한다.
-  end_date: "2026-06-12"
-  split_strategy: "sliding"
+  tickers: ''
+  universe: krx_common_stock
+  start_date: '2016-01-01'
+  end_date: '2026-06-12'
+  split_strategy: sliding
   embargo_days: 7
-  splits:
-    - train_start: "2016-01-01"
-      train_end: "2020-12-31"
-      test_start: "2021-01-08"
-      test_end: "2021-12-31"
   sliding:
     train_window_years: 3
     test_window_years: 1
     start_year: 2016
     end_year: 2025
-  expanding:
-    initial_train_years: 5
-    test_window_years: 1
-    start_year: 2016
-    end_year: 2025
-
 features:
-  set_name: "alpha158"
-  technical: true
-  fundamental: false
-  include_market_features: false
-  include_volume_features: true
-
+  groups:
+  - base
+  include: []
+  exclude: []
 labels:
-  type: "dynamic_sigma"
+  type: dynamic_sigma
   horizon: 5
   up_mult: 1.5
   down_mult: 1.2
-  volatility_window: 20
   up_class: 2
   neutral_class: 1
   down_class: 0
-
 model:
-  type: "LGBM"
-  objective: "multiclass"
+  type: LGBM
+  objective: multiclass
   params:
     n_estimators: 1000
     learning_rate: 0.01
@@ -64,35 +43,35 @@ model:
     colsample_bytree: 0.7
     subsample: 0.8
     subsample_freq: 1
-    class_weight: "balanced"
+    class_weight: balanced
     random_state: 42
     n_jobs: -1
-
 strategy:
-  score_column: "prob_up"
-  selection: "top_k"
+  score_column: prob_up
+  selection: top_k
   top_n: 5
-  top_quantile: 0.10
   prob_threshold: 0.65
-  position_weighting: "equal_weight"
-
+  position_weighting: equal_weight
 backtest:
-  delisting_policy: "last_tradable_close"
   initial_cash: 10000000
   signal_lag_days: 1
-  entry_price: "open"
-  exit_price: "open"
+  entry_price: open
+  exit_price: rule
   fee: 0.00105
   max_holding_days: 5
   up_mult: 1.8
   down_mult: 1.2
   hard_sl_mult: 1.5
-
 evaluation:
-  probability_bins: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  probability_bins:
+  - 0
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1
+  benchmark_file: workspace/experiments/datasets/shared_v3_local_2016/benchmarks/KOSPI.parquet
   benchmark_strategies:
-    - random_top_k
-    - momentum_5d
-    - ma20_breakout
-    - market_index
-  random_baseline_seeds: 5
+  - market_index
+contract_version: 3
+dataset: experiments/configs/datasets/dataset.yaml

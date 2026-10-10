@@ -3,13 +3,13 @@
 import argparse
 from pathlib import Path
 
-from .internal.pack import download, load_pack
+from .internal.pack import config_path, download, load_pack
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["download", "validate"])
-    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.yaml"))
+    parser.add_argument("--config", type=Path, default=config_path())
     parser.add_argument("--path", type=Path)
     args = parser.parse_args(argv)
     if args.command == "download":

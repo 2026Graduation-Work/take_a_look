@@ -1,32 +1,33 @@
 import argparse
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import yaml
-from backtest.engine import VectorBTEngine, compute_custom_krx_composite
-from evaluation.backtest_metrics import calculate_trading_metrics
-from evaluation.baselines import (
+from experiments.backtest.engine import VectorBTEngine, configured_benchmark, kospi_index_returns
+from experiments.evaluation.backtest_metrics import calculate_trading_metrics
+from experiments.evaluation.baselines import (
     generate_ma_breakout_signals,
     generate_momentum_signals,
     generate_random_top_k_signals,
     restrict_signals_to_test_folds,
 )
-from experiment_utils import (
+from experiments.experiment_utils import (
     build_fold_alignment,
     find_processed_dir,
-    find_universe_file,
     generate_predictions_hash,
     load_predictions,
+    load_universe_intervals,
     resolve_splits,
+    resolve_tickers,
     result_dir,
     test_date_bounds,
     validate_embargo,
 )
-from point_in_time_universe import load_security_master
-from train_src.loaders import load_parquet_data
-from train_src.swing_strategy import SwingStrategy
+from experiments.train_src.loaders import load_parquet_data
+from experiments.train_src.swing_strategy import SwingStrategy
 
 
 def _json_safe(value):
@@ -58,17 +59,154 @@ def _format_float(value: float) -> str:
     return "N/A" if pd.isna(value) else f"{value:.4f}"
 
 
-def main(config_path, predictions_path=None):
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(
-            f"[ERROR] 설정을 불러올 수 없습니다. 경로를 확인해주세요: {config_path}"
-        )
+def add_kospi_benchmark(out_dir, config):
+    """Add the same KOSPI buy-and-hold comparison to a saved backtest."""
+    returns_path = os.path.join(out_dir, "daily_returns.csv")
+    comparison_path = os.path.join(out_dir, "benchmark_comparison.csv")
+    metadata_path = os.path.join(out_dir, "benchmark_metadata.csv")
+    summary_path = os.path.join(out_dir, "backtest_metrics_summary.json")
+    daily = pd.read_csv(returns_path, index_col="Date", parse_dates=["Date"])
+    index_file = config.get("evaluation", {}).get("kospi_index_file")
+    kospi = kospi_index_returns(daily.index, index_file)
+    metrics = calculate_trading_metrics(kospi)
+    source = kospi.attrs["benchmark_source"]
 
+    comparison = pd.read_csv(comparison_path, keep_default_na=False)
+    comparison.loc[comparison["Win Rate"] == "", "Win Rate"] = "N/A"
+    comparison = comparison[comparison["Strategy"] != "KOSPI Index Buy & Hold"].reset_index(
+        drop=True
+    )
+    comparison.loc[len(comparison)] = {
+        "Strategy": "KOSPI Index Buy & Hold",
+        "Total Return": _format_pct(metrics["total_return"]),
+        "Sharpe Ratio": _format_float(metrics["sharpe_ratio"]),
+        "Max Drawdown": _format_pct(metrics["max_drawdown"]),
+        "Win Rate": "N/A",
+        "Benchmark Source": source,
+    }
+    metadata = pd.read_csv(metadata_path, keep_default_na=False)
+    metadata = metadata[metadata["benchmark"] != "KOSPI Index Buy & Hold"].reset_index(drop=True)
+    metadata.loc[len(metadata)] = {
+        "benchmark": "KOSPI Index Buy & Hold",
+        "source": source,
+        "reason": "KOSPI price index close-to-close returns; no dividends or fees",
+        "valid": True,
+        "validity_reason": "full evaluation-date coverage",
+    }
+    with open(summary_path, encoding="utf-8") as f:
+        summary = json.load(f)
+    summary.update({f"benchmark_kospi_{key}": _json_safe(value) for key, value in metrics.items()})
+    summary["benchmark_kospi_source"] = source
+
+    daily["Benchmark_KOSPI"] = kospi
+    daily.to_csv(returns_path)
+    comparison.to_csv(comparison_path, index=False)
+    metadata.to_csv(metadata_path, index=False)
+    with open(summary_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=4, ensure_ascii=False)
+    print(f"[*] KOSPI index benchmark added: {out_dir}")
+
+
+def _run_local_period(config, predictions, prices, out):
+    from experiments.backtest.local_execution import save_execution
+    from shared.io import atomic_json
+
+    if predictions.empty or prices.empty:
+        raise ValueError("Backtest period has no predictions/prices")
+    Path(out).mkdir(parents=True, exist_ok=True)
+    entries, weights = SwingStrategy(config).generate_signals(predictions, prices)
+    try:
+        portfolio = VectorBTEngine(config).run(entries, weights, prices, generate_report=False)
+    except Exception as exc:
+        atomic_json(Path(out) / "execution_error.json", {"reason": str(exc), "config": config})
+        raise
+    save_execution(portfolio, out)
+    closed = portfolio.trade_records().loc[lambda frame: frame.Status.eq("Closed")]
+    returns = portfolio.returns()
+    metrics = calculate_trading_metrics(returns, closed)
+    benchmark = configured_benchmark(config, returns.index, prices)
+    metrics["benchmark"] = calculate_trading_metrics(benchmark)
+    metrics["initial_cash"] = config["backtest"]["initial_cash"]
+    metrics["final_equity"] = float(portfolio.value().iloc[-1])
+    metrics["unclosed_positions"] = len(portfolio.open_positions)
+    metrics["execution_policy"] = {"quantity": "integer_floor_on_existing_adjusted_price_basis",
+                                   "delisting": "zero_valuation_zero_cash_recovery"}
+    metrics["unrealized_pnl"] = sum(
+        row["unrealized_pnl_before_exit_fee"] for row in portfolio.open_positions
+    )
+    atomic_json(Path(out) / "backtest_metrics.json", metrics)
+    (Path(out) / "execution_error.json").unlink(missing_ok=True)
+    pd.DataFrame({"Portfolio": returns, "Benchmark": benchmark}).to_csv(
+        Path(out) / "daily_returns.csv"
+    )
+    return metrics
+
+
+def run_local_backtest(config, predictions_path=None):
+    from shared.io import atomic_json
+
+    splits = resolve_splits(config)
+    if not validate_embargo(splits, config["data"].get("embargo_days", 7)):
+        raise ValueError("Invalid embargo")
+    predictions = load_predictions(config, splits, __file__, predictions_path)
+    start, end = test_date_bounds(splits)
+    prices = load_parquet_data(
+        find_processed_dir(config, __file__), start, end,
+        columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt"],
+        tickers=resolve_tickers(config, __file__), strict=True,
+        universe_intervals=load_universe_intervals(config),
+    )
+    out = Path(result_dir(config, __file__))
+    if config["backtest"].get("capital_mode", "continuous") == "continuous":
+        _run_local_period(config, predictions, prices, out)
+    else:
+        summaries = []
+        # Generate signals separately within each calendar year. Lagged signals,
+        # cash and open positions therefore cannot cross annual boundaries.
+        for year in sorted(pd.to_datetime(predictions.Date).dt.year.unique()):
+            period_predictions = predictions.loc[pd.to_datetime(predictions.Date).dt.year.eq(year)]
+            period_prices = prices.loc[pd.to_datetime(prices.Date).dt.year.eq(year)]
+            period_out = out / "years" / str(year)
+            metrics = _run_local_period(config, period_predictions, period_prices, period_out)
+            summaries.append({"year": int(year), "start": str(period_prices.Date.min().date()),
+                              "end": str(period_prices.Date.max().date()),
+                              "prediction_rows": len(period_predictions),
+                              "fold_ids": sorted(period_predictions.fold_id.unique().tolist()),
+                              **metrics})
+        pd.DataFrame([{k: v for k, v in row.items() if k not in {"benchmark", "fold_ids"}}
+                      for row in summaries]).to_csv(out / "backtest_metrics_by_year.csv", index=False)
+        atomic_json(out / "backtest_metrics.json", {
+            "capital_mode": "independent_year", "initial_cash_per_year": config["backtest"]["initial_cash"],
+            "years": summaries, "end_valuation": "each year final close",
+            "cash_and_positions_carried": False,
+        })
+        for filename in ["orders.csv", "trades.csv", "equity_curve.csv", "daily_returns.csv"]:
+            parts = []
+            for row in summaries:
+                try:
+                    frame = pd.read_csv(out / "years" / str(row["year"]) / filename)
+                except pd.errors.EmptyDataError:
+                    frame = pd.DataFrame()
+                frame.insert(0, "year", row["year"])
+                parts.append(frame)
+            pd.concat(parts, ignore_index=True).to_csv(out / filename, index=False)
+    print(f"Backtest results: {out}")
+
+
+def main(config_path, predictions_path=None, benchmarks_only=False):
     print(f"[*] Loading config from {config_path}...")
-    with open(config_path, encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    from experiments.config import load_experiment_config
+
+    config = load_experiment_config(config_path)
+    if config.get("contract_version") == 3:
+        if benchmarks_only:
+            raise ValueError("Local pipeline evaluates its fixed benchmark with the strategy")
+        return run_local_backtest(config, predictions_path)
 
     exp_name = config.get("experiment_name", "default_exp")
+    if benchmarks_only:
+        add_kospi_benchmark(result_dir(config, __file__), config)
+        return
     print(f"\n📈 [*] Starting Trading Backtest: {exp_name}")
 
     splits = resolve_splits(config)
@@ -85,12 +223,11 @@ def main(config_path, predictions_path=None):
     final_predictions = load_predictions(config, splits, __file__, predictions_path)
 
     processed_dir = find_processed_dir(config, __file__)
-    universe_file = find_universe_file(config, __file__)
-    universe_master = load_security_master(universe_file) if universe_file else None
     print(f"[*] 데이터 소스 디렉토리: {processed_dir}")
 
     full_test_start, full_test_end = test_date_bounds(splits)
-    tickers_cfg = config.get("data", {}).get("tickers", None)
+    tickers_cfg = resolve_tickers(config, __file__)
+    universe_intervals = load_universe_intervals(config)
 
     price_cols = ["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt"]
     market_df = load_parquet_data(
@@ -99,7 +236,8 @@ def main(config_path, predictions_path=None):
         full_test_end,
         columns_only=price_cols,
         tickers=tickers_cfg,
-        universe_file=universe_file,
+        strict=config.get("data", {}).get("point_in_time", False),
+        universe_intervals=universe_intervals,
     )
     market_df["Date"] = pd.to_datetime(market_df["Date"]).dt.tz_localize(None)
 
@@ -127,7 +265,7 @@ def main(config_path, predictions_path=None):
 
     print("\n[1] 트레이딩 전략 매트릭스 변환 (Swing Strategy)...")
     strategy = SwingStrategy(config)
-    entries, weights = strategy.generate_signals(final_predictions, market_df, universe_master)
+    entries, weights = strategy.generate_signals(final_predictions, market_df)
     strategy_keys = pd.MultiIndex.from_product(
         [entries.index, entries.columns], names=["Date", "Code"]
     )
@@ -142,7 +280,7 @@ def main(config_path, predictions_path=None):
 
     print("\n[2] VectorBT 퀀트 시뮬레이터 가동 (Backtest Engine)...")
     bt_engine = VectorBTEngine(config)
-    pf = bt_engine.run(entries, weights, market_df, universe_master=universe_master)
+    pf = bt_engine.run(entries, weights, market_df)
 
     daily_returns = pf.returns()
     daily_returns.index = pd.to_datetime(daily_returns.index).tz_localize(None)
@@ -155,7 +293,9 @@ def main(config_path, predictions_path=None):
         test_start = pd.to_datetime(split["test_start"])
         test_end = pd.to_datetime(split["test_end"])
 
-        fold_returns = daily_returns[(daily_returns.index >= test_start) & (daily_returns.index <= test_end)]
+        fold_returns = daily_returns[
+            (daily_returns.index >= test_start) & (daily_returns.index <= test_end)
+        ]
         fold_trades = _slice_trades(trades_all, test_start, test_end)
         metrics = calculate_trading_metrics(fold_returns, fold_trades)
         metrics["fold_id"] = fold_id
@@ -190,18 +330,12 @@ def main(config_path, predictions_path=None):
 
     for seed in range(100, 100 + random_seeds):
         random_entries, random_weights = generate_random_top_k_signals(
-            market_df, top_n=top_n, seed=seed, universe_master=universe_master
+            market_df, top_n=top_n, seed=seed
         )
         random_entries, random_weights = restrict_signals_to_test_folds(
             random_entries, random_weights, splits
         )
-        random_pf = bt_engine.run(
-            random_entries,
-            random_weights,
-            market_df,
-            generate_report=False,
-            universe_master=universe_master,
-        )
+        random_pf = bt_engine.run(random_entries, random_weights, market_df, generate_report=False)
         random_metrics = calculate_trading_metrics(
             random_pf.returns(),
             random_pf.trades.records_readable if len(random_pf.trades.records) > 0 else None,
@@ -210,35 +344,21 @@ def main(config_path, predictions_path=None):
         random_mdds.append(random_metrics.get("max_drawdown", np.nan))
         random_sharpes.append(random_metrics.get("sharpe_ratio", np.nan))
 
-    mom_entries, mom_weights = generate_momentum_signals(
-        market_df, top_n=top_n, horizon=5, universe_master=universe_master
-    )
-    mom_entries, mom_weights = restrict_signals_to_test_folds(
-        mom_entries, mom_weights, splits
-    )
-    mom_pf = bt_engine.run(
-        mom_entries, mom_weights, market_df, generate_report=False, universe_master=universe_master
-    )
+    mom_entries, mom_weights = generate_momentum_signals(market_df, top_n=top_n, horizon=5)
+    mom_entries, mom_weights = restrict_signals_to_test_folds(mom_entries, mom_weights, splits)
+    mom_pf = bt_engine.run(mom_entries, mom_weights, market_df, generate_report=False)
     mom_metrics = calculate_trading_metrics(
         mom_pf.returns(), mom_pf.trades.records_readable if len(mom_pf.trades.records) > 0 else None
     )
 
-    ma_entries, ma_weights = generate_ma_breakout_signals(
-        market_df, top_n=top_n, window=20, universe_master=universe_master
-    )
-    ma_entries, ma_weights = restrict_signals_to_test_folds(
-        ma_entries, ma_weights, splits
-    )
-    ma_pf = bt_engine.run(
-        ma_entries, ma_weights, market_df, generate_report=False, universe_master=universe_master
-    )
+    ma_entries, ma_weights = generate_ma_breakout_signals(market_df, top_n=top_n, window=20)
+    ma_entries, ma_weights = restrict_signals_to_test_folds(ma_entries, ma_weights, splits)
+    ma_pf = bt_engine.run(ma_entries, ma_weights, market_df, generate_report=False)
     ma_metrics = calculate_trading_metrics(
         ma_pf.returns(), ma_pf.trades.records_readable if len(ma_pf.trades.records) > 0 else None
     )
 
-    krx_returns = compute_custom_krx_composite(
-        daily_returns.index, market_df, universe_master
-    )
+    krx_returns = configured_benchmark(config, daily_returns.index, market_df)
     krx_source = krx_returns.attrs.get("benchmark_source", "unknown")
     krx_reason = krx_returns.attrs.get("benchmark_reason", "")
     krx_valid = krx_returns.attrs.get("benchmark_valid", False)
@@ -295,14 +415,19 @@ def main(config_path, predictions_path=None):
     summary.update(
         {
             "prediction_hash": predictions_hash,
-            "delisting_policy": bt_engine.delisting_policy,
             "benchmark_custom_krx_source": krx_source,
             "benchmark_custom_krx_reason": krx_reason,
             "benchmark_custom_krx_valid": krx_valid,
             "benchmark_custom_krx_validity_reason": krx_validity_reason,
-            **{f"benchmark_custom_krx_{key}": _json_safe(value) for key, value in krx_metrics.items()},
+            **{
+                f"benchmark_custom_krx_{key}": _json_safe(value)
+                for key, value in krx_metrics.items()
+            },
             "fold_alignment_exact": bool(alignment_status["is_exact_fold_match"]),
-            **{f"fold_alignment_{key}": _json_safe(value) for key, value in alignment_status.items()},
+            **{
+                f"fold_alignment_{key}": _json_safe(value)
+                for key, value in alignment_status.items()
+            },
         }
     )
 
@@ -326,6 +451,7 @@ def main(config_path, predictions_path=None):
         json.dump(summary, f, indent=4, ensure_ascii=False)
     with open(os.path.join(out_dir, "config_snapshot.yaml"), "w", encoding="utf-8") as f:
         yaml.dump(config, f, allow_unicode=True)
+    add_kospi_benchmark(out_dir, config)
 
     print(
         f"\n🎉 백테스트 [{exp_name}] 완료. fold_alignment_exact={alignment_status['is_exact_fold_match']}"
@@ -341,5 +467,10 @@ if __name__ == "__main__":
         default=None,
         help="Path to pre-computed predictions parquet file",
     )
+    parser.add_argument(
+        "--benchmarks-only",
+        action="store_true",
+        help="Add KOSPI index to an existing backtest without rerunning training or simulation",
+    )
     args = parser.parse_args()
-    main(args.config, args.predictions_path)
+    main(args.config, args.predictions_path, args.benchmarks_only)

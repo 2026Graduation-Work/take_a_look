@@ -1,0 +1,82 @@
+contract_version: 3
+dataset: experiments/configs/datasets/dataset_kospi.yaml
+experiment_name: sliding_2016_2026_h20_kospi
+description: Three-year sliding training from 2016; annual OOS 2019..2026; independent
+  annual capital.
+tags:
+- sliding
+- annual_oos
+- independent_year
+- h20
+data:
+  embargo_days: 7
+  end_date: '2026-12-31'
+  point_in_time: false
+  sliding:
+    end_year: 2026
+    start_year: 2016
+    test_window_years: 1
+    train_window_years: 3
+  split_strategy: sliding
+  start_date: '2016-01-01'
+  tickers: []
+  universe: all
+features:
+  exclude: []
+  groups:
+  - base
+  include: []
+labels:
+  down_class: 0
+  down_mult: 3.0
+  horizon: 20
+  neutral_class: 1
+  type: dynamic_sigma
+  up_class: 2
+  up_mult: 3.75
+  volatility_mode: current_sigma
+model:
+  objective: multiclass
+  params:
+    class_weight: balanced
+    colsample_bytree: 0.7
+    learning_rate: 0.01
+    max_depth: 5
+    min_child_samples: 2000
+    n_estimators: 1000
+    n_jobs: -1
+    num_leaves: 20
+    random_state: 42
+    subsample: 0.8
+    subsample_freq: 1
+  type: LGBM
+training:
+  skip_validation: true
+strategy:
+  position_weighting: equal_weight
+  prob_threshold: 0.65
+  score_column: prob_up
+  selection: top_k
+  top_n: 5
+backtest:
+  capital_mode: independent_year
+  down_mult: 3.0
+  entry_price: open
+  exit_price: rule
+  fee: 0.00105
+  hard_sl_mult: 2.0
+  initial_cash: 10000000
+  max_holding_days: 20
+  signal_lag_days: 1
+  up_mult: 3.75
+evaluation:
+  benchmark_file: workspace/experiments/datasets/shared_v3_kospi_2016/benchmarks/KOSPI.parquet
+  benchmark_strategies:
+  - market_index
+  probability_bins:
+  - 0
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1

@@ -1,8 +1,13 @@
 from pathlib import Path
+from urllib.error import HTTPError
 
 import pandas as pd
 import pytest
-from experiments.handoff.build_kospi_universe import build_kospi_snapshot
+from experiments.handoff.build_kospi_universe import (
+    build_kospi_history,
+    build_kospi_snapshot,
+    fetch_listing_inputs,
+)
 from experiments.handoff.package_processed import HandoffContractError
 
 
@@ -54,3 +59,37 @@ def test_build_snapshot_rejects_missing_processed_file(tmp_path: Path) -> None:
     active, delisted = _frames()
     with pytest.raises(HandoffContractError, match="processed 파일이 없습니다"):
         build_kospi_snapshot(active, delisted, cutoff="2024-12-30", processed_dir=tmp_path)
+
+
+def test_build_history_keeps_active_intervals_and_excludes_other_markets(tmp_path: Path) -> None:
+    for code in ("005930", "123456", "45014K"):
+        (tmp_path / f"{code}.parquet").touch()
+    active, delisted = _frames()
+    history = build_kospi_history(
+        active, delisted, start="2024-01-01", end="2025-12-31", processed_dir=tmp_path
+    )
+    assert history.Code.tolist() == ["005930", "123456", "45014K"]
+    assert history.iloc[0].ListingDate == pd.Timestamp("2000-01-01")
+    assert history.iloc[1].ListingDate == pd.Timestamp("2025-01-02")
+    assert history.iloc[2].DelistingDate == pd.Timestamp("2025-02-01")
+
+
+def test_listing_cache_404_uses_shared_verified_krx_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    from shared.data import metadata, providers
+    active, delisted = _frames()
+    active = active.loc[active.Market.eq("KOSPI")].copy()
+    active["Code"] = active.Code.str.zfill(6)
+    delisted["Symbol"] = delisted.Symbol.str.upper().str.zfill(6)
+    calls = []
+    monkeypatch.setattr(providers.fdr, "StockListing", lambda *args: (_ for _ in ()).throw(
+        HTTPError("https://example.test/listing.csv", 404, "missing", None, None)))
+    def fallback(market):
+        calls.append(market)
+        return active
+    monkeypatch.setattr(metadata, "fetch_active_listing_intervals", fallback)
+    monkeypatch.setattr(providers, "_fetch_delisted_list", lambda start: delisted)
+    current, past = fetch_listing_inputs("2016-01-01")
+    assert calls == ["KOSPI"]
+    assert set(current.Code) == set(active.Code)
+    assert set(past.Symbol) == set(delisted.loc[delisted.Market.eq("KOSPI") & delisted.SecuGroup.eq("주권"), "Symbol"])
+    assert current.ListingDate.notna().all() and past.DelistingDate.notna().all()

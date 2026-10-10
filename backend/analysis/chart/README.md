@@ -1,26 +1,15 @@
-# 차트 분석 블록
+# Chart
 
-기술적 피처와 3분류 LightGBM으로 profile별 상대 스코어를 생성하고 공용 평가·백테스트를
-수행한다.
+수정가격·시장 심리 피처를 근거로 H5/H20 상대 스코어와 과거 유사 사례를 제공한다. 자동 매매는 하지 않는다.
 
-과거 실험 universe는 `data/universe/security_master.parquet`의 상장 구간을 기준으로
-`ListingDate <= Date < DelistingDate` 규칙을 적용한다. 상폐 종목을 제외하거나 현재
-상장 목록으로 과거 universe를 대신하지 않는다.
+- `shared/`: 공급자 호출, 원본 OHLC 보정, 실제 VWAP, 거래일 검증, 정규화, Alpha158, Sigma, 수급 피처, 해시·원자적 저장.
+- `experiments/`: 장기 구축·재개, 미래 정보가 필요한 라벨·표본 선택, 학습·평가·백테스트, 검증된 결과의 pack 내보내기.
+- `serving/`: 운영 입력 갱신·재실행, pack 검사, 추론·Supabase 저장·발행. 연구 코드와 연구 저장 경로를 참조하지 않는다.
+- `workspace/experiments/`, `workspace/serving/`, `workspace/archive/`: 데이터·캐시·산출물. 전체 Git 제외.
+- `archive/`: 이전 코드·문서 원문. 현재 실행 경로가 아니다.
 
-설치, 데이터, 모델, config, 학습, 평가, 추론, 추가 피처, 파일 구조는
-[`ONBOARDING.md`](ONBOARDING.md) 하나를 기준으로 한다.
+모든 명령은 `backend/analysis/chart`에서 `python -m experiments...`, `python -m serving...`로 실행한다.
 
-종목 상세 H5/H20 serving의 구현·공개 계약·검증 상태는
-[`serving/README.md`](serving/README.md), 실행 절차는
-[`serving/OPERATIONS.md`](serving/OPERATIONS.md)를 참고한다.
+실행법: [실험](experiments/README.md), [serving](serving/OPERATIONS.md). 해석 전 [품질 제한](docs/DATA_QUALITY.md)을 확인한다.
 
-후속 연구 과제: 과거 KRX 휴장일 표시의 전수 감사와 실제 VWAP 피처의 학습 입력 동등성 검증.
-두 항목은 현재 pack의 결과 해석 제한으로 남아 있다.
-
-빠른 검증:
-
-```bash
-pip install -r requirements.txt
-ruff check .
-pytest
-```
+대표 결과는 [RESULTS.md](docs/RESULTS.md), 이동·검증 기록은 [VALIDATION.md](docs/VALIDATION.md), 삭제 검토 목록은 [DELETION_CANDIDATES.md](docs/DELETION_CANDIDATES.md)에 있다.

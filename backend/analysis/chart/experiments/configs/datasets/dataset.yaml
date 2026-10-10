@@ -1,0 +1,10 @@
+contract_version: 3
+dataset_id: shared_v3_local_2016
+root: workspace/experiments/datasets/shared_v3_local_2016
+collection:
+  start_date: '2016-01-01'
+  end_date: null # 최신 확정 관측 거래일을 최초 구축 시 고정
+  markets: [KOSPI, KOSDAQ]
+  include_delisted: true
+  investor_flows: true
+preprocessing: shared_v3

@@ -1,0 +1,19 @@
+{
+  "physical_deletions": 0,
+  "duplicate_scripts": [
+    {
+      "path": "archive/legacy/check_data_integrity.py",
+      "bytes": 4282,
+      "sha256": "bc39e0e029530296832fceedfadb88f7506c4685bb3fdbc9f32761a31c926ba6",
+      "active_code_or_ci_references": []
+    },
+    {
+      "path": "archive/legacy/scratch/check_data_integrity.py",
+      "bytes": 4282,
+      "sha256": "bc39e0e029530296832fceedfadb88f7506c4685bb3fdbc9f32761a31c926ba6",
+      "active_code_or_ci_references": []
+    }
+  ],
+  "data_duplicate_candidates": [],
+  "data_policy": "Full content hashes recorded in migration inventory. Dataset, cache, model and pack consumers differ; no data has been declared disposable without a complete consumer audit."
+}

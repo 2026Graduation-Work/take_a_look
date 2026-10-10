@@ -1,0 +1,8 @@
+{
+  "commit": "6c7aa26",
+  "files": 159,
+  "bytes": 109421098,
+  "full_record": "workspace/archive/main-6c7aa26/inventory.json",
+  "full_record_sha256": "8e481361a4008a3f9edfda65d8b835eac0a9d4c5fbec8ece414344ead50221af",
+  "policy": "Preserved main originals before resolving the chart tree. Kept latest main outside chart; kept validated research v3 and integrated production public contracts, market updates, idempotent retries, storage panel and operational commands."
+}

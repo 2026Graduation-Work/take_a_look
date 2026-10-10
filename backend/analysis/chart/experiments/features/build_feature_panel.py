@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 
-import yaml
+from experiments.config import load_experiment_config
 
-from .panel_builder import build_feature_store
+from .local_panel import prepare_local_panel
 
 
 def main() -> None:
@@ -15,9 +15,10 @@ def main() -> None:
     parser.add_argument("--output", help="feature store 출력 경로; 없으면 config 값을 사용")
     args = parser.parse_args()
 
-    with open(args.config, encoding="utf-8") as handle:
-        config = yaml.safe_load(handle) or {}
-    manifest = build_feature_store(config, output_dir=args.output)
+    config = load_experiment_config(args.config)
+    if args.output:
+        raise ValueError("Configure the dataset root instead of --output")
+    manifest = prepare_local_panel(config)
     print(f"feature store 생성 완료: {manifest['output_feature_store_dir']}")
     print(f"처리된 종목 파일 수: {len(manifest['files'])}")
 
