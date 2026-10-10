@@ -1,6 +1,6 @@
 {
   "activated_locally": true,
-  "archive_sha256": "5778cc8ffd14331bb7d80a1c8a1ce2159e4260f63e9af35c036e260fab85da11",
+  "archive_sha256": "03a4522d11bb61ee0182d2965ca5e5b360362f434f0a00162816b4c787b39d3d",
   "build_reports": {
     "h20": {
       "completed_outcome_period": {
@@ -315,7 +315,7 @@
         "end": "2026-10-06",
         "start": "2019-01-07"
       },
-      "original_run_manifest": "/home/jinse/projects/Grduation/Stock_Prediction_v2/backend/analysis/chart/workspace/experiments/runs/sliding_2016_2026_h20_kospi_1734679be11d0369/run_manifest.json",
+      "original_run_manifest": "workspace/experiments/runs/sliding_2016_2026_h20_kospi_1734679be11d0369/run_manifest.json",
       "prediction_hash": "2b60850a",
       "prediction_manifest_sha256": "4dcb924a83a858d4a229a385934a57ad972d38f0b6a13914e1a8fa7c498fab17",
       "prediction_rows": 1671129,
@@ -348,7 +348,7 @@
         "end": "2026-10-06",
         "start": "2019-01-07"
       },
-      "original_run_manifest": "/home/jinse/projects/Grduation/Stock_Prediction_v2/backend/analysis/chart/workspace/experiments/runs/sliding_2016_2026_h5_kospi_739166ce0d474177/run_manifest.json",
+      "original_run_manifest": "workspace/experiments/runs/sliding_2016_2026_h5_kospi_739166ce0d474177/run_manifest.json",
       "prediction_hash": "56a3f2a9",
       "prediction_manifest_sha256": "0007496f165bd4a2ea81ba46050015aeab9aee70ee67083bfc9a00a91b22aa4b",
       "prediction_rows": 1671129,
@@ -357,7 +357,7 @@
       "training_feature_store": "/home/jinse/projects/Grduation/Stock_Prediction_v2/backend/analysis/chart/workspace/experiments/datasets/local_2016_kospi_v1/feature_store/5866e9f1664b4b2a"
     }
   },
-  "pack_id": "kospi_shared_v3_train2023_2025_20261010_main",
+  "pack_id": "kospi_shared_v3_train2023_2025_20261011",
   "processing_contract": {
     "base_feature_columns": [
       "Change",
@@ -539,6 +539,7 @@
       "data/bulk_prices.py": "84373e7fb74cd33f77ede1decf553d1a7b3bff703490041ab52af8c167c1dafb",
       "data/calendar.py": "e93d0ade75ec4f9ccc75b9aca3ac83061827179fedf095897a48c2bc516f92b8",
       "data/krx.py": "147ad9dd6cffee4a21f2b34bc2baa5328fa0cb38310edfb8deea32c17e459e9f",
+      "data/metadata.py": "6782e0c2e03521356ee44e095b1e552bf5b79df25a66c0aa3a0934e06862e009",
       "data/prices.py": "e287d0555a9ec75d8fba41101e6f36b155c9e6ea7b6967b2238d13f14409668c",
       "data/providers.py": "ff729d1b1e28cb49ff9452a92656424042a2f73b394975b937821ca51661a7e7",
       "data/trading_calendar.py": "655bdf4da56f1f0853e6956a2e3ab90b776624c464d4c5f32941ec410febb14e",
@@ -547,7 +548,7 @@
       "features/columns.py": "c4eae37c20087a8df28c038a1454ab246a9900ee3c0a2d6da1505cf2cf91482e",
       "features/flow.py": "58a35f3885b40f2c25a7b155af8c9c423d7bef6ab46dc04adfe5edc821fd764b",
       "io.py": "bc82259a1ac66f04aea38bcbd5e6a60de9103a5ba0bf72f954794afdf8284b11",
-      "settings.py": "f53d91c93c71f14ebdf603178b729944ba65a2da0ec31eeb0bde1a2f02bd82fd"
+      "settings.py": "2f3b34136e505e2c2b6d27ab3041a8ca5f2c5f4be7dac9dca73d237a5bb7cbd1"
     },
     "preprocessing": {
       "barrier_feature_down_mult": 1.2,
@@ -556,7 +557,7 @@
       "sigma_window": 20
     },
     "price_basis": "krx_raw_ohlc_uniform_close_ratio_v1",
-    "sha256": "4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867"
+    "sha256": "64abc83dce3eb7164c1e94cab75484c757684fce0c56342863dc7b01baca3fed"
   },
   "scores": {
     "20": {

@@ -20,9 +20,9 @@ serving 단독 검증은 실험 디렉터리 없이 shared·serving만 복사하
 
 ## 최종 로컬 검사
 
-전체 chart pytest: **277 passed, 3 skipped**, 80.54초. serving 단독 설치·격리 디렉터리: **93 passed**, 12.11초. Ruff는 레포 루트에서 통과했다. 프런트엔드는 `node node_modules/next/dist/bin/next build --webpack`으로 통과했다. 환경의 Turbopack 소켓 제한 때문에 Webpack을 사용했으며 프런트엔드 코드는 수정하지 않았다.
+전체 chart pytest: **282 passed, 3 skipped**, 117.01초. serving 단독 설치·격리 디렉터리: **98 passed**, 9.60초. Ruff는 레포 루트에서 통과했다. 프런트엔드는 `node node_modules/next/dist/bin/next build --webpack`으로 통과했다. 환경의 Turbopack 소켓 제한 때문에 Webpack을 사용했으며 프런트엔드 코드는 수정하지 않았다.
 
-로그는 `workspace/archive/validation-20261010/`에 보존한다. 삭제 후보와 확인 범위는 [DELETION_CANDIDATES.md](DELETION_CANDIDATES.md)에 있다. 파일은 삭제하지 않았다.
+로그는 `workspace/archive/validation-20261010/`과 `workspace/archive/validation-20261011/`에 보존한다. 삭제 후보와 확인 범위는 [DELETION_CANDIDATES.md](DELETION_CANDIDATES.md)에 있다. 파일은 삭제하지 않았다.
 
 ## 로컬 pack
 
@@ -30,10 +30,12 @@ serving 단독 검증은 실험 디렉터리 없이 shared·serving만 복사하
 
 전체 1,019종목·2,368,027행의 가격·피처 및 학습 피처 저장소를 대조했다. 정규장 미관측 34,967행과 일봉 범위 밖 VWAP 4,478행도 임의 변환 없이 일치했다. 허용 오차는 rtol=1e-8, atol=1e-10이다.
 
-새 로컬 pack: `kospi_shared_v3_train2023_2025_20261010_main`. H5 1,666,324건, H20 1,651,754건의 관측 완료 사례를 생성했다. 미래 관측 미완료로 각각 4,805건·19,375건을 제외했다. 예측 기간은 2019-01-07~2026-10-06이며 2026은 부분 연도다.
+새 로컬 pack: `kospi_shared_v3_train2023_2025_20261011`. H5 1,666,324건, H20 1,651,754건의 관측 완료 사례를 생성했다. 미래 관측 미완료로 각각 4,805건·19,375건을 제외했다. 예측 기간은 2019-01-07~2026-10-06이며 2026은 부분 연도다.
 
-같은 운영 입력으로 삼성전자 2026-10-06 프리뷰를 일반 환경과 serving 단독 환경에서 실행했다. 배치 ID `1ca0bf8eb24bd5cefa23758c477cba1bd22b7afb0813dfae48fc622b92e1b88f`가 같았고 유사 사례는 H5 8,806건·H20 6,175건이었다. 공개 JSON 스키마 검사를 통과했으며 Supabase 저장·발행은 수행하지 않았다.
+같은 운영 입력으로 삼성전자 2026-10-06 프리뷰를 일반 환경과 serving 단독 환경에서 실행했다. 배치 ID `c315ebe06c0fcb1d9d7cc335cbadd0b1fce17aba78c29e3315182c3c6593a42b`가 같았고 유사 사례는 H5 8,806건·H20 6,175건이었다. 공개 JSON 스키마 검사를 통과했으며 Supabase 저장·발행은 수행하지 않았다.
 
 최신 main `6c7aa26`의 chart 원본 159개·109,421,098바이트도 별도 보존했다. 상세 해시·보존 경로는 [main-sync.json](main-sync.json)에 있다. 공개 JSON 계약과 기여도·히스토그램, 시장 상태, Storage 재시도·panel 저장, 운영 명령은 main 동작을 유지했다. 연구 v3 구축·학습 경로는 검증된 현재 구현을 유지한다. 이전 브랜치의 중복 번호 SQL은 [sql-migration.json](sql-migration.json)의 기록대로 archive로 이동했다. DB 마이그레이션은 실행하지 않았다.
 
-PR #266의 experiments·serving·profiling·text CI와 CodeQL이 통과했다. PR 연동 Vercel 프리뷰는 자동 생성됐고, 모델 Release 업로드·운영 chart 발행·DB 적용은 수행하지 않았다. main을 반영한 최종 공통 builder 계약 SHA-256은 `4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867`이다. 기존 최초 전환 pack과 main 통합 후 pack을 모두 보존했다.
+PR #266의 experiments·serving·profiling·text CI와 CodeQL이 통과했다. PR 연동 Vercel 프리뷰는 자동 생성됐고, 모델 Release 업로드·운영 chart 발행·DB 적용은 수행하지 않았다. 상장 구간까지 통합한 최종 공통 builder 계약 SHA-256은 `64abc83dce3eb7164c1e94cab75484c757684fce0c56342863dc7b01baca3fed`이다. 기존 최초 전환 pack과 main 통합 후 pack을 모두 보존했다.
+
+상장 구간·종목 목록·관리종목·벤치마크 공급자 호출도 shared로 추출했다. 원래 최신 v3 함수와 AST가 일치한다. 일일 수집은 확인된 개별 상장일 이전을 요구하지 않으며 알 수 없거나 미래인 상장일은 거부한다. 신규 상장 종목·공급자 실패 조합을 포함해 검증했다.
