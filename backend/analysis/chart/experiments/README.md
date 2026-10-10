@@ -29,6 +29,8 @@ H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼�
 
 ## 검증된 기존 v3 결과 내보내기
 
+현재 활성 모델은 기본 161개 + 수급 9개 입력의 H5/H20이다. 기존 기본 모델 export 명령도 유지한다. 수급 모델은 아래의 `--with-flows` 명령을 사용한다.
+
 ```bash
 python -m experiments.export.refresh_pack \
   --h5-result workspace/experiments/runs/sliding_2016_2026_h5_kospi_739166ce0d474177 \
@@ -39,3 +41,12 @@ python -m experiments.export.refresh_pack \
 동일 pack ID를 덮어쓰지 않는다. 원본 run manifest의 과거 경로는 이 명시적 export에서만 `docs/migration.json`의 이동 기록으로 해석한다. 모델·OOS 예측·raw/processed·학습 피처의 출처, 파일 SHA-256, 전체 가격·피처 일치를 검증한다. 실패 시 활성 설정을 바꾸지 않는다.
 
 pack은 `workspace/serving/packs/`에 생성한다. `--activate`는 `serving/config.local.yaml`만 갱신하고 이전 설정을 pack 옆에 보존한다. 프리뷰용 삼성전자 입력도 출처와 해시를 기록해 `workspace/serving/inputs/`로 명시적으로 복사한다. 원격 Release 업로드·Supabase 발행은 실행하지 않는다.
+
+```bash
+python -m experiments.export.refresh_pack \
+  --h5-result workspace/experiments/runs/sliding_2016_2026_h5_flow_kospi_ecb00d84b00063ca \
+  --h20-result workspace/experiments/runs/sliding_2016_2026_h20_flow_kospi_b3bdd182d898e80f \
+  --with-flows --pack-id YOUR_NEW_FLOW_PACK_ID --activate
+```
+
+수급 모델 export는 학습 피처 저장소의 170개 입력 순서·값·결측을 공통 builder와 대조한다. 수급이 완전했던 연구 표본에서 나온 OOS 예측으로 유사 사례를 다시 만든다.

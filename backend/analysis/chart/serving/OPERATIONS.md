@@ -8,7 +8,7 @@
 python -m venv workspace/serving/.venv
 source workspace/serving/.venv/bin/activate
 python -m pip install -r serving/requirements.txt
-python -m serving.pack validate --path workspace/serving/packs/kospi_shared_v3_train2023_2025_20261011
+python -m serving.pack validate --path workspace/serving/packs/kospi_shared_v3_flow_train2023_2025_20261011
 python -m serving.local_preview --code 005930 --as-of 2026-10-06 --compute-only
 ```
 
@@ -48,3 +48,5 @@ Storage에는 날짜별 최근 원본 60행과 전체 입력 해시를 보관하
 main 통합 직전 공통 v3 코드 기준은 `e5a0fe4`이며 최초 전환 전 기준은 `095584b`다. 새 pack의 `previous_active_pack.json`에는 이전 설정·처리 계약·builder 소스 경로가 있다. 이전 pack의 builder와 해당 코드 기준을 함께 사용한다.
 
 상장 구간 통합 직전 builder 기준 커밋은 `0c474ff`다. `20261010_main` pack으로 되돌릴 때는 이 코드와 보존된 이전 로컬 설정을 함께 복원한다.
+
+현재 로컬 활성 pack은 수급 포함 H5/H20이며 기본 161개 + 수급 9개 입력을 사용한다. 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. 기본 pack `kospi_shared_v3_train2023_2025_20261011`은 같은 builder와 호환되므로 보존된 설정만 복원해 검증할 수 있다. 원격 기본 설정은 이번 로컬 전환에 포함하지 않는다.
