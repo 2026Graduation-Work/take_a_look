@@ -74,3 +74,13 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | 도구 | 판정 | 이유 |
 |---|---|---|
 | "화면 만드는 프롬프트 8가지"(레퍼런스 분석·색·글자·아이콘·부품·레이아웃·모션·화면 검수 역할 분담, SNS 가이드) | 흐름만 채택 | 원문은 DM 배포라 설치할 실체가 없다. 1~6단계는 `frontend-design`(브리프 → 토큰 → 기본값 점검)·DESIGN.md·`baseline-ui`와 겹치고, 7단계는 DESIGN.md 5장(눌림·펼치기만)과 같다. 실제 캡처를 비교해 영향이 큰 차이부터 고치는 **8단계(화면 검수)** 만 작업 끝 절차로 쓴다 — 첫 적용(#250): 보유 맵 비중 글자 대비 4.18 → 5.07(흰 85% → 흰), 390에서 잘리던 공시 건수를 앞으로 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-11)
+
+| 도구 | 판정 | 이유 |
+|---|---|---|
+| [Firecrawl](https://github.com/firecrawl/firecrawl) (AGPL-3.0) | 기각 | 웹 크롤링 API. 호스팅판은 크레딧 과금, 무료로 쓰려면 셀프호스팅(서버 관리). 우리 데이터는 KRX·DART·BigKinds로 정해져 있다 |
+| [andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | 아이디어만 | CLAUDE.md 한 장(가정 밝히기·단순하게·필요한 줄만 고치기·검증 가능한 목표). 라이선스 표기가 없어 원문을 복사하지 않는다. 2·3번은 ponytail·AGENTS.md와 같고, 4번 "단계 → 확인 방법" 계획 형식만 작업 계획에 쓴다 |
+| ponytail · ui-ux-pro-max · ECC · prompts.chat | 기존 판정 유지 | 09-23·09-26·10-09 표 참고 |
+| [public-apis](https://github.com/public-apis/public-apis) (MIT) | 기각 | 무료 API 목록일 뿐. 한국 주식 원천은 없고(공공데이터포털·출처 불명 K-Data Gate 정도) 우리 원천(KRX·DART·BigKinds)을 바꿀 이유가 없다 |
+| Claude Code 팁(오토 모드·`/security-review`·`ultrathink`) | 하나 채택 | 스킵 퍼미션은 쓰지 않고 있고(설정 확인), `think hard` 문구도 지시문에 없다. `/security-review`는 브랜치와 main의 차이만 보는 내장 기능(추가 비용 없음)이라 운영 경로를 바꾸는 PR의 머지 전 점검으로 AGENTS.md PR 규칙에 넣었다 |
