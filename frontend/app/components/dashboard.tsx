@@ -119,8 +119,8 @@ export default function Dashboard(initialData: DashboardData) {
     getServerHoldingsSnapshot,
   );
   const savedHoldings = parseSavedHoldings(savedHoldingsSnapshot);
-  // 보유 종목의 최신 종가·신호(최신 게시 차트). 오늘 목록 종목도 같은 요청으로 읽어 출처 줄에 기준일을 붙인다.
-  const savedCodes = [...(savedHoldings ?? []), ...stocks].map(({ code }) => code).join(",");
+  // 보유·관심 종목의 최신 종가·신호(최신 게시 차트). 오늘 목록 종목도 같은 요청으로 읽어 출처 줄에 기준일을 붙인다.
+  const savedCodes = [...(savedHoldings ?? []), ...watchlist, ...stocks].map(({ code }) => code).join(",");
   const [closes, setCloses] = useState<LatestCloses>(new Map());
   useEffect(() => {
     let active = true;
@@ -134,11 +134,13 @@ export default function Dashboard(initialData: DashboardData) {
   const signalByCode = new Map(
     [...holdings, ...stocks, ...rawHoldingAlerts].map((item) => [item.code, item]),
   );
+  // 보유 맵·관심 종목이 같은 신호를 쓴다(#278): 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값
+  const lightFor = (code: string) => closes.get(code)?.signal ?? signalByCode.get(code)?.signalLight;
   const activeHoldings = savedHoldings
     ? savedHoldings.flatMap((saved) => {
         const source = signalByCode.get(saved.code);
         const latest = closes.get(saved.code);
-        const signalLight = latest?.signal ?? source?.signalLight;
+        const signalLight = lightFor(saved.code);
         if (!signalLight) return [];
         const { price, basis } = costBasis(saved.avgBuyPrice, latest?.close);
         return [
@@ -302,7 +304,7 @@ export default function Dashboard(initialData: DashboardData) {
                   />
                   <ul className="group-list m-0 list-none p-0">
                     {watchlist.map(({ code, name }) => {
-                      const light = signalByCode.get(code)?.signalLight;
+                      const light = lightFor(code);
                       return (
                         <li key={code}>
                           <Link
