@@ -26,6 +26,10 @@ on:
         description: "Store price/feature inputs and validate results without publishing a new batch"
         type: boolean
         default: false
+      model_check:
+        description: "Verify active H5/H20 inference on fresh confirmed data without database writes"
+        type: boolean
+        default: false
       supply_only:
         description: "Collect investor net purchases only (skip serving)"
         type: boolean
@@ -75,9 +79,14 @@ jobs:
           REPLAY: ${{ inputs.replay }}
           AS_OF: ${{ inputs.as_of }}
           DRY_RUN: ${{ inputs.dry_run }}
+          MODEL_CHECK: ${{ inputs.model_check }}
+          SUPPLY_ONLY: ${{ inputs.supply_only }}
         run: |
           if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ -n "$AS_OF" ]; }; then
             echo "Preview cannot combine with diagnose, replay, dry_run or as_of"; exit 1
+          fi
+          if [ "$MODEL_CHECK" = "true" ] && { [ "$PREVIEW" = "true" ] || [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ "$SUPPLY_ONLY" = "true" ] || [ -n "$AS_OF" ]; }; then
+            echo "Model check cannot combine with other execution modes"; exit 1
           fi
 
       - name: Check required secrets
@@ -95,12 +104,16 @@ jobs:
         if: ${{ inputs.diagnose != true && inputs.supply_only != true }}
         run: python -m serving.pack download --config serving/config.yaml
 
+      - name: Verify active models on fresh confirmed data
+        if: ${{ inputs.model_check == true }}
+        run: python -m serving.model_check
+
       - name: Publish recorded display-test batch
         if: ${{ inputs.publish_preview == true }}
         run: python -m serving.publish_preview --publish
 
       - name: Collect, archive and publish confirmed daily results
-        if: ${{ inputs.diagnose != true && inputs.publish_preview != true && inputs.supply_only != true }}
+        if: ${{ inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.supply_only != true }}
         env:
           REPLAY: ${{ inputs.replay }}
           REQUESTED_AS_OF: ${{ inputs.as_of }}
@@ -116,13 +129,13 @@ jobs:
 
       # 무료 한도 보존 정리(요약 로그 적재, 게시 배치 5개, 입력 파일 30일, 뉴스 원문 90일). 실패해도 게시는 그대로다.
       - name: Retention (prediction log, batches, inputs, articles)
-        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
+        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
         continue-on-error: true
         run: python -m serving.retention
 
       # 투자자별 순매수(시장 전체, 하루 3회 호출). 실패해도 게시는 그대로다.
       - name: Investor net purchases
-        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true }}
+        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true }}
         continue-on-error: true
         run: python -m serving.supply
 
@@ -137,7 +150,7 @@ jobs:
 
       # 종목 마스터(stocks)를 오늘 universe로 넣고 고친다(지우지 않음). 서빙 결과와 별개 step이라 실패해도 게시는 그대로다.
       - name: Sync stock master from universe
-        if: ${{ success() && inputs.diagnose != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
+        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
         run: |
           python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
           python -m serving.stock_master

@@ -1,5 +1,6 @@
 active_pack:
-  pack_id: kospi_uniform_v3_train2023_2025_20261009
-  release_tag: chart-serving-kospi_uniform_v3_train2023_2025_20261009
-  asset_name: kospi_uniform_v3_train2023_2025_20261009.tar.gz
-  sha256: 16871814a0e3ae422e469dfbb3072ef4608ed7cc6bf9c805e71859b4b440b4b2
+  pack_id: kospi_shared_v3_flow_train2023_2025_20261011
+  release_tag: chart-serving-kospi_shared_v3_flow_train2023_2025_20261011
+  asset_name: kospi_shared_v3_flow_train2023_2025_20261011.tar.gz
+  sha256: 26fd46a82e18abf20f8fc15510964cb7dd402fa3a8200fa7447899b69540821f
+  builder_sha256: 64abc83dce3eb7164c1e94cab75484c757684fce0c56342863dc7b01baca3fed
