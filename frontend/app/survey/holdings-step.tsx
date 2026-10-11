@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { isValidHolding, saveHoldings, type SavedHolding } from "@/lib/save-holdings";
+import { digitsOnly, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import { useStockOptions } from "../portfolio/use-stock-options";
 import StepNav from "../components/step-nav";
@@ -19,11 +20,6 @@ const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity,
 
 const field =
   "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
-
-function parseCount(value: string): number {
-  const parsed = Number.parseInt(value.replaceAll(",", "").trim(), 10);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
 
 export default function HoldingsStep({
   mode,
@@ -56,8 +52,8 @@ export default function HoldingsStep({
     }
     const candidate: SavedHolding = {
       ...match,
-      quantity: parseCount(quantity),
-      avgBuyPrice: avgPrice.trim() === "" ? null : parseCount(avgPrice),
+      quantity: parseWholeNumber(quantity) ?? Number.NaN,
+      avgBuyPrice: parseWholeNumber(avgPrice),
     };
     if (!isValidHolding(candidate)) {
       setError("수량은 1 이상의 정수로 적어 주세요. 평균 매입가는 비워 둬도 돼요.");
@@ -153,14 +149,14 @@ export default function HoldingsStep({
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">수량(주)</span>
-                <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} placeholder="10" className={field} />
+                <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(digitsOnly(event.target.value, QUANTITY_DIGITS))} placeholder="10" className={field} />
               </label>
               <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
                 <input
                   inputMode="numeric"
                   value={avgPrice}
-                  onChange={(event) => setAvgPrice(event.target.value)}
+                  onChange={(event) => setAvgPrice(digitsOnly(event.target.value, PRICE_DIGITS))}
                   placeholder="모르면 비워 두세요"
                   className={field}
                 />
