@@ -44,7 +44,8 @@ function Level({ score }: { score: number }) {
   );
 }
 
-export default function MarketStatusBar({ status: snapshot }: { status: MarketStatus }) {
+// 시장 바와 대시보드 출처 표가 같은 값을 쓴다(#278 점검: 바는 최신 행, 출처 표는 스냅샷 날짜를 보여 주던 문제)
+export function useMarketStatus(snapshot: MarketStatus): MarketStatus {
   const [status, setStatus] = useState(snapshot);
   useEffect(() => {
     let alive = true;
@@ -55,6 +56,11 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
       alive = false;
     };
   }, [snapshot.date]);
+  return status;
+}
+
+export default function MarketStatusBar({ status: snapshot }: { status: MarketStatus }) {
+  const status = useMarketStatus(snapshot);
   const stale = staleLabel(status.date);
   const meta = MARKET_CONDITION_META[status.condition];
   const real = status.provenance.kind === "real";

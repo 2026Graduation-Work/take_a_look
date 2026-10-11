@@ -488,6 +488,7 @@ export function toNudgeMarket(
     sentimentChange: comparable ? latestDay.score - previousDay.score : null,
     sentimentDayLabel: latestDay && latestDay.date !== kstDay(now) ? `${latestDay.date.slice(5).replace("-", ".")}에` : "오늘",
     isTopHolding: topHolding?.code === detail.code,
+    isHolding: holdings.some(({ code }) => code === detail.code),
     holdingGain: gainRatio(holdings.find(({ code }) => code === detail.code)?.rawAvgBuyPrice ?? null, detail.currentPrice),
     riskGrade: detail.riskGrade,
   };

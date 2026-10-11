@@ -13,7 +13,14 @@ interface MarketStatusRow {
   index_quotes: MarketIndexQuote[];
 }
 
-export async function loadLatestMarketStatus(): Promise<MarketStatus | null> {
+// 한 화면에서 시장 바·출처 표가 같이 부르므로 요청은 한 번만(새로고침하면 다시 읽는다)
+let latest: Promise<MarketStatus | null> | null = null;
+export function loadLatestMarketStatus(): Promise<MarketStatus | null> {
+  latest ??= readLatestMarketStatus();
+  return latest;
+}
+
+async function readLatestMarketStatus(): Promise<MarketStatus | null> {
   const client = getSupabaseClient();
   if (!client) return null;
   const { data } = await client

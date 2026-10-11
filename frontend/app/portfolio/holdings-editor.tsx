@@ -60,11 +60,11 @@ export default function HoldingsEditor({
     saved ??
     (supabaseMode
       ? []
-      : demoHoldings.map(({ code, name, quantity, avgBuyPrice }) => ({
+      : demoHoldings.map(({ code, name, quantity }) => ({
           code,
           name,
           quantity,
-          avgBuyPrice,
+          avgBuyPrice: null, // 예시 평단은 실제 종가와 섞지 않는다(설문 보유 단계와 같음)
         })));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
@@ -191,7 +191,9 @@ export default function HoldingsEditor({
           <section aria-label="등록한 종목" className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between px-1">
               <span className="eyebrow tabular-nums">
-                {rows.length}종목 · 매입금액 합계 {formatWon(total)}원
+                {rows.length}종목
+                {/* 평단을 하나도 모르면 "합계 0원"이 되므로 숨긴다(#278 점검) */}
+                {rows.some(({ avgBuyPrice }) => avgBuyPrice !== null) && ` · 매입금액 합계 ${formatWon(total)}원`}
               </span>
               <button type="button" onClick={openSheet} className="btn-text text-xs">
                 종목 추가

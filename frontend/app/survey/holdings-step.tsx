@@ -10,12 +10,13 @@ import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import { useStockOptions } from "../portfolio/use-stock-options";
 import StepNav from "../components/step-nav";
 
-// 데모 계정은 김민지 예시 보유 종목을 미리 채워 둔다.
-const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity, avgBuyPrice }) => ({
+// 데모 계정은 김민지 예시 보유 종목을 미리 채워 둔다. 평단은 비워 둔다(#278 점검: 옛 예시 평단이
+// 실제 최신 종가와 섞여 "평단 대비 +269%" 같은 없는 손익을 보여 줬다). 평단을 넣으면 손익이 보인다.
+const DEMO_ROWS: SavedHolding[] = portfolioHoldings.map(({ code, name, quantity }) => ({
   code,
   name,
   quantity,
-  avgBuyPrice,
+  avgBuyPrice: null,
 }));
 
 const field =

@@ -51,6 +51,7 @@ const CALM: NudgeMarket = {
   sentimentDayLabel: "오늘",
   isTopHolding: false,
   holdingGain: null,
+  isHolding: false,
   riskGrade: 3,
 };
 
@@ -67,6 +68,7 @@ const ALL_MARKET: NudgeMarket = {
   sentimentDayLabel: "오늘",
   isTopHolding: true,
   holdingGain: null,
+  isHolding: false,
   riskGrade: 2,
 };
 
@@ -160,7 +162,9 @@ test("N05는 보유 손익 ±10% 이상이면 평단 기준으로 말한다(#255
   assert.equal(n05({ holdingGain: 0.1 }), "평균 매입가보다 10.0% 높은 상태예요. 처음 산 이유를 다시 확인해 보세요.");
   // ±10% 미만이면 손익으로는 발화하지 않고, 3개월 고점 조건이면 기존 문구
   assert.equal(n05({ holdingGain: 0.05 }), undefined);
-  assert.match(n05({ holdingGain: 0.05, drawdownFrom3mHigh: -0.2 })!, /최근 3개월 최고가/);
+  assert.match(n05({ holdingGain: 0.05, drawdownFrom3mHigh: -0.2, isHolding: true })!, /처음 살 때/);
+  // 보유하지 않은 종목에는 "처음 살 때"라고 하지 않는다(#278 점검)
+  assert.match(n05({ drawdownFrom3mHigh: -0.2 })!, /왜 떨어졌는지/);
   // 하락 시 유지 쪽(-) 성향에는 손익이 커도 없음
   assert.deepEqual(ids(axes({ drawdown_reaction: -0.5 }), { holdingGain: -0.3 }), []);
 });

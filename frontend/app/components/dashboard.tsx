@@ -6,6 +6,7 @@ import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
+import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
 import StockRow from "./stock-card";
@@ -105,6 +106,7 @@ export default function Dashboard(initialData: DashboardData) {
   } = currentData;
   const holdingAlerts = holdingAlertsOutside(rawHoldingAlerts, stocks);
   const { watchlist } = useStockMarks();
+  const liveMarket = useMarketStatus(marketStatus); // 시장 바와 같은 최신 값
   const loadingAuthenticatedData =
     onboardingState.mode === "supabase" && !authenticatedData && !dataError;
   const savedSnapshot = useSyncExternalStore(
@@ -208,8 +210,8 @@ export default function Dashboard(initialData: DashboardData) {
     strongCount: strongSignals.length,
   });
   // 요약 문장은 보유 맵 신호의 기준일(최신 게시 차트)을 따른다. 없으면 시장 기준일.
-  const summaryAsOf = activeHoldings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1) || marketStatus.date;
-  const listProvenance = strongSignals[0] ? chartProvenance(strongSignals[0].asOf) : marketStatus.provenance;
+  const summaryAsOf = activeHoldings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1) || liveMarket.date;
+  const listProvenance = strongSignals[0] ? chartProvenance(strongSignals[0].asOf) : liveMarket.provenance;
 
   function retryAuthenticatedData() {
     setAuthenticatedResult(null);
@@ -387,7 +389,7 @@ export default function Dashboard(initialData: DashboardData) {
               <div className="pb-4">
                 <SourceTable
                   rows={[
-                    ["시장 지수·흔들림", marketStatus.provenance],
+                    ["시장 지수·흔들림", liveMarket.provenance],
                     ["보유 종목 신호·종가", activeHoldings[0]?.provenance ?? null],
                     ["오늘 신호가 강한 종목", strongSignals.length ? listProvenance : null],
                     ["어제와 달라진 근거", changes?.length
