@@ -1,3 +1,4 @@
+import { signedPercent } from "@/lib/display";
 import { gainRatio } from "@/lib/holdings-rules";
 
 // 평단 대비 평가손익(#255). 숫자만 굵게, 상승 빨강·하락 파랑. 매수·매도 문구 없음.
@@ -11,7 +12,7 @@ export default function GainText({ avgBuyPrice, close }: { avgBuyPrice: number |
       평단 대비{" "}
       <span style={{ color }}>
         {arrow}
-        <strong className="font-semibold">{`${ratio > 0 ? "+" : ""}${(ratio * 100).toFixed(1)}%`}</strong>
+        <strong className="font-semibold">{signedPercent(ratio)}</strong>
       </span>
     </span>
   );

@@ -2,7 +2,7 @@
 
 import { CHART } from "@/lib/chart-colors";
 import { useRef, useState } from "react";
-import type { SignalMeta } from "@/lib/display";
+import { formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
 // 최근 60거래일 실제 주가 실선. 미래 영역에는 H10 시점의 수익률 분포 범위를
@@ -20,10 +20,6 @@ const PAD = { top: 20, bottom: 34 };
 const X0 = 14; // 실선 시작
 const X1 = 668; // 실선 끝 = 오늘
 const XH = 780; // H10 세로 구간 중심
-
-function formatSigned(value: number) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
 
 // 눈금 간격을 1/2/2.5/5 × 10^n 으로 스냅
 function niceStep(rough: number) {
@@ -105,7 +101,7 @@ export default function PriceHistoryChart({
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`최근 60거래일 주가 흐름. ${band ? `${horizonLabel} 수익률 범위 ${formatSigned(band.low)}부터 ${formatSigned(band.high)}까지` : "수익률 범위 미제공"}`}
+        aria-label={`최근 60거래일 주가 흐름. ${band ? `${horizonLabel} 수익률 범위 ${formatSignedPercent(band.low)}부터 ${formatSignedPercent(band.high)}까지` : "수익률 범위 미제공"}`}
         onMouseMove={handleMove}
         onMouseLeave={() => setHovered(null)}
       >
@@ -183,7 +179,7 @@ export default function PriceHistoryChart({
           style={{ fill: signal.ink }}
           textAnchor="middle"
         >
-          {formatSigned(band.high)}
+          {formatSignedPercent(band.high)}
         </text>
         <text
           x={XH}
@@ -193,7 +189,7 @@ export default function PriceHistoryChart({
           style={{ fill: signal.ink }}
           textAnchor="middle"
         >
-          {formatSigned(band.low)}
+          {formatSignedPercent(band.low)}
         </text>
         <text x={XH} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
           {horizonLabel}
