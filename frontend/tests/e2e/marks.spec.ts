@@ -176,3 +176,19 @@ test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async 
   await search.pressSequentially("전");
   await expect(page.getByRole("list", { name: "종목 검색 결과" })).toBeVisible();
 });
+
+// #278 QA: 같은 종목이 보유 맵과 관심 종목에서 다른 신호로 보이지 않는다(둘 다 최신 게시 차트 4주 방향)
+test("QA #278: 보유 맵과 관심 종목의 신호가 같다", async ({ page }) => {
+  await page.route(/\/rest\/v1\/latest_chart_signal_snapshots/, (route) =>
+    route.fulfill({
+      json: [{ stock_code: "005930", close: 70_000, as_of: "2026-10-08", status: "available", scores: { down: 0.6, neutral: 0.2, up: 0.2 } }],
+    }),
+  );
+  await demoReady(page);
+  await page.goto("/stocks/005930");
+  await page.getByRole("button", { name: "관심 종목에 두기" }).click();
+  await page.goto("/");
+  const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
+  await expect(tile).toHaveAccessibleName(/하방 신호/);
+  await expect(page.getByRole("region", { name: "관심 종목" }).getByRole("link", { name: /삼성전자/ })).toContainText("하방");
+});
