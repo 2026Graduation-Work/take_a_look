@@ -56,7 +56,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
-import { formatKstDateTime, kstDay } from "@/lib/display";
+import { formatKstDateTime, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -128,7 +128,6 @@ const SUPPLY_SERIES = [
 const TOOLTIP_STYLE = { border: `1px solid ${CHART.line}`, borderRadius: 8, fontSize: 12 };
 
 const signed = (value: number, digits = 2) => `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
-const signedPercent = (ratio: number) => `${ratio > 0 ? "+" : ""}${(ratio * 100).toFixed(1)}%`;
 // 순매수 수량(주). 만 주 단위로 줄여 읽기 쉽게: +5,276,406 → +527.6만 주
 const shares = (value: number) =>
   `${value > 0 ? "+" : value < 0 ? "-" : ""}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;

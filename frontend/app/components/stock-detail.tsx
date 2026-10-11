@@ -30,16 +30,12 @@ import {
   TERM,
   topPercentLabel,
 } from "@/lib/copy-glossary";
-import { HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
+import { formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
 import type { InvestorProfileSummary, MarketStatus, StockDetail, StyleAxes } from "@/lib/types";
 import { staleLabel } from "@/lib/market-status";
-
-function formatPercent(value: number) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
 
 function formatDate(iso: string) {
   return iso.replaceAll("-", ".");
@@ -182,7 +178,7 @@ export default function StockDetailView({
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
                 <span className="text-base font-medium tabular-nums" style={{ color: changeColor }}>
-                  {changeArrow} {formatPercent(changePercent)}
+                  {changeArrow} {formatSignedPercent(changePercent)}
                   <span className="ml-2 text-xs font-normal text-muted">
                     전일 대비{detail.asOf && staleLabel(detail.asOf) && ` · ${formatDate(detail.asOf)} 기준`}
                   </span>
@@ -211,7 +207,7 @@ export default function StockDetailView({
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
               <strong className="font-semibold tabular-nums text-ink">
-                {hasBand ? `${formatPercent(detail.returnBand.low)} ~ ${formatPercent(detail.returnBand.high)}` : "미제공"}
+                {hasBand ? `${formatSignedPercent(detail.returnBand.low)} ~ ${formatSignedPercent(detail.returnBand.high)}` : "미제공"}
               </strong>
             </p>
           </div>

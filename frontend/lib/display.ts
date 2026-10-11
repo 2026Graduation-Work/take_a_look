@@ -97,3 +97,9 @@ export function formatKstDateTime(iso: string) {
   const time = iso.includes("T") ? Date.parse(iso) : NaN;
   return (Number.isNaN(time) ? iso : KST_DATE_TIME.format(time)).replaceAll("-", ".");
 }
+
+// 부호 붙은 퍼센트 한 자리. signedPercent는 비율(0.12 → "+12.0%"), formatSignedPercent는 이미 % 단위인 값(1.2 → "+1.2%").
+export const signedPercent = (ratio: number) => formatSignedPercent(ratio * 100);
+export function formatSignedPercent(value: number) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
