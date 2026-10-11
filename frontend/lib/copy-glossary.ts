@@ -18,7 +18,7 @@ export const TERM = {
   supply: "누가 사고팔았나",
   sentiment: "뉴스 분위기",
   volatility: "가격 흔들림",
-  nudge: "체크포인트",
+  nudge: "확인할 것",
   market: "시장 분위기",
   financial: "회사 체력",
   horizonAgreement: "기간마다 같은 방향인가요?",

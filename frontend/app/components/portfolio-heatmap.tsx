@@ -107,7 +107,7 @@ export default function PortfolioHeatmap({
                   <span className="flex items-baseline justify-between gap-2 text-sm font-medium">
                     <span className="truncate">{signal.label}</span>
                     {/* 비중 = 평가금액 ÷ 보유 합계 */}
-                    <span className="flex-none text-xs tabular-nums">{Math.round((amount / grandTotal) * 100)}%</span>
+                    <span className="flex-none text-xs tabular-nums">비중 {Math.round((amount / grandTotal) * 100)}%</span>
                   </span>
                 </Link>
               );
@@ -118,13 +118,15 @@ export default function PortfolioHeatmap({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
         <span>
-          넓이는 평가금액
+          넓이·비중은 내 보유 평가금액 기준
           {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
           {closeAsOf && staleLabel(closeAsOf) && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
           {provenance?.kind === "real" ? " · 모델 검증 전" : provenance && " · 예시 데이터"}
         </span>
       </div>
+      {/* #278 QA: 상방·하방이 무슨 뜻인지 맵 바로 아래에서 한 줄로 */}
+      <p className="m-0 text-2xs text-muted">상방·하방은 과거 비슷한 경우를 보고 모델이 본 앞으로 4주의 가격 방향이에요. 맞는다는 보장은 없어요.</p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
           등록한 종목 중 {withoutSignalCount}개는 오늘 모델 신호가 없어 맵에 넣지 않았어요.

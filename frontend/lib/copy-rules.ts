@@ -16,7 +16,10 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /정확도\s*[\d{$]/, reason: "'정확도 N%' 표기 (ROC-AUC 오표기)" },
   // 쉬운 말 규칙(copy-glossary.ts). "계산 근거" 영역도 예외 없이 검사한다.
   { pattern: /추천/, reason: "모델 신호 순 목록을 '추천'으로 부르지 않는다 → '오늘 신호가 강한 종목'" },
-  { pattern: /넛지/, reason: "개발 용어 → '체크포인트'" },
+  { pattern: /넛지/, reason: "개발 용어 → '확인할 것'" },
+  { pattern: /체크포인트/, reason: "QA #278: 처음 쓰는 사람이 모르는 말 → '확인할 것'" },
+  { pattern: /행동투자자|종목을\s*거르/, reason: "QA #278: 내부 용어 → '투자 습관 유형' · '볼 수 있는 종목을 줄이다'" },
+  { pattern: /3등분/, reason: "QA #278: 당연한 계산 설명은 쓰지 않는다" },
   { pattern: /\bH(5|10|20)\b/, reason: "개발 용어 → '1주 뒤/2주 뒤/4주 뒤'" },
   { pattern: /신뢰구간/, reason: "개발 용어 → '10번 중 N번 이 범위'" },
   { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다" },
