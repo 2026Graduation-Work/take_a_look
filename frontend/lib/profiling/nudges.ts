@@ -22,6 +22,7 @@ export interface NudgeMarket {
   sentimentChange: number | null; // 뉴스 감성(-1~1) 최근 두 수집일(Live 일별) 변화량. 두 날이 없거나 기사가 적으면 null
   sentimentDayLabel: string; // 최근 수집일 말: 오늘 수집이면 "오늘", 아니면 "10.08에" — 지난 날을 "오늘"이라 부르지 않는다
   isTopHolding: boolean; // 보유 종목 중 비중 1위
+  isHolding: boolean; // 이 종목을 보유 중인가. 아니면 "처음 살 때" 같은 보유 전제 문구를 쓰지 않는다
   holdingGain: number | null; // 이 종목 평단 대비 평가손익(0.12 = +12%, #255). 보유하지 않거나 평단을 모르면 null
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
@@ -104,7 +105,9 @@ export const NUDGES: readonly NudgeRule[] = [
       const percent = `${Math.abs(gain * 100).toFixed(1)}%`;
       if (gain <= -HOLDING_GAIN) return `평균 매입가보다 ${percent} 낮은 상태예요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.`;
       if (gain >= HOLDING_GAIN) return `평균 매입가보다 ${percent} 높은 상태예요. 처음 산 이유를 다시 확인해 보세요.`;
-      return "지금 가격이 최근 3개월 최고가보다 크게 낮아요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.";
+      return m.isHolding
+        ? "지금 가격이 최근 3개월 최고가보다 크게 낮아요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요."
+        : "지금 가격이 최근 3개월 최고가보다 크게 낮아요. 왜 떨어졌는지 근거를 먼저 확인해 보세요.";
     },
   },
   {

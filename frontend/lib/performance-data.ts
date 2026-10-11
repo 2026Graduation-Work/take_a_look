@@ -47,7 +47,7 @@ const DELTA_METRIC_MAP = [
 ] as const;
 
 const SAMPLE_CONCLUSION =
-  "현재 수치는 화면 구조 검증용 샘플입니다. 실제 비교실험 artifact가 반영되기 전에는 A/B 성능 차이에 대한 연구 결론으로 사용하지 않습니다.";
+  "현재 수치는 화면 구조 검증용 샘플입니다. 실제 비교 실험 결과가 들어오기 전에는 A/B 성능 차이에 대한 연구 결론으로 사용하지 않습니다.";
 
 export async function loadPerformanceData(): Promise<PerformanceDataBundle> {
   const configuredFile = process.env.PERFORMANCE_RESULTS_FILE?.trim();
