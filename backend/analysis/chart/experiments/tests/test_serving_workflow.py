@@ -26,3 +26,24 @@ def test_recorded_preview_cannot_publish_when_dry_run_was_requested():
                             env={**os.environ, "PREVIEW": "true", "DRY_RUN": "true",
                                  "DIAGNOSE": "false", "REPLAY": "false", "AS_OF": ""})
     assert result.returncode != 0
+
+
+@pytest.mark.parametrize("other", ["PREVIEW", "DIAGNOSE", "REPLAY", "DRY_RUN", "SUPPLY_ONLY", "AS_OF"])
+def test_model_check_rejects_other_execution_modes(other):
+    script = next(s for s in steps() if s.get("name") == "Validate execution mode")["run"]
+    env = {**os.environ, **dict.fromkeys(["PREVIEW", "DIAGNOSE", "REPLAY", "DRY_RUN", "SUPPLY_ONLY"], "false"),
+           "MODEL_CHECK": "true", "AS_OF": ""}
+    env[other] = "2026-10-09" if other == "AS_OF" else "true"
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, env=env)
+    assert result.returncode != 0
+
+
+def test_model_check_skips_every_database_writing_step():
+    names = {"Collect, archive and publish confirmed daily results",
+             "Publish recorded display-test batch", "Retention (prediction log, batches, inputs, articles)",
+             "Investor net purchases", "Sync stock master from universe"}
+    for step in steps():
+        if step.get("name") in names:
+            assert "inputs.model_check != true" in step["if"] or step["name"] == "Publish recorded display-test batch"
+    check = next(s for s in steps() if s.get("name") == "Verify active models on fresh confirmed data")
+    assert check["run"] == "python -m serving.model_check"

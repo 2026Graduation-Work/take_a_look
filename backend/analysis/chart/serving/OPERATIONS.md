@@ -41,7 +41,7 @@ Storage에는 날짜별 최근 원본 60행과 전체 입력 해시를 보관하
 
 전환 이전 v3 구현의 기준 커밋은 `095584b`, 원본은 `workspace/archive/pre-refactor/originals/`이다. 해당 커밋의 별도 checkout에서 호환 구현과 이전 설정을 사용하고 `CHART_SERVING_DATA_DIR`를 보관된 운영 workspace로 지정하면 이전 pack을 검증할 수 있다. 현재 builder에 이전 모델만 끼우지 않는다.
 
-`serving/config.yaml`의 기존 원격 설정은 보존했다. 이번 작업은 로컬 전환까지만 수행한다. 원격 배포 전 새 코드와 정확히 일치하는 pack을 Release로 올리고 원격 활성 설정도 함께 바꿔야 한다. 이전 설정으로 새 builder를 실행하면 호환성 검사에서 중단한다.
+`serving/config.yaml`은 수급 포함 pack `kospi_shared_v3_flow_train2023_2025_20261011`을 사용한다. GitHub Release의 tar.gz SHA-256은 `26fd46a82e18abf20f8fc15510964cb7dd402fa3a8200fa7447899b69540821f`다. 다운로드 후 builder 계약과 모델·사례 파일 해시를 모두 검사한다.
 
 시장 상태 갱신·수급·종목 마스터·기존 보존 정책은 최신 main 동작을 유지했다. 별도 운영 명령은 `python -m serving.supply`, `python -m serving.stock_master`, `python -m serving.retention`이다. 이번 작업에서 실행하거나 발행하지 않았다. 이전 표시용 preview는 호환 pack이 있어야 검증·발행할 수 있다.
 
@@ -49,4 +49,14 @@ main 통합 직전 공통 v3 코드 기준은 `e5a0fe4`이며 최초 전환 전 
 
 상장 구간 통합 직전 builder 기준 커밋은 `0c474ff`다. `20261010_main` pack으로 되돌릴 때는 이 코드와 보존된 이전 로컬 설정을 함께 복원한다.
 
-현재 로컬 활성 pack은 수급 포함 H5/H20이며 기본 161개 + 수급 9개 입력을 사용한다. 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. 기본 pack `kospi_shared_v3_train2023_2025_20261011`은 같은 builder와 호환되므로 보존된 설정만 복원해 검증할 수 있다. 원격 기본 설정은 이번 로컬 전환에 포함하지 않는다.
+현재 로컬 활성 pack은 수급 포함 H5/H20이며 기본 161개 + 수급 9개 입력을 사용한다. 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. 기본 pack `kospi_shared_v3_train2023_2025_20261011`은 같은 builder와 호환되므로 보존된 설정만 복원해 검증할 수 있다. 원격 기본 설정도 동일한 수급 pack을 사용한다.
+
+## 원격 모델 확인
+
+Daily chart serving의 `model_check=true`는 마지막 확정 거래일의 삼성전자 가격과 최근 20거래일 수급을 공급자에서 읽어 H5/H20 실제 추론을 확인한다. DB 저장 객체를 생성하지 않으며 발행·보존 정리·수급 저장·종목 마스터 단계도 실행하지 않는다. 결과는 Actions artifact에만 남긴다. 수급 결측으로 추론이 제외되면 점검도 실패한다. 이 점검은 과거 운영 발행 재실행이 아니다.
+
+```bash
+python -m serving.model_check
+```
+
+직전 원격 운영 성공 실행은 `37899919906`, 호환 코드 기준은 `7bb84b69345e51c0badf9aefcd7132037173bdc3`다. 이전 pack `kospi_uniform_v3_train2023_2025_20261009`와 Release는 보존한다. 이 pack으로 복구하려면 위 코드와 그 커밋의 설정을 함께 복구한다. 현재 shared builder에서 이전 원격 설정만 복원하면 호환성 검사로 중단한다.
