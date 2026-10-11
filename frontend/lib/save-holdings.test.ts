@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { costBasis, isValidHolding, parseSavedHoldings, type SavedHolding } from "./holdings-rules.ts";
+import { costBasis, gainRatio, isValidHolding, parseSavedHoldings, type SavedHolding } from "./holdings-rules.ts";
 
 const ok: SavedHolding = { code: "005930", name: "삼성전자", quantity: 15, avgBuyPrice: 71_200 };
 
@@ -38,4 +38,13 @@ test("비중 단가: 최신 종가가 있으면 평가금액, 없으면 매입�
   assert.deepEqual(costBasis(null, undefined), { price: 0, basis: "avg_buy" });
   const withNull = JSON.stringify([{ ...ok, avgBuyPrice: null }]);
   assert.deepEqual(parseSavedHoldings(withNull), [{ ...ok, avgBuyPrice: null }]);
+});
+
+test("평단 대비 평가손익(#255): 평단·종가가 모두 있어야 계산한다", () => {
+  assert.ok(Math.abs(gainRatio(50_000, 56_000)! - 0.12) < 1e-12);
+  assert.ok(Math.abs(gainRatio(50_000, 45_000)! + 0.1) < 1e-12);
+  // 평단을 모르거나 0(무상증자), 종가가 없으면 미제공
+  assert.equal(gainRatio(null, 56_000), null);
+  assert.equal(gainRatio(0, 56_000), null);
+  assert.equal(gainRatio(50_000, undefined), null);
 });

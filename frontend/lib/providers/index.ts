@@ -4,6 +4,7 @@
 import type { NudgeMarket } from "../profiling/nudges";
 import { kstDay } from "../display.ts";
 import { FEW_ARTICLES } from "../copy-glossary.ts";
+import { gainRatio } from "../holdings-rules.ts";
 import { getSupabaseClient } from "../supabase.ts";
 import type { DataProvenance, PortfolioHolding, RiskGrade, StockDetail } from "../types";
 import {
@@ -206,7 +207,9 @@ export const contributionProvider = async (code: string): Promise<ContributionSi
     .sort((left, right) => right.share - left.share);
 };
 
-export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuyPrice">;
+export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuyPrice"> & {
+  rawAvgBuyPrice?: number | null; // 사용자가 입력한 평단 원값(모르면 null). avgBuyPrice는 비중 계산용으로 종가가 채워질 수 있다
+};
 
 // 가격·거래량으로 본 분위기 한 줄(psychology_market_v1). 구간 말 + 풀이.
 export interface PsychologyLine {
@@ -485,6 +488,7 @@ export function toNudgeMarket(
     sentimentChange: comparable ? latestDay.score - previousDay.score : null,
     sentimentDayLabel: latestDay && latestDay.date !== kstDay(now) ? `${latestDay.date.slice(5).replace("-", ".")}에` : "오늘",
     isTopHolding: topHolding?.code === detail.code,
+    holdingGain: gainRatio(holdings.find(({ code }) => code === detail.code)?.rawAvgBuyPrice ?? null, detail.currentPrice),
     riskGrade: detail.riskGrade,
   };
 }

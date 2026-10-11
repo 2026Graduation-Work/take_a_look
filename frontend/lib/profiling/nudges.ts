@@ -22,6 +22,7 @@ export interface NudgeMarket {
   sentimentChange: number | null; // 뉴스 감성(-1~1) 최근 두 수집일(Live 일별) 변화량. 두 날이 없거나 기사가 적으면 null
   sentimentDayLabel: string; // 최근 수집일 말: 오늘 수집이면 "오늘", 아니면 "10.08에" — 지난 날을 "오늘"이라 부르지 않는다
   isTopHolding: boolean; // 보유 종목 중 비중 1위
+  holdingGain: number | null; // 이 종목 평단 대비 평가손익(0.12 = +12%, #255). 보유하지 않거나 평단을 모르면 null
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
 
@@ -42,6 +43,7 @@ const STREAK_DAYS = 5;
 const INSTITUTION_BUY_DAYS = 4;
 const VOLATILITY_TOP_10 = 0.9;
 const DRAWDOWN_LIMIT = -0.15;
+const HOLDING_GAIN = 0.1; // 평단 대비 ±10% 이상이면 N05가 손익 방향으로 말한다
 const RALLY_3D = 0.1;
 // 감성 "급변" 임계 = news_corpus 일별 감성 변화량 |Δ|의 p90.
 // 계산: frontend/scripts/build_sentiment_fixture.py. 산출값·표본·감성 백엔드는 sentiment-fixture.ts 헤더에 있다.
@@ -95,8 +97,15 @@ export const NUDGES: readonly NudgeRule[] = [
     // drawdown_reaction: -1=하락 시 유지, +1=하락 시 이탈
     axis: "drawdown_reaction",
     side: 1,
-    market: (m) => m.drawdownFrom3mHigh <= DRAWDOWN_LIMIT,
-    text: "지금 가격이 최근 3개월 최고가보다 크게 낮아요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.",
+    market: (m) => m.drawdownFrom3mHigh <= DRAWDOWN_LIMIT || Math.abs(m.holdingGain ?? 0) >= HOLDING_GAIN,
+    // 보유 종목 손익이 ±10% 이상이면 평단 기준으로, 아니면 3개월 고점 기준으로 말한다(#255)
+    text: (m) => {
+      const gain = m.holdingGain ?? 0;
+      const percent = `${Math.abs(gain * 100).toFixed(1)}%`;
+      if (gain <= -HOLDING_GAIN) return `평균 매입가보다 ${percent} 낮은 상태예요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.`;
+      if (gain >= HOLDING_GAIN) return `평균 매입가보다 ${percent} 높은 상태예요. 처음 산 이유를 다시 확인해 보세요.`;
+      return "지금 가격이 최근 3개월 최고가보다 크게 낮아요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.";
+    },
   },
   {
     id: "N06",
