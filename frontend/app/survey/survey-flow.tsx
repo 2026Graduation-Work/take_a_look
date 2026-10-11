@@ -37,7 +37,6 @@ import { STORAGE_KEYS } from "@/lib/storage-keys";
 
 const DRAFT_KEY = STORAGE_KEYS.surveyDraft;
 const ANSWERS_KEY = STORAGE_KEYS.surveyAnswers;
-const ADVANCE_DELAY_MS = 180; // 고른 답이 눌린 것을 보여 준 뒤 다음 문항으로
 
 type SurveyMode = "short" | "quick";
 type Stage = "welcome" | "survey" | "result" | "holdings";
@@ -185,20 +184,6 @@ export default function SurveyFlow() {
     update({ page: Math.min(Math.max(0, index), pages.length - 1) });
   }
 
-  // 고르면 바로 다음 문항으로. 이전 버튼으로 되돌릴 수 있다.
-  function answerAndAdvance(next: Partial<Draft>) {
-    const from = draft.page;
-    update(next);
-    window.setTimeout(() => {
-      setDraft((current) => {
-        if (current.page !== from) return current;
-        const moved = { ...current, page: Math.min(from + 1, PAGES[current.mode].length - 1) };
-        writeDraft(moved);
-        return moved;
-      });
-    }, ADVANCE_DELAY_MS);
-  }
-
   function payload(adjusted?: Partial<Record<StyleAxisId, number>>): SurveyAnswers {
     return {
       user_id: "u_minji_001",
@@ -332,7 +317,7 @@ export default function SurveyFlow() {
             restored={restored}
             submitting={submitting}
             error={error}
-            onAnswer={answerAndAdvance}
+            onAnswer={update}
             onUpdate={update}
             onBack={() => goTo(draft.page - 1)}
             onNext={() => (last ? showResult() : goTo(draft.page + 1))}
@@ -422,7 +407,7 @@ function QuestionPage({
   onRestart: () => void;
 }) {
   const total = PAGES[draft.mode].length;
-  // 고르면 자동으로 넘어가므로 "다음"은 이전으로 돌아왔다가 다시 앞으로 갈 때 쓴다. 답한 문항에서만 켜진다.
+  // 고른 뒤 "다음"을 눌러야 넘어간다(#278: 고친 답을 확인할 기회). 답한 문항에서만 켜진다.
   const answered =
     page.kind === "style"
       ? draft.style[page.question.id] !== undefined
