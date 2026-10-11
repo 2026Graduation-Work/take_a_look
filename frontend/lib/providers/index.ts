@@ -4,6 +4,7 @@
 import type { NudgeMarket } from "../profiling/nudges";
 import { kstDay } from "../display.ts";
 import { FEW_ARTICLES } from "../copy-glossary.ts";
+import { gainRatio } from "../holdings-rules.ts";
 import { getSupabaseClient } from "../supabase.ts";
 import type { DataProvenance, PortfolioHolding, RiskGrade, StockDetail } from "../types";
 import {
@@ -487,6 +488,7 @@ export function toNudgeMarket(
     sentimentChange: comparable ? latestDay.score - previousDay.score : null,
     sentimentDayLabel: latestDay && latestDay.date !== kstDay(now) ? `${latestDay.date.slice(5).replace("-", ".")}에` : "오늘",
     isTopHolding: topHolding?.code === detail.code,
+    holdingGain: gainRatio(holdings.find(({ code }) => code === detail.code)?.rawAvgBuyPrice ?? null, detail.currentPrice),
     riskGrade: detail.riskGrade,
   };
 }

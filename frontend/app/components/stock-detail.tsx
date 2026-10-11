@@ -4,7 +4,7 @@
 // 순서: 헤더 → 한눈에 보기 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
 // 필수 정보는 지우지 않고 "더 알아보기"에 접는다.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import EvidenceTabs, {
@@ -15,6 +15,9 @@ import EvidenceTabs, {
   useDemoStyleAxes,
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
+import GainText from "./gain-text";
+import { parseSavedHoldings } from "@/lib/holdings-rules";
+import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
@@ -87,6 +90,18 @@ export default function StockDetailView({
 }: StockDetailViewProps) {
   const demo = useDemoStyleAxes(styleAxes);
   const [query, setQuery] = useState("");
+  // 이 종목 보유 정보(#255). 대시보드처럼 이 브라우저에 저장한 보유 종목이 먼저, 없으면 계정 보유 종목.
+  // 평단은 사용자가 입력한 원값만 쓴다(모르면 미제공). 체크포인트 N05도 같은 값을 본다.
+  const saved = parseSavedHoldings(
+    useSyncExternalStore(subscribeToSavedHoldings, getSavedHoldingsSnapshot, getServerHoldingsSnapshot),
+  )?.find(({ code }) => code === detail.code);
+  const held = holdings.find(({ code }) => code === detail.code);
+  const own = saved
+    ? { quantity: saved.quantity, rawAvgBuyPrice: saved.avgBuyPrice }
+    : held && { quantity: held.quantity, rawAvgBuyPrice: held.rawAvgBuyPrice ?? null };
+  const nudgeHoldings = own
+    ? [...holdings.filter(({ code }) => code !== detail.code), { code: detail.code, avgBuyPrice: held?.avgBuyPrice ?? 0, ...own }]
+    : holdings;
 
   const preview = chartSnapshots !== undefined;
   const chart = chartSnapshots?.get(20);
@@ -176,6 +191,11 @@ export default function StockDetailView({
             ) : (
               <span className="text-sm text-muted">시세 데이터가 아직 없어요</span>
             )}
+            {own && (
+              <span className="text-xs text-muted tabular-nums">
+                보유 {own.quantity.toLocaleString("ko-KR")}주 · <GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
+              </span>
+            )}
           </div>
         </section>
 
@@ -215,7 +235,7 @@ export default function StockDetailView({
         </section>
 
         {/* 3. 나에게 맞춘 체크포인트 */}
-        <Checkpoints demo={demo} detail={detail} insights={insights} holdings={holdings} extra={riskNote} />
+        <Checkpoints demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
 
         {/* 4. 판단 근거 4가지 */}
         <EvidenceTabs detail={detail} insights={insights} demo={demo}
@@ -292,7 +312,7 @@ export default function StockDetailView({
               <h3 id="more-basis" className="text-base font-semibold">
                 계산 근거
               </h3>
-              <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={holdings} />
+              <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
             </section>
 
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">

@@ -50,6 +50,7 @@ const CALM: NudgeMarket = {
   sentimentChange: 0,
   sentimentDayLabel: "오늘",
   isTopHolding: false,
+  holdingGain: null,
   riskGrade: 3,
 };
 
@@ -65,6 +66,7 @@ const ALL_MARKET: NudgeMarket = {
   sentimentChange: 2, // 감성 점수 폭(-1~1)의 최대 변화. N07 임계 산출값과 무관하게 참
   sentimentDayLabel: "오늘",
   isTopHolding: true,
+  holdingGain: null,
   riskGrade: 2,
 };
 
@@ -149,6 +151,18 @@ test("N04·N05는 drawdown_reaction + 쪽(하락 시 이탈)에서만", () => {
     ids(axes({ drawdown_reaction: -0.5 }), { volatilityPercentile: 0.95, drawdownFrom3mHigh: -0.2 }),
     [],
   );
+});
+
+test("N05는 보유 손익 ±10% 이상이면 평단 기준으로 말한다(#255)", () => {
+  const n05 = (market: Partial<NudgeMarket>) =>
+    selectNudges(classifyBit(axes({ drawdown_reaction: 0.5 })), { ...CALM, ...market }).find(({ id }) => id === "N05")?.text;
+  assert.equal(n05({ holdingGain: -0.123 }), "평균 매입가보다 12.3% 낮은 상태예요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.");
+  assert.equal(n05({ holdingGain: 0.1 }), "평균 매입가보다 10.0% 높은 상태예요. 처음 산 이유를 다시 확인해 보세요.");
+  // ±10% 미만이면 손익으로는 발화하지 않고, 3개월 고점 조건이면 기존 문구
+  assert.equal(n05({ holdingGain: 0.05 }), undefined);
+  assert.match(n05({ holdingGain: 0.05, drawdownFrom3mHigh: -0.2 })!, /최근 3개월 최고가/);
+  // 하락 시 유지 쪽(-) 성향에는 손익이 커도 없음
+  assert.deepEqual(ids(axes({ drawdown_reaction: -0.5 }), { holdingGain: -0.3 }), []);
 });
 
 test("같은 축 근거 넛지는 우선순위가 높은 하나만 남는다", () => {
