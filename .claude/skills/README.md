@@ -84,3 +84,12 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | ponytail · ui-ux-pro-max · ECC · prompts.chat | 기존 판정 유지 | 09-23·09-26·10-09 표 참고 |
 | [public-apis](https://github.com/public-apis/public-apis) (MIT) | 기각 | 무료 API 목록일 뿐. 한국 주식 원천은 없고(공공데이터포털·출처 불명 K-Data Gate 정도) 우리 원천(KRX·DART·BigKinds)을 바꿀 이유가 없다 |
 | Claude Code 팁(오토 모드·`/security-review`·`ultrathink`) | 하나 채택 | 스킵 퍼미션은 쓰지 않고 있고(설정 확인), `think hard` 문구도 지시문에 없다. `/security-review`는 브랜치와 main의 차이만 보는 내장 기능(추가 비용 없음)이라 운영 경로를 바꾸는 PR의 머지 전 점검으로 AGENTS.md PR 규칙에 넣었다 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-11 오후)
+
+| 도구 | 판정 | 이유 |
+|---|---|---|
+| Playwright 플러그인(`playwright@claude-plugins-official`) | 사용 중(바뀐 점 없음) | 중현 개인 설정에 이미 켜져 있고, 레포는 `@playwright/test` 1.63으로 e2e·전후 스크린샷(`pr-screenshots` 브랜치 `demo-shots.mjs`)을 찍는다. 플러그인 도구는 필요할 때만 불러와 평소 토큰 부담이 없다. 레포 공용 설치는 하지 않는다 |
+| [Taste Skill](https://github.com/Leonxlnx/taste-skill) (MIT) | 기존 판정 유지 | 설치한 2종(`redesign-skill`·`minimalist-skill`)은 고정 SHA `5217fb4` 이후 바뀐 파일이 없다(compare 확인). 본체 `taste-skill`·`brutalist`·`soft` 등은 방향이 DESIGN.md와 달라 계속 제외 |
+| Image to Code ([taste-skill `image-to-code-skill`](https://github.com/Leonxlnx/taste-skill/tree/main/skills/image-to-code-skill), MIT) | 기각 | SKILL.md가 "for Codex"이고 **이미지를 먼저 생성**한 뒤 코드로 옮기는 방식이라 이미지 생성 도구가 필요하다. 대상도 랜딩·마케팅 히어로라 우리 근거 화면과 맞지 않는다 |
+| [screenshot-to-code](https://github.com/abi/screenshot-to-code) (MIT) | 기각 | 별도 웹앱(React+FastAPI)이고 OpenAI·Anthropic **API 키(종량 과금)** 가 필요하다. 캡처 → 코드는 Claude Code에 이미지를 바로 주는 것으로 충분 |
