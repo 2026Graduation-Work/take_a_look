@@ -22,13 +22,14 @@ const ANSWER_LABEL = new Map(
     .map(({ text, direction }) => [text, LIKERT_LABEL.get(3 + 2 * direction)!]),
 );
 
-// 한 화면 한 문항: 고르면 바로 다음 문항으로 넘어간다.
+// 한 화면 한 문항: 고른 뒤 "다음"을 눌러 넘어간다(#278).
 async function answerCurrentQuestion(page: Page): Promise<void> {
   const group = page.locator("fieldset");
   const text = (await group.locator("legend").innerText()).trim();
   const label = ANSWER_LABEL.get(text);
   if (!label) throw new Error(`문항 정의에 없는 문항: ${text}`);
   await group.getByLabel(label, { exact: true }).check();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
 }
 
 async function startDemo(page: Page): Promise<void> {
@@ -59,7 +60,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.getByRole("button", { name: "시작하기" }).click();
 
-  // 짧은 진단 16문항: 한 화면 한 문항, 고르면 바로 다음
+  // 짧은 진단 16문항: 한 화면 한 문항, 고르고 "다음"
   for (let number = 1; number <= 16; number += 1) {
     await expect(page.getByText(`질문 ${number}/16`)).toBeVisible();
     await answerCurrentQuestion(page);
@@ -69,8 +70,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
       await page.getByRole("button", { name: "이전" }).click();
       await expect(page.getByText("질문 3/16")).toBeVisible();
       await expect(page.locator("fieldset input:checked")).toHaveCount(1);
-      // 이미 고른 답을 다시 눌러도 다음으로 넘어간다
-      await page.locator("fieldset input:checked").click();
+      await page.getByRole("button", { name: "다음", exact: true }).click();
     }
     if (number === 8) {
       // 중간 저장: 새로고침해도 같은 문항에서 이어진다
@@ -83,6 +83,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   await expect(page.getByText("마무리 1/3")).toBeVisible();
   await page.getByLabel("6개월~2년").check();
+  await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByText("마무리 2/3")).toBeVisible();
   await page.getByLabel("SPAC", { exact: false }).check();
   await page.getByRole("button", { name: "다음", exact: true }).click();
@@ -309,7 +310,12 @@ test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, �
   expect(backBox!.x).toBeLessThan(nextBox!.x);
   expect(backBox!.height).toBe(nextBox!.height);
 
-  await answerCurrentQuestion(page);
+  // 고르기만 하면 넘어가지 않는다(#278). 답을 바꾼 뒤 "다음"으로 넘어간다
+  await page.locator("fieldset input").first().check();
+  await page.locator("fieldset input").nth(1).check();
+  await expect(page.getByText("질문 1/16")).toBeVisible();
+  await expect(next).toBeEnabled();
+  await next.click();
   await expect(page.getByText("질문 2/16")).toBeVisible();
   await answerCurrentQuestion(page);
   await expect(page.getByText("질문 3/16")).toBeVisible();
