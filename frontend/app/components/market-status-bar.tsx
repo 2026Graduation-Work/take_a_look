@@ -86,7 +86,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
               흔들림: KOSPI 최근 20거래일 가격 흔들림이 지난 1년 중 아래에서 {status.volatilityScore}% 위치예요.
             </p>
             <p className="m-0 mt-1">거래: 최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
-            <p className="m-0 mt-2 text-muted">3등분해 낮음·보통·높음으로 불러요. {meta.comment}.</p>
+            <p className="m-0 mt-2 text-muted">{meta.comment}.</p>
           </MarketDetail>
         ) : (
           <span className="flex-none whitespace-nowrap text-xs text-body lg:ml-auto">{meta.comment}</span>

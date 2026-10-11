@@ -105,7 +105,7 @@ const TAB_META: Record<TabId, { label: string; question: string; why: string }> 
   supply: {
     label: TERM.supply,
     question: "최근 누가 이 종목을 사고팔았나요?",
-    why: "개인·외국인·기관이 실제로 거래한 기록이에요. 누가 어느 쪽으로 움직였는지는 알 수 있지만 이유는 담겨 있지 않아요.",
+    why: "개인·외국인·기관 중 누가 이 종목을 사고 팔았는지 실제 거래 기록으로 볼 수 있어요.",
   },
   financial: {
     label: TERM.financial,
@@ -166,7 +166,7 @@ export function useDemoStyleAxes(original: StyleAxes | null) {
 
 function Why({ children }: { children: ReactNode }) {
   return (
-    <p className="m-0 max-w-2xl text-xs text-muted">
+    <p className="m-0 text-xs text-muted">
       <span className="font-medium text-body">왜 봐야 하나요? </span>
       {children}
     </p>
@@ -954,7 +954,7 @@ export function CalculationBasis({
           </BasisTile>
         )}
         {nudges.map((nudge) => (
-          <BasisTile key={nudge.id} title="체크포인트가 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`} sub={signed(nudge.ratio)}>
+          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`} sub={signed(nudge.ratio)}>
             <Scale value={nudge.ratio} left={AXIS_META[nudge.axis].negative} right={AXIS_META[nudge.axis].positive} />
           </BasisTile>
         ))}
@@ -972,7 +972,7 @@ export function CalculationBasis({
         </div>
       </div>
       {insights.sentiment?.days.length ? <p className="m-0 text-xs text-muted">기사 수가 적은 날: {FEW_ARTICLES_RULE}</p> : null}
-      {nudges.length > 0 && <p className="m-0 text-xs text-muted">체크포인트: {CHECKPOINT_RULE}</p>}
+      {nudges.length > 0 && <p className="m-0 text-xs text-muted">확인할 것: {CHECKPOINT_RULE}</p>}
       <p className="m-0 text-xs text-muted">{STYLE_TYPE_SOURCE}</p>
     </div>
   );
@@ -1043,7 +1043,7 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
       ? ([["가격 흐름으로 본 분위기", insights.psychology.provenance]] as [string, DataProvenance][])
       : []),
     [
-      "체크포인트",
+      "확인할 것",
       combinedProvenance(
         detail.provenance,
         ...[shown(insights.supply, p.supply), shown(insights.sentiment, p.sentiment)].filter((item) => item !== null),

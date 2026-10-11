@@ -672,8 +672,8 @@ export function ResultView({
             : BIT_SUMMARY[bit.type]}
         </p>
         <p className="mt-3 text-xs text-muted">
-          행동투자자 유형에서 착안한 분류예요. 금융회사의 투자자 등급과는 다른 것이고, 정보를 보여 주는
-          순서와 체크포인트에만 쓰며 종목을 거르지 않아요.
+          투자 습관을 기준으로 나눈 유형이에요. 증권사의 투자자 등급과는 달라요. 종목 화면에서 무엇부터
+          보여 줄지 정하는 데만 쓰고, 볼 수 있는 종목을 줄이지는 않아요.
         </p>
         {canBeMoreAccurate && (
           <button type="button" onClick={onMoreAccurate} className="btn-text mt-2 text-xs">
