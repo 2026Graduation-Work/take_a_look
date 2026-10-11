@@ -18,7 +18,7 @@ export function SourceTable({ rows, children }: { rows: [string, DataProvenance 
 }
 
 // 출처 전체 목록(더 알아보기)용 한 줄 글.
-export function sourceText(provenance: DataProvenance): string {
+function sourceText(provenance: DataProvenance): string {
   if (provenance.kind !== "real") return "예시 데이터";
   return [provenance.source, provenance.asOf && formatKstDateTime(provenance.asOf)].filter(Boolean).join(" · ");
 }

@@ -4,7 +4,7 @@ import { DISCLOSURE_KIND } from "./copy-glossary.ts";
 // 대시보드 상단 "어제와 달라진 근거": 보유·관심 종목에서 직전 대비 바뀐 사실만 규칙으로 찾는다(최대 MAX_LINES줄).
 // 판단(사라·팔아라)은 붙이지 않는다(HITL). 새 테이블 없이 공개 읽기 가능한 기존 테이블만 쓴다.
 // 4주 신호의 전일 값은 예측 요약 로그(0009)가 service_role 전용이라, 같은 값이 남아 있는 직전 게시 배치 스냅샷에서 읽는다.
-export const MAX_LINES = 3;
+const MAX_LINES = 3;
 const CAUTION_KINDS = new Set(["market_action", "business_risk", "inquiry"]);
 const DIRECTION = { up: "상방", flat: "중립", down: "하방" } as const;
 
