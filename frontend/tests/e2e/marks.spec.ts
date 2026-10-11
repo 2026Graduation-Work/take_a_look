@@ -138,3 +138,41 @@ test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
 });
+
+// #278 QA: 숫자 칸에 NaN·지수 표기·"10abc"가 들어가지 않고, 검색은 Esc 뒤 다시 입력하면 목록이 다시 열린다
+test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async ({ page }) => {
+  await demoReady(page);
+  await page.goto("/portfolio");
+  const quantity = page.getByLabel("카카오 수량");
+  await quantity.fill("");
+  await expect(quantity).toHaveValue("");
+  await quantity.pressSequentially("12");
+  await expect(quantity).toHaveValue("12");
+  const price = page.getByLabel("카카오 평균 매입가");
+  await price.fill("");
+  await price.pressSequentially("1".repeat(25));
+  await expect(price).toHaveValue("1".repeat(12));
+  await price.pressSequentially("9");
+  await expect(price).toHaveValue("1".repeat(12));
+  await quantity.fill("");
+  await page.getByRole("button", { name: /^저장/ }).first().click();
+  await expect(page.getByText("카카오의 수량을 1 이상으로 적어 주세요.", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "종목 추가" }).first().click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("수량(주)").pressSequentially("10abc");
+  await expect(sheet.getByLabel("수량(주)")).toHaveValue("10");
+
+  // 검색 목록은 종목 마스터(stocks 전체)에서 고른다. e2e 스텁은 코드 조회만 답하므로 여기서 목록을 준다
+  await page.route(/\/rest\/v1\/stocks\?.*is_active/, (route) =>
+    route.fulfill({ json: [{ code: "005930", name: "삼성전자" }, { code: "028260", name: "삼성물산" }] }),
+  );
+  await page.goto("/");
+  const search = page.getByRole("searchbox", { name: "종목 검색", exact: true });
+  await search.fill("삼성");
+  await expect(page.getByRole("list", { name: "종목 검색 결과" })).toBeVisible();
+  await search.press("Escape");
+  await expect(page.getByRole("list", { name: "종목 검색 결과" })).toHaveCount(0);
+  await search.pressSequentially("전");
+  await expect(page.getByRole("list", { name: "종목 검색 결과" })).toBeVisible();
+});

@@ -54,7 +54,10 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
       <input
         type="search"
         value={query}
-        onChange={(event) => onQueryChange(event.target.value)}
+        onChange={(event) => {
+          onQueryChange(event.target.value);
+          setOpen(true); // Esc로 닫은 뒤 다시 입력하면 목록을 다시 연다(#278)
+        }}
         placeholder="종목명 또는 코드 검색"
         aria-label="종목 검색"
         className="box-border h-11 w-full min-w-0 rounded-md bg-track px-4 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"

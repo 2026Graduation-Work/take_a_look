@@ -7,6 +7,20 @@ export interface SavedHolding {
   avgBuyPrice: number | null; // null = 모름(선택 입력). 비중은 기준일 종가로 계산한다
 }
 
+// 숫자 입력칸 정리(#278): 숫자만 남기고 자릿수를 자른다. 문자("10abc")·쉼표·지수 표기(1e+21)가 들어갈 수 없다.
+export const QUANTITY_DIGITS = 9; // 10억 주 미만
+export const PRICE_DIGITS = 12; // 1조 원 미만. 둘 다 안전한 정수 범위(2^53) 안
+export function digitsOnly(value: string, maxDigits: number): string {
+  return value.replace(/\D/g, "").slice(0, maxDigits);
+}
+
+// 숫자만 있는 문자열 → 정수, 빈칸 → null, 그 밖(문자 섞임) → NaN. parseInt처럼 앞 숫자만 읽지 않는다.
+export function parseWholeNumber(value: string): number | null {
+  const text = value.replaceAll(",", "").trim();
+  if (text === "") return null;
+  return /^\d+$/.test(text) ? Number(text) : Number.NaN;
+}
+
 // 수량 0은 "보유 안 함"이라 저장하지 않는다. 평단 0은 허용한다(무상증자 등). 평단은 비워 둘 수 있다.
 export function isValidHolding(value: SavedHolding): boolean {
   return (

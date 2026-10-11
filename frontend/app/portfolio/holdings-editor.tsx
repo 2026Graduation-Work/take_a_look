@@ -10,6 +10,7 @@ import { useStockOptions } from "./use-stock-options";
 import GainText from "../components/gain-text";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
+import { digitsOnly, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -33,15 +34,6 @@ type Draft = { code: string; name: string; quantity: string; avgBuyPrice: string
 const EMPTY_DRAFT: Draft = { code: "", name: "", quantity: "", avgBuyPrice: "" };
 
 // 비워 두면 null(모름). 평균 매입가만 선택 입력이다.
-function toOptionalInt(value: string): number | null {
-  return value.trim() === "" ? null : toInt(value);
-}
-
-function toInt(value: string): number {
-  const parsed = Number.parseInt(value.replaceAll(",", "").trim(), 10);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-}
-
 function formatWon(value: number): string {
   return value.toLocaleString("ko-KR");
 }
@@ -116,8 +108,8 @@ export default function HoldingsEditor({
     const candidate: SavedHolding = {
       code,
       name,
-      quantity: toInt(draft.quantity),
-      avgBuyPrice: toOptionalInt(draft.avgBuyPrice),
+      quantity: parseWholeNumber(draft.quantity) ?? Number.NaN,
+      avgBuyPrice: parseWholeNumber(draft.avgBuyPrice),
     };
 
     if (!match) {
@@ -153,6 +145,12 @@ export default function HoldingsEditor({
 
   async function submit() {
     setSaveError("");
+    // 수량을 비운 종목이 있으면 저장하지 않는다(저장 단계에서 조용히 빠지지 않게)
+    const empty = rows.find(({ quantity }) => !(quantity > 0));
+    if (empty) {
+      setSaveError(`${empty.name}의 수량을 1 이상으로 적어 주세요. 보유하지 않으면 삭제를 눌러 주세요.`);
+      return;
+    }
     setStatus("saving");
     try {
       await saveHoldings(rows, onboardingState.mode);
@@ -214,8 +212,8 @@ export default function HoldingsEditor({
                     <input
                       inputMode="numeric"
                       aria-label={`${row.name} 수량`}
-                      value={String(row.quantity)}
-                      onChange={(event) => updateRow(row.code, { quantity: toInt(event.target.value) })}
+                      value={row.quantity > 0 ? String(row.quantity) : ""}
+                      onChange={(event) => updateRow(row.code, { quantity: Number(digitsOnly(event.target.value, QUANTITY_DIGITS)) })}
                       className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
@@ -226,7 +224,7 @@ export default function HoldingsEditor({
                       aria-label={`${row.name} 평균 매입가`}
                       value={row.avgBuyPrice === null ? "" : String(row.avgBuyPrice)}
                       placeholder="모름 · 현재가 기준"
-                      onChange={(event) => updateRow(row.code, { avgBuyPrice: toOptionalInt(event.target.value) })}
+                      onChange={(event) => updateRow(row.code, { avgBuyPrice: parseWholeNumber(digitsOnly(event.target.value, PRICE_DIGITS)) })}
                       className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
@@ -317,7 +315,7 @@ export default function HoldingsEditor({
               <input
                 inputMode="numeric"
                 value={draft.quantity}
-                onChange={(event) => setDraft({ ...draft, quantity: event.target.value })}
+                onChange={(event) => setDraft({ ...draft, quantity: digitsOnly(event.target.value, QUANTITY_DIGITS) })}
                 placeholder="10"
                 className={field}
               />
@@ -327,7 +325,7 @@ export default function HoldingsEditor({
               <input
                 inputMode="numeric"
                 value={draft.avgBuyPrice}
-                onChange={(event) => setDraft({ ...draft, avgBuyPrice: event.target.value })}
+                onChange={(event) => setDraft({ ...draft, avgBuyPrice: digitsOnly(event.target.value, PRICE_DIGITS) })}
                 placeholder="모르면 비워 두세요"
                 className={field}
               />
