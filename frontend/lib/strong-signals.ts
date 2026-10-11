@@ -6,7 +6,7 @@ import type { RiskFlag } from "./types.ts";
 // 대시보드 "오늘 신호가 강한 종목": 최신 게시 배치의 코스피 전 종목에서 4주(H20) 분류 점수의
 // 확신도(가장 높은 점수 − 두 번째 점수)가 큰 순으로 상방·하방 각 SHOW개. 규칙 코드이며 성향으로 거르지 않는다.
 // 사용자가 직접 고른 회피 항목(하드 제약)만 뺀다. payload 전체 대신 필요한 경로만 한 번에 읽는다.
-export const SHOW = 5;
+const SHOW = 5;
 const SHORTLIST = 30; // 하드 제약으로 빠질 몫을 감안해 방향마다 이만큼만 종목 마스터를 조회
 
 export interface StrongSignal {
