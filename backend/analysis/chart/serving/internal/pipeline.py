@@ -13,6 +13,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
+from shared.data.calendar import scheduled_sessions
 from shared.settings import processing_contract, serving_root
 
 from .calendar import refresh_krx_trading_days
@@ -237,6 +238,11 @@ def run(args):
     pack, paths = active_pack(root)
     if pack["feature_builder_id"] != BUILDER_ID:
         raise ValueError("Daily inference requires a pack matching the corrected feature builder")
+    # Automatic runs have no archived universe on weekends or exchange holidays.
+    # Explicit historical requests must still satisfy the archive requirements.
+    if not args.as_of and pd.Timestamp(as_of) not in scheduled_sessions(pd.Timestamp("2016-01-01"), pd.Timestamp(as_of)):
+        print(json.dumps({"event": "holiday", "as_of": as_of, "pack_id": pack["pack_id"]}))
+        return
     store = SupabaseStore()
     replay = getattr(args, "replay", False) or (pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test)
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
