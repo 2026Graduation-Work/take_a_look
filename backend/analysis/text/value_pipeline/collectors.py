@@ -31,6 +31,9 @@ except ModuleNotFoundError as exc:
     # Python 3.12에서 설치되는 마지막 호환 버전(0.2.2)은 대문자 모듈명을 쓴다.
     import OpenDartReader  # type: ignore[no-redef]
 
+from . import newsapi_ai
+from .config import SETTINGS
+
 _DartReader = OpenDartReader
 
 
@@ -48,9 +51,6 @@ def OpenDartReader(api_key: str, tries: int = 3, wait: float = 60):  # type: ign
                 raise
             time.sleep(wait * attempt)
 
-
-from . import newsapi_ai
-from .config import SETTINGS
 
 # 빅카인즈 전처리 파이프라인(preprocess.py)의 point-in-time 로더 재사용.
 # `python -m value_pipeline.run`(top-level)와 `analysis.text.value_pipeline`
