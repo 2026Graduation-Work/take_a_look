@@ -316,6 +316,27 @@ def test_opendartreader_exposes_callable_client() -> None:
     assert callable(collectors_mod.OpenDartReader)
 
 
+def test_opendartreader_retries_connect_timeout(monkeypatch) -> None:
+    """10/12 재무 예약: corpCode.xml 접속 타임아웃 한 번에 전체가 죽지 않게 다시 시도한다."""
+    import requests
+
+    calls = []
+
+    def flaky(api_key):
+        calls.append(api_key)
+        if len(calls) < 3:
+            raise requests.exceptions.ConnectTimeout("opendart.fss.or.kr timed out")
+        return "client"
+
+    monkeypatch.setattr(collectors_mod, "_DartReader", flaky)
+    assert collectors_mod.OpenDartReader("k", wait=0) == "client"
+    assert len(calls) == 3
+    calls.clear()
+    monkeypatch.setattr(collectors_mod, "_DartReader", lambda key: (_ for _ in ()).throw(requests.exceptions.ConnectTimeout()))
+    with pytest.raises(requests.exceptions.ConnectTimeout):
+        collectors_mod.OpenDartReader("k", tries=2, wait=0)
+
+
 class _FakeDart:
     """OpenDartReader 대역."""
 

@@ -31,6 +31,24 @@ except ModuleNotFoundError as exc:
     # Python 3.12에서 설치되는 마지막 호환 버전(0.2.2)은 대문자 모듈명을 쓴다.
     import OpenDartReader  # type: ignore[no-redef]
 
+_DartReader = OpenDartReader
+
+
+def OpenDartReader(api_key: str, tries: int = 3, wait: float = 60):  # type: ignore[no-redef]  # noqa: N802
+    """생성자가 corpCode.xml을 timeout 없이 받는다. DART 접속 타임아웃(10/12 재무 예약 실패)은 잠깐 뒤 다시 하면 붙는다."""
+    import time
+
+    import requests
+
+    for attempt in range(1, tries + 1):
+        try:
+            return _DartReader(api_key)
+        except requests.exceptions.ConnectionError:  # ConnectTimeout 포함
+            if attempt == tries:
+                raise
+            time.sleep(wait * attempt)
+
+
 from . import newsapi_ai
 from .config import SETTINGS
 
