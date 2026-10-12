@@ -3,6 +3,7 @@ import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
+import { DIRECTION_RULE } from "@/lib/copy-glossary";
 
 interface WeightedHolding {
   holding: PortfolioHolding;
@@ -126,7 +127,7 @@ export default function PortfolioHeatmap({
         </span>
       </div>
       {/* #278 QA: 상방·하방이 무슨 뜻인지 맵 바로 아래에서 한 줄로 */}
-      <p className="m-0 text-2xs text-muted">상방·하방은 과거 비슷한 경우를 보고 모델이 본 앞으로 4주의 가격 방향이에요. 맞는다는 보장은 없어요.</p>
+      <p className="m-0 text-2xs text-muted">{DIRECTION_RULE}</p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
           등록한 종목 중 {withoutSignalCount}개는 오늘 모델 신호가 없어 맵에 넣지 않았어요.

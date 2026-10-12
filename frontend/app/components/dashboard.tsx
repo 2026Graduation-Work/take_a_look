@@ -9,6 +9,7 @@ import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
+import { DIRECTION_RULE } from "@/lib/copy-glossary";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -358,6 +359,8 @@ export default function Dashboard(initialData: DashboardData) {
                 {/* "모델 검증 전"은 모델 신호가 처음 나오는 곳에 한 번 — 보유 맵이 있으면 그 범례에 있다 */}
                 <p className="m-0 px-1 text-2xs text-muted">
                   {activeHoldings.length === 0 && "모델 검증 전 · "}신호는 과거 데이터로 만든 참고 정보예요
+                  {/* 상방·하방 뜻도 처음 나오는 곳에 한 번 — 보유 맵이 있으면 맵 아래에 같은 문장이 있다 */}
+                  {activeHoldings.length === 0 && <><br />{DIRECTION_RULE}</>}
                 </p>
                 {!keyword && activeExcludedStocks.length > 0 && (
                   <details className="disclosure surface px-5">
