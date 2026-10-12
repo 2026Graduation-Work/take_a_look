@@ -93,3 +93,11 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | [Taste Skill](https://github.com/Leonxlnx/taste-skill) (MIT) | 기존 판정 유지 | 설치한 2종(`redesign-skill`·`minimalist-skill`)은 고정 SHA `5217fb4` 이후 바뀐 파일이 없다(compare 확인). 본체 `taste-skill`·`brutalist`·`soft` 등은 방향이 DESIGN.md와 달라 계속 제외 |
 | Image to Code ([taste-skill `image-to-code-skill`](https://github.com/Leonxlnx/taste-skill/tree/main/skills/image-to-code-skill), MIT) | 기각 | SKILL.md가 "for Codex"이고 **이미지를 먼저 생성**한 뒤 코드로 옮기는 방식이라 이미지 생성 도구가 필요하다. 대상도 랜딩·마케팅 히어로라 우리 근거 화면과 맞지 않는다 |
 | [screenshot-to-code](https://github.com/abi/screenshot-to-code) (MIT) | 기각 | 별도 웹앱(React+FastAPI)이고 OpenAI·Anthropic **API 키(종량 과금)** 가 필요하다. 캡처 → 코드는 Claude Code에 이미지를 바로 주는 것으로 충분 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-13)
+
+| 도구 | 판정 | 이유 |
+|---|---|---|
+| "네이버에 안 뜬다면 3가지"(서치어드바이저·서치콘솔+사이트맵·페이지별 메타) | 채택 | 무료·설치 없음. Next 기본 기능(`app/robots.ts`·`app/sitemap.ts`·`generateMetadata`)으로 적용. 이때 `metadataBase`가 옛 주소(`stock-prediction-v2-chi`)라 og:image가 옛 주소로 나가던 것도 고침. 두 검색 도구 등록·소유 확인은 계정 로그인이 필요해 사람이 한다(받은 확인 코드를 `layout.tsx` `metadata.verification`에 넣기) |
+| [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) grill-me · prototype · handoff | 아이디어만 | grill-me는 별도 `grilling` 스킬을 불러 계획을 한 질문씩 캐묻는다 — 질문이 많아질수록 대화 횟수·토큰이 는다. 계획 확인은 내장 질문 도구로 충분. handoff는 대화 요약 문서 — 자동 요약·메모리·`[인수인계]` 이슈(#265)와 겹친다. prototype(UI)의 "한 경로에서 `?variant=`로 시안 여러 개 비교, main엔 결정만" 방식은 화면 대안을 비교할 때만 아이디어로 쓴다. 디자인 스킬 허용 목록 밖이라 설치하지 않음 |
+| andrej-karpathy-skills ("22만 스타 CLAUDE.md") | 기존 판정 유지 | 10-11 표와 같은 레포(forrestchang, 2026-10-13 별 21.9만). 여전히 라이선스 표기 없음 → 원문 복사 안 함, ponytail·AGENTS.md와 내용 겹침 |

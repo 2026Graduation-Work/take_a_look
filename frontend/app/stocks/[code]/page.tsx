@@ -1,4 +1,6 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import Link from "next/link";
 import { NewsSentimentPanel } from "@/app/components/insight-cards";
 import StockDetailBoundary from "@/app/components/stock-detail-boundary";
@@ -17,7 +19,8 @@ export const revalidate = 3600;
 // 게시된 차트 스냅샷이 있으면 다른 종목과 같은 상세 화면, 없으면 뉴스만 보인다.
 type MasterStock = Pick<StockDetail, "name" | "market" | "riskGrade" | "riskFlags" | "volatilityAnnual" | "volatilityPercentile" | "riskAsOf">;
 
-async function loadMasterStock(code: string): Promise<MasterStock | null> {
+// cache: 메타데이터와 본문이 같은 요청에서 한 번만 조회한다
+const loadMasterStock = cache(async (code: string): Promise<MasterStock | null> => {
   const client = getSupabaseClient();
   if (!client || !/^[0-9A-Z]{6}$/.test(code)) return null;
   const { data } = await client
@@ -31,7 +34,7 @@ async function loadMasterStock(code: string): Promise<MasterStock | null> {
     name: data.name, market: data.market, riskGrade: toRiskGrade(data.risk_grade), riskFlags: toRiskFlags(data.risk_flags),
     ...masterVolatility(data),
   };
-}
+});
 
 // 예측·시세 칸은 ChartPreviewDetail이 스냅샷 값으로 덮는다(chartDetail).
 function chartOnlyDetail(code: string, stock: MasterStock): StockDetail {
@@ -45,6 +48,13 @@ function chartOnlyDetail(code: string, stock: MasterStock): StockDetail {
 
 export function generateStaticParams() {
   return Object.keys(stockDetails).map((code) => ({ code }));
+}
+
+// 검색 결과·공유 미리보기에 종목 이름이 보이게(예: "삼성전자 005930 · Take a Look")
+export async function generateMetadata({ params }: PageProps<"/stocks/[code]">): Promise<Metadata> {
+  const { code } = await params;
+  const name = stockDetails[code]?.name ?? (await loadMasterStock(code))?.name;
+  return name ? { title: `${name} ${code}`, description: `${name}의 뉴스 분위기·재무·차트 신호를 근거와 함께 쉽게 보여 드려요.` } : {};
 }
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
