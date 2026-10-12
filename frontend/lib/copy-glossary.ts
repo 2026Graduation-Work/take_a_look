@@ -88,6 +88,9 @@ export const PSYCHOLOGY_RULE =
 export const FEW_ARTICLES = 3;
 export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 한두 기사의 말투가 그날 점수를 크게 움직일 수 있어요. 이 값은 참고만 해 주세요.`;
 
+// 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA)
+export const DIRECTION_RULE = "상방·하방은 과거 비슷한 경우를 보고 모델이 본 앞으로 4주의 가격 방향이에요. 맞는다는 보장은 없어요.";
+
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
 export const STYLE_TYPE_SOURCE = "행동재무학의 투자자 유형 연구(Pompian)에서 착안해 설문으로 가늠한 분류예요.";
