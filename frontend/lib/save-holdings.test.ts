@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { costBasis, digitsOnly, gainRatio, isValidHolding, parseSavedHoldings, parseWholeNumber, type SavedHolding } from "./holdings-rules.ts";
+import { costBasis, digitsOnly, numberDraft, gainRatio, isValidHolding, parseSavedHoldings, parseWholeNumber, type SavedHolding } from "./holdings-rules.ts";
 
 const ok: SavedHolding = { code: "005930", name: "삼성전자", quantity: 15, avgBuyPrice: 71_200 };
 
@@ -52,6 +52,13 @@ test("평단 대비 평가손익(#255): 평단·종가가 모두 있어야 계�
 test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 않는다", () => {
   assert.equal(digitsOnly("10abc", 9), "10");
   assert.equal(digitsOnly("1,200", 9), "1200");
+  assert.equal(digitsOnly("1.5", 9), "1"); // 15가 되면 안 된다
+  assert.equal(digitsOnly("318,000.5", 12), "318000");
+  assert.equal(digitsOnly("１２", 9), "12");
+  assert.equal(numberDraft("1.5", 9), "1.5"); // 보여 주고 넣을 때 막는다
+  assert.ok(Number.isNaN(parseWholeNumber(numberDraft("1.5", 9))));
+  assert.equal(numberDraft("2,500주", 9), "2500");
+  assert.equal(numberDraft("１２", 9), "12");
   assert.equal(digitsOnly("", 9), ""); // 지워도 NaN이 아니라 빈칸
   assert.equal(digitsOnly("12345678901234567890123", 12), "123456789012"); // 1e+22 대신 자릿수에서 멈춤
   assert.ok(Number.isSafeInteger(Number(digitsOnly("9".repeat(30), 12))));

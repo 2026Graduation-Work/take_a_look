@@ -8,10 +8,18 @@ export interface SavedHolding {
 }
 
 // 숫자 입력칸 정리(#278): 숫자만 남기고 자릿수를 자른다. 문자("10abc")·쉼표·지수 표기(1e+21)가 들어갈 수 없다.
+// 소수점 아래는 버린다(1.5 → 1, 전에는 점만 지워 15가 됐다). 전각 숫자(１２)는 반각으로 읽는다(NFKC). 페르소나 워크스루 2026-10
 export const QUANTITY_DIGITS = 9; // 10억 주 미만
 export const PRICE_DIGITS = 12; // 1조 원 미만. 둘 다 안전한 정수 범위(2^53) 안
 export function digitsOnly(value: string, maxDigits: number): string {
-  return value.replace(/\D/g, "").slice(0, maxDigits);
+  return value.normalize("NFKC").split(".")[0].replace(/\D/g, "").slice(0, maxDigits);
+}
+
+// 새 종목 입력칸용: 점(소수)을 지우지 않고 보여 준다. 한 글자씩 "1" "." "5"를 쳐도 15가 되지 않고,
+// 넣을 때 parseWholeNumber가 NaN으로 막아 "정수로 적어 주세요" 안내가 뜬다(페르소나 워크스루 2026-10).
+export function numberDraft(value: string, maxDigits: number): string {
+  const [whole, ...fraction] = value.normalize("NFKC").replace(/[^\d.]/g, "").split(".");
+  return whole.slice(0, maxDigits) + (fraction.length ? "." + fraction.join("") : "");
 }
 
 // 숫자만 있는 문자열 → 정수, 빈칸 → null, 그 밖(문자 섞임) → NaN. parseInt처럼 앞 숫자만 읽지 않는다.

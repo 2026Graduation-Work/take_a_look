@@ -10,7 +10,7 @@ import { useStockOptions } from "./use-stock-options";
 import GainText from "../components/gain-text";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
-import { digitsOnly, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { digitsOnly, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -317,7 +317,7 @@ export default function HoldingsEditor({
               <input
                 inputMode="numeric"
                 value={draft.quantity}
-                onChange={(event) => setDraft({ ...draft, quantity: digitsOnly(event.target.value, QUANTITY_DIGITS) })}
+                onChange={(event) => setDraft({ ...draft, quantity: numberDraft(event.target.value, QUANTITY_DIGITS) })}
                 placeholder="10"
                 className={field}
               />
@@ -327,7 +327,7 @@ export default function HoldingsEditor({
               <input
                 inputMode="numeric"
                 value={draft.avgBuyPrice}
-                onChange={(event) => setDraft({ ...draft, avgBuyPrice: digitsOnly(event.target.value, PRICE_DIGITS) })}
+                onChange={(event) => setDraft({ ...draft, avgBuyPrice: numberDraft(event.target.value, PRICE_DIGITS) })}
                 placeholder="모르면 비워 두세요"
                 className={field}
               />
