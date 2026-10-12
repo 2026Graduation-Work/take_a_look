@@ -470,7 +470,7 @@ export function toNudgeMarket(
     retailStreak += 1;
   }
   const latest = supply[supply.length - 1];
-  // ponytail: 보유 비중은 매입금액(수량 × 평단) 기준. 보유 종목 현재가가 연결되면 평가금액 기준으로 바꾼다.
+  // 보유 비중: avgBuyPrice는 호출하는 쪽이 최신 종가로 채운 값(평가금액, costBasis). 종가가 없으면 매입금액
   const cost = ({ quantity, avgBuyPrice }: HoldingWeight) => quantity * avgBuyPrice;
   const topHolding = holdings.reduce<HoldingWeight | null>(
     (top, holding) => (!top || cost(holding) > cost(top) ? holding : top),

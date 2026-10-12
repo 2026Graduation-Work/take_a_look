@@ -4,7 +4,7 @@
 // 순서: 헤더 → 한눈에 보기 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
 // 필수 정보는 지우지 않고 "더 알아보기"에 접는다.
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import EvidenceTabs, {
@@ -16,7 +16,9 @@ import EvidenceTabs, {
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
 import GainText from "./gain-text";
-import { parseSavedHoldings } from "@/lib/holdings-rules";
+import { costBasis, parseSavedHoldings } from "@/lib/holdings-rules";
+import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
+import { getSupabaseClient } from "@/lib/supabase";
 import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
 import ReturnHistogram from "./return-histogram";
@@ -88,15 +90,27 @@ export default function StockDetailView({
   const [query, setQuery] = useState("");
   // 이 종목 보유 정보(#255). 대시보드처럼 이 브라우저에 저장한 보유 종목이 먼저, 없으면 계정 보유 종목.
   // 평단은 사용자가 입력한 원값만 쓴다(모르면 미제공). 체크포인트 N05도 같은 값을 본다.
-  const saved = parseSavedHoldings(
+  const savedList = parseSavedHoldings(
     useSyncExternalStore(subscribeToSavedHoldings, getSavedHoldingsSnapshot, getServerHoldingsSnapshot),
-  )?.find(({ code }) => code === detail.code);
+  );
+  const saved = savedList?.find(({ code }) => code === detail.code);
+  // 체크포인트 N08 비중은 보유 맵과 같은 평가금액(최신 게시 종가) 기준(#257). 종가가 없으면 매입금액
+  const savedCodes = savedList?.map(({ code }) => code).join(",") ?? "";
+  const [closes, setCloses] = useState<LatestCloses>(() => new Map());
+  useEffect(() => {
+    if (!savedCodes) return;
+    let live = true;
+    loadLatestCloses(getSupabaseClient(), savedCodes.split(",")).then((next) => live && setCloses(next));
+    return () => { live = false; };
+  }, [savedCodes]);
   const held = holdings.find(({ code }) => code === detail.code);
   const own = saved
     ? { quantity: saved.quantity, rawAvgBuyPrice: saved.avgBuyPrice }
     : held && { quantity: held.quantity, rawAvgBuyPrice: held.rawAvgBuyPrice ?? null };
-  const nudgeHoldings = own
-    ? [...holdings.filter(({ code }) => code !== detail.code), { code: detail.code, avgBuyPrice: held?.avgBuyPrice ?? 0, ...own }]
+  const nudgeHoldings: HoldingWeight[] = savedList
+    ? savedList.map(({ code, quantity, avgBuyPrice }) => ({
+        code, quantity, rawAvgBuyPrice: avgBuyPrice, avgBuyPrice: costBasis(avgBuyPrice, closes.get(code)?.close).price,
+      }))
     : holdings;
 
   const preview = chartSnapshots !== undefined;
