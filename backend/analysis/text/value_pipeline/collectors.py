@@ -34,6 +34,24 @@ except ModuleNotFoundError as exc:
 from . import newsapi_ai
 from .config import SETTINGS
 
+_DartReader = OpenDartReader
+
+
+def OpenDartReader(api_key: str, tries: int = 3, wait: float = 60):  # type: ignore[no-redef]  # noqa: N802
+    """생성자가 corpCode.xml을 timeout 없이 받는다. DART 접속 타임아웃(10/12 재무 예약 실패)은 잠깐 뒤 다시 하면 붙는다."""
+    import time
+
+    import requests
+
+    for attempt in range(1, tries + 1):
+        try:
+            return _DartReader(api_key)
+        except requests.exceptions.ConnectionError:  # ConnectTimeout 포함
+            if attempt == tries:
+                raise
+            time.sleep(wait * attempt)
+
+
 # 빅카인즈 전처리 파이프라인(preprocess.py)의 point-in-time 로더 재사용.
 # `python -m value_pipeline.run`(top-level)와 `analysis.text.value_pipeline`
 # (namespace 패키지) 두 실행 방식을 모두 지원한다.
