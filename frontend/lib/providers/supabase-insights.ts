@@ -66,8 +66,9 @@ const FINANCIAL_LABEL: Record<string, string> = {
 
 // DART fs_div 코드 → 화면 말. 정적 스냅샷(demo-snapshot.ts)은 이미 "연결"·"별도"로 저장돼 있다.
 const STATEMENT_LABEL: Record<string, string> = { CFS: "연결", OFS: "별도" };
-// DART 정기보고서 종류(financial_snapshots.report_code, 0012). 분기·반기는 누적을 12개월로 환산한 값이다
-const REPORT_LABEL: Record<string, string> = { "11013": "1분기", "11012": "반기", "11014": "3분기", "11011": "사업보고서" };
+// DART 정기보고서 종류(financial_snapshots.report_code, 0012). 비율은 사업보고서(연간)로만 만든다(#292) → "2025년 연간 기준".
+// 10/13 이전에 적재된 분기·반기 행은 이름만 '누적'으로 맞춘다(새 적재는 연간만)
+const REPORT_LABEL: Record<string, string> = { "11013": "최근 1분기 누적", "11012": "최근 반기 누적", "11014": "최근 3분기 누적", "11011": "연간" };
 
 const METRIC_KEYS = Object.keys(FINANCIAL_LABEL);
 const REPRESENTATIVE_TITLE_TERMS: Record<string, string[]> = {

@@ -87,7 +87,8 @@ def compute_metrics(f: dict) -> dict:
         "psr": _div(mktcap, rev),
         "peg": peg,
         "ev_ebitda": _div(ev, ebitda) if (ebitda and ebitda > 0) else None,
-        "roe": _div(ni, eq),
+        # 연간 보고서 경로(latest_financials)는 지배주주 순이익 ÷ 평균 지배주주지분을 넘긴다(#292). 없으면 기존식
+        "roe": _div(_num(f, "roe_net_income"), _num(f, "roe_equity_avg")) if f.get("roe_equity_avg") else _div(ni, eq),
         "roa": _div(ni, ta),
         "operating_margin": _div(op, rev),
         "net_margin": _div(ni, rev),
