@@ -1,17 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-
-// 페르소나 워크스루(2026-10) P2: 수량에 "1.5"를 한 글자씩 치면 점만 지워져 15주로 들어갔다.
-async function toHoldingsStep(page: Page): Promise<void> {
-  await page.goto("/");
-  await page.getByRole("button", { name: "데모로 둘러보기" }).click();
-  await page.getByRole("button", { name: "시작하기" }).click();
-  await page.getByRole("button", { name: /데모 응답/ }).first().click();
-  for (let i = 0; i < 25; i++) {
-    if (await page.getByRole("heading", { name: "지금 가진 주식이 있나요?" }).isVisible()) return;
-    const done = page.getByRole("button", { name: "완료", exact: true });
-    await (await done.isVisible() ? done : page.getByRole("button", { name: "다음", exact: true })).click();
-  }
-}
+import { expect, test } from "@playwright/test";
+import { toHoldingsStep } from "./demo-steps";
 
 test("수량 소수점은 그대로 보이고 넣을 때 막힌다, 전각 숫자는 읽는다", async ({ page }) => {
   await toHoldingsStep(page);
