@@ -30,6 +30,23 @@ def test_past_date_requires_archived_inputs(monkeypatch, tmp_path, replay):
     assert calls == [True]
 
 
+def test_delayed_schedule_after_midnight_collects_live(monkeypatch, tmp_path):
+    """#291: 18:47 schedule starting at 01:00 KST must not switch to archive replay."""
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 10, 13, 1, tzinfo=tz)
+    monkeypatch.setattr(pipeline, "datetime", Clock)
+    monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}))
+    monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
+    calls = []
+    monkeypatch.setattr(pipeline, "scheduled_sessions", lambda *_: [pipeline.pd.Timestamp("2026-10-12")])
+    monkeypatch.setattr(pipeline, "collect", lambda as_of, *a, **kw: calls.append((as_of, kw["replay"])))
+    pipeline.run(Namespace(as_of=None, replay=False, historical_test=False, publish=False, dry_run=True))
+    assert calls == [("2026-10-12", False)]
+
+
 def test_replay_requires_date():
     with pytest.raises(SystemExit):
         run_daily.main(["--replay", "--dry-run"])

@@ -244,7 +244,8 @@ def run(args):
         print(json.dumps({"event": "holiday", "as_of": as_of, "pack_id": pack["pack_id"]}))
         return
     store = SupabaseStore()
-    replay = getattr(args, "replay", False) or (pd.Timestamp(as_of).date() != datetime.now(KST).date() and not historical_test)
+    # Live collection for the latest confirmed day even when a delayed schedule starts after midnight KST (#291)
+    replay = getattr(args, "replay", False) or (as_of != official_day(None) and not historical_test)
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:

@@ -20,7 +20,7 @@ def test_automatic_closed_session_never_opens_database(monkeypatch, tmp_path, ca
 
 def test_explicit_historical_date_keeps_archive_requirement(monkeypatch, tmp_path):
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(pipeline, "official_day", lambda _: "2026-10-11")
+    monkeypatch.setattr(pipeline, "official_day", lambda requested=None: requested or "2026-10-12")  # 최신 확정일은 10-12
     monkeypatch.setattr(pipeline, "active_pack", lambda _: ({"pack_id": "flow", "feature_builder_id": pipeline.BUILDER_ID}, {}))
     monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
 
