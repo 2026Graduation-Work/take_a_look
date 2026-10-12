@@ -178,9 +178,10 @@ export default function HoldingsStep({
             className="border-t border-line-soft pt-6"
             onBack={() => setAnswer(null)}
             backDisabled={saving}
-            nextLabel={saving ? "저장 중" : "저장하고 시작"}
+            // 예시를 다 지운 사람(보유 없음)도 시작할 수 있게(페르소나 워크스루 2026-10 P1 막힘)
+            nextLabel={saving ? "저장 중" : rows.length === 0 ? "보유 없이 시작" : "저장하고 시작"}
             onNext={() => void finish(rows)}
-            nextDisabled={saving || rows.length === 0}
+            nextDisabled={saving}
           />
         </>
       )}
