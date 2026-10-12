@@ -127,6 +127,9 @@ backend/analysis/chart/data/runs/
 backend/analysis/chart/data/runtime_cache/
 backend/analysis/chart/.venv-pipeline/
 backend/analysis/chart/data/raw/corp_code_mapping.json
+# #266에서 빠진 무시 줄 복구: 팀 드라이브 processed 묶음(2GB, #191)·KRX 거래일 캐시는 로컬 전용
+backend/analysis/chart/data/processed/*.tar.gz
+backend/analysis/chart/data/krx_trading_calendar.json
 !backend/analysis/chart/core/models/
 
 # ---------- backend/analysis/text (value_pipeline) ----------
