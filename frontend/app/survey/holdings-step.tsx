@@ -5,7 +5,7 @@
 
 import { useState } from "react";
 import { isValidHolding, saveHoldings, type SavedHolding } from "@/lib/save-holdings";
-import { digitsOnly, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import { useStockOptions } from "../portfolio/use-stock-options";
 import StepNav from "../components/step-nav";
@@ -150,14 +150,14 @@ export default function HoldingsStep({
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">수량(주)</span>
-                <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(digitsOnly(event.target.value, QUANTITY_DIGITS))} placeholder="10" className={field} />
+                <input inputMode="numeric" value={quantity} onChange={(event) => setQuantity(numberDraft(event.target.value, QUANTITY_DIGITS))} placeholder="10" className={field} />
               </label>
               <label className="flex flex-col gap-2">
                 <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
                 <input
                   inputMode="numeric"
                   value={avgPrice}
-                  onChange={(event) => setAvgPrice(digitsOnly(event.target.value, PRICE_DIGITS))}
+                  onChange={(event) => setAvgPrice(numberDraft(event.target.value, PRICE_DIGITS))}
                   placeholder="모르면 비워 두세요"
                   className={field}
                 />
