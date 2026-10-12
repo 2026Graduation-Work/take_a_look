@@ -61,6 +61,11 @@ def _basis(metric_key: str, raw: dict[str, Any]) -> str:
             else "주가 ÷ 주당순자산(자본총계 ÷ 발행주식수)"
         )
     if metric_key == "roe":
+        if raw.get("roe_equity_avg"):
+            income, equity_name = ("지배주주 순이익", "지배주주지분") if raw.get("roe_owners") else ("순이익", "자본총계")
+            return (f"{income} {_won(raw.get('roe_net_income'))} ÷ 평균 {equity_name} {_won(raw['roe_equity_avg'])}"
+                    f"(({fiscal_year}년 말 {_won(raw.get('roe_equity_end'))} + "
+                    f"{fiscal_year - 1}년 말 {_won(raw.get('roe_equity_start'))}) ÷ 2)")
         return f"당기순이익 {_won(net_income)} ÷ 자본총계 {_won(equity)}"
     if metric_key == "operating_margin":
         return f"영업이익 {_won(operating_profit)} ÷ 매출 {_won(revenue)}"
