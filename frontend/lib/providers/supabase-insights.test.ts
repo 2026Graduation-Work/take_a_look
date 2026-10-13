@@ -488,3 +488,106 @@ test("가격 흐름 분위기는 백엔드 산식(20일 위험 대비 수익 + 6
   const flat = Array.from({ length: 60 }, () => ({ close: 100, volume: 1000 }));
   assert.equal(psychologyAxis(flat), null); // 흔들림 0 → 나눗셈 불가(백엔드 _safe_divide와 같이 값 없음)
 });
+
+function financialPriceClient(quote: unknown, snapshotOverrides: Record<string, unknown> = {}) {
+  const keys = ["per", "pbr", "roe", "operating_margin", "debt_ratio", "revenue_growth"];
+  return new FakeClient({
+    financial_snapshots: [{ data: {
+      id: "annual", as_of: "2026-10-07", fiscal_year: 2025, report_code: "11011",
+      statement: "CFS", receipt_no: "20260310000001", filed_at: "2026-03-10",
+      shares_basis: "최근 공시 보통주", price: 10000, price_as_of: "2026-10-07",
+      price_source: "fdr", ...snapshotOverrides,
+    }, error: null }],
+    financial_metrics: [{ data: keys.map((metric_key, index) => ({
+      metric_key, value: [10, 2, 8, 15, 60, 12][index],
+      unit: index < 2 ? "multiple" : "percent", note: null,
+      basis: index < 2 ? "주가 10,000원 ÷ 보고서 주당 값" : `${metric_key} 원래 근거`,
+    })), error: null }],
+    latest_chart_signal_snapshots: [{ data: quote && typeof quote === "object"
+      ? { history: [{ date: "2026-10-07", close: 10000 }], ...quote }
+      : quote, error: null }],
+  });
+}
+
+test("보고서가 같아도 새 종가로 PER·PBR만 갱신하고 두 기준일을 표시한다", async () => {
+  const client = financialPriceClient({ close: 12000, as_of: "2026-10-13", source: "KRX adjusted daily OHLCV" });
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.deepEqual(result?.metrics.map(({ value }) => value), [12, 2.4, 8, 15, 60, 12]);
+  assert.equal(result?.period, "2025년 연간 기준");
+  assert.match(result?.filing ?? "", /2026-03-10 공시.*주가 2026-10-13 종가/);
+  assert.match(result?.filing ?? "", /KRX 수정종가/);
+  assert.equal(result?.asOf, "2026-10-13");
+  assert.match(result?.metrics[0].basis ?? "", /12,000원/);
+  assert.match(result?.metrics[0].basis ?? "", /2026-10-13/);
+  assert.equal(result?.metrics[2].basis, "roe 원래 근거");
+});
+
+for (const [label, quote] of [
+  ["없는 종가", null],
+  ["오래된 종가", { close: 12000, as_of: "2026-10-06" }],
+  ["동일 기준일", { close: 12000, as_of: "2026-10-07" }],
+  ["0원", { close: 0, as_of: "2026-10-13" }],
+  ["무한값", { close: Infinity, as_of: "2026-10-13" }],
+  ["잘못된 날짜", { close: 12000, as_of: "2026-99-99" }],
+] as const) {
+  test(`가격 갱신 불가(${label})면 기존 값·기준일을 유지한다`, async () => {
+    const result = await loadSupabaseFinancial("005930", financialPriceClient(quote) as never);
+    assert.deepEqual(result?.metrics.map(({ value }) => value), [10, 2, 8, 15, 60, 12]);
+    assert.match(result?.filing ?? "", /주가 2026-10-07 종가/);
+    assert.equal(result?.asOf, "2026-10-07");
+  });
+}
+
+test("기준 가격이 없으면 새 가격으로 배수를 추정하지 않는다", async () => {
+  const client = financialPriceClient({ close: 12000, as_of: "2026-10-13" }, { price: null });
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.equal(result?.metrics[0].value, 10);
+  assert.match(result?.filing ?? "", /주가 2026-10-07 종가/);
+});
+
+test("적자로 없는 PER은 새 가격이 들어와도 없는 상태를 유지한다", async () => {
+  const client = financialPriceClient({ close: 12000, as_of: "2026-10-13" });
+  // 별도의 DB 대역으로 실제 적자 행을 반환한다.
+  const from = client.from.bind(client);
+  client.from = (table: string) => {
+    if (table !== "financial_metrics") return from(table);
+    return new FakeQuery({ data: [
+      { metric_key: "per", value: null, unit: "multiple", basis: "당기순손실", note: "negative_earnings" },
+      ...["pbr", "roe", "operating_margin", "debt_ratio", "revenue_growth"].map((metric_key) => ({
+        metric_key, value: 2, unit: metric_key === "pbr" ? "multiple" : "percent", basis: "원래 근거", note: null,
+      })),
+    ], error: null }, []);
+  };
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.equal(result?.metrics[0].value, null);
+  assert.equal(result?.metrics[0].note, "negative_earnings");
+  assert.equal(result?.metrics[1].value, 2.4);
+});
+
+test("주가 조회 오류가 나도 저장된 재무는 제공한다", async () => {
+  const client = financialPriceClient(null);
+  const from = client.from.bind(client);
+  client.from = (table: string) => table === "latest_chart_signal_snapshots"
+    ? new FakeQuery({ data: null, error: { message: "unavailable" } }, [])
+    : from(table);
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.equal(result?.metrics[0].value, 10);
+  assert.equal(result?.asOf, "2026-10-07");
+});
+
+
+test("액면분할 뒤에는 원래 기준일의 수정종가와 비교해 배수를 유지한다", async () => {
+  const client = financialPriceClient({ close: 6000, as_of: "2026-10-13",
+    history: [{ date: "2026-10-07", close: 5000 }, { date: "2026-10-13", close: 6000 }] });
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.equal(result?.metrics[0].value, 12);
+  assert.equal(result?.metrics[1].value, 2.4);
+  assert.match(result?.metrics[0].basis ?? "", /5,000원/);
+});
+
+test("비교할 기준일의 수정종가가 없으면 기존 배수와 가격 기준일을 유지한다", async () => {
+  const client = financialPriceClient({ close: 12000, as_of: "2026-10-13", history: [] });
+  const result = await loadSupabaseFinancial("005930", client as never);
+  assert.equal(result?.metrics[0].value, 10);
+  assert.match(result?.filing ?? "", /주가 2026-10-07 종가/);
+});

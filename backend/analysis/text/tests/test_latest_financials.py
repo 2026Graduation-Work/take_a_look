@@ -2,6 +2,7 @@
 import datetime as dt
 
 import pandas as pd
+import pytest
 from analysis.text.value_pipeline import financial_tracks
 from analysis.text.value_pipeline.latest_financials import latest_report, parse_report
 
@@ -63,3 +64,45 @@ def test_separate_statement_without_owner_split_uses_total_equity_average():
     frame = ANNUAL.loc[~ANNUAL.account_id.str.contains("AttributableToOwners")]
     raw = parse_report(frame)
     assert raw["roe_net_income"] == 42 and raw["roe_equity_avg"] == (121 + 80) / 2 and raw["roe_owners"] is False
+
+
+@pytest.mark.parametrize("observation,shares", [((84, "2026-10-09"), 1), (None, 1), ((84, "2026-10-09"), None)])
+def test_same_annual_receipt_refreshes_price_anchor_and_keeps_report(monkeypatch, observation, shares):
+    from analysis.text.value_pipeline import collectors, latest_financials, supabase_store
+
+    class Client:
+        def select(self, table, params):
+            return [{"stock_code": "000660", "receipt_no": "20260310000001", "as_of": "2026-10-07"}]
+
+    persisted = []
+    frame = ANNUAL.copy()
+    frame["rcept_no"] = "20260310000001"
+    monkeypatch.setattr(collectors, "OpenDartReader", lambda key: object())
+    monkeypatch.setattr(latest_financials, "latest_report", lambda *args: (2025, "CFS", frame))
+    monkeypatch.setattr(collectors, "_fetch_latest_shares", lambda ticker: shares)
+    monkeypatch.setattr(collectors, "_fetch_price_observation", lambda ticker, day: observation)
+    monkeypatch.setattr(supabase_store, "persist_financial_track", lambda client, track: persisted.append(track))
+
+    latest_financials.sync(Client(), {"000660": "SK하이닉스"}, dt.date(2026, 10, 13))
+
+    if observation is None or shares is None:
+        assert persisted == []  # 가격·주식수 실패로 기존 유효한 스냅샷을 덮지 않는다.
+        return
+    assert len(persisted) == 1
+    track = persisted[0]
+    assert track["filing"]["receipt_no"] == "20260310000001"
+    assert track["filing"]["fiscal_year"] == 2025
+    values = {row["metric_key"]: row["value"] for row in track["metrics"]}
+    assert values["per"] == 2  # 84 / (42 / 1)
+    assert values["roe"] == 40
+
+    assert track["price"]["as_of"] == "2026-10-09"  # 휴장일에는 실제 마지막 거래일
+
+
+def test_price_observation_uses_actual_trading_day_and_excludes_future(monkeypatch):
+    from analysis.text.value_pipeline import collectors
+
+    frame = pd.DataFrame({"Close": [84, 100]}, index=pd.to_datetime(["2026-10-09", "2026-10-14"]))
+    monkeypatch.setattr(collectors, "_price_history", lambda ticker: frame)
+    assert collectors._fetch_price_observation("000660", "2026-10-13") == (84, "2026-10-09")
+    assert collectors._fetch_price("000660", "2026-10-13") == 84

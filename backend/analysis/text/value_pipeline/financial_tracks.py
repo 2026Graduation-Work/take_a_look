@@ -135,7 +135,7 @@ def build_financial_track(
         },
         "price": {
             "value": _number(raw_financials.get("price")),
-            "as_of": as_of,
+            "as_of": str(raw_financials.get("_price_as_of") or as_of),
             "source": str(raw_financials.get("_price_source") or "fdr"),
         },
         "metrics": metric_rows,
