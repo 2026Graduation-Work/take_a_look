@@ -10,7 +10,7 @@ import { useStockOptions } from "./use-stock-options";
 import GainText from "../components/gain-text";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
-import { digitsOnly, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -92,6 +92,8 @@ export default function HoldingsEditor({
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState(""); // 종목 추가 시트 안 오류
   const [saveError, setSaveError] = useState(""); // 저장 오류
+  // 줄 안 수정칸에 친 글자 그대로("1.5"). 새 종목 입력칸처럼 점을 보여 주고 저장할 때 막는다(페르소나 워크스루 2026-10)
+  const [texts, setTexts] = useState<Record<string, string>>({});
   const sheetRef = useRef<HTMLDialogElement>(null);
 
   function openSheet() {
@@ -140,15 +142,21 @@ export default function HoldingsEditor({
 
   function removeRow(code: string) {
     setRows((current) => current.filter((row) => row.code !== code));
+    setTexts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${code}:`))));
     setStatus("idle");
   }
 
   async function submit() {
     setSaveError("");
     // 수량을 비운 종목이 있으면 저장하지 않는다(저장 단계에서 조용히 빠지지 않게)
-    const empty = rows.find(({ quantity }) => !(quantity > 0));
+    const empty = rows.find(({ quantity }) => quantity === 0);
     if (empty) {
       setSaveError(`${empty.name}의 수량을 1 이상으로 적어 주세요. 보유하지 않으면 삭제를 눌러 주세요.`);
+      return;
+    }
+    const invalid = rows.find((row) => !isValidHolding(row));
+    if (invalid) {
+      setSaveError(`${invalid.name}의 수량·평균 매입가는 정수로 적어 주세요.`);
       return;
     }
     setStatus("saving");
@@ -163,7 +171,7 @@ export default function HoldingsEditor({
   }
 
   // 합계는 평균 매입가를 입력한 종목만 더한다(모르는 종목은 현재가 기준이라 섞지 않는다)
-  const total = rows.reduce((sum, row) => sum + row.quantity * (row.avgBuyPrice ?? 0), 0);
+  const total = rows.reduce((sum, row) => sum + (row.quantity * (row.avgBuyPrice ?? 0) || 0), 0);
 
   const field =
     "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
@@ -214,8 +222,12 @@ export default function HoldingsEditor({
                     <input
                       inputMode="numeric"
                       aria-label={`${row.name} 수량`}
-                      value={row.quantity > 0 ? String(row.quantity) : ""}
-                      onChange={(event) => updateRow(row.code, { quantity: Number(digitsOnly(event.target.value, QUANTITY_DIGITS)) })}
+                      value={texts[`${row.code}:quantity`] ?? (row.quantity > 0 ? String(row.quantity) : "")}
+                      onChange={(event) => {
+                        const text = numberDraft(event.target.value, QUANTITY_DIGITS);
+                        setTexts((current) => ({ ...current, [`${row.code}:quantity`]: text }));
+                        updateRow(row.code, { quantity: parseWholeNumber(text) ?? 0 });
+                      }}
                       className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
@@ -224,9 +236,13 @@ export default function HoldingsEditor({
                     <input
                       inputMode="numeric"
                       aria-label={`${row.name} 평균 매입가`}
-                      value={row.avgBuyPrice === null ? "" : String(row.avgBuyPrice)}
+                      value={texts[`${row.code}:price`] ?? (row.avgBuyPrice === null ? "" : String(row.avgBuyPrice))}
                       placeholder="모름 · 현재가 기준"
-                      onChange={(event) => updateRow(row.code, { avgBuyPrice: parseWholeNumber(digitsOnly(event.target.value, PRICE_DIGITS)) })}
+                      onChange={(event) => {
+                        const text = numberDraft(event.target.value, PRICE_DIGITS);
+                        setTexts((current) => ({ ...current, [`${row.code}:price`]: text }));
+                        updateRow(row.code, { avgBuyPrice: parseWholeNumber(text) });
+                      }}
                       className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
                     />
                   </label>
@@ -254,7 +270,7 @@ export default function HoldingsEditor({
           {dirty ? (
             <span className="mr-auto flex items-center gap-2 text-xs text-body">
               저장하지 않은 변경이 있어요
-              <button type="button" onClick={() => setRows(baseline)} className="btn-text min-h-11 text-xs">
+              <button type="button" onClick={() => { setRows(baseline); setTexts({}); }} className="btn-text min-h-11 text-xs">
                 되돌리기
               </button>
             </span>
