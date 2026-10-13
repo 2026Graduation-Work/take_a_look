@@ -77,7 +77,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[co
             <span className="eyebrow tabular-nums">{code} · {stock.market}</span>
             <h1 className="mt-1 text-3xl font-semibold">{stock.name}</h1>
             <p className="m-0 mt-2 text-sm text-body">
-              예측·시세 스냅샷은 아직 연결되지 않았어요. 현재 수집된 뉴스 분위기만 보여 드려요.
+              이 종목은 오늘 모델 신호가 없어요. 수집된 뉴스 분위기만 보여 드려요.
             </p>
           </div>
           <NewsSentimentPanel insights={insights} />

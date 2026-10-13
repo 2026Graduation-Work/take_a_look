@@ -1,3 +1,4 @@
+import json
 from argparse import Namespace
 
 import pandas as pd
@@ -79,3 +80,19 @@ def test_historical_test_rejects_remote_supabase(monkeypatch, tmp_path):
     monkeypatch.setenv("SUPABASE_URL", "https://production.supabase.co")
     with pytest.raises(ValueError, match="loopback"):
         pipeline.run(Namespace(as_of="2026-09-21", historical_test=True, code="005930", dry_run=True, publish=False))
+
+
+def test_daily_universe_drops_codes_outside_verified_listing(monkeypatch, verified_listing_provider, capsys):
+    # 코스피 목록에 리츠·인프라(상장일 확인 목록 '주권' 밖)가 섞여도 유니버스는 확인 목록 안에서만 만든다(#296)
+    from shared.data.providers import krx as stock
+
+    reits = ["088980", "395400", "0030R0"]
+    monkeypatch.setattr(stock, "get_market_ticker_list",
+                        lambda *_args, **_kwargs: [f"{number:06d}" for number in range(499)] + ["005930"] + reits)
+    monkeypatch.setattr(stock, "get_market_ticker_name", lambda code: f"stock-{code}")
+    universe = pipeline.fetch_universe("2026-09-21")
+    verified = {f"{i:06d}" for i in range(499)} | {"00104K", "005930", "00088K"}
+    assert set(universe.Code) <= verified
+    assert len(universe) == 500 and not set(reits) & set(universe.Code)
+    log = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert log["event"] == "universe_outside_training_scope" and log["count"] == 3 and log["codes"] == sorted(reits)

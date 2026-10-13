@@ -39,8 +39,28 @@ def official_day(requested=None):
 
 
 def fetch_universe(as_of, code=None):
-    from shared.data.metadata import fetch_current_universe
-    return fetch_current_universe(as_of, code=code, root=serving_root() / "cache/listings")
+    """KOSPI 목록 ∩ 상장일 확인 목록(KRX '주권'). pack 학습 범위 밖(리츠·인프라 등)은 빼고 로그에 남긴다(#296)."""
+    from shared.data import metadata, providers
+
+    if code:
+        return metadata.fetch_current_universe(as_of, code=code, root=serving_root() / "cache/listings")
+    listed = set(providers.krx.get_market_ticker_list(as_of.replace("-", ""), market="KOSPI"))
+    if not 500 <= len(listed) <= 1200:
+        raise ValueError("Invalid KOSPI universe size")
+    verified = metadata.load_metadata({"start_date": "1900-01-01", "markets": ["KOSPI"], "include_delisted": False}, as_of)
+    rows = verified.loc[verified.Code.isin(listed), ["Code", "ListingDate"]].drop_duplicates("Code").copy()
+    dropped = sorted(listed - set(rows.Code))
+    print(json.dumps({"event": "universe_outside_training_scope", "as_of": as_of, "count": len(dropped),
+                      "codes": dropped}), flush=True)
+    if not 500 <= len(rows) <= 1200:
+        raise ValueError("Invalid KOSPI universe size after listing verification")
+    rows["ListingDate"] = pd.to_datetime(rows.ListingDate, errors="coerce")
+    if rows.ListingDate.isna().any() or rows.ListingDate.gt(pd.Timestamp(as_of)).any():
+        raise ValueError("Current universe has invalid or future listing intervals")
+    rows["Name"] = [providers.krx.get_market_ticker_name(item) for item in rows.Code]
+    if not rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all() or not rows.Name.astype(str).str.strip().all():
+        raise ValueError("Invalid KOSPI universe")
+    return rows[["Code", "Name", "ListingDate"]].sort_values("Code").reset_index(drop=True)
 
 
 def frame_hash(frame):
