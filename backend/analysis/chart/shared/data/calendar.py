@@ -51,7 +51,7 @@ def fetch_authenticated_index(start, end):
     frames = []
     current = start
     while current <= end:
-        chunk_end = min(current + pd.DateOffset(years=2) - pd.Timedelta(days=1), end)
+        chunk_end = min(current + pd.DateOffset(years=2) - pd.Timedelta(1, unit="D"), end)
         response = session.post(
             "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
             data={
@@ -71,7 +71,7 @@ def fetch_authenticated_index(start, end):
             "Date": pd.to_datetime(frame.TRD_DD),
             "Close": pd.to_numeric(frame.CLSPRC_IDX.astype(str).str.replace(",", "", regex=False)),
         }))
-        current = chunk_end + pd.Timedelta(days=1)
+        current = chunk_end + pd.Timedelta(1, unit="D")
     return pd.concat(frames, ignore_index=True).set_index("Date")
 
 def scheduled_sessions(start, end):
@@ -118,7 +118,7 @@ def build_calendar(root, collection):
     now = pd.Timestamp.now(tz="Asia/Seoul")
     confirmed_cutoff = now.tz_localize(None).normalize()
     if now.hour < 16:
-        confirmed_cutoff -= pd.Timedelta(days=1)
+        confirmed_cutoff -= pd.Timedelta(1, unit="D")
     requested_end = pd.Timestamp(collection.get("end_date") or confirmed_cutoff)
     end = min(requested_end, confirmed_cutoff)
     latest_reference = (
@@ -135,7 +135,7 @@ def build_calendar(root, collection):
         primary = validate_index(calendar._fetch_fdr_index(start, end), start, end)
         if not primary.index.equals(secondary.index):
             raise ValueError("KS11 dates differ from KRX (stale or partial cache)")
-        if primary.index[-1] < end - pd.Timedelta(days=7):
+        if primary.index[-1] < end - pd.Timedelta(7, unit="D"):
             raise ValueError("KS11 does not establish requested boundary coverage")
         if latest_reference is not None and primary.index[-1] != latest_reference:
             raise ValueError("KS11 is older than the latest confirmed KRX session")
@@ -151,9 +151,7 @@ def build_calendar(root, collection):
             f"only {primary_provider}={primary.index.difference(secondary.index).strftime('%Y-%m-%d').tolist()}, "
             f"only pykrx={secondary.index.difference(primary.index).strftime('%Y-%m-%d').tolist()}"
         )
-    if primary.index[0] > start + pd.Timedelta(days=7) or primary.index[-1] < end - pd.Timedelta(
-        days=7
-    ):
+    if primary.index[0] > start + pd.Timedelta(7, unit="D") or primary.index[-1] < end - pd.Timedelta(7, unit="D"):
         raise ValueError("Index response does not establish requested boundary coverage")
     effective_end = primary.index[-1]
     if latest_reference is not None and effective_end != latest_reference:

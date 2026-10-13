@@ -194,8 +194,8 @@ def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) ->
 
             raw = fetch_index_prices(
                 "KS11",
-                (index.min() - pd.Timedelta(days=10)).strftime("%Y-%m-%d"),
-                (index.max() + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+                (index.min() - pd.Timedelta(10, unit="D")).strftime("%Y-%m-%d"),
+                (index.max() + pd.Timedelta(1, unit="D")).strftime("%Y-%m-%d"),
             )
             closes = raw["Close"]
             if closes.empty:
@@ -252,8 +252,8 @@ def compute_custom_krx_composite(
     try:
         import yfinance as yf
 
-        yf_start = (index[0] - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
-        yf_end = (index[-1] + pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+        yf_start = (index[0] - pd.Timedelta(10, unit="D")).strftime("%Y-%m-%d")
+        yf_end = (index[-1] + pd.Timedelta(10, unit="D")).strftime("%Y-%m-%d")
 
         print("[*] 커스텀 KRX 통합 지수 산출: KOSPI(^KS11) + KOSDAQ(^KQ11) 다운로드 중...")
         raw = yf.download(

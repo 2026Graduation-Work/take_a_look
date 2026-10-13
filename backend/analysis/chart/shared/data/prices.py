@@ -21,14 +21,14 @@ def supplement_raw_ohlc(root, code, days, raw, source):
     current = days[0]
     # Reuse complete legacy chunks before requesting a full history.
     while current <= days[-1]:
-        end = min(current + pd.DateOffset(years=2) - pd.Timedelta(days=1), days[-1])
+        end = min(current + pd.DateOffset(years=2) - pd.Timedelta(1, unit="D"), days[-1])
         path = root / "raw_ohlc_cache" / f"{code}_{current:%Y%m%d}_{end:%Y%m%d}.parquet"
         sidecar = path.with_suffix(".json")
         if path.exists() and sidecar.exists():
             meta = json.loads(sidecar.read_text())
             if meta.get("sha256") == sha256(path):
                 parts.append(pd.read_parquet(path).set_index("Date"))
-        current = end + pd.Timedelta(days=1)
+        current = end + pd.Timedelta(1, unit="D")
     cached = pd.concat(parts).sort_index() if parts else pd.DataFrame(columns=fields)
     path = root / "raw_ohlc_cache" / f"{code}_{days[0]:%Y%m%d}_{days[-1]:%Y%m%d}.parquet"
     sidecar = path.with_suffix(".json")

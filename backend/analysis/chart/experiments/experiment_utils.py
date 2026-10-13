@@ -108,7 +108,7 @@ def resolve_splits(config: dict) -> list[dict]:
             test_window_years,
         ):
             test_start = (
-                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(days=embargo_days)
+                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(embargo_days, unit="D")
             ).strftime("%Y-%m-%d")
             folds.append(
                 {
@@ -140,7 +140,7 @@ def resolve_splits(config: dict) -> list[dict]:
             test_window_years,
         ):
             test_start = (
-                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(days=embargo_days)
+                pd.to_datetime(f"{y - 1}-12-31") + pd.Timedelta(embargo_days, unit="D")
             ).strftime("%Y-%m-%d")
             folds.append(
                 {
@@ -160,7 +160,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2016-01-01",
                 "train_end": "2016-12-31",
                 "test_start": (
-                    pd.to_datetime("2016-12-31") + pd.Timedelta(days=embargo_days)
+                    pd.to_datetime("2016-12-31") + pd.Timedelta(embargo_days, unit="D")
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2018-06-30",
             },
@@ -169,7 +169,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2017-01-01",
                 "train_end": "2019-12-31",
                 "test_start": (
-                    pd.to_datetime("2019-12-31") + pd.Timedelta(days=embargo_days)
+                    pd.to_datetime("2019-12-31") + pd.Timedelta(embargo_days, unit="D")
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2021-06-30",
             },
@@ -178,7 +178,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2019-01-01",
                 "train_end": "2021-12-31",
                 "test_start": (
-                    pd.to_datetime("2021-12-31") + pd.Timedelta(days=embargo_days)
+                    pd.to_datetime("2021-12-31") + pd.Timedelta(embargo_days, unit="D")
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2022-12-31",
             },
@@ -187,7 +187,7 @@ def resolve_splits(config: dict) -> list[dict]:
                 "train_start": "2020-01-01",
                 "train_end": "2022-12-31",
                 "test_start": (
-                    pd.to_datetime("2022-12-31") + pd.Timedelta(days=embargo_days)
+                    pd.to_datetime("2022-12-31") + pd.Timedelta(embargo_days, unit="D")
                 ).strftime("%Y-%m-%d"),
                 "test_end": "2024-12-31",
             },

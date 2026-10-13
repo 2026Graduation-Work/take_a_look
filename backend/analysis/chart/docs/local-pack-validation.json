@@ -1,6 +1,6 @@
 {
-  "activated_locally": true,
-  "archive_sha256": "26fd46a82e18abf20f8fc15510964cb7dd402fa3a8200fa7447899b69540821f",
+  "activated_locally": false,
+  "archive_sha256": "20da6a515edc32f5e906116f748484bac0fd224220ad4d9b9c0e1561f9b88086",
   "build_reports": {
     "h20": {
       "completed_outcome_period": {
@@ -730,7 +730,7 @@
       "training_feature_store": "/home/jinse/projects/Grduation/Stock_Prediction_v2/backend/analysis/chart/workspace/experiments/datasets/local_2016_kospi_v1/feature_store/d0317839d0fa79bd"
     }
   },
-  "pack_id": "kospi_shared_v3_flow_train2023_2025_20261011",
+  "pack_id": "kospi_shared_v3_flow_train2023_2025_20261014",
   "processing_contract": {
     "base_feature_columns": [
       "Change",
@@ -910,11 +910,11 @@
     ],
     "implementation_sha256": {
       "data/bulk_prices.py": "84373e7fb74cd33f77ede1decf553d1a7b3bff703490041ab52af8c167c1dafb",
-      "data/calendar.py": "e93d0ade75ec4f9ccc75b9aca3ac83061827179fedf095897a48c2bc516f92b8",
+      "data/calendar.py": "c78ed2d1e524bea3d9ef747f2b1e13e0fda33cca678441a6b362a014b62f072e",
       "data/krx.py": "147ad9dd6cffee4a21f2b34bc2baa5328fa0cb38310edfb8deea32c17e459e9f",
       "data/metadata.py": "6782e0c2e03521356ee44e095b1e552bf5b79df25a66c0aa3a0934e06862e009",
-      "data/prices.py": "e287d0555a9ec75d8fba41101e6f36b155c9e6ea7b6967b2238d13f14409668c",
-      "data/providers.py": "ff729d1b1e28cb49ff9452a92656424042a2f73b394975b937821ca51661a7e7",
+      "data/prices.py": "e544e7c9382a15d2f48a71fb3eeffdd7e19d9e726ec14758c0bc6e26f2d24630",
+      "data/providers.py": "5e94c98f3f770834f2d9998ad2467829b81d31b6c31a4a46aa9150b6a28e587c",
       "data/trading_calendar.py": "655bdf4da56f1f0853e6956a2e3ab90b776624c464d4c5f32941ec410febb14e",
       "data/validation.py": "f3d191a5459842161b0457981754509343c164d08d4cb6e832b07b42f8915cbb",
       "features/builder.py": "c76697e3ecbf6ea1c08462765373040bf4357928812048b3a5a91beec60ae2f2",
@@ -930,7 +930,7 @@
       "sigma_window": 20
     },
     "price_basis": "krx_raw_ohlc_uniform_close_ratio_v1",
-    "sha256": "64abc83dce3eb7164c1e94cab75484c757684fce0c56342863dc7b01baca3fed"
+    "sha256": "ac4d23b4a17d9427efffb079c9a9e0d8f543ae8d6b1620b1f867700cf2faeb88"
   },
   "scores": {
     "20": {
