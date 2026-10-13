@@ -1,3 +1,4 @@
+import { featureLabel } from "./featureLabels.ts";
 import { getSupabaseClient } from "./supabase.ts";
 
 export type ChartProfile = "stable" | "aggressive";
@@ -112,7 +113,10 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
     inference.features.reduce((sum: number, f: { contribution: number }) => sum + Math.abs(f.contribution), 0)
       > inference.contribution_abs_sum + 1e-8
   )) throw new Error("전체 피처 기여도 기준값이 올바르지 않습니다.");
-  return p as unknown as ChartSnapshot;
+  const snapshot = p as unknown as ChartSnapshot;
+  // 화면 표시 이름만 쉬운 말로(#257). 원본 피처명(name)은 그대로 둔다.
+  return { ...snapshot, inference: { ...snapshot.inference, features: snapshot.inference.features.map((feature) =>
+    ({ ...feature, label_ko: featureLabel(feature.name, feature.label_ko) })) } };
 }
 
 export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map<ChartHorizon, ChartSnapshot>>> {
