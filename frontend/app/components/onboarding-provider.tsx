@@ -19,6 +19,7 @@ import {
 } from "@/lib/auth";
 import Wordmark from "@/components/brand/Wordmark";
 import { isChartPreview } from "@/lib/chart-preview-config";
+import { storageBlocked } from "@/lib/storage-keys";
 
 interface OnboardingContextValue {
   state: OnboardingState;
@@ -52,8 +53,9 @@ export default function OnboardingProvider({
       setState({
         status: "error",
         mode: getAuthMode(),
-        error:
-          error instanceof Error
+        error: storageBlocked()
+          ? STORAGE_BLOCKED
+          : error instanceof Error
             ? error.message
             : "로그인 상태를 확인하지 못했습니다.",
       });
@@ -91,6 +93,7 @@ export default function OnboardingProvider({
   if (state.status === "error") {
     return (
       <OnboardingError
+        title={state.error === STORAGE_BLOCKED ? "저장이 막혀 있어요" : "연결을 확인해 주세요"}
         message={state.error ?? "로그인 상태를 확인하지 못했습니다."}
         onRetry={() => void refresh(true)}
       />
@@ -158,10 +161,15 @@ function OnboardingLoading() {
   );
 }
 
+const STORAGE_BLOCKED =
+  "이 브라우저에서는 저장이 막혀 있어 새로 고치면 입력이 사라질 수 있어요. 브라우저 설정에서 이 사이트의 데이터 저장(쿠키)을 허용한 뒤 다시 시도해 주세요.";
+
 function OnboardingError({
+  title,
   message,
   onRetry,
 }: {
+  title: string;
   message: string;
   onRetry: () => void;
 }) {
@@ -169,7 +177,7 @@ function OnboardingError({
     <main className="grid min-h-screen place-items-center bg-page px-5">
       <section className="w-full max-w-[460px] surface p-7">
         <BrandMark />
-        <h1 className="mt-8 text-xl font-semibold text-ink">연결을 확인해 주세요</h1>
+        <h1 className="mt-8 text-xl font-semibold text-ink">{title}</h1>
         <p role="alert" className="mt-2 text-sm text-muted">
           {message}
         </p>

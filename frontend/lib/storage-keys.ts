@@ -37,3 +37,13 @@ if (typeof window !== "undefined") {
     // 저장소를 못 쓰면 옛 값도 읽을 수 없으니 옮길 것이 없다.
   }
 }
+
+// 브라우저가 사이트 저장소를 막으면(쿠키·사이트 데이터 차단) localStorage 접근 자체가 예외를 던진다.
+export function storageBlocked(): boolean {
+  try {
+    window.localStorage.getItem(STORAGE_KEYS.holdings);
+    return false;
+  } catch {
+    return true;
+  }
+}

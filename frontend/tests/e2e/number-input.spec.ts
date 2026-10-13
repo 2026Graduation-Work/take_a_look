@@ -15,3 +15,16 @@ test("수량 소수점은 그대로 보이고 넣을 때 막힌다, 전각 숫�
   await quantity.fill("１２");
   await expect(quantity).toHaveValue("12");
 });
+
+test("보유 목록 줄 안 수정칸도 소수점을 보여 주고 저장할 때 막는다", async ({ page }) => {
+  await toHoldingsStep(page);
+  await page.getByRole("button", { name: "저장하고 시작" }).click();
+  await page.goto("/portfolio");
+  const quantity = page.getByLabel("삼성전자 수량");
+  await quantity.fill("");
+  await quantity.pressSequentially("1.5");
+  await expect(quantity).toHaveValue("1.5");
+  await page.getByRole("button", { name: "저장", exact: true }).click();
+  await expect(page.getByText("삼성전자의 수량·평균 매입가는 정수로 적어 주세요.")).toBeVisible();
+  await expect(page.getByText("저장했어요")).toHaveCount(0);
+});

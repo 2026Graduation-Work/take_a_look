@@ -77,6 +77,11 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
           ))}
         </ul>
       )}
+      {open && keyword && stocks.length > 0 && matches.length === 0 && (
+        <p role="status" className="glass absolute inset-x-0 top-12 z-50 m-0 rounded-md bg-white/90 px-4 py-3 text-sm text-body">
+          찾는 종목이 없어요. 현재는 코스피 종목만 제공해요.
+        </p>
+      )}
     </div>
   );
 }

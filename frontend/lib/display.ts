@@ -103,3 +103,11 @@ export const signedPercent = (ratio: number) => formatSignedPercent(ratio * 100)
 export function formatSignedPercent(value: number) {
   return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
 }
+
+// 순매수 수량(주). 만 주 단위로 줄여 읽기 쉽게: +5,276,406 → +527.6만 주.
+// 1만 주 미만은 반올림하면 "-0만 주"가 되므로 말로 쓴다(페르소나 워크스루 2026-10).
+export function formatShares(value: number): string {
+  if (value === 0) return "변동 없음";
+  if (Math.abs(value) < 10_000) return `1만 주 미만 ${value > 0 ? "순매수" : "순매도"}`;
+  return `${value > 0 ? "+" : "-"}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
+}
