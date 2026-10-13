@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { featureLabel } from "../../lib/featureLabels.ts";
 
 const snapshots = JSON.parse(readFileSync("../backend/analysis/chart/serving/previews/2026-09-21/snapshots.json", "utf8"));
 const rows = snapshots.map((payload: { batch_id: string; stock_code: string; horizon: number }) => ({
@@ -29,7 +30,7 @@ test("public predictions retain the original detail UI and both model directions
   for (const [index, feature] of expected.entries()) {
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
-      await expect(row).toContainText(feature.label_ko);
+      await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
       await expect(row).toContainText("기여도 미제공");
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();

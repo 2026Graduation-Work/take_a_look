@@ -2,6 +2,7 @@ import { AVOIDED_ASSET_LABELS, summaryFromStyleAxes } from "./profiling-rules";
 import type { LatestCloses } from "./latest-closes.ts";
 import { chartProvenance } from "./chart-detail.ts";
 import { costBasis } from "./holdings-rules.ts";
+import { featureLabel } from "./featureLabels.ts";
 import type {
   DataProvenance,
   HorizonAgreement,
@@ -201,7 +202,7 @@ export function mapPredictionReasons(
       const direction = row.contribution >= 0 ? "신호를 높이는 기여" : "신호를 낮추는 기여";
       const signedValue = `${row.contribution > 0 ? "+" : ""}${row.contribution.toFixed(4)}`;
       return {
-        title: row.label_ko,
+        title: featureLabel(row.feature, row.label_ko),
         detail: `${direction} · 모델 기여값 ${signedValue}`,
         source: source.type,
         sourceLabel: source.label,
