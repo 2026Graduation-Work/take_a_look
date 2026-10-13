@@ -52,6 +52,7 @@ export async function loadAccountHoldings(
   if (!holdings.every(isValidHolding)) {
     throw new Error("저장된 보유 정보를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.");
   }
+  if (typeof window !== "undefined") persistHoldings(holdings);
   return holdings;
 }
 

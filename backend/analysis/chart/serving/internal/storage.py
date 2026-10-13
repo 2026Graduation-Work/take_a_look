@@ -233,7 +233,7 @@ class SupabaseStore:
             except FileNotFoundError:
                 self._raw_price_frames[as_of] = None
             else:
-                manifest = self._request("GET", prefix + "batch.manifest.json")
+                manifest = json.loads(self._request("GET", prefix + "batch.manifest.json"))
                 if hashlib.sha256(data).hexdigest() != manifest["sha256"] or manifest["as_of"] != as_of:
                     raise ValueError("Stored price panel checksum/date mismatch")
                 frame = pd.read_parquet(io.BytesIO(data))
@@ -273,7 +273,8 @@ class SupabaseStore:
         self._request("POST", prefix + "batch.parquet", data.getvalue(),
                       content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
         self._request("POST", prefix + "batch.manifest.json",
-                      {"as_of": as_of, "sha256": hashlib.sha256(data.getvalue()).hexdigest(), "input_sha256": hashes},
+                      json.dumps({"as_of": as_of, "sha256": hashlib.sha256(data.getvalue()).hexdigest(),
+                                  "input_sha256": hashes}).encode(), content_type="application/octet-stream",
                       extra_headers={"x-upsert": "true"})
         self._raw_price_frames.pop(as_of, None)
 

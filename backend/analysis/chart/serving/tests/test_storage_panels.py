@@ -54,6 +54,7 @@ def test_raw_price_panel_roundtrip_legacy_and_checksum(monkeypatch):
     def request(method, path, body=None, **kwargs):
         key = path.replace('/authenticated/', '/')
         if method == 'POST':
+            assert kwargs.get('content_type') == 'application/octet-stream'
             objects[key] = body
         else:
             reads.append(key)

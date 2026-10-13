@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -14,6 +15,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from shared.data.calendar import scheduled_sessions
+from shared.data.providers import KrxResponseError
 from shared.settings import processing_contract, serving_root
 
 from .calendar import refresh_krx_trading_days
@@ -24,6 +26,7 @@ from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
 from .pack import config_path, load_pack
 from .prices import fetch_prices, price_snapshot
+from .progress import report
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
@@ -70,7 +73,16 @@ def frame_hash(frame):
 
 
 def _retry_fetch(code, start, as_of):
-    return fetch_prices(code, start, as_of)
+    # KRX sometimes serves HTML even with HTTP 200. Retry bounded reads;
+    # exhausted transport/auth errors still abort publication.
+    for attempt in range(3):
+        try:
+            return fetch_prices(code, start, as_of)
+        except KrxResponseError:
+            if attempt == 2:
+                raise
+            report("price_retry", code=code, attempt=attempt + 1, error_type="KrxResponseError")
+            time.sleep(10 * (attempt + 1))
 
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):

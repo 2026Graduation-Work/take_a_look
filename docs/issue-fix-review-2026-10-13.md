@@ -120,3 +120,10 @@ main의 운영 경로는 옛 registry/core/벌크 수집 경로를 대체했다.
 사용자가 로컬 수정의 PR·머지·배포를 요청했다. 최신 main `99da856`에 대해 차트 307 passed / 3 skipped, 프론트 108개 단위 검사·린트·빌드 통과, production 브라우저 36 passed / 1 skipped를 다시 확인했다. 브라우저 skip은 기존 sentiment-history 실데이터 전용 검사다.
 
 차트 게시 뒤 `budget_usage()`로 DB·Storage 바이트 수와 남은 배치 수를 읽는 단계도 추가했다. 측정 실패는 성공으로 숨기지 않고 workflow 실패로 남긴다. Storage 600 MiB 초과는 경고하며, 게시가 성공했다는 사실과 용량 목표 충족을 구분한다. 정기 실행 여부는 Actions의 `event=schedule`로 확인한다.
+
+
+### PR #313 봇 리뷰 반영
+
+가격 manifest는 기존 버킷 계약의 application/octet-stream으로 저장하고 읽을 때 JSON을 해석한다. 로그인 계정 보유 조회 성공 시 공유 저장소를 동기화한다. 완료 상태와 입력 manifest의 누락 해시는 첫 내보내기 커밋에서 기록된 보조 증거에 고정하고 exporter가 새 해시를 자동 신뢰하지 않는다. A/B의 데이터·피처 구성 계약을 비교하고 작은 ROC-AUC·일치율·Brier·ECE 차이는 6자리로 표시한다. Storage 실측 단계는 retention 바로 뒤로 이동했다.
+
+10/14 확인한 정기 실행 38436318274는 10/13 예약이 지연되어 실행됐으며 KRX HTTP 200 HTML 응답 때문에 가격 재조회에서 중단됐다. serving 읽기에 최대 3회 재시도를 추가했다. 계약 오류는 재시도하지 않고, KRX 오류가 계속되면 게시를 중단해 기존 배치를 보존한다.

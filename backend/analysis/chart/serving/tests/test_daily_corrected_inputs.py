@@ -200,3 +200,28 @@ def test_current_universe_rejects_unknown_or_future_listing(monkeypatch, tmp_pat
         "Code": ["005930"], "ListingDate": [listing]}))
     with pytest.raises(ValueError, match="listing intervals"):
         metadata.fetch_current_universe("2026-10-06", root=tmp_path, code="005930")
+
+
+def test_price_reads_retry_krx_html_but_do_not_hide_contract_failures(monkeypatch):
+    calls, delays = [], []
+    def fetch(*args):
+        calls.append(args)
+        if len(calls) < 3:
+            raise pipeline.KrxResponseError("HTTP 200 non-JSON")
+        return "confirmed"
+    monkeypatch.setattr(pipeline, "fetch_prices", fetch)
+    monkeypatch.setattr(pipeline.time, "sleep", delays.append)
+    assert pipeline._retry_fetch("005930", "2016-01-01", "2026-10-13") == "confirmed"
+    assert delays == [10, 20]
+    def broken(*args):
+        raise pipeline.KrxResponseError("permanent outage")
+    monkeypatch.setattr(pipeline, "fetch_prices", broken)
+    with pytest.raises(pipeline.KrxResponseError):
+        pipeline._retry_fetch("005930", "2016-01-01", "2026-10-13")
+    delays.clear()
+    def invalid(*args):
+        raise ValueError("calendar contract")
+    monkeypatch.setattr(pipeline, "fetch_prices", invalid)
+    with pytest.raises(ValueError, match="calendar contract"):
+        pipeline._retry_fetch("005930", "2016-01-01", "2026-10-13")
+    assert delays == []

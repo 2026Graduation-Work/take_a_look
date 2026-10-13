@@ -1,0 +1,12 @@
+{
+  "run_id": "a6723ca89a07fbe5",
+  "completion_status_sha256": "9576aa61fb1119bcf1d5c207775fb3ab6f53efe606d97eb3ea472c460feb0a58",
+  "source": "Supplementary input digests recorded in initial export commit 6023d3b. The original completed suite did not hash these manifests; this reviewed snapshot supplies those missing anchors without editing the original completion record.",
+  "run_manifest_sha256": {
+    "h5_A": "eac8811a69a609e5cd5881fb075e37ab8dfa32647e4bdd038ce93c2e5fd9c657",
+    "h5_B": "b18a1e1c34126d2ea4d01658b1cf687a26d1352d3a5baf6874c0216f908e2475",
+    "h20_A": "87bdaa3e428c4dd7e0d5f9db857afdfaab2a6a30476202188a48166ebd67e34c",
+    "h20_B": "8291b9582d05b5de587a4570e5b793c2d0da487fdb13c57de231c19ed8b73a3c"
+  },
+  "sigma_feature_manifest_sha256": "185fbc03ad173349a5bb981f03f1521c4c5484dda255965a879e454cfae3feef"
+}

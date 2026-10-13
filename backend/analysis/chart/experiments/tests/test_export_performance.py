@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-from experiments.export_performance import metric_row, paired_frames
+from experiments.export_performance import (
+    checked_manifest,
+    metric_row,
+    paired_frames,
+    validate_pair_contract,
+)
 
 
 def predictions():
@@ -37,3 +42,34 @@ def test_export_rejects_different_samples_labels_duplicates_and_score_columns():
     changed.loc[0, 'Prob'] = np.nan
     with pytest.raises(ValueError, match='score columns'):
         paired_frames(a, changed)
+
+
+def test_pinned_manifests_and_full_pair_contract(tmp_path):
+    import copy
+
+    from experiments.features.psychology.market_psychology import RAW_FEATURES
+    from shared.io import sha256
+    from shared.settings import BASE_FEATURES, FLOW_FEATURES
+    path = tmp_path / "run_manifest.json"
+    path.write_text('{"config": {}}')
+    digest = sha256(path)
+    assert checked_manifest(path, digest) == {"config": {}}
+    path.write_text('{"config": {"changed": true}}')
+    with pytest.raises(ValueError, match="manifest changed"):
+        checked_manifest(path, digest)
+    a = {"config": {key: {} for key in ("labels", "model", "strategy", "backtest", "dataset")},
+         "feature_columns": list(BASE_FEATURES) + list(FLOW_FEATURES), "processing_contract": {"sha256": "same"}}
+    a["config"].update(data={"price_dir": "a", "point_in_time": False}, features={"groups": ["base", "flow"]})
+    b = copy.deepcopy(a)
+    b["config"]["data"]["price_dir"] = "b"
+    b["config"]["features"]["groups"].append("psychology")
+    b["feature_columns"] += list(RAW_FEATURES)
+    validate_pair_contract(a, b)
+    changed = copy.deepcopy(b)
+    changed["config"]["data"]["point_in_time"] = True
+    with pytest.raises(ValueError, match="data settings"):
+        validate_pair_contract(a, changed)
+    changed = copy.deepcopy(b)
+    changed["feature_columns"][-1] = "arbitrary_treatment"
+    with pytest.raises(ValueError, match="treatment feature"):
+        validate_pair_contract(a, changed)

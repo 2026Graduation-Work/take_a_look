@@ -22,6 +22,7 @@ test("로그인: 브라우저 저장본 없이 DB 보유를 읽고 저장 실패
   await page.evaluate(() => localStorage.removeItem("takealook.holdings.v1"));
   await page.goto("/portfolio");
   await expect(page.getByLabel("삼성전자우 수량", { exact: true })).toHaveValue("7");
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem("takealook.holdings.v1")!)[0].quantity)).toBe(7);
   await page.getByLabel("삼성전자우 수량", { exact: true }).fill("8");
   holdingErrors.upsert = true;
   await page.getByRole("button", { name: "저장", exact: true }).click();

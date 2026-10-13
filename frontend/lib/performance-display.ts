@@ -49,7 +49,7 @@ export const METRICS: MetricDefinition[] = [
     deltaKey: "delta_B_minus_A_hit_rate",
     label: "상승 여부 일치율",
     direction: "higher",
-    format: "decimal3",
+    format: "decimal6",
     description: "상승 점수 0.5 이상을 상승으로 분류했을 때 실제 상승 라벨(2) 여부와 일치한 비율입니다. 세 방향 정확도는 아닙니다.",
   },
   {
@@ -57,7 +57,7 @@ export const METRICS: MetricDefinition[] = [
     deltaKey: "delta_B_minus_A_calibration_brier",
     label: "Brier",
     direction: "lower",
-    format: "decimal3",
+    format: "decimal6",
     description: "예측 확률과 실제 결과 사이의 오차를 측정하며, 값이 작을수록 확률 예측이 정교합니다.",
   },
   {
@@ -65,7 +65,7 @@ export const METRICS: MetricDefinition[] = [
     deltaKey: "delta_B_minus_A_calibration_ece",
     label: "ECE",
     direction: "lower",
-    format: "decimal3",
+    format: "decimal6",
     description: "모델이 제시한 확률이 실제 발생 빈도와 얼마나 어긋나는지 나타내는 보정 오차로, 값이 작을수록 확률을 신뢰할 수 있습니다.",
   },
   {

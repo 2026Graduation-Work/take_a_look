@@ -8,7 +8,9 @@ import numpy as np
 import pandas as pd
 from experiments.comparison.metrics import expected_calibration_error, select_volatile_dates
 from experiments.evaluation.metrics import calculate_classification_metrics
+from experiments.features.psychology.market_psychology import RAW_FEATURES
 from shared.io import sha256
+from shared.settings import BASE_FEATURES, FLOW_FEATURES
 
 METRICS = {
     "auc": "delta_B_minus_A_auc", "hit_rate": "delta_B_minus_A_hit_rate",
@@ -62,10 +64,44 @@ def paired_frames(left, right):
     return result
 
 
-def export(suite, output):
+def checked_manifest(path, digest):
+    if sha256(path) != digest:
+        raise ValueError(f"Completed input manifest changed: {path.name}")
+    return json.loads(path.read_text())
+
+
+def validate_pair_contract(a, b):
+    config_a, config_b = a["config"], b["config"]
+    for field in ("labels", "model", "strategy", "backtest", "dataset"):
+        if config_a[field] != config_b[field]:
+            raise ValueError(f"A/B {field} settings differ")
+    if ({k: v for k, v in config_a["data"].items() if k != "price_dir"}
+            != {k: v for k, v in config_b["data"].items() if k != "price_dir"}):
+        raise ValueError("A/B data settings differ")
+    if ({k: v for k, v in config_a["features"].items() if k not in {"groups", "materialized_dir", "matched_sample_file"}}
+            != {k: v for k, v in config_b["features"].items() if k not in {"groups", "materialized_dir", "matched_sample_file"}}):
+        raise ValueError("A/B feature settings differ")
+    if (config_a["features"].get("matched_sample_file") not in
+            {None, str(Path(config_b["data"]["price_dir"]) / "sample_keys.parquet")}
+            or config_b["features"].get("matched_sample_file")):
+        raise ValueError("A/B matched sample source differs")
+    if (config_a["features"]["groups"] != ["base", "flow"]
+            or config_b["features"]["groups"] != ["base", "flow", "psychology"]
+            or a["feature_columns"] != list(BASE_FEATURES) + list(FLOW_FEATURES)
+            or b["feature_columns"] != a["feature_columns"] + list(RAW_FEATURES)
+            or a["processing_contract"] != b["processing_contract"]):
+        raise ValueError("A/B treatment feature contract differs")
+
+
+def export(suite, output, input_evidence):
+    # Older suites omitted input-manifest digests. Require separately reviewed,
+    # pinned evidence; never create a new trusted digest from the current input.
+    pinned = json.loads(input_evidence.read_text())
+    if sha256(suite / "status.json") != pinned["completion_status_sha256"]:
+        raise ValueError("Completion record differs from pinned input evidence")
     status = json.loads((suite / "status.json").read_text())
     prepared = json.loads((suite / "prepared.json").read_text())
-    if status["status"] != "complete" or status["run_id"] != prepared["run_id"]:
+    if status["status"] != "complete" or status["run_id"] != prepared["run_id"] or status["run_id"] != pinned["run_id"]:
         raise ValueError("A/B suite is incomplete or identities differ")
     evidence = []
     runs = {}
@@ -80,13 +116,15 @@ def export(suite, output):
         oos = next(Path(p) for p in stages[1] if Path(p).name == "oos_history.parquet")
         backtest = next(Path(p) for p in stages[2] if Path(p).name == "backtest_metrics_by_year.csv")
         manifest_path = oos.parent / "run_manifest.json"
-        manifest = json.loads(manifest_path.read_text())
+        manifest = checked_manifest(manifest_path, pinned["run_manifest_sha256"][name])
         evidence.append({"run": name, "file": f"{oos.parent.name}/run_manifest.json", "sha256": sha256(manifest_path)})
         runs[name] = (pd.read_parquet(oos), pd.read_csv(backtest), manifest)
 
     # Sigma comes from the actual, hashed B inputs, not recomputed current prices.
     feature_root = Path(runs["h5_B"][2]["config"]["data"]["price_dir"])
-    feature_manifest = json.loads((feature_root / "feature_manifest.json").read_text())
+    feature_manifest = checked_manifest(feature_root / "feature_manifest.json", pinned["sigma_feature_manifest_sha256"])
+    if feature_manifest["feature_columns"] != runs["h5_B"][2]["feature_columns"]:
+        raise ValueError("Sigma input feature contract differs")
     sigma_parts = []
     for filename, digest in feature_manifest["file_hashes"].items():
         path = feature_root / filename
@@ -101,10 +139,7 @@ def export(suite, output):
     periods, years = [], None
     for horizon, profile in [(5, "aggressive"), (20, "stable")]:
         config_a = runs[f"h{horizon}_A"][2]["config"]
-        config_b = runs[f"h{horizon}_B"][2]["config"]
-        for field in ("labels", "model", "strategy", "backtest"):
-            if config_a[field] != config_b[field]:
-                raise ValueError(f"A/B {field} settings differ")
+        validate_pair_contract(runs[f"h{horizon}_A"][2], runs[f"h{horizon}_B"][2])
         if (config_a["strategy"]["prob_threshold"] != 0.65
                 or config_a["data"]["sliding"]["train_window_years"] != 3
                 or runs[f"h{horizon}_B"][2]["config"]["data"]["price_dir"] != str(feature_root)):
@@ -154,6 +189,7 @@ def export(suite, output):
     output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2, allow_nan=False) + "\n")
     output.with_name("performance-provenance.json").write_text(json.dumps(
         {"run_id": status["run_id"], "artifact_sha256": sha256(output), "exporter_sha256": sha256(Path(__file__)),
+         "input_evidence_sha256": sha256(input_evidence),
          "status_sha256": sha256(suite / "status.json"), "prepared_sha256": sha256(suite / "prepared.json"),
          "source_artifacts": evidence}, ensure_ascii=False, indent=2) + "\n")
     return artifact
@@ -163,8 +199,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--input-evidence", type=Path, required=True, help="Reviewed input digests pinned to the completed suite")
     args = parser.parse_args()
-    export(args.suite_dir, args.output)
+    export(args.suite_dir, args.output, args.input_evidence)
 
 
 if __name__ == "__main__":

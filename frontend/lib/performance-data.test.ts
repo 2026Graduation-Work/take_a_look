@@ -22,3 +22,12 @@ test("실제 성적표는 네 실행·동일 표본·B-A를 검증하고 급변 
   brokenDate.experiment.end = "2025-02-31";
   assert.throws(() => validatePerformanceResults(brokenDate), /날짜/);
 });
+
+
+test("작은 일치율·Brier·ECE 차이의 부호와 크기를 숨기지 않는다", () => {
+  for (const key of ["hit_rate", "calibration_brier", "calibration_ece"]) {
+    const metric = METRICS.find((item) => item.key === key)!;
+    assert.equal(formatDeltaValue(-0.000123, metric), "-0.000123");
+    assert.equal(formatDeltaValue(0.000123, metric), "+0.000123");
+  }
+});
