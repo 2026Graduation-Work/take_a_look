@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { performanceResults } from "./mock-performance";
+import { performanceResults } from "./mock-performance.ts";
 import type {
   ComparisonDeltaRow,
   ComparisonMetricRow,
@@ -8,6 +8,7 @@ import type {
   ComparisonResults,
   ComparisonSample,
   ComparisonVariant,
+  PerformanceExperiment,
 } from "./performance-types";
 
 export interface PerformanceDataBundle {
@@ -31,10 +32,8 @@ const METRIC_NUMBER_FIELDS = [
   "hit_rate",
   "calibration_brier",
   "calibration_ece",
-  "sharpe",
-  "mdd",
-  "cumulative_return",
 ] as const;
+const BACKTEST_FIELDS = ["sharpe", "mdd", "cumulative_return"] as const;
 const DELTA_METRIC_MAP = [
   ["auc", "delta_B_minus_A_auc"],
   ["hit_rate", "delta_B_minus_A_hit_rate"],
@@ -111,6 +110,7 @@ export function validatePerformanceResults(value: unknown): ComparisonResults {
 
   validateDeltaConsistency(fourRuns, volatileRuns, deltas);
   return {
+    ...(value.experiment === undefined ? {} : { experiment: validateExperiment(value.experiment) }),
     four_run_metrics: sortMetricRows(fourRuns),
     volatile_subsample_metrics: sortMetricRows(volatileRuns),
     comparison_deltas: sortDeltaRows(deltas),
@@ -144,11 +144,12 @@ function validateMetricRows(
     assertInteger(candidate.feature_count, `${rowPath}.feature_count`, 1);
     assertInteger(candidate.sample_rows, `${rowPath}.sample_rows`, 1);
     assertInteger(candidate.sample_dates, `${rowPath}.sample_dates`, 1);
-    assertInteger(candidate.trade_count, `${rowPath}.trade_count`, 0);
+    if (candidate.trade_count !== null) assertInteger(candidate.trade_count, `${rowPath}.trade_count`, 0);
     assertNullableFiniteNumber(candidate.auc, `${rowPath}.auc`);
     for (const field of METRIC_NUMBER_FIELDS) {
       assertFiniteNumber(candidate[field], `${rowPath}.${field}`);
     }
+    for (const field of BACKTEST_FIELDS) assertNullableFiniteNumber(candidate[field], `${rowPath}.${field}`);
     for (const field of [
       "positive_rate",
       "hit_rate",
@@ -158,11 +159,18 @@ function validateMetricRows(
       assertRange(candidate[field], `${rowPath}.${field}`, 0, 1);
     }
     if (candidate.auc !== null) assertRange(candidate.auc, `${rowPath}.auc`, 0, 1);
-    assertRange(candidate.mdd, `${rowPath}.mdd`, -1, 0);
+    if (candidate.mdd !== null) assertRange(candidate.mdd, `${rowPath}.mdd`, -1, 0);
     return candidate as unknown as ComparisonMetricRow;
   });
 
   assertCompleteMetricPairs(rows, label);
+  for (const profile of PROFILES) {
+    const a = findMetric(rows, profile, "A");
+    const b = findMetric(rows, profile, "B");
+    if (a.sample_rows !== b.sample_rows || a.sample_dates !== b.sample_dates || !sameNumber(a.positive_rate, b.positive_rate)) {
+      throw new Error(`${label}:${profile}의 A/B 공통 표본이 일치하지 않습니다.`);
+    }
+  }
   return rows;
 }
 
@@ -177,11 +185,7 @@ function validateDeltaRows(value: unknown): ComparisonDeltaRow[] {
     assertEnum(candidate.profile, PROFILES, `${rowPath}.profile`);
     assertEnum(candidate.sample, SAMPLES, `${rowPath}.sample`);
     for (const [, deltaKey] of DELTA_METRIC_MAP) {
-      if (deltaKey === "delta_B_minus_A_auc") {
-        assertNullableFiniteNumber(candidate[deltaKey], `${rowPath}.${deltaKey}`);
-      } else {
-        assertFiniteNumber(candidate[deltaKey], `${rowPath}.${deltaKey}`);
-      }
+      assertNullableFiniteNumber(candidate[deltaKey], `${rowPath}.${deltaKey}`);
     }
     return candidate as unknown as ComparisonDeltaRow;
   });
@@ -236,7 +240,38 @@ function buildExperimentConclusion(data: ComparisonResults): string {
   const volatileStable = findDelta(data, "stable", "volatile_top_20pct");
   const volatileAggressive = findDelta(data, "aggressive", "volatile_top_20pct");
 
-  return `1차 지표 Sharpe의 B-A 차이는 전체 구간에서 안정형 ${signedDecimal(allStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(allAggressive.delta_B_minus_A_sharpe)}, 급변 구간에서 안정형 ${signedDecimal(volatileStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(volatileAggressive.delta_B_minus_A_sharpe)}였습니다. MDD 차이(양수=낙폭 완화)는 급변 구간에서 각각 ${signedPercentPoint(volatileStable.delta_B_minus_A_mdd)}, ${signedPercentPoint(volatileAggressive.delta_B_minus_A_mdd)}였습니다. 이는 관측 차이의 기술적 요약이며 통계적 유의성을 의미하지 않습니다.`;
+  if (data.experiment) {
+    const auc = (value: number | null) => value === null ? "미산출" : `${value > 0 ? "+" : ""}${value.toFixed(6)}`;
+    return `주지표인 연도별 평균 ROC-AUC의 B−A 차이는 안정형 ${auc(allStable.delta_B_minus_A_auc)}, 공격형 ${auc(allAggressive.delta_B_minus_A_auc)}입니다. 독립 연도 수익률 평균 차이는 각각 ${signedPercentPoint(allStable.delta_B_minus_A_cumulative_return)}, ${signedPercentPoint(allAggressive.delta_B_minus_A_cumulative_return)}입니다. 판별력과 수익률을 함께 보며, 이 차이를 통계적으로 유의한 개선으로 단정하지 않습니다.`;
+  }
+  return `Sharpe의 B-A 차이는 전체 구간에서 안정형 ${signedDecimal(allStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(allAggressive.delta_B_minus_A_sharpe)}, 급변 구간에서 안정형 ${signedDecimal(volatileStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(volatileAggressive.delta_B_minus_A_sharpe)}였습니다. 이는 관측 차이의 기술적 요약이며 통계적 유의성을 의미하지 않습니다.`;
+}
+
+function validateExperiment(value: unknown): PerformanceExperiment {
+  assertRecord(value, "experiment");
+  for (const key of ["id", "run_id", "start", "end", "source", "limitations", "backtest_scope", "volatile_definition"]) {
+    if (typeof value[key] !== "string" || !value[key].trim()) throw new Error(`experiment.${key}가 필요합니다.`);
+  }
+  if (value.primary_metric !== "annual_mean_roc_auc" || value.aggregation !== "equal_weight_annual_mean") {
+    throw new Error("실험 주지표와 집계 방식이 지원되는 계약과 다릅니다.");
+  }
+  if (!Array.isArray(value.years) || !value.years.length || new Set(value.years).size !== value.years.length) {
+    throw new Error("평가 연도가 없거나 중복됐습니다.");
+  }
+  value.years.forEach((year) => assertInteger(year, "experiment.years", 2000));
+  for (const key of ["start", "end"]) {
+    const day = value[key] as string;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day) {
+      throw new Error(`experiment.${key}의 날짜가 올바르지 않습니다.`);
+    }
+  }
+  if ((value.start as string) > (value.end as string)) throw new Error("평가 시작일이 종료일보다 늦습니다.");
+  assertInteger(value.initial_cash, "experiment.initial_cash", 1);
+  for (const key of ["classification_threshold", "strategy_threshold"]) {
+    assertFiniteNumber(value[key], `experiment.${key}`);
+    assertRange(value[key], `experiment.${key}`, 0, 1);
+  }
+  return value as unknown as PerformanceExperiment;
 }
 
 function assertCompleteMetricPairs(rows: ComparisonMetricRow[], label: string): void {
@@ -345,11 +380,13 @@ function sameNumber(actual: number | null, expected: number | null): boolean {
   return Math.abs(actual - expected) <= 1e-8;
 }
 
-function signedDecimal(value: number): string {
+function signedDecimal(value: number | null): string {
+  if (value === null) return "미산출";
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
 }
 
-function signedPercentPoint(value: number): string {
+function signedPercentPoint(value: number | null): string {
+  if (value === null) return "미산출";
   return `${value > 0 ? "+" : ""}${(value * 100).toFixed(1)}%p`;
 }
 

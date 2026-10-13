@@ -31,7 +31,7 @@ export interface MetricDefinition {
   deltaKey: DeltaMetricKey;
   label: string;
   direction: "higher" | "lower" | "neutral";
-  format: "decimal3" | "decimal2" | "percent" | "integer";
+  format: "decimal6" | "decimal3" | "decimal2" | "percent" | "integer";
   description?: string;
 }
 
@@ -39,18 +39,18 @@ export const METRICS: MetricDefinition[] = [
   {
     key: "auc",
     deltaKey: "delta_B_minus_A_auc",
-    label: "AUC",
+    label: "ROC-AUC",
     direction: "higher",
-    format: "decimal3",
-    description: "모델이 상승과 하락을 얼마나 잘 구분하는지 나타내며, 1에 가까울수록 판별력이 높습니다.",
+    format: "decimal6",
+    description: "상승 라벨(2)과 나머지 라벨(0·1)의 판별력입니다. 0.5는 무작위 순위 수준, 1에 가까울수록 높습니다.",
   },
   {
     key: "hit_rate",
     deltaKey: "delta_B_minus_A_hit_rate",
-    label: "방향 일치율",
+    label: "상승 여부 일치율",
     direction: "higher",
     format: "decimal3",
-    description: "모델이 예측한 방향이 실제 방향과 일치한 비율입니다.",
+    description: "상승 점수 0.5 이상을 상승으로 분류했을 때 실제 상승 라벨(2) 여부와 일치한 비율입니다. 세 방향 정확도는 아닙니다.",
   },
   {
     key: "calibration_brier",
@@ -87,10 +87,10 @@ export const METRICS: MetricDefinition[] = [
   {
     key: "cumulative_return",
     deltaKey: "delta_B_minus_A_cumulative_return",
-    label: "누적수익률",
+    label: "연도 수익률 평균",
     direction: "higher",
     format: "percent",
-    description: "평가 기간 동안 누적된 총 수익률입니다.",
+    description: "매년 자금을 초기화한 독립 평가의 연도별 수익률 단순평균입니다. 연속 운용 누적 수익률은 아닙니다.",
   },
   {
     key: "trade_count",
@@ -110,10 +110,11 @@ export function formatMetricValue(
   value: ComparisonMetricRow[MetricKey],
   metric: MetricDefinition,
 ): string {
-  if (value === null || !Number.isFinite(value)) return "N/A";
+  if (value === null || !Number.isFinite(value)) return "미산출";
   if (metric.format === "integer") return Math.round(value).toLocaleString("ko-KR");
   if (metric.format === "percent") return `${(value * 100).toFixed(1)}%`;
   if (metric.format === "decimal2") return value.toFixed(2);
+  if (metric.format === "decimal6") return value.toFixed(6);
   return value.toFixed(3);
 }
 
@@ -121,11 +122,12 @@ export function formatDeltaValue(
   value: ComparisonDeltaRow[DeltaMetricKey],
   metric: MetricDefinition,
 ): string {
-  if (value === null || !Number.isFinite(value)) return "N/A";
+  if (value === null || !Number.isFinite(value)) return "미산출";
   const sign = value > 0 ? "+" : "";
   if (metric.format === "integer") return `${sign}${Math.round(value).toLocaleString("ko-KR")}`;
   if (metric.format === "percent") return `${sign}${(value * 100).toFixed(1)}%p`;
   if (metric.format === "decimal2") return `${sign}${value.toFixed(2)}`;
+  if (metric.format === "decimal6") return `${sign}${value.toFixed(6)}`;
   return `${sign}${value.toFixed(3)}`;
 }
 

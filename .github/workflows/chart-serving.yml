@@ -154,3 +154,21 @@ jobs:
         run: |
           python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
           python -m serving.stock_master
+
+      # Measure after retention so the Storage target uses actual retained bytes, not an estimate.
+      - name: Measure retained chart storage budget
+        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
+        run: |
+          python - <<'PYTHON'
+          import json
+          from serving.internal.storage import SupabaseStore
+          store = SupabaseStore()
+          usage = store._request("POST", "/rest/v1/rpc/budget_usage", {})
+          batches = store._request("GET", "/rest/v1/chart_batches?select=as_of&order=as_of.asc&limit=1000")
+          print(json.dumps({"event": "chart_storage_budget", "db_bytes": usage["db_bytes"],
+                            "storage_bytes": usage["storage_bytes"], "retained_batches": len(batches),
+                            "oldest_as_of": batches[0]["as_of"] if batches else None,
+                            "last_published_as_of": usage["last_published_as_of"]}))
+          if usage["storage_bytes"] > 600 * 2**20:
+              print("::warning::Storage exceeds the 600 MiB operating target; see #286")
+          PYTHON

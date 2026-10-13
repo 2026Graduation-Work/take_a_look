@@ -39,6 +39,15 @@ def prune_corrected_inputs(store, cutoff, flow_cutoff):
     for item in listing("investor-flows-v3"):
         if item["name"][:10] < flow_cutoff:
             paths.append(f"investor-flows-v3/{item['name']}")
+    for item in listing("calendars-v3"):
+        name = item["name"]
+        if name.endswith(".parquet"):
+            try:
+                day = date.fromisoformat(name.removesuffix(".parquet")).isoformat()
+            except ValueError:
+                continue
+            if day < cutoff:
+                paths.append(f"calendars-v3/{name}")
     for offset in range(0, len(paths), 1000):
         store._request("DELETE", f"/storage/v1/object/{BUCKET}", {"prefixes": paths[offset:offset + 1000]})
     return len(paths)
@@ -59,13 +68,24 @@ def main(today=None):
         rows.extend(page)
         if len(page) < 1000:
             break
-    paths = sorted({row["storage_path"] for row in rows})
+    paths = {row["storage_path"] for row in rows}
+    if paths:
+        offset = 0
+        while True:
+            kept = store._request("GET", "/rest/v1/chart_feature_snapshots?as_of=gte." + quote(cutoff) +
+                                  f"&select=storage_path&order=storage_path&limit=1000&offset={offset}")
+            paths.difference_update(row["storage_path"] for row in kept)
+            if len(kept) < 1000:
+                break
+            offset += 1000
+    paths = sorted(paths)
     for offset in range(0, len(paths), 1000):
         store._request("DELETE", f"/storage/v1/object/{BUCKET}", {"prefixes": paths[offset:offset + 1000]})
     if rows:
         store._request("DELETE", "/rest/v1/chart_feature_snapshots?as_of=lt." + quote(cutoff), prefer="return=minimal")
 
     corrected_objects = prune_corrected_inputs(store, cutoff, flow_cutoff)
+    store._request("DELETE", "/rest/v1/chart_universe?as_of=lt." + quote(cutoff), prefer="return=minimal")
 
     article_cutoff = (today - timedelta(days=ARTICLE_DAYS)).isoformat()
     store._request("DELETE", "/rest/v1/news_articles?article_date=lt." + quote(article_cutoff), prefer="return=minimal")

@@ -5,7 +5,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   applyAdjustments,
   AVOIDED_ASSET_DESCRIPTIONS,
@@ -150,6 +150,15 @@ export default function SurveyFlow() {
   const [result, setResult] = useState<ProfilingOutput | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // 같은 URL의 단계 전환은 라우트 알림이 갱신되지 않는다. 현재 문항·결과로 포커스를 옮긴다.
+    const heading = mainRef.current?.querySelector<HTMLElement>("fieldset legend, h1:not([data-route-heading])");
+    if (heading) {
+      heading.tabIndex = -1;
+      heading.focus();
+    }
+  }, [stage, draft.page]);
 
   // 중간 저장 불러오기. localStorage는 브라우저에서만 읽을 수 있어 마운트 후에 한 번 읽는다.
   // 다시 진단은 지난 답이 채워진 상태로 1번부터 시작한다(답하던 중간 저장이 있으면 그쪽이 먼저).
@@ -307,7 +316,11 @@ export default function SurveyFlow() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[720px] flex-col px-4 py-8 sm:px-8 sm:py-12">
+      <main ref={mainRef} className="mx-auto flex w-full max-w-[720px] flex-col px-4 py-8 sm:px-8 sm:py-12">
+        {stage === "survey" && <h1 data-route-heading className="sr-only">투자 성향 설문</h1>}
+        <p role="status" aria-atomic="true" className="sr-only">
+          {stage === "result" ? "투자 성향 진단을 마쳤어요. 결과를 확인해 주세요." : ""}
+        </p>
         {stage === "welcome" && <Welcome onStart={() => setStage("survey")} />}
         {stage === "survey" && (
           <QuestionPage

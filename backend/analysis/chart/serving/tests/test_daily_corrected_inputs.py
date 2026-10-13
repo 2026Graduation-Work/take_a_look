@@ -78,7 +78,9 @@ def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
             assert digest == "a" * 64
             return None if archive_mode == "missing_features" else build_feature_frame(raw, set(dates.date)).tail(1)
         def upload_features(self, *args):
-            pass
+            pytest.fail("Replay wrote feature archive")
+        def upload_feature_panel(self, *args):
+            pytest.fail("Replay wrote feature panel")
     monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: pytest.fail("Replay fetched flows"))
     if archive_mode == "missing_features":

@@ -32,7 +32,7 @@ export function parseWholeNumber(value: string): number | null {
 // 수량 0은 "보유 안 함"이라 저장하지 않는다. 평단 0은 허용한다(무상증자 등). 평단은 비워 둘 수 있다.
 export function isValidHolding(value: SavedHolding): boolean {
   return (
-    /^\d{6}$/.test(value.code) &&
+    /^[0-9A-Z]{6}$/.test(value.code) &&
     value.name.trim().length > 0 &&
     Number.isInteger(value.quantity) &&
     value.quantity > 0 &&

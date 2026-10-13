@@ -1,11 +1,12 @@
 "use client";
 
-import { assertOk, getSupabaseClient } from "./supabase";
-import { isValidHolding, type SavedHolding } from "./holdings-rules";
-import { STORAGE_KEYS } from "./storage-keys";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { assertOk, getSupabaseClient } from "./supabase.ts";
+import { isValidHolding, type SavedHolding } from "./holdings-rules.ts";
+import { STORAGE_KEYS } from "./storage-keys.ts";
 
-export { isValidHolding, parseSavedHoldings } from "./holdings-rules";
-export type { SavedHolding } from "./holdings-rules";
+export { isValidHolding, parseSavedHoldings } from "./holdings-rules.ts";
+export type { SavedHolding } from "./holdings-rules.ts";
 
 // 보유 종목은 사용자가 직접 입력한 값이다(증권사 연동 없음).
 // 저장 경로는 설문 프로필(save-profile.ts)과 같은 모양을 따른다:
@@ -13,39 +14,74 @@ export type { SavedHolding } from "./holdings-rules";
 export const HOLDINGS_STORAGE_KEY = STORAGE_KEYS.holdings;
 export const HOLDINGS_UPDATED_EVENT = "takealook:holdings-updated";
 
+async function currentAccount(client: SupabaseClient, expectedAuthUserId?: string) {
+  const { data, error } = await client.auth.getUser();
+  assertOk(error, "로그인 사용자 확인");
+  if (!data.user || (expectedAuthUserId && data.user.id !== expectedAuthUserId)) {
+    throw new Error("로그인 계정이 바뀌었어요. 새로고침 후 다시 시도해 주세요.");
+  }
+  return data.user;
+}
+
+async function holdingOwner(client: SupabaseClient | null, expectedAuthUserId?: string) {
+  if (!client) throw new Error("계정 연결을 확인하지 못했어요. 새로고침 후 다시 시도해 주세요.");
+  const authUser = await currentAccount(client, expectedAuthUserId);
+  const { data: user, error: userError } = await client.from("users")
+    .select("id").eq("auth_user_id", authUser.id).maybeSingle();
+  assertOk(userError, "서비스 사용자 확인");
+  if (!user) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
+  return { client, userId: user.id as string, authUserId: authUser.id };
+}
+
+export async function loadAccountHoldings(
+  expectedAuthUserId: string,
+  client = getSupabaseClient(),
+): Promise<SavedHolding[]> {
+  const owner = await holdingOwner(client, expectedAuthUserId);
+  const { data, error } = await owner.client.from("portfolio_holdings")
+    .select("stock_code,quantity,avg_buy_price,stocks(name)")
+    .eq("user_id", owner.userId).eq("is_active", true).order("display_order");
+  assertOk(error, "보유 종목 조회");
+  await currentAccount(owner.client, owner.authUserId);
+  const holdings = (data ?? []).map((row) => ({
+    code: row.stock_code as string,
+    name: (row.stocks as unknown as { name: string } | null)?.name ?? row.stock_code,
+    quantity: Number(row.quantity),
+    avgBuyPrice: row.avg_buy_price === null ? null : Number(row.avg_buy_price),
+  }));
+  if (!holdings.every(isValidHolding)) {
+    throw new Error("저장된 보유 정보를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.");
+  }
+  return holdings;
+}
+
 export async function saveHoldings(
   holdings: SavedHolding[],
   mode: "demo" | "supabase",
+  expectedAuthUserId?: string,
+  client = getSupabaseClient(),
 ): Promise<void> {
   if (typeof window === "undefined") return;
-  const valid = holdings.filter(isValidHolding);
+  if (!holdings.every(isValidHolding) || new Set(holdings.map(({ code }) => code)).size !== holdings.length) {
+    throw new Error("보유 종목의 수량·평균 매입가와 중복 종목을 확인해 주세요.");
+  }
+  const valid = holdings;
 
-  const client = mode === "supabase" ? getSupabaseClient() : null;
-  if (!client) {
+  if (mode === "demo") {
     persistHoldings(valid);
     return;
   }
 
-  const { data, error: authError } = await client.auth.getUser();
-  assertOk(authError, "로그인 사용자 확인");
-  if (!data.user) throw new Error("로그인 후 보유 종목을 저장할 수 있습니다.");
-
-  const { data: appUser, error: appUserError } = await client
-    .from("users")
-    .select("id")
-    .eq("auth_user_id", data.user.id)
-    .maybeSingle();
-  assertOk(appUserError, "서비스 사용자 확인");
-  if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
-
-  const userId = (appUser as { id: string }).id;
+  const owner = await holdingOwner(client, expectedAuthUserId);
+  const db = owner.client;
+  const userId = owner.userId;
   const now = new Date().toISOString();
 
   // stocks에 없는 종목은 FK 제약에 걸린다. 미리 걸러 어떤 종목이 빠졌는지 알려준다.
   const codes = valid.map(({ code }) => code);
   const known = new Set<string>();
   if (codes.length > 0) {
-    const { data: stockRows, error: stockError } = await client
+    const { data: stockRows, error: stockError } = await db
       .from("stocks")
       .select("code")
       .in("code", codes);
@@ -53,18 +89,14 @@ export async function saveHoldings(
     for (const { code } of (stockRows ?? []) as { code: string }[]) known.add(code);
   }
   const unknown = valid.filter(({ code }) => !known.has(code));
-  const storable = valid.filter(({ code }) => known.has(code));
+  if (unknown.length) {
+    throw new Error(`종목 마스터에 없는 종목을 확인해 주세요: ${unknown.map(({ name }) => name).join(", ")}`);
+  }
 
-  // 지운 종목이 남지 않도록 전체를 비활성화한 뒤 현재 목록만 되살린다.
-  const { error: resetError } = await client
-    .from("portfolio_holdings")
-    .update({ is_active: false, updated_at: now })
-    .eq("user_id", userId);
-  assertOk(resetError, "기존 보유 종목 비활성화");
-
-  if (storable.length > 0) {
-    const { error: upsertError } = await client.from("portfolio_holdings").upsert(
-      storable.map((holding, index) => ({
+  // 저장 실패가 기존 목록을 비우지 않도록 현재 목록을 먼저 쓴다.
+  if (valid.length > 0) {
+    const { error: upsertError } = await db.from("portfolio_holdings").upsert(
+      valid.map((holding, index) => ({
         user_id: userId,
         stock_code: holding.code,
         quantity: holding.quantity,
@@ -78,15 +110,13 @@ export async function saveHoldings(
     assertOk(upsertError, "보유 종목 저장");
   }
 
-  persistHoldings(storable);
-
-  if (unknown.length > 0) {
-    throw new Error(
-      `종목 마스터에 없어 저장하지 못한 종목이 있습니다: ${unknown
-        .map(({ name, code }) => `${name}(${code})`)
-        .join(", ")}`,
-    );
-  }
+  let removed = db.from("portfolio_holdings")
+    .update({ is_active: false, updated_at: now }).eq("user_id", userId).eq("is_active", true);
+  if (codes.length) removed = removed.not("stock_code", "in", `(${codes.join(",")})`);
+  const { error: resetError } = await removed;
+  if (resetError) throw new Error("추가·수정은 저장됐지만 삭제를 마치지 못했어요. 새로고침 후 보유 목록을 확인해 주세요.");
+  await currentAccount(db, owner.authUserId);
+  persistHoldings(valid);
 }
 
 function persistHoldings(holdings: SavedHolding[]): void {

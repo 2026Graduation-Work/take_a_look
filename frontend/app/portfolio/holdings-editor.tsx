@@ -15,6 +15,7 @@ import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
   isValidHolding,
+  loadAccountHoldings,
   parseSavedHoldings,
   saveHoldings,
   subscribeToSavedHoldings,
@@ -38,7 +39,12 @@ function formatWon(value: number): string {
   return value.toLocaleString("ko-KR");
 }
 
-export default function HoldingsEditor({
+export default function HoldingsEditor(props: HoldingsEditorProps) {
+  const { state } = useOnboarding();
+  return <AccountHoldingsEditor key={`${state.mode}:${state.userId}`} {...props} />;
+}
+
+function AccountHoldingsEditor({
   profile,
   marketStatus,
   catalog,
@@ -56,16 +62,13 @@ export default function HoldingsEditor({
 
   // 저장된 목록이 있으면 그것이 정답이다. 없을 때만 데모 시드를 보여 준다.
   // (로그인 사용자는 데모 시드를 받지 않으므로 빈 목록에서 시작한다.)
-  const initial: SavedHolding[] =
-    saved ??
-    (supabaseMode
-      ? []
-      : demoHoldings.map(({ code, name, quantity }) => ({
+  const initial: SavedHolding[] = supabaseMode ? [] :
+    saved ?? demoHoldings.map(({ code, name, quantity }) => ({
           code,
           name,
           quantity,
           avgBuyPrice: null, // 예시 평단은 실제 종가와 섞지 않는다(설문 보유 단계와 같음)
-        })));
+        }));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
   // 평단 대비 평가손익(#255): 대시보드와 같은 최신 게시 종가(loadLatestCloses)
@@ -92,6 +95,26 @@ export default function HoldingsEditor({
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState(""); // 종목 추가 시트 안 오류
   const [saveError, setSaveError] = useState(""); // 저장 오류
+  const [loaded, setLoaded] = useState(!supabaseMode);
+  const [loadError, setLoadError] = useState("");
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const request = supabaseMode
+      ? loadAccountHoldings(onboardingState.userId!)
+      : Promise.resolve(parseSavedHoldings(getSavedHoldingsSnapshot()));
+    void request.then((next) => {
+      if (!active) return;
+      if (next !== null) {
+        setRows(next);
+        setBaseline(next);
+      }
+      setLoaded(true);
+    }).catch((cause: unknown) => {
+      if (active) setLoadError(cause instanceof Error ? cause.message : "보유 목록을 읽지 못했어요. 다시 시도해 주세요.");
+    });
+    return () => { active = false; };
+  }, [supabaseMode, onboardingState.userId, reload]);
   // 줄 안 수정칸에 친 글자 그대로("1.5"). 새 종목 입력칸처럼 점을 보여 주고 저장할 때 막는다(페르소나 워크스루 2026-10)
   const [texts, setTexts] = useState<Record<string, string>>({});
   const sheetRef = useRef<HTMLDialogElement>(null);
@@ -147,6 +170,7 @@ export default function HoldingsEditor({
   }
 
   async function submit() {
+    if (!loaded || status === "saving") return;
     setSaveError("");
     // 수량을 비운 종목이 있으면 저장하지 않는다(저장 단계에서 조용히 빠지지 않게)
     const empty = rows.find(({ quantity }) => quantity === 0);
@@ -161,7 +185,7 @@ export default function HoldingsEditor({
     }
     setStatus("saving");
     try {
-      await saveHoldings(rows, onboardingState.mode);
+      await saveHoldings(rows, onboardingState.mode, onboardingState.userId);
       setBaseline(rows);
       setStatus("saved");
     } catch (cause) {
@@ -188,7 +212,14 @@ export default function HoldingsEditor({
           </p>
         </div>
 
-        {rows.length === 0 ? (
+        {!loaded ? (
+          <div className="surface flex flex-col gap-4 px-6 py-8">
+            {loadError ? <>
+              <p role="alert" className="m-0 text-sm text-danger">{loadError}</p>
+              <button type="button" className="btn-secondary self-end" onClick={() => { setLoadError(""); setReload((value) => value + 1); }}>다시 불러오기</button>
+            </> : <p role="status" className="m-0 text-sm text-body">저장된 보유 종목을 불러오는 중이에요.</p>}
+          </div>
+        ) : rows.length === 0 ? (
           <div className="surface flex flex-col items-center gap-4 px-6 py-12 text-center">
             <p className="m-0 text-sm text-body">아직 등록한 종목이 없어요.</p>
             <button type="button" onClick={openSheet} className="btn-primary">
@@ -284,7 +315,7 @@ export default function HoldingsEditor({
               저장했어요. <Link href="/">대시보드에서 보기</Link>
             </span>
           )}
-          <button type="button" onClick={submit} disabled={status === "saving"} className="btn-primary">
+          <button type="button" onClick={submit} disabled={!loaded || status === "saving"} className="btn-primary">
             {status === "saving" ? "저장 중…" : "저장"}
           </button>
         </div>

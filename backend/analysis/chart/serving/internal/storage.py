@@ -38,6 +38,8 @@ class SupabaseStore:
     def __init__(self, url=None, key=None):
         self.url = (url or os.environ.get("SUPABASE_URL", "")).rstrip("/")
         self.key = key or os.environ.get("SUPABASE_SECRET_KEY")
+        self._feature_frames = {}
+        self._raw_price_frames = {}
         if not self.url or not self.key:
             raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY are required")
 
@@ -92,8 +94,13 @@ class SupabaseStore:
                       prefer="resolution=merge-duplicates,return=minimal")
 
     def load_universe(self, as_of):
-        rows = self._request("GET", "/rest/v1/chart_universe?as_of=eq." + quote(as_of) +
-                             "&select=stock_code,stock_name&order=stock_code")
+        rows = []
+        while True:
+            page = self._request("GET", "/rest/v1/chart_universe?as_of=eq." + quote(as_of) +
+                                 "&select=stock_code,stock_name&order=stock_code&limit=1000&offset=" + str(len(rows)))
+            rows.extend(page)
+            if len(page) < 1000:
+                break
         return pd.DataFrame([{"Code": row["stock_code"], "Name": row["stock_name"],
                               "AsOf": as_of} for row in rows])
 
@@ -219,7 +226,56 @@ class SupabaseStore:
         self._save_private_frame(f"raw-history-v3/{code}.parquet", frame)
 
     def load_raw_prices(self, code, as_of):
-        return self._load_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet")
+        if as_of not in self._raw_price_frames:
+            prefix = f"/storage/v1/object/authenticated/chart-features/raw-prices-v3/{quote(as_of)}/"
+            try:
+                data = self._request("GET", prefix + "batch.parquet")
+            except FileNotFoundError:
+                self._raw_price_frames[as_of] = None
+            else:
+                manifest = self._request("GET", prefix + "batch.manifest.json")
+                if hashlib.sha256(data).hexdigest() != manifest["sha256"] or manifest["as_of"] != as_of:
+                    raise ValueError("Stored price panel checksum/date mismatch")
+                frame = pd.read_parquet(io.BytesIO(data))
+                if not {"stock_code", "Date"}.issubset(frame) or frame.duplicated(["stock_code", "Date"]).any():
+                    raise ValueError("Stored price panel has missing or duplicate identities")
+                if set(frame.stock_code) != set(manifest["input_sha256"]):
+                    raise ValueError("Stored price panel/input identities mismatch")
+                self._raw_price_frames[as_of] = (frame, manifest)
+        if self._raw_price_frames[as_of] is None:
+            return self._load_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet")
+        panel, manifest = self._raw_price_frames[as_of]
+        frame = panel.loc[panel.stock_code.eq(code)].drop(columns="stock_code").reset_index(drop=True)
+        if frame.empty:
+            return None
+        if pd.to_datetime(frame.Date).max() != pd.Timestamp(as_of):
+            raise ValueError("Stored price panel stock/date mismatch")
+        frame.attrs["input_sha256"] = manifest["input_sha256"][code]
+        return frame
+
+    def save_raw_price_panel(self, as_of, frames):
+        """One daily price object plus its checksum manifest, preserving per-stock input hashes."""
+        if not frames:
+            raise ValueError("Empty raw price panel")
+        hashes, parts = {}, []
+        for code, source in sorted(frames.items()):
+            digest = source.attrs.get("input_sha256", "")
+            if len(digest) != 64 or source.empty or source.Date.duplicated().any() or source.Date.max() != pd.Timestamp(as_of):
+                raise ValueError("Invalid raw price panel stock/date/hash")
+            hashes[code] = digest
+            part = source.copy()
+            part.attrs = {}
+            parts.append(part.assign(stock_code=code))
+        panel = pd.concat(parts, ignore_index=True)
+        data = io.BytesIO()
+        panel.to_parquet(data, index=False)
+        prefix = f"/storage/v1/object/chart-features/raw-prices-v3/{quote(as_of)}/"
+        self._request("POST", prefix + "batch.parquet", data.getvalue(),
+                      content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
+        self._request("POST", prefix + "batch.manifest.json",
+                      {"as_of": as_of, "sha256": hashlib.sha256(data.getvalue()).hexdigest(), "input_sha256": hashes},
+                      extra_headers={"x-upsert": "true"})
+        self._raw_price_frames.pop(as_of, None)
 
     def save_raw_prices(self, code, as_of, frame):
         self._save_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet", frame)
@@ -251,11 +307,20 @@ class SupabaseStore:
         if not rows:
             return None
         item = rows[0]
-        data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" +
-                             quote(item["storage_path"], safe="/"))
-        if hashlib.sha256(data).hexdigest() != item["feature_sha256"]:
-            raise ValueError("Stored feature checksum mismatch")
-        return pd.read_parquet(io.BytesIO(data))
+        identity = (item["storage_path"], item["feature_sha256"])
+        if identity not in self._feature_frames:
+            data = self._request("GET", "/storage/v1/object/authenticated/chart-features/" +
+                                 quote(item["storage_path"], safe="/"))
+            if hashlib.sha256(data).hexdigest() != item["feature_sha256"]:
+                raise ValueError("Stored feature checksum mismatch")
+            self._feature_frames[identity] = pd.read_parquet(io.BytesIO(data))
+        frame = self._feature_frames[identity]
+        # Batch archives share one object across stocks; legacy objects contain one row.
+        if "stock_code" in frame:
+            frame = frame.loc[frame.stock_code.eq(code)].drop(columns="stock_code")
+        if len(frame) != 1 or "Date" not in frame or not pd.to_datetime(frame.Date).eq(pd.Timestamp(as_of)).all():
+            raise ValueError("Stored feature stock/date mismatch")
+        return frame.reset_index(drop=True)
 
 
     def _existing_batch(self, batch_id):

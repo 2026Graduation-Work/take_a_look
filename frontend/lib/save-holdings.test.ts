@@ -17,7 +17,8 @@ test("보유 종목 검증: 정상 입력만 통과한다", () => {
   assert.equal(isValidHolding({ ...ok, quantity: Number.NaN }), false, "빈 입력은 NaN이 된다");
   assert.equal(isValidHolding({ ...ok, avgBuyPrice: -100 }), false);
   assert.equal(isValidHolding({ ...ok, code: "5930" }), false, "종목코드는 6자리");
-  assert.equal(isValidHolding({ ...ok, code: "00593A" }), false);
+  assert.equal(isValidHolding({ ...ok, code: "00104K" }), true, "KRX 영문 포함 종목코드도 허용한다");
+  assert.equal(isValidHolding({ ...ok, code: "00104k" }), false);
   assert.equal(isValidHolding({ ...ok, name: "  " }), false);
 });
 

@@ -92,6 +92,9 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   // 결과: "다음"을 눌러야 저장된다 + 24문항으로 더 정확하게 진단하는 길
   await expect(page.getByRole("heading", { name: "적극 축적형" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "적극 축적형" })).toBeFocused();
+  await expect(page.getByRole("status")).toContainText("투자 성향 진단을 마쳤어요");
+  await expect(page.getByRole("alert")).not.toContainText(BANK.questions[0].text);
   await expect(page.getByRole("button", { name: "더 정확하게 진단하기(24문항)" })).toBeVisible();
   await expectStoredOnboardingData(page, { session: true, profile: false });
   await page.getByRole("button", { name: "다음", exact: true }).click();
