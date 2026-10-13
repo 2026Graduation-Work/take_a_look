@@ -67,7 +67,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
   const quotes = status.indexQuotes.filter(({ symbol }) => SHOWN.has(symbol));
 
   return (
-    <section aria-label="시장 브리핑" className="border-t border-line/60">
+    <section aria-label="시장 브리핑" className="border-t border-line/60 bg-white/70 shadow-[0_1px_0_rgb(0_0_0/0.06)]">
       <div className="mx-auto flex min-h-10 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 sm:px-6 lg:px-8">
         {/* 연도까지 보인다: 스냅샷이 오래되면 "12.30"만으로는 오늘 값처럼 읽힌다. */}
         <span className="flex-none text-xs text-muted tabular-nums">

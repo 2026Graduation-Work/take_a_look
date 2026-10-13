@@ -68,8 +68,9 @@ export default function SiteHeader({
 
           <AccountControls profile={profile} />
         </div>
-        <MarketStatusBar status={marketStatus} />
       </header>
+      {/* 시장 바는 고정 영역 밖: 줄바꿈으로 높아져도(390·200% 확대) 스크롤하면 사라져 화면을 가리지 않는다(#305 후속) */}
+      <MarketStatusBar status={marketStatus} />
 
       {/* 모바일: 엄지가 닿는 아래쪽에 떠 있는 유리 탭 막대. 현재 화면은 흰 렌즈 + 초록 글자 */}
       <nav
