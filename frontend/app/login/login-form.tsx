@@ -140,19 +140,23 @@ export default function LoginForm() {
                 className={field}
               />
             </label>
-            <label className="flex flex-col gap-2 text-xs text-muted">
-              비밀번호
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={tab === "signup" ? "8자 이상" : ""}
-                autoComplete={tab === "signup" ? "new-password" : "current-password"}
-                minLength={tab === "signup" ? 8 : undefined}
-                required
-                className={field}
-              />
-            </label>
+            <div className="flex flex-col gap-2">
+              <label className="flex flex-col gap-2 text-xs text-muted">
+                비밀번호
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete={tab === "signup" ? "new-password" : "current-password"}
+                  minLength={tab === "signup" ? 8 : undefined}
+                  aria-describedby={tab === "signup" ? "password-help" : undefined}
+                  required
+                  className={field}
+                />
+              </label>
+              {/* 규칙은 칠 때 사라지는 placeholder 대신 항상 보이는 도움말로(이름표와 따로 읽히게 label 밖) */}
+              {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요</p>}
+            </div>
             {tab === "signup" && (
               <p className="m-0 text-2xs text-muted">
                 가입하면 이메일·이름, 성향 진단 결과, 보유·관심 종목, 판단 메모를 서울 리전 서버에 저장해요. 내 계정으로만
