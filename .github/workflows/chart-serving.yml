@@ -142,7 +142,7 @@ jobs:
           from serving.internal.storage import SupabaseStore
           store = SupabaseStore()
           usage = store._request("POST", "/rest/v1/rpc/budget_usage", {})
-          batches = store._request("GET", "/rest/v1/chart_batches?select=as_of&order=as_of.asc&limit=1000")
+          batches = store._request("GET", "/rest/v1/chart_batches?select=as_of&status=eq.published&order=as_of.asc&limit=1000")
           print(json.dumps({"event": "chart_storage_budget", "db_bytes": usage["db_bytes"],
                             "storage_bytes": usage["storage_bytes"], "retained_batches": len(batches),
                             "oldest_as_of": batches[0]["as_of"] if batches else None,
