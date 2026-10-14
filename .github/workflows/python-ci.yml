@@ -121,7 +121,10 @@ jobs:
           mkdir -p "$chart_serving_root"
           cp -R shared serving conftest.py "$chart_serving_root/"
           cd "$chart_serving_root"
-          python -m pytest shared/tests serving/tests -v -W "error:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning" -W "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:exchange_calendars.*"
+          python -m pytest shared/tests serving/tests -v \
+            -W "error:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning" \
+            -W "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:exchange_calendars.exchange_calendar" \
+            -W "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:exchange_calendars.utils.pandas_utils"
           python -m serving.run_daily --help
 
   # Keep the required check name stable while testing both installations.

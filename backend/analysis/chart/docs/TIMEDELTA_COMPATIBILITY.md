@@ -9,6 +9,8 @@
 - source 계약 SHA-256: `ac4d23b4a17d9427efffb079c9a9e0d8f543ae8d6b1620b1f867700cf2faeb88`.
 - 새 압축 파일 SHA-256: `20da6a515edc32f5e906116f748484bac0fd224220ad4d9b9c0e1561f9b88086`.
 - 상세 근거: `local-pack-validation.json`. 독립 원문과 전체 데이터 비교를 유지했다.
-- serving 설치의 CI는 프로젝트 코드의 generic timedelta DeprecationWarning을 오류로 승격한다. 고정한 exchange_calendars 4.13.2 내부의 `pd.Timedelta("1h")` 등에서 같은 외부 경고가 남아 해당 패키지에서 발생하는 경고만 예외로 둔다. 라이브러리 파일은 수정하지 않았다.
+- serving 설치의 CI는 프로젝트 코드의 generic timedelta DeprecationWarning을 오류로 승격한다. 고정한 exchange_calendars 4.13.2 내부의 `pd.Timedelta("1h")` 등에서 같은 외부 경고가 남아 `exchange_calendar`와 `utils.pandas_utils` 두 모듈에서 발생하는 경고만 예외로 둔다. 라이브러리 파일은 수정하지 않았다.
 
 변경 전 source와 pack을 각각 섞어 쓰면 계약 검사가 실패한다. 되돌릴 때는 10/11 pack config와 그 builder source가 있는 PR #313 머지 상태를 함께 복원한다. 이번 검증은 날짜 연산·입력·추론 동등성 검사이며 KRX 공급자 접속 성공이나 실제 참가자 평가를 대신하지 않는다.
+
+최신 main(PR #313 포함)의 전체 차트 테스트는 309 passed / 3 기존 샘플 skip이다. 운영·공용 111개 검사는 위 경고 오류 모드와 두 외부 모듈 예외를 적용해 모두 통과했다.
