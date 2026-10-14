@@ -25,10 +25,10 @@ from .flows import collect_flows
 from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
 from .pack import config_path, load_pack
-from .prices import fetch_prices, price_snapshot
+from .prices import PRICE_WINDOW_DAYS, fetch_prices, price_snapshot
 from .progress import report
 from .snapshot import build_snapshot, unavailable_snapshot
-from .storage import SupabaseStore
+from .storage import PRICE_COLUMNS, SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -85,9 +85,53 @@ def _retry_fetch(code, start, as_of):
             time.sleep(10 * (attempt + 1))
 
 
+def recent_prices(code, start, as_of, days, store, *, historical_test=False):
+    """Reuse the bounded DB window; revalidate one anchor session for adjustment changes."""
+    expected = pd.DatetimeIndex(pd.to_datetime(sorted(days)))
+    expected = expected[(expected >= pd.Timestamp(start)) & (expected <= pd.Timestamp(as_of))]
+    cached = pd.DataFrame() if historical_test else store.load_prices(code, start, as_of)
+    if not cached.empty:
+        cached = cached.loc[pd.to_datetime(cached.Date).isin(expected)].sort_values("Date").copy()
+        if cached.Date.duplicated().any():
+            raise ValueError("Duplicate cached price dates")
+    request_start = start
+    if not cached.empty:
+        missing = expected.difference(pd.DatetimeIndex(cached.Date))
+        boundary = missing.min() if len(missing) else expected[-1]
+        anchors = pd.DatetimeIndex(cached.Date)[pd.DatetimeIndex(cached.Date) < boundary]
+        request_start = ((anchors.max() if len(anchors) else expected[0]) if len(missing)
+                         else expected[-1]).date().isoformat()
+    fresh = _retry_fetch(code, request_start, as_of)
+    fresh = fresh.loc[pd.to_datetime(fresh.Date).isin(expected)].copy()
+    if not cached.empty:
+        overlap = cached[["Date", "AdjustmentFactor"]].merge(
+            fresh[["Date", "AdjustmentFactor"]], on="Date", suffixes=("_old", "_new"))
+        if overlap.empty or not np.allclose(overlap.AdjustmentFactor_old, overlap.AdjustmentFactor_new,
+                                           rtol=1e-8, atol=1e-12, equal_nan=False):
+            # Corporate actions can change the price basis. Refresh only this window,
+            # never the training history or the immutable histogram samples.
+            if request_start != start:
+                fresh = _retry_fetch(code, start, as_of)
+                fresh = fresh.loc[pd.to_datetime(fresh.Date).isin(expected)].copy()
+            cached = pd.DataFrame()
+            report("price_window_refresh", code=code, start=start, as_of=as_of)
+    raw = pd.concat([cached, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+    raw = raw.sort_values("Date").reset_index(drop=True)
+    raw = raw[[column for column in PRICE_COLUMNS if column in raw]].copy()
+    if not pd.DatetimeIndex(raw.Date).equals(expected):
+        raise ValueError("Price providers exhausted: incomplete recent price window")
+    # chart_prices stores uniformly adjusted OHLC; reconstruct the source-session
+    # flag that is not a DB column (zero raw OHLC remains zero after adjustment).
+    if {"Open", "High", "Low"}.issubset(raw):
+        raw["RegularSessionUnavailable"] = raw[["Open", "High", "Low"]].eq(0).all(axis=1)
+    if not historical_test:
+        store.upsert_prices(code, fresh)
+    report("price_window_cache", code=code, start=start, cached_rows=len(cached), fetched_rows=len(fresh))
+    return raw
+
+
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
-    start = "2016-01-01"
-    recent_start = (pd.Timestamp(as_of) - pd.Timedelta(240, unit="D")).date().isoformat()
+    recent_start = (pd.Timestamp(as_of) - pd.Timedelta(PRICE_WINDOW_DAYS, unit="D")).date().isoformat()
     if replay:
         universe = store.load_universe(as_of)
         if universe.empty:
@@ -96,7 +140,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         if pd.Timestamp(as_of).date() not in days:
             return None
     else:
-        days = refresh_krx_trading_days(start, as_of)
+        days = refresh_krx_trading_days(recent_start, as_of)
         if pd.Timestamp(as_of).date() not in days:
             return None
         universe = fetch_universe(as_of, code=code)
@@ -123,39 +167,13 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 listing = pd.to_datetime(getattr(row, "ListingDate", None))
                 if pd.isna(listing):
                     raise ValueError(f"Verified listing interval absent for {code}")
-                previous = None if historical_test else store.load_price_history(code)
-                if previous is not None:
-                    previous = previous.loc[pd.to_datetime(previous.Date).ge(listing)].copy()
-                    if previous.empty:
-                        previous = None
-                first = max(pd.Timestamp(start), listing).date().isoformat()
-                request_start = first if previous is None else max(pd.Timestamp(recent_start), listing).date().isoformat()
-                fresh = _retry_fetch(code, request_start, as_of)
-                if previous is not None:
-                    previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
-                    overlap = previous[["Date", "Close", "RawClose", "RawVolume", "Amount"]].merge(
-                        fresh[["Date", "Close", "RawClose", "RawVolume", "Amount"]], on="Date", suffixes=("_old", "_new"))
-                    revised = overlap.empty or any(
-                        not np.allclose(overlap[f"{col}_old"], overlap[f"{col}_new"],
-                                                      rtol=1e-10, atol=1e-10, equal_nan=True)
-                        for col in ("Close", "RawClose", "RawVolume", "Amount"))
-                    if revised:
-                        fresh = _retry_fetch(code, first, as_of)
-                    else:
-                        fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
-                if fresh.Date.max().date().isoformat() != as_of:
-                    unavailable[code] = "price_not_confirmed_for_session"
-                    continue
-                # Requery the entire feature window: adjusted past prices can change.
-                store.upsert_prices(code, fresh.loc[pd.to_datetime(fresh.Date).ge(pd.Timestamp(recent_start))])
-                raw = fresh
+                first = max(pd.Timestamp(recent_start), listing).date().isoformat()
+                raw = recent_prices(code, first, as_of, days, store, historical_test=historical_test)
                 raw["Code"] = code
                 raw = raw.drop(columns=[c for c in raw if c.startswith(("Individual_", "Institution_", "Foreign_"))], errors="ignore")
                 if not flow.empty:
                     raw = raw.merge(flow.loc[flow.Code.eq(code)].drop(columns="Code"),
                                     on="Date", how="left", validate="one_to_one")
-                if not historical_test:
-                    store.save_price_history(code, raw)
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"

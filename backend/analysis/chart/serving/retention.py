@@ -10,6 +10,7 @@ import json
 from datetime import date, timedelta
 from urllib.parse import quote
 
+from serving.internal.prices import PRICE_WINDOW_DAYS
 from serving.internal.storage import SupabaseStore
 
 KEEP_BATCHES = 5  # 영업일 하루 1배치 → 입력 파일도 5영업일만(1GB 무료 한도, docs/ops/free-tier-budget.md)
@@ -87,11 +88,14 @@ def main(today=None):
     corrected_objects = prune_corrected_inputs(store, cutoff, flow_cutoff)
     store._request("DELETE", "/rest/v1/chart_universe?as_of=lt." + quote(cutoff), prefer="return=minimal")
 
+    price_cutoff = (today - timedelta(days=PRICE_WINDOW_DAYS)).isoformat()
+    store._request("DELETE", "/rest/v1/chart_prices?trade_date=lt." + quote(price_cutoff), prefer="return=minimal")
+
     article_cutoff = (today - timedelta(days=ARTICLE_DAYS)).isoformat()
     store._request("DELETE", "/rest/v1/news_articles?article_date=lt." + quote(article_cutoff), prefer="return=minimal")
     store._request("DELETE", "/rest/v1/disclosures?filed_on=lt." + quote(article_cutoff), prefer="return=minimal")
     print(json.dumps({"event": "retention", "pruned_batches": pruned, "feature_rows": len(rows),
-                      "storage_objects": len(paths), "corrected_objects": corrected_objects, "feature_cutoff": cutoff, "article_cutoff": article_cutoff}))
+                      "price_cutoff": price_cutoff, "storage_objects": len(paths), "corrected_objects": corrected_objects, "feature_cutoff": cutoff, "article_cutoff": article_cutoff}))
 
 
 if __name__ == "__main__":

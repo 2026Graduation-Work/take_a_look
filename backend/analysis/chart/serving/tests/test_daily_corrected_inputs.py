@@ -108,11 +108,9 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
             pass
         def save_universe(self, *args):
             pass
-        def load_price_history(self, code):
-            return None
-        def upsert_prices(self, *args):
-            pass
-        def save_price_history(self, code, frame):
+        def load_prices(self, code, start, end):
+            return pd.DataFrame()
+        def upsert_prices(self, code, frame):
             archived.append(frame.copy())
         def save_raw_prices(self, *args):
             pass
@@ -132,10 +130,10 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     result = pipeline.collect(dates[-1].date().isoformat(), Store())
     assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
-    assert requests == [dates[0].date().isoformat() if recently_listed else "2016-01-01"]
+    assert requests == [dates[0].date().isoformat() if recently_listed else (dates[-1] - pd.Timedelta(240, unit="D")).date().isoformat()]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
     assert result[-1]["complete_current_rows"] == 1
-    assert pd.isna(archived[0].Foreign_BuyAmount.iloc[0])
+    assert "Foreign_BuyAmount" not in archived[0]
 
 
 def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
