@@ -153,7 +153,7 @@ export default function SurveyFlow() {
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     // 같은 URL의 단계 전환은 라우트 알림이 갱신되지 않는다. 현재 문항·결과로 포커스를 옮긴다.
-    const heading = mainRef.current?.querySelector<HTMLElement>("fieldset legend, h1:not([data-route-heading])");
+    const heading = mainRef.current?.querySelector<HTMLElement>("fieldset legend, [data-question-heading], h1:not([data-route-heading])");
     if (heading) {
       heading.tabIndex = -1;
       heading.focus();
@@ -537,7 +537,7 @@ function QuestionPage({
 
         {page.kind === "freeText" && (
           <div className="flex flex-col gap-5">
-            <h1 className="text-xl font-semibold">요즘 투자하면서 걱정되는 점이 있나요?</h1>
+            <h2 data-question-heading className="text-xl font-semibold">요즘 투자하면서 걱정되는 점이 있나요?</h2>
             <p className="m-0 text-sm text-muted">점수 계산에는 쓰지 않고 결과를 설명할 때 참고만 해요. 비워 둬도 돼요.</p>
             <textarea
               value={draft.freeText}
