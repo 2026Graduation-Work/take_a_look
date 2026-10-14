@@ -24,6 +24,8 @@ import {
   STYLE_TYPE_RULE,
   STYLE_TYPE_SOURCE,
   TERM,
+  CONTEXTUAL_LIVE_NEWS_CODES,
+  LIVE_NEWS_SCOPE,
   DISCLOSURE_KIND,
 } from "@/lib/copy-glossary";
 import { STYLE_AXIS_IDS } from "@/lib/profiling-rules";
@@ -358,11 +360,11 @@ function Conclusion({ children }: { children: ReactNode }) {
   return <p className="m-0 text-base text-ink">{children}</p>;
 }
 
-export function NewsSentimentPanel({ insights }: { insights: StockInsights }) {
-  return <MarketPanel detail={null} insights={insights} />;
+export function NewsSentimentPanel({ insights, code }: { insights: StockInsights; code: string }) {
+  return <MarketPanel detail={null} insights={insights} code={code} />;
 }
 
-function MarketPanel({ detail, insights }: { detail: StockDetail | null; insights: StockInsights }) {
+function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockDetail | null; insights: StockInsights; code?: string }) {
   const { sentiment, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentTimelineRef = useRef<HTMLDivElement | null>(null);
@@ -372,6 +374,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
     year: null,
   });
   const sentimentView = marketSentimentView(insights);
+  const contextualLive = sentimentView?.basis === "live" && Boolean(code && CONTEXTUAL_LIVE_NEWS_CODES.has(code));
   const todayLive = todayLiveSentimentView(insights);
   const chartLive = selectedSentimentPeriod === "day" ? todayLive : null;
   const risk = detail ? riskSnapshot(detail) : null;
@@ -411,7 +414,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
     <>
       {sentimentView ? (
         <Conclusion>
-          {sentimentView.basis === "live" ? "최근 24시간" : "과거"} {TERM.sentiment}는{" "}
+          {sentimentView.basis === "live" ? "최근 24시간" : "과거"} {contextualLive ? TERM.relatedNewsSentiment : TERM.sentiment}는{" "}
           <strong className="font-semibold" style={{ color: moodColor(sentimentView.score) }}>{moodWord(sentimentView.score)}</strong>이에요.
         </Conclusion>
       ) : risk ? (
@@ -428,6 +431,7 @@ function MarketPanel({ detail, insights }: { detail: StockDetail | null; insight
           {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳
         </p>
       )}
+      {contextualLive && <p className="m-0 text-xs text-muted">{LIVE_NEWS_SCOPE}</p>}
       {sentimentView?.status === "partial" && (
         <p data-coverage-notice className="m-0 text-xs text-body">
           수집 범위 일부 · 공급자 결과가 100건을 넘어 확인된 기사 범위로 계산했어요.

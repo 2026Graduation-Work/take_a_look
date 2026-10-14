@@ -227,3 +227,24 @@ def test_reviewed_subject_boundaries(company, title, body, category):
 def test_subordinate_competitor_actions_are_not_joint_target_events(company, title, body):
     from analysis.text.value_pipeline.news_relevance import classify_live_relevance
     assert not classify_live_relevance(_item('subordinate', title, body), company).included
+
+
+def test_live_diagnostics_exposes_category_means_without_changing_track(monkeypatch, caplog):
+    import json
+    monkeypatch.setattr(news_tracks.sentiment, 'score_texts', lambda texts, **kwargs: ([-0.9, 0.3, 0.5], 'kr-finbert'))
+    with caplog.at_level('INFO', logger=news_tracks.__name__):
+        track = news_tracks.build_live_track([
+            _item('company', '네이버 실적 하락', '네이버 영업이익이 줄었다.'),
+            _item('industry', '인터넷 플랫폼 산업 전반 광고 수요 회복', '인터넷 플랫폼 업계 전반이 회복했다.'),
+            _item('market', '코스피 상승', '시장 전체에 외국인 매수가 유입됐다.'),
+            _item('other', '카카오 멤버십 출시', '카카오는 멤버십을 출시했다.'),
+        ], '035420', '네이버', as_of=datetime(2026, 10, 13, 15, tzinfo=ZoneInfo('Asia/Seoul')))
+    records = [json.loads(r.message) for r in caplog.records if r.message.startswith('{')]
+    audit = next(r for r in records if r.get('event') == 'live_news_sentiment_breakdown')
+    assert audit['groups']['direct'] == {'article_count': 1, 'sentiment_mean': -0.9}
+    assert audit['groups']['industry'] == {'article_count': 1, 'sentiment_mean': 0.3}
+    assert audit['groups']['market'] == {'article_count': 1, 'sentiment_mean': 0.5}
+    assert audit['decision_counts']['irrelevant'] == 1
+    assert track['window']['sentiment_mean'] == pytest.approx(-0.0333)
+    assert len(track['articles']) == 3
+    assert 'groups' not in track and 'relevance_category' not in track['articles'][0]

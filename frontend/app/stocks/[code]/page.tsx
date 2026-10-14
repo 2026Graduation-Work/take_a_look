@@ -80,7 +80,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[co
               예측·시세 스냅샷은 아직 연결되지 않았어요. 현재 수집된 뉴스 분위기만 보여 드려요.
             </p>
           </div>
-          <NewsSentimentPanel insights={insights} />
+          <NewsSentimentPanel insights={insights} code={code} />
         </section>
       </main>
     );

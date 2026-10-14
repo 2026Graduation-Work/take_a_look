@@ -62,7 +62,24 @@ def _score_relevant(
     scores, backend = sentiment.score_texts(
         [_article_text(item) for item in relevant], require_finbert=require_finbert, batch_size=inference_batch_size
     )
-    return list(zip(relevant, scores, strict=False)), backend
+    scored = list(zip(relevant, scores, strict=False))
+    if contextual:
+        kept_categories = [decision.category for decision in decisions if decision.included]
+        groups = {}
+        for category in ("direct", "indirect", "industry", "market"):
+            values = [score for (_, score), kind in zip(scored, kept_categories, strict=False) if kind == category]
+            groups[category] = {
+                "article_count": len(values),
+                "sentiment_mean": sentiment.aggregate(values)[0] if values else None,
+            }
+        logging.getLogger(__name__).info(json.dumps({
+            "event": "live_news_sentiment_breakdown",
+            "company": company_name,
+            "policy_version": news_relevance.POLICY_VERSION,
+            "decision_counts": dict(Counter(decision.category for decision in decisions)),
+            "groups": groups,
+        }, ensure_ascii=False))
+    return scored, backend
 
 
 def _stats(

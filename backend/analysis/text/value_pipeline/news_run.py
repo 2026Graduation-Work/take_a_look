@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -211,6 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     args = build_parser().parse_args()
     args.handler(args)
 
