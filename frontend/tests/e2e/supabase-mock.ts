@@ -47,7 +47,8 @@ export async function mockSupabaseAuth(
   const users = new Map<string, MockUser>();
   let current: MockUser | null = null;
   const calls: string[] = [];
-  const tables: Record<string, Map<string, Record<string, unknown>>> = { watchlist: new Map(), stock_notes: new Map() };
+  const tables: Record<string, Map<string, Record<string, unknown>>> = { watchlist: new Map(), stock_notes: new Map(), portfolio_holdings: new Map() };
+  const holdingErrors = { read: false, upsert: false, remove: false };
 
   await page.route(`${SUPABASE_URL}/**`, async (route) => {
     const request = route.request();
@@ -98,13 +99,26 @@ export async function mockSupabaseAuth(
       if (rows) {
         const eq = (key: string) => url.searchParams.get(key)?.replace(/^eq\./, "");
         if (method === "GET") {
+          if (table === "portfolio_holdings" && holdingErrors.read) return json(route, { message: "holding read failed" }, 400);
           const active = eq("is_active");
-          return json(route, [...rows.values()].filter((row) => active === undefined || String(row.is_active) === active));
+          return json(route, [...rows.values()].filter((row) =>
+            (active === undefined || String(row.is_active) === active) && (eq("user_id") === undefined || row.user_id === eq("user_id"))));
         }
         if (method === "POST") {
+          if (table === "portfolio_holdings" && holdingErrors.upsert) return json(route, { message: "holding write failed" }, 503);
           const body = request.postDataJSON() as Record<string, unknown> | Record<string, unknown>[];
-          for (const row of Array.isArray(body) ? body : [body]) rows.set(String(row.stock_code), row);
+          for (const row of Array.isArray(body) ? body : [body]) rows.set(String(row.stock_code), { ...rows.get(String(row.stock_code)), ...row });
           return route.fulfill({ status: 201 });
+        }
+        if (method === "PATCH") {
+          if (table === "portfolio_holdings" && holdingErrors.remove) return json(route, { message: "holding removal failed" }, 503);
+          const excluded = url.searchParams.get("stock_code")?.match(/^not\.in\.\((.*)\)$/)?.[1].split(",") ?? [];
+          for (const [key, row] of rows) {
+            if (row.user_id === eq("user_id") && !excluded.includes(String(row.stock_code))) {
+              rows.set(key, { ...row, ...request.postDataJSON() });
+            }
+          }
+          return route.fulfill({ status: 204 });
         }
         if (method === "DELETE") {
           rows.delete(eq("stock_code") ?? "");
@@ -115,5 +129,5 @@ export async function mockSupabaseAuth(
     }
     return json(route, {});
   });
-  return { calls, tables };
+  return { calls, tables, holdingErrors };
 }

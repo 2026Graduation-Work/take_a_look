@@ -50,8 +50,8 @@ const OUTCOME_WORD: Record<DeltaOutcome, string> = {
 const DESIGN: [string, string][] = [
   ["모델", "LightGBM 다중 분류(하락·중립·상승), 네 런 모두 같은 하이퍼파라미터"],
   ["라벨", "동적 σ 배리어 — 안정형 20거래일, 공격형 5거래일 안에 위·아래 배리어 중 어느 쪽에 먼저 닿는지"],
-  ["A (기준)", "Alpha158 계열 가격·거래량 피처"],
-  ["B (처치)", "A + 가격·거래량 심리 피처와 뉴스 감성"],
+  ["A (기준)", "가격·거래량 161개 + 수급 9개, 총 170개 입력"],
+  ["B (처치)", "A + 시장 심리 4개, 총 174개 입력. 뉴스 감성과 개인 설문 점수는 포함하지 않음"],
   ["통제", "같은 종목 유니버스 · 같은 기간 분할 · 같은 시드 · 같은 평가 함수. 바뀌는 것은 피처 묶음뿐"],
   ["고변동일", "일별 시장 변동성 상위 20% 날짜만 다시 평가"],
 ];
@@ -82,7 +82,7 @@ export default function PerformanceDashboard({
             심리 피처를 더하면 예측이 나아지나요?
           </h1>
           <p className="m-0 max-w-2xl text-sm text-body">
-            가격 피처만 쓴 모델 A와 심리 피처를 더한 모델 B를 같은 조건에서 비교했어요.
+            운영 모델과 같은 입력 구성의 A와 시장 심리 피처를 더한 B를 비교했어요. 과거 연도별로 따로 학습한 연구 결과이며, 현재 운영 모델 자체의 성적은 아니에요.
           </p>
           {isSample && (
             <p role="note" className="m-0 mt-2 rounded-md bg-field px-4 py-3 text-sm text-body">
@@ -90,6 +90,10 @@ export default function PerformanceDashboard({
             </p>
           )}
           {!isSample && <p className="m-0 max-w-2xl text-sm text-ink">{conclusion}</p>}
+          {data.experiment && <>
+            <p className="m-0 text-xs text-muted tabular-nums">{data.experiment.start}~{data.experiment.end} · {data.experiment.years.length}개 평가 연도 · 각 연도 직전 3년 학습</p>
+            <p className="m-0 max-w-2xl text-xs text-body">{data.experiment.limitations}</p>
+          </>}
         </section>
 
         <section aria-labelledby="compare-title" className="flex flex-col gap-3">
@@ -157,19 +161,26 @@ export default function PerformanceDashboard({
               ))}
             </table>
           </div>
+          <p className="m-0 px-1 text-xs text-muted sm:hidden">표를 좌우로 밀면 B−A 차이를 볼 수 있어요.</p>
           {b && (
             <p className="m-0 px-1 text-xs text-muted tabular-nums">
               {SAMPLE_LABEL[sample]} · 관측치 {b.sample_rows.toLocaleString("ko-KR")}건 · 거래일 {b.sample_dates.toLocaleString("ko-KR")}일 · 상승 라벨 비율{" "}
               {(b.positive_rate * 100).toFixed(1)}%
             </p>
           )}
+          {data.experiment && <p className="m-0 px-1 text-xs text-muted">
+            지표는 연도별 단순평균, 관측치·거래일·거래 수는 합계입니다. 상승 라벨 비율도 연도별 평균입니다.
+            {sample !== "all" && " 고변동일은 분류·보정 지표만 다시 평가하며 별도 백테스트는 미산출입니다."}
+          </p>}
         </section>
 
         <section aria-labelledby="design-title" className="flex flex-col gap-3">
           <h2 id="design-title" className="px-1 text-xl font-semibold">
             실험 설계
           </h2>
-          <Definitions items={DESIGN} />
+          <Definitions items={data.experiment ? [...DESIGN.filter(([term]) => term !== "고변동일"),
+            ["고변동일", data.experiment.volatile_definition], ["체결 기준", "상승 점수 0.65 이상 · 일별 신규 후보 최대 5개 · 다음 거래일 시가 · 매수·매도 각각 비용 0.105%"],
+            ["집계", data.experiment.backtest_scope], ["출처", data.experiment.source]] : DESIGN} />
         </section>
 
         <section aria-labelledby="metrics-title" className="flex flex-col gap-3">

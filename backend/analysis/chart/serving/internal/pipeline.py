@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -14,6 +15,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from shared.data.calendar import scheduled_sessions
+from shared.data.providers import KrxResponseError
 from shared.settings import processing_contract, serving_root
 
 from .calendar import refresh_krx_trading_days
@@ -24,6 +26,7 @@ from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
 from .pack import config_path, load_pack
 from .prices import fetch_prices, price_snapshot
+from .progress import report
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
@@ -70,12 +73,21 @@ def frame_hash(frame):
 
 
 def _retry_fetch(code, start, as_of):
-    return fetch_prices(code, start, as_of)
+    # KRX sometimes serves HTML even with HTTP 200. Retry bounded reads;
+    # exhausted transport/auth errors still abort publication.
+    for attempt in range(3):
+        try:
+            return fetch_prices(code, start, as_of)
+        except KrxResponseError:
+            if attempt == 2:
+                raise
+            report("price_retry", code=code, attempt=attempt + 1, error_type="KrxResponseError")
+            time.sleep(10 * (attempt + 1))
 
 
 def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     start = "2016-01-01"
-    recent_start = (pd.Timestamp(as_of) - pd.Timedelta(days=240)).date().isoformat()
+    recent_start = (pd.Timestamp(as_of) - pd.Timedelta(240, unit="D")).date().isoformat()
     if replay:
         universe = store.load_universe(as_of)
         if universe.empty:
@@ -94,7 +106,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
     flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
-    frames, unavailable, raw_hashes = {}, {}, {}
+    frames, unavailable, raw_hashes, price_archives = {}, {}, {}, {}
     archive_builder = BUILDER_ID + "_" + processing_contract()["sha256"][:16]
     for row in universe.itertuples():
         code = row.Code
@@ -163,8 +175,11 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             if not replay and not historical_test:
                 archive = raw.tail(60).copy()
                 archive.attrs["input_sha256"] = digest
-                store.save_raw_prices(code, as_of, archive)
-            if not hasattr(store, "upload_feature_panel"):
+                if hasattr(store, "save_raw_price_panel"):
+                    price_archives[code] = archive
+                else:
+                    store.save_raw_prices(code, as_of, archive)
+            if not replay and not hasattr(store, "upload_feature_panel"):
                 store.upload_features(code, as_of, archive_builder, digest, current)
             frames[code] = (raw, current.iloc[0].to_dict(), current)
             raw_hashes[code] = digest
@@ -180,7 +195,9 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         all(pd.notna(row.get(f"flow_{investor}_{window}"))
             for investor in ("individual", "institution", "foreign") for window in (1, 5, 20))
         for _, row, _ in frames.values())
-    if hasattr(store, "upload_feature_panel"):
+    if price_archives:
+        store.save_raw_price_panel(as_of, price_archives)
+    if not replay and hasattr(store, "upload_feature_panel"):
         store.upload_feature_panel(as_of, archive_builder, raw_hashes, frames)
     return universe, frames, unavailable, raw_hashes, flow_report
 

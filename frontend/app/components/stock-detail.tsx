@@ -241,6 +241,7 @@ export default function StockDetailView({
           <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
             {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
             <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}지난 3개월 주가와 {HORIZON_LABEL[horizon]} 범위만 그려요. 미래 가격 곡선은 그리지 않아요.</span>
+            <Link href="/performance" className="btn-text">과거 모델 성적표 보기</Link>
           </div>
         </section>
 

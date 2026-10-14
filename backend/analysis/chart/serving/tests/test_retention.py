@@ -9,6 +9,8 @@ class FakeStore:
 
     def _request(self, method, path, body=None, prefer=None):
         self.calls.append((method, path.split("?")[0], body))
+        if path.startswith("/rest/v1/chart_feature_snapshots?as_of=gte."):
+            return []
         if path.startswith("/rest/v1/chart_feature_snapshots?select"):
             offset = int(path.rsplit("offset=", 1)[1])
             rows = [{"storage_path": f"b/2026-08-01/{i % 1200}/x.parquet"} for i in range(1500)]
@@ -42,15 +44,20 @@ def test_corrected_retention_preserves_history_and_recent_inputs():
                 "raw-prices-v3": [{"name": "2026-08-01"}, {"name": "2026-10-08"}],
                 "raw-prices-v3/2026-08-01": [{"name": "005930.parquet"}],
                 "investor-flows-v3": [{"name": "2026-08-01.parquet"}, {"name": "2026-10-08.parquet"}],
+                "calendars-v3": [{"name": "2026-08-01.parquet"}, {"name": "2026-10-08.parquet"},
+                                 {"name": "README"}],
             }[body["prefix"]]
-    assert retention.prune_corrected_inputs(Store(), "2026-09-09", "2026-09-09") == 2
-    assert removed == ["raw-prices-v3/2026-08-01/005930.parquet", "investor-flows-v3/2026-08-01.parquet"]
+    assert retention.prune_corrected_inputs(Store(), "2026-09-09", "2026-09-09") == 3
+    assert removed == ["raw-prices-v3/2026-08-01/005930.parquet", "investor-flows-v3/2026-08-01.parquet",
+                       "calendars-v3/2026-08-01.parquet"]
 
 
 def test_inputs_follow_oldest_kept_batch_but_flows_keep_30_days(monkeypatch):
     removed = []
     class Store:
         def _request(self, method, path, body=None, prefer=None):
+            if path.startswith("/rest/v1/chart_feature_snapshots?as_of=gte."):
+                return []
             if path.startswith("/rest/v1/chart_batches"):
                 return [{"as_of": "2026-10-02"}]
             if path.startswith("/rest/v1/chart_feature_snapshots?select"):
@@ -60,8 +67,25 @@ def test_inputs_follow_oldest_kept_batch_but_flows_keep_30_days(monkeypatch):
             if path.startswith("/storage/v1/object/list/"):
                 return {"raw-prices-v3": [{"name": "2026-10-01"}, {"name": "2026-10-02"}],
                         "raw-prices-v3/2026-10-01": [{"name": "005930.parquet"}],
-                        "investor-flows-v3": [{"name": "2026-10-01.parquet"}]}[body["prefix"]]
+                        "investor-flows-v3": [{"name": "2026-10-01.parquet"}],
+                        "calendars-v3": [{"name": "2026-10-01.parquet"}, {"name": "2026-10-02.parquet"}]}[body["prefix"]]
             return 0
     monkeypatch.setattr(retention, "SupabaseStore", Store)
     retention.main(date(2026, 10, 12))
-    assert removed == ["alpha/2026-10-01/h/005930.parquet", "raw-prices-v3/2026-10-01/005930.parquet"]
+    assert removed == ["alpha/2026-10-01/h/005930.parquet", "raw-prices-v3/2026-10-01/005930.parquet",
+                       "calendars-v3/2026-10-01.parquet"]
+
+
+def test_retention_keeps_shared_objects_referenced_by_retained_batches(monkeypatch):
+    class Store(FakeStore):
+        def _request(self, method, path, body=None, prefer=None):
+            if path.startswith("/rest/v1/chart_feature_snapshots?as_of=gte."):
+                return [{"storage_path": "b/2026-08-01/0/x.parquet"}]
+            return super()._request(method, path, body, prefer)
+    store = Store()
+    monkeypatch.setattr(retention, "SupabaseStore", lambda: store)
+    retention.main(date(2026, 11, 15))
+    removed = [p for method, path, body in store.calls if method == "DELETE" and path.startswith("/storage/")
+               for p in body["prefixes"]]
+    assert "b/2026-08-01/0/x.parquet" not in removed
+    assert len(removed) == 1199
