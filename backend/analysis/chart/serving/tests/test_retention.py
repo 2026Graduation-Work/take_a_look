@@ -89,18 +89,3 @@ def test_retention_keeps_shared_objects_referenced_by_retained_batches(monkeypat
                for p in body["prefixes"]]
     assert "b/2026-08-01/0/x.parquet" not in removed
     assert len(removed) == 1199
-
-
-def test_retention_bounds_price_cache_to_240_calendar_days(monkeypatch):
-    class Store(FakeStore):
-        def _request(self, method, path, body=None, prefer=None):
-            if path.startswith('/rest/v1/chart_prices?'):
-                assert method == 'DELETE'
-                assert path == '/rest/v1/chart_prices?trade_date=lt.2026-02-16'
-                self.price_pruned = True
-                return b''
-            return super()._request(method, path, body, prefer)
-    store = Store()
-    monkeypatch.setattr(retention, 'SupabaseStore', lambda: store)
-    retention.main(date(2026, 10, 14))
-    assert store.price_pruned

@@ -6,8 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-PRICE_WINDOW_DAYS = 240  # Calendar days, not trading sessions.
-
 REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
 

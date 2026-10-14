@@ -108,9 +108,11 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
             pass
         def save_universe(self, *args):
             pass
-        def load_prices(self, code, start, end):
-            return pd.DataFrame()
-        def upsert_prices(self, code, frame):
+        def load_price_history(self, code):
+            return None
+        def upsert_prices(self, *args):
+            pass
+        def save_price_history(self, code, frame):
             archived.append(frame.copy())
         def save_raw_prices(self, *args):
             pass
@@ -130,10 +132,10 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     result = pipeline.collect(dates[-1].date().isoformat(), Store())
     assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
-    assert requests == [dates[0].date().isoformat() if recently_listed else (dates[-1] - pd.Timedelta(240, unit="D")).date().isoformat()]
+    assert requests == [dates[0].date().isoformat() if recently_listed else "2016-01-01"]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
     assert result[-1]["complete_current_rows"] == 1
-    assert "Foreign_BuyAmount" not in archived[0]
+    assert pd.isna(archived[0].Foreign_BuyAmount.iloc[0])
 
 
 def test_flow_missing_only_blocks_model_that_requires_it(monkeypatch):
@@ -223,3 +225,44 @@ def test_price_reads_retry_krx_html_but_do_not_hide_contract_failures(monkeypatc
     with pytest.raises(ValueError, match="calendar contract"):
         pipeline._retry_fetch("005930", "2016-01-01", "2026-10-13")
     assert delays == []
+
+
+@pytest.mark.parametrize("changed_column", ["Close", "RawClose", "RawVolume", "Amount"])
+def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, changed_column):
+    dates = pd.bdate_range("2023-01-02", periods=400)
+    values = np.arange(len(dates)) + 100.
+    stored = pd.DataFrame({"Date": dates[:-1], "Open": values[:-1], "High": values[:-1]+1,
+                           "Low": values[:-1]-1, "Close": values[:-1], "Volume": 10.,
+                           "VWAP": values[:-1], "RawClose": values[:-1], "RawVolume": 10., "Amount": 1000.})
+    start = dates[-1] - pd.Timedelta(240, unit="D")
+    fresh = pd.concat([stored, pd.DataFrame([{**stored.iloc[-1].to_dict(), "Date": dates[-1]}])], ignore_index=True)
+    fresh = fresh.loc[fresh.Date >= start].copy()
+    # Both an older overlapping row and the last stored row can be revised.
+    fresh.loc[fresh.index.isin([fresh.index[0], fresh.index[-2]]), changed_column] += 1
+    saved = []
+    class Store:
+        def save_calendar(self, *args): pass
+        def save_universe(self, *args): pass
+        def load_price_history(self, code): return stored.copy()
+        def upsert_prices(self, code, frame):
+            assert frame.Date.min() >= start
+        def save_price_history(self, code, frame): saved.append(frame.copy())
+        def save_raw_prices(self, *args): pass
+        def upload_features(self, *args): pass
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
+    universe = pd.DataFrame({"Code": ["005930"], "Name": ["삼성전자"], "ListingDate": pd.Timestamp("2000-01-01")})
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (pd.DataFrame(), {}))
+    requests = []
+    def fetch(code, first, last):
+        requests.append((first, last))
+        return fresh.copy()
+    monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
+    as_of = dates[-1].date().isoformat()
+    result = pipeline.collect(as_of, Store())
+    assert requests == [(start.date().isoformat(), as_of)]
+    expected = pd.concat([stored, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+    actual = saved[0].drop(columns="Code")
+    pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected.reset_index(drop=True))
+    assert len(actual) == 400
+    assert not result[2]
