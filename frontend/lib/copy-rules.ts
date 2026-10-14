@@ -14,6 +14,7 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /(오를|내릴)\s*것/, reason: "수익률 전망 (AGENTS.md 근거 서술)" },
   { pattern: /적중률/, reason: "모델 지표(ROC-AUC 등)를 적중률로 오표기할 수 있는 용어" },
   { pattern: /정확도\s*[\d{$]/, reason: "'정확도 N%' 표기 (ROC-AUC 오표기)" },
+  { pattern: /기여도\s*[\d{$]|기여도[^"'`<]{0,15}%/, reason: "기여값을 '결과의 몇 %'로 읽히게 쓰지 않는다 → '신호를 크게/조금 높임·낮춤'" },
   // 쉬운 말 규칙(copy-glossary.ts). "계산 근거" 영역도 예외 없이 검사한다.
   { pattern: /추천/, reason: "모델 신호 순 목록을 '추천'으로 부르지 않는다 → '오늘 신호가 강한 종목'" },
   { pattern: /넛지/, reason: "개발 용어 → '확인할 것'" },

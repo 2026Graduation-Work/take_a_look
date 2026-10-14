@@ -56,7 +56,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
-import { formatKstDateTime, formatShares, kstDay, signedPercent } from "@/lib/display";
+import { contributionWord, formatKstDateTime, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -863,9 +863,8 @@ function ContributionPanel({
   }
   const target = space === "class_0_raw_margin" ? "하방" : space === "class_1_raw_margin" ? "중립" : "상방";
   const top = features[0];
-  const share = (value: number) => total === undefined ? null : total === 0 ? 0 : Math.abs(value) / total * 100;
-  // 쉽게 보이기: 상위 3개만 막대로, 비중 10% 미만은 상위 3개 안이어도 뺀다. 나머지는 "그 밖의 N개" 한 줄
-  const shown = features.slice(0, 3).filter((feature) => (share(feature.contribution) ?? 100) >= 10);
+  // 쉽게 보이기: 상위 3개만 막대로, 나머지는 "그 밖의 N개" 한 줄. 크기는 말로(contributionWord), 숫자는 계산값 보기에만
+  const shown = features.slice(0, 3);
   const hiddenCount = features.length - shown.length;
   const max = Math.max(...shown.map(f => Math.abs(f.contribution))) || 1;
   return (
@@ -885,9 +884,7 @@ function ContributionPanel({
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
-                <span className="ml-auto flex-none text-xs text-muted tabular-nums">
-                  {target} {feature.contribution === 0 ? "영향 없음" : up ? "강화" : "완화"} · 기여도 {share(feature.contribution) === null ? "미제공" : `${share(feature.contribution)!.toFixed(1)}%`}
-                </span>
+                <span className="ml-auto flex-none text-xs text-body">{contributionWord(feature.contribution, total)}</span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
                 <span className="absolute inset-y-[-3px] left-1/2 w-px bg-line" />
@@ -900,14 +897,13 @@ function ContributionPanel({
                   }}
                 />
               </div>
-              <span className="text-xs text-muted">{target} 점수를 {feature.contribution === 0 ? "바꾸지 않음" : up ? "높이는 방향" : "낮추는 방향"}</span>
               <span className="text-xs text-muted">{feature.meaning_ko} · 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
             </li>
           );
         })}
       </ul>
       {hiddenCount > 0 && (
-        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 비중이 작아(10% 미만 포함) 줄였어요. 계산값 보기에서 모두 볼 수 있어요.</p>
+        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 영향이 더 작아 줄였어요. 계산값 보기에서 모두 볼 수 있어요.</p>
       )}
       <details className="disclosure">
         <summary className="text-xs text-body">계산값 보기</summary>
@@ -919,10 +915,10 @@ function ContributionPanel({
             </div>
           ))}
         </dl>
-        <p className="text-xs text-muted">기여도 = {target} 점수에 대한 피처 기여값의 절댓값 ÷ 전체 피처 기여값의 절댓값 합 × 100. 모델 기준값은 제외해요.{total !== undefined && ` 이번 절댓값 합 ${total.toFixed(4)}.`} 막대 길이는 막대로 보인 항목 중 가장 큰 기여를 기준으로 비교해요.</p>
+        <p className="text-xs text-muted">계산값은 {target} 점수를 올리고(+) 내린(−) 정도예요. 결과의 몇 분의 몇이라는 뜻이 아니에요. 계산값의 절댓값이 전체 항목 절댓값 합{total !== undefined && `(이번 ${total.toFixed(4)})`}의 10분의 1 이상이면 &lsquo;크게&rsquo;, 그보다 작으면 &lsquo;조금&rsquo;이라고 써요. 모델 기준값은 제외해요. 막대 길이는 막대로 보인 항목 중 가장 큰 값을 기준으로 비교해요.</p>
       </details>
       <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>{total === undefined ? "전체 항목 기준값이 없어 %는 미제공해요." : "기여도 = 전체 항목 대비 비중이라 합이 100%가 아닐 수 있어요."} {target} 강화 = 점수를 높임 · 완화 = 낮춤 · 예측 확률·수익률 아님</span>
+        <span>{total === undefined && "전체 항목 기준값이 없어 크기 말은 빼고 방향만 보여요. "}{target} 점수를 높이고 낮춘 정도예요 · 예측 확률·수익률 아님</span>
       </div>
     </>
   );

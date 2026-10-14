@@ -111,3 +111,15 @@ export function formatShares(value: number): string {
   if (Math.abs(value) < 10_000) return `1만 주 미만 ${value > 0 ? "순매수" : "순매도"}`;
   return `${value > 0 ? "+" : "-"}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
 }
+
+// 모델 근거의 크기 말(규칙 코드). 기여값은 선택한 분류 점수를 올리고 내린 정도라 "결과의 몇 %"로 쓰지 않는다.
+// 크기 = |기여값| ÷ 전체 피처 |기여값| 합(payload.inference.contribution_abs_sum). 0.1 이상 "크게", 미만 "조금".
+// 기준: 운영 배치(2026-10-13, 913종목 H20)에서 1위 항목의 중앙값이 약 0.13, 2~3위 항목은 대부분 0.1 미만.
+// 합이 없으면(옛 스냅샷) 크기를 알 수 없어 방향만 쓴다.
+export const CONTRIBUTION_LARGE = 0.1;
+export function contributionWord(contribution: number, total?: number): string {
+  if (contribution === 0) return "신호를 바꾸지 않음";
+  const verb = contribution > 0 ? "높임" : "낮춤";
+  if (!total) return `신호를 ${verb}`;
+  return `신호를 ${Math.abs(contribution) / total >= CONTRIBUTION_LARGE ? "크게" : "조금"} ${verb}`;
+}

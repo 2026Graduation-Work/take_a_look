@@ -54,6 +54,9 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     "적중률 61%",
     "정확도 64%",
     "정확도 {auc}",
+    "기여도 12.0%",
+    "기여도 {share}",
+    "합이 100%가 아닐 수 있어요 · 기여도 = 비중 %",
     "오늘의 추천 종목",
     "넛지",
     "H10 · 10거래일 후",
@@ -74,4 +77,5 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   assert.ok(!caught("getSupabaseClient()"));
   assert.ok(!caught("const h10 = agreement.h10"));
   assert.ok(!caught("signalLabel"));
+  assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않습니다."));
 });
