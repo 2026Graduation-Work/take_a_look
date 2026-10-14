@@ -141,7 +141,7 @@ export default function PortfolioHeatmap({
                   href={`/stocks/${holding.code}`}
                   aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, 비중 ${Math.round((amount / grandTotal) * 100)}%, ${HORIZON_AHEAD[20]} ${signal.label} 신호`}
                   aria-describedby={active?.code === holding.code ? popupId : undefined}
-                  className="relative min-h-0 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
+                  className="relative min-h-16 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                   onPointerDown={(event) => { pointerType.current = event.pointerType; }}
                   onPointerEnter={(event) => {
