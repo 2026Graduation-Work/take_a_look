@@ -48,14 +48,14 @@ export default function HeatmapPopup({
       className={`fixed z-50 flex w-64 max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] flex-col gap-4 overflow-y-auto rounded-md bg-surface p-4 text-sm text-ink shadow-lift ${touch ? "" : "pointer-events-none"}`}
       style={{ ...position, visibility: position ? "visible" : "hidden" }}
     >
-      <span className="wrap-anywhere text-base font-semibold">{holding.name}</span>
-      <div className="flex flex-col gap-1">
+      <span className="shrink-0 wrap-anywhere text-base font-semibold">{holding.name}</span>
+      <div className="flex shrink-0 flex-col gap-1">
         <span className="font-medium" style={{ color: signal.ink }}>{HORIZON_AHEAD[20]} {signal.label}</span>
         <span className="tabular-nums">비중 {weight}%</span>
         <span className="text-xs tabular-nums text-muted">{holding.quantity.toLocaleString("ko-KR")}주, {amount}</span>
       </div>
       {touch && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
           <button type="button" className="btn-text" onClick={onClose}>닫기</button>
           <Link href={`/stocks/${holding.code}`} className="btn-text">종목 상세 보기</Link>
         </div>

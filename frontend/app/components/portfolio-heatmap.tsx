@@ -65,6 +65,7 @@ export default function PortfolioHeatmap({
     input: "pointer" | "keyboard" | "touch";
   } | null>(null);
   const isOpen = active !== null;
+  const popupInput = active?.input;
   useEffect(() => {
     if (!isOpen) return;
     const dismiss = () => setActive(null);
@@ -75,17 +76,24 @@ export default function PortfolioHeatmap({
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") dismiss();
     };
+    const scroll = (event: Event) => {
+      if (event.target instanceof Node && document.getElementById(popupId)?.contains(event.target)) return;
+      // 터치 선택기의 기본 스크롤이나 팝업 내부 스크롤은 정보를 닫지 않는다.
+      // 바깥에서 시작한 터치는 pointerdown에서 닫힌다.
+      if (popupInput === "touch") return;
+      dismiss();
+    };
     window.addEventListener("resize", dismiss);
-    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("scroll", scroll, true);
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
     return () => {
       window.removeEventListener("resize", dismiss);
-      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("scroll", scroll, true);
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape);
     };
-  }, [isOpen, popupId]);
+  }, [isOpen, popupId, popupInput]);
 
   const columns = splitIntoColumns(holdings);
   const closeAsOf = holdings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1);
@@ -175,6 +183,22 @@ export default function PortfolioHeatmap({
           </div>
         ))}
       </div>
+      <select
+        aria-label="보유 종목 정보 선택"
+        value=""
+        className="hidden min-h-11 w-full min-w-0 rounded-sm bg-field px-3 text-sm text-ink [@media(any-pointer:coarse)]:block"
+        onChange={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setActive({ code: event.currentTarget.value, x: rect.right, y: rect.top, input: "touch" });
+        }}
+      >
+        <option value="" disabled>종목을 골라 정보 보기</option>
+        {columns.flat().map(({ holding, amount }) => (
+          <option key={holding.code} value={holding.code}>
+            {holding.name}, 비중 {Math.round((amount / grandTotal) * 100)}%
+          </option>
+        ))}
+      </select>
       {active && activeItem && (
         <HeatmapPopup
           id={popupId}
