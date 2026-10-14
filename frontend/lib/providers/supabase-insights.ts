@@ -492,7 +492,13 @@ export async function loadSupabaseFinancial(
             if (metric.value === null) continue; // 적자·결측은 주가로 채우지 않는다.
             const original = metric.value;
             metric.value = Number((original * factor).toFixed(4));
-            metric.basis = `기존 ${original}배 × (${quote.as_of} ${priceSource} ${quote.close.toLocaleString("ko-KR")}원 ÷ ${snapshot.price_as_of} 수정종가 ${baseline!.toLocaleString("ko-KR")}원) · 기존 재무 계산: ${metric.basis}`;
+            // 저장된 배수에서 주당 값을 환산한다. 수정종가를 사용해 분할 전후 단위를 맞춘다.
+            // 원자료의 정확한 EPS/BPS가 아니므로 '약'으로 표시하고 결과 정밀도는 카드와 맞춘다.
+            const displayValue = metric.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+            const denominator = metric.key === "per" ? "주당순이익" : "주당순자산";
+            metric.basis = positiveFinite(original)
+              ? `주가 ${quote.close.toLocaleString("ko-KR")}원 ÷ ${denominator} 약 ${(baseline! / original).toLocaleString("ko-KR", { maximumFractionDigits: 0 })}원 = ${displayValue}배`
+              : `최신 종가를 반영한 ${displayValue}배`;
           }
           priceAsOf = quote.as_of;
           asOf = snapshot.as_of && snapshot.as_of > quote.as_of ? snapshot.as_of : quote.as_of;
@@ -505,6 +511,7 @@ export async function loadSupabaseFinancial(
   const priceLabel = priceAsOf ? ` · 주가 ${priceAsOf} 종가${priceSource ? ` (${priceSource})` : ""}` : "";
   return {
     period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준`,
+    valuationPriceAsOf: validPriceDay(priceAsOf) ? priceAsOf : undefined,
     filing: `${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
     metrics,
     asOf,

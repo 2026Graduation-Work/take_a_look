@@ -20,7 +20,7 @@ export const TERM = {
   volatility: "가격 흔들림",
   nudge: "확인할 것",
   market: "시장 분위기",
-  financial: "회사 체력",
+  financial: "재무 상태",
   horizonAgreement: "기간마다 같은 방향인가요?",
 } as const;
 

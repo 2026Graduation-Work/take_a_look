@@ -348,7 +348,7 @@ export default function EvidenceTabs({
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
           />
         )}
-        <Why>{TAB_META[active].why}</Why>
+        {active !== "financial" && <Why>{TAB_META[active].why}</Why>}
       </div>
     </section>
   );
@@ -799,10 +799,10 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
             </li>
           ))}
         </ul>
+        <p className="m-0 mt-3 text-2xs text-muted">
+          재무 {financial.period}{financial.valuationPriceAsOf && ` · PER·PBR 주가 ${financial.valuationPriceAsOf.replaceAll("-", ".")} 종가 기준`}
+        </p>
       </details>
-      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>{financial.period}</span>
-      </div>
     </>
   );
 }

@@ -179,6 +179,7 @@ export interface FinancialMetric {
   note: string | null;
 }
 export interface FinancialSnapshot {
+  valuationPriceAsOf?: string; // PER·PBR에 실제 사용한 종가 기준일(보고서 기준과 분리)
   period: string; // "2025년 연간 기준"
   filing?: string; // 연결/별도·공시일·접수번호·주식수·주가 기준(출처 줄을 펼치면 보임)
   metrics: FinancialMetric[];
