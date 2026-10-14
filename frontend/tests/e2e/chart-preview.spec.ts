@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { featureLabel } from "../../lib/featureLabels.ts";
+import { contributionWord } from "../../lib/display.ts";
 
 const snapshots = JSON.parse(readFileSync("../backend/analysis/chart/serving/previews/2026-09-21/snapshots.json", "utf8"));
 const rows = snapshots.map((payload: { batch_id: string; stock_code: string; horizon: number }) => ({
@@ -31,7 +32,7 @@ test("public predictions retain the original detail UI and both model directions
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText("기여도 미제공");
+      await expect(row).toContainText(contributionWord(feature.contribution)); // 전체 합이 없으면 크기 말 없이 방향만
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
@@ -68,18 +69,18 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
   const features = wholeModel.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features;
-  // 상위 3개 중 비중 10% 이상만 막대, 나머지는 "그 밖의 N개" 한 줄
-  const visible = features.slice(0, 3).filter((feature: { contribution: number }) => Math.abs(feature.contribution) * 100 >= 10);
+  // 상위 3개를 막대로, 크기는 말로(전체 합의 10분의 1 기준), 나머지는 "그 밖의 N개" 한 줄
+  const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
-    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(
-      `기여도 ${(Math.abs(feature.contribution) * 100).toFixed(1)}%`);
+    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, 1));
   }
+  await expect(model).not.toContainText("기여도");
   if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산값 보기" }).click();
   await expect(model.locator("dd").first()).toHaveText(features[0].contribution.toFixed(4));
-  await expect(model).toContainText("합이 100%가 아닐 수 있어요");
+  await expect(model).toContainText("10분의 1 이상이면");
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -164,10 +165,9 @@ for (const [space, target, scores, color] of [
     await page.getByRole("tab", { name: "모델이 본 이유" }).click();
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText(`모델의 ${target} 점수`);
-    const third = Math.abs(selected.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features[2].contribution) * 100;
-    await expect(panel.locator("[data-model-feature]")).toHaveCount(third >= 10 ? 3 : 2);
-    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 강화 · 기여도 12.0%`);
-    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 완화 · 기여도 10.0%`);
+    await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
+    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText("신호를 크게 높임");
+    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText("신호를 크게 낮춤");
     // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
     expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
     expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
