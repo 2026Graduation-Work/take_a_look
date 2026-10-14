@@ -7,9 +7,11 @@
   "publication_base": "35f791038ab4536362b700b26f7b2d562c08be6a",
   "source_contains_uncommitted_changes": true,
   "checks": {
-    "recorded_input_hashes_verified": 100,
     "annual_means_and_frontend_values_verified": 48,
-    "pnl_reconciliations_verified": 14
+    "pnl_reconciliations_verified": 14,
+    "output_artifact_hashes_verified": 100,
+    "suite_identity_recomputed_matches": true,
+    "common_trades_verified": 609
   },
   "source_code_sha256": {
     "experiments/run_psychology_ab.py": "119181e52570e2cd9d424dbeb0192890a3c8e1f041f62edd6c996aba9e93a660",
@@ -20,5 +22,7 @@
     "experiments/features/local_panel.py": "ab1ab59d22d56be28428d7837a898255ab1eb42233b331bf6707778b99b5bcb9",
     "experiments/features/psychology/market_psychology.py": "798aed6f97b6caa3a438ba2aa38902f554fcf217ed953757947daada6bf5d94f",
     "experiments/configs/psychology_ab_2019_2025.yaml": "01def9375ef6a5d8b38412025853527c2709c7c79fd0b4296444e16c60f88681"
-  }
+  },
+  "source_snapshot_manifest": "source_manifest.json",
+  "training_input_manifest_location": "source archive: workspace/experiments/datasets/psychology_ab_kospi_snapshot_20261006/"
 }
