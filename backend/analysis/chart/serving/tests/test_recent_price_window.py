@@ -12,7 +12,7 @@ def price_rows(dates):
                          'RawVolume': 10., 'Amount': values * 10, 'AdjustmentFactor': 1.})
 
 
-@pytest.mark.parametrize('mode', ['daily', 'volume_revision', 'amount_revision', 'split', 'gap', 'empty', 'already_current'])
+@pytest.mark.parametrize('mode', ['daily', 'volume_revision', 'amount_revision', 'split', 'gap', 'empty', 'already_current', 'missing_factor'])
 def test_recent_db_cache_is_incremental_and_never_fetches_training_history(monkeypatch, mode):
     dates = pd.bdate_range('2024-01-02', periods=80)
     full = price_rows(dates)
@@ -23,6 +23,8 @@ def test_recent_db_cache_is_incremental_and_never_fetches_training_history(monke
         cached = pd.DataFrame()
     if mode == 'already_current':
         cached = full.copy()
+    if mode == 'missing_factor':
+        cached['AdjustmentFactor'] = pd.Series([None] * len(cached), dtype=object)
     fresh = full.copy()
     fresh['PriceProvider'] = 'test-provider'
     fresh['RawOpen'] = fresh.Open
@@ -44,9 +46,9 @@ def test_recent_db_cache_is_incremental_and_never_fetches_training_history(monke
     monkeypatch.setattr(pipeline, '_retry_fetch', fetch)
     raw = pipeline.recent_prices('005930', str(dates[0].date()), str(dates[-1].date()), set(dates.date), Store())
     expected_start = dates[0] if mode == 'empty' else dates[29] if mode == 'gap' else dates[-1] if mode == 'already_current' else dates[-2]
-    assert starts == [str(expected_start.date())] + ([str(dates[0].date())] if mode == 'split' else [])
+    assert starts == [str(expected_start.date())] + ([str(dates[0].date())] if mode in ('split', 'missing_factor') else [])
     assert len(raw) == 80 and len(writes) == 1
-    assert len(writes[0]) == (80 if mode in ('empty', 'split') else 51 if mode == 'gap' else 1 if mode == 'already_current' else 2)
+    assert len(writes[0]) == (80 if mode in ('empty', 'split', 'missing_factor') else 51 if mode == 'gap' else 1 if mode == 'already_current' else 2)
     assert raw.Date.min() == dates[0]
     if mode == 'split':
         assert raw.Close.iloc[0] == fresh.Close.iloc[0]

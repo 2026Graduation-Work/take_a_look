@@ -106,8 +106,10 @@ def recent_prices(code, start, as_of, days, store, *, historical_test=False):
     if not cached.empty:
         overlap = cached[["Date", "AdjustmentFactor"]].merge(
             fresh[["Date", "AdjustmentFactor"]], on="Date", suffixes=("_old", "_new"))
-        if overlap.empty or not np.allclose(overlap.AdjustmentFactor_old, overlap.AdjustmentFactor_new,
-                                           rtol=1e-8, atol=1e-12, equal_nan=False):
+        if overlap.empty or not np.allclose(
+                overlap.AdjustmentFactor_old.to_numpy(dtype=float, na_value=np.nan),
+                overlap.AdjustmentFactor_new.to_numpy(dtype=float, na_value=np.nan),
+                rtol=1e-8, atol=1e-12, equal_nan=False):
             # Corporate actions can change the price basis. Refresh only this window,
             # never the training history or the immutable histogram samples.
             if request_start != start:
