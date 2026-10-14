@@ -37,7 +37,7 @@ def _json_safe(value):
 def _validation_window(train_end: str, embargo_days: int) -> tuple[str, str, str]:
     train_end_dt = pd.to_datetime(train_end)
     pure_train_end_dt = train_end_dt - pd.DateOffset(months=6)
-    val_start_dt = pure_train_end_dt + pd.Timedelta(days=embargo_days)
+    val_start_dt = pure_train_end_dt + pd.Timedelta(embargo_days, unit="D")
     return (
         pure_train_end_dt.strftime("%Y-%m-%d"),
         val_start_dt.strftime("%Y-%m-%d"),
@@ -60,11 +60,11 @@ def _training_windows(
         return train_end, train_end, train_end, train_end, None
 
     pure_train_end, val_start, val_end = _validation_window(train_end, embargo_days)
-    train_label_observation_end = (pd.to_datetime(val_start) - pd.Timedelta(days=1)).strftime(
+    train_label_observation_end = (pd.to_datetime(val_start) - pd.Timedelta(1, unit="D")).strftime(
         "%Y-%m-%d"
     )
     validation_label_observation_end = (
-        pd.to_datetime(split_info["test_start"]) - pd.Timedelta(days=1)
+        pd.to_datetime(split_info["test_start"]) - pd.Timedelta(1, unit="D")
     ).strftime("%Y-%m-%d")
     return (
         pure_train_end,
@@ -343,7 +343,7 @@ def main(config_path):
             label_params = label_params_from_config(config)
             _, val_start, val_end = _validation_window(train_end, embargo_days)
             label_observation_end = (
-                pd.to_datetime(split_info["test_start"]) - pd.Timedelta(days=1)
+                pd.to_datetime(split_info["test_start"]) - pd.Timedelta(1, unit="D")
             ).strftime("%Y-%m-%d")
             fold_pred_hash = f"{predictions_hash}_fold{idx}"
             model_wrapper = LGBMWrapper(config)

@@ -8,7 +8,7 @@
 python -m venv workspace/serving/.venv
 source workspace/serving/.venv/bin/activate
 python -m pip install -r serving/requirements.txt
-python -m serving.pack validate --path workspace/serving/packs/kospi_shared_v3_flow_train2023_2025_20261011
+python -m serving.pack validate --path workspace/serving/packs/kospi_shared_v3_flow_train2023_2025_20261014
 python -m serving.local_preview --code 005930 --as-of 2026-10-06 --compute-only
 ```
 
@@ -41,15 +41,15 @@ Storage에는 날짜별 최근 원본 60행과 전체 입력 해시를 보관하
 
 전환 이전 v3 구현의 기준 커밋은 `095584b`, 원본은 `workspace/archive/pre-refactor/originals/`이다. 해당 커밋의 별도 checkout에서 호환 구현과 이전 설정을 사용하고 `CHART_SERVING_DATA_DIR`를 보관된 운영 workspace로 지정하면 이전 pack을 검증할 수 있다. 현재 builder에 이전 모델만 끼우지 않는다.
 
-`serving/config.yaml`은 수급 포함 pack `kospi_shared_v3_flow_train2023_2025_20261011`을 사용한다. GitHub Release의 tar.gz SHA-256은 `26fd46a82e18abf20f8fc15510964cb7dd402fa3a8200fa7447899b69540821f`다. 다운로드 후 builder 계약과 모델·사례 파일 해시를 모두 검사한다.
+`serving/config.yaml`은 수급 포함 pack `kospi_shared_v3_flow_train2023_2025_20261014`을 사용한다. GitHub Release의 tar.gz SHA-256은 `20da6a515edc32f5e906116f748484bac0fd224220ad4d9b9c0e1561f9b88086`다. 다운로드 후 builder 계약과 모델·사례 파일 해시를 모두 검사한다. 10/14 전환은 NumPy 날짜 단위 명시만 바꿨으며 H5/H20 모델·사례 파일 SHA-256은 10/11 pack과 같다. 바로 이전 수급 pack으로 복구할 때는 PR #313 머지 커밋 `9cd2f75174b657c4956d18e81493674f3306bf2a`의 builder와 `serving/config.yaml`을 함께 복원한다. 상세 동등성 검증은 `../docs/TIMEDELTA_COMPATIBILITY.md`다.
 
 시장 상태 갱신·수급·종목 마스터·기존 보존 정책은 최신 main 동작을 유지했다. 별도 운영 명령은 `python -m serving.supply`, `python -m serving.stock_master`, `python -m serving.retention`이다. 이번 작업에서 실행하거나 발행하지 않았다. 이전 표시용 preview는 호환 pack이 있어야 검증·발행할 수 있다.
 
-main 통합 직전 공통 v3 코드 기준은 `e5a0fe4`이며 최초 전환 전 기준은 `095584b`다. 새 pack의 `previous_active_pack.json`에는 이전 설정·처리 계약·builder 소스 경로가 있다. 이전 pack의 builder와 해당 코드 기준을 함께 사용한다.
+main 통합 직전 공통 v3 코드 기준은 `e5a0fe4`이며 최초 전환 전 기준은 `095584b`다. 과거 로컬 활성화에서 생성한 `previous_active_pack.json`에는 당시 이전 설정·처리 계약·builder 소스 경로가 있다. 10/14 원격 pack은 아래 명시된 Git 커밋·설정으로 복구한다. 이전 pack의 builder와 해당 코드 기준을 함께 사용한다.
 
 상장 구간 통합 직전 builder 기준 커밋은 `0c474ff`다. `20261010_main` pack으로 되돌릴 때는 이 코드와 보존된 이전 로컬 설정을 함께 복원한다.
 
-현재 로컬 활성 pack은 수급 포함 H5/H20이며 기본 161개 + 수급 9개 입력을 사용한다. 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. 기본 pack `kospi_shared_v3_train2023_2025_20261011`은 같은 builder와 호환되므로 보존된 설정만 복원해 검증할 수 있다. 원격 기본 설정도 동일한 수급 pack을 사용한다.
+현재 로컬 활성 pack은 수급 포함 H5/H20이며 기본 161개 + 수급 9개 입력을 사용한다. 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. 기본 pack `kospi_shared_v3_train2023_2025_20261011`은 이전 builder와 함께 보존한다. 현재 날짜 단위 명시 builder에서는 설정만 복원하면 계약 검사가 실패한다. 원격 기본 설정도 동일한 수급 pack을 사용한다.
 
 ## 원격 모델 확인
 
@@ -59,4 +59,4 @@ Daily chart serving의 `model_check=true`는 마지막 확정 거래일의 삼�
 python -m serving.model_check
 ```
 
-직전 원격 운영 성공 실행은 `37899919906`, 호환 코드 기준은 `7bb84b69345e51c0badf9aefcd7132037173bdc3`다. 이전 pack `kospi_uniform_v3_train2023_2025_20261009`와 Release는 보존한다. 이 pack으로 복구하려면 위 코드와 그 커밋의 설정을 함께 복구한다. 현재 shared builder에서 이전 원격 설정만 복원하면 호환성 검사로 중단한다.
+초기 원격 운영 성공 기록은 `37899919906`, 호환 코드 기준은 `7bb84b69345e51c0badf9aefcd7132037173bdc3`다. 이전 pack `kospi_uniform_v3_train2023_2025_20261009`와 Release는 보존한다. 이 pack으로 복구하려면 위 코드와 그 커밋의 설정을 함께 복구한다. 현재 shared builder에서 이전 원격 설정만 복원하면 호환성 검사로 중단한다.

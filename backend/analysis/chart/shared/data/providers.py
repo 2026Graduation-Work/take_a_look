@@ -155,7 +155,7 @@ def _fetch_delisted_list(start_date: str) -> pd.DataFrame:
     end = pd.Timestamp.today().normalize()
     parts = []
     while start <= end:
-        chunk_end = min(start + pd.DateOffset(years=2) - pd.Timedelta(days=1), end)
+        chunk_end = min(start + pd.DateOffset(years=2) - pd.Timedelta(1, unit="D"), end)
         response = session.post(
             "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
             data={
@@ -173,7 +173,7 @@ def _fetch_delisted_list(start_date: str) -> pd.DataFrame:
         except (ValueError, KeyError, TypeError) as exc:
             raise RuntimeError(f"KRX 상폐 목록 응답 오류: {start:%Y-%m-%d}~{chunk_end:%Y-%m-%d}") from exc
         parts.append(pd.DataFrame(rows))
-        start = chunk_end + pd.Timedelta(days=1)
+        start = chunk_end + pd.Timedelta(1, unit="D")
 
     raw = pd.concat(parts, ignore_index=True)
     if raw.empty:
@@ -677,7 +677,7 @@ def download_ohlcv_full(start_date: str = _DEFAULT_START_DATE, repair_only: bool
         )
         # KRX DelistingDate는 종목이 더 이상 상장되지 않은 첫날이다.
         fetch_end = (
-            min(pd.Timestamp(today_str), delisting_date - pd.Timedelta(days=1))
+            min(pd.Timestamp(today_str), delisting_date - pd.Timedelta(1, unit="D"))
             if pd.notna(delisting_date) else pd.Timestamp(today_str)
         )
         if fetch_start > fetch_end:
@@ -717,7 +717,7 @@ def download_ohlcv_full(start_date: str = _DEFAULT_START_DATE, repair_only: bool
                     missing_days = check_days - existing_dates
 
                     last_date = period_existing["Date"].max()
-                    fetch_start_str = (last_date + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+                    fetch_start_str = (last_date + pd.Timedelta(1, unit="D")).strftime("%Y-%m-%d")
 
                     # 2. 업데이트 및 보정 필요성 판단
                     if fetch_start_str <= stock_end_str or missing_days or vwap_incomplete:
