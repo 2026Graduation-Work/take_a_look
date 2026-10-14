@@ -11,7 +11,6 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import lightgbm as lgb
-import numpy as np
 import pandas as pd
 import yaml
 from shared.data.calendar import scheduled_sessions
@@ -133,16 +132,10 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 fresh = _retry_fetch(code, request_start, as_of)
                 if previous is not None:
                     previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
-                    overlap = previous[["Date", "Close", "RawClose", "RawVolume", "Amount"]].merge(
-                        fresh[["Date", "Close", "RawClose", "RawVolume", "Amount"]], on="Date", suffixes=("_old", "_new"))
-                    revised = overlap.empty or any(
-                        not np.allclose(overlap[f"{col}_old"], overlap[f"{col}_new"],
-                                                      rtol=1e-10, atol=1e-10, equal_nan=True)
-                        for col in ("Close", "RawClose", "RawVolume", "Amount"))
-                    if revised:
-                        fresh = _retry_fetch(code, first, as_of)
-                    else:
-                        fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+                    # Daily serving updates only the recent input window. Keep the
+                    # saved prefix for the existing feature calculation; source
+                    # revisions must never trigger a 2016~ history requery (#320).
+                    fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
