@@ -26,6 +26,7 @@ import {
   TERM,
   CONTEXTUAL_LIVE_NEWS_CODES,
   LIVE_NEWS_SCOPE,
+  PRICE_CONTEXT_CAPTION,
   DISCLOSURE_KIND,
 } from "@/lib/copy-glossary";
 import { STYLE_AXIS_IDS } from "@/lib/profiling-rules";
@@ -58,7 +59,7 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
-import { contributionWord, formatKstDateTime, formatShares, kstDay, signedPercent } from "@/lib/display";
+import { contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -405,8 +406,6 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
   const periodInput = sentimentDaysIncludingLive(insights)
     .filter(({ date }) => !chartLive || date !== kstDay(Date.parse(chartLive.asOf)));
   const periodDays = aggregateSentimentPeriods(periodInput, selectedSentimentPeriod);
-  const chartDates = periodInput.length ? {start: periodInput[0].date, end: periodInput.at(-1)!.date} : null;
-  const includesLive = selectedSentimentPeriod !== "day" && Boolean(todayLive) && Boolean(insights.liveSentiment?.periodDays?.length);
   // 일별은 최근 1년만 한 줄 스크롤로 그린다. 더 긴 기간은 월별·연별에서 본다.
   // ponytail: 점 하나당 SENTIMENT_POINT_PX 폭이라 일별 전체(10년, 약 3,700점)는 너무 넓다. 필요하면 가상 스크롤로.
   const chartDays = selectedSentimentPeriod === "day" ? periodDays.slice(-SENTIMENT_DAY_LIMIT) : periodDays;
@@ -444,24 +443,7 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
       ) : !psychology ? (
         <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유·관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
       ) : null}
-      {sentimentView?.basis === "live" && (
-        <p className="m-0 text-xs text-muted tabular-nums">
-          기준시각 {formatKstDateTime(sentimentView.asOf)} · 직전 24시간 · 관련 기사{" "}
-          {sentimentView.articleCount}건 · 언론사 {sentimentView.publisherCount}곳
-        </p>
-      )}
       {contextualLive && <p className="m-0 text-xs text-muted">{LIVE_NEWS_SCOPE}</p>}
-      {sentimentView?.status === "partial" && (
-        <p data-coverage-notice className="m-0 text-xs text-body">
-          수집 범위 일부 · 공급자 결과가 100건을 넘어 확인된 기사 범위로 계산했어요.
-        </p>
-      )}
-      {psychology && (
-        <p className="m-0 text-sm text-body">
-          가격 흐름으로 본 분위기: {psychology.word}
-          <span className="text-muted"> — {psychology.explain}</span>
-        </p>
-      )}
       {(sentiment?.days.length || Boolean(todayLive)) ? (
         <>
           <div
@@ -492,9 +474,6 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
           </div>
           <p className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
             <DotLegend items={[["var(--color-up)", "긍정"], ["var(--color-muted)", "중립"], ["var(--color-down)", "부정"]]} />
-            {selectedSentimentPeriod === "day" ? "일별 관련 기사 평균" : `${selectedSentimentPeriod === "month" ? "월별" : "연별"} 뉴스 감성 · 기사 수 가중평균`}
-            {chartDates && ` · ${sentimentDateLabel(chartDates.start)} ~ ${sentimentDateLabel(chartDates.end)}`}
-            {includesLive && " · 오늘 Live 반영"}
           </p>
           <div
             role="tabpanel"
@@ -532,6 +511,7 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
       )}
       {risk && (
         <>
+          <p className="m-0 text-xs font-semibold text-muted">{PRICE_CONTEXT_CAPTION}</p>
           <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Stat
               label={`${TERM.volatility}(1년 · 코스피 상위 ${Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}%)`}
