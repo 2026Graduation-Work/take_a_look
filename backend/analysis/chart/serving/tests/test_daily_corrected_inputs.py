@@ -225,3 +225,48 @@ def test_price_reads_retry_krx_html_but_do_not_hide_contract_failures(monkeypatc
     with pytest.raises(ValueError, match="calendar contract"):
         pipeline._retry_fetch("005930", "2016-01-01", "2026-10-13")
     assert delays == []
+
+
+def _revision_collect(monkeypatch, codes, revise_from):
+    """Stored history vs fresh read where rows from `revise_from` onward changed (#267)."""
+    dates = pd.bdate_range("2024-01-02", periods=75)
+    stored = pd.DataFrame({"Date": dates[:-1], "Open": 100., "High": 101., "Low": 99., "Close": 100.,
+                           "Volume": 10., "VWAP": 100., "RawClose": 100., "RawVolume": 10., "Amount": 1000.})
+    fresh = pd.DataFrame({"Date": dates, "Open": 100., "High": 101., "Low": 99., "Close": 100.,
+                          "Volume": 10., "VWAP": 100., "RawClose": 100., "RawVolume": 10., "Amount": 1000.})
+    fresh.loc[fresh.Date >= dates[revise_from], "Amount"] = 2000.
+    class Store:
+        def save_calendar(self, *args): pass
+        def save_universe(self, *args): pass
+        def load_price_history(self, code): return stored.copy()
+        def upsert_prices(self, *args): pass
+        def save_price_history(self, *args): pass
+        def save_raw_prices(self, *args): pass
+        def upload_features(self, *args): pass
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
+    universe = pd.DataFrame({"Code": codes, "Name": codes, "ListingDate": pd.Timestamp("2000-01-01")})
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (pd.DataFrame(), {}))
+    starts = []
+    def fetch(code, start, end):
+        starts.append(start)
+        return fresh.copy()
+    monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
+    return pipeline.collect(dates[-1].date().isoformat(), Store()), starts
+
+
+def test_last_saved_row_correction_does_not_refetch_full_history(monkeypatch):
+    # Only the previous run's last session (index -2) was corrected by KRX later.
+    result, starts = _revision_collect(monkeypatch, ["005930", "000660"], -2)
+    assert "2016-01-01" not in starts
+    assert set(result[1]) == {"005930", "000660"} and result[2] == {}
+    assert result[1]["005930"][0].Amount.iloc[-2] == 2000.
+
+
+def test_older_revisions_full_refetch_respects_limit(monkeypatch):
+    monkeypatch.setattr(pipeline, "FULL_REFETCH_LIMIT", 2)
+    codes = ["000020", "000040", "000050", "000070"]
+    result, starts = _revision_collect(monkeypatch, codes, 0)
+    assert starts.count("2016-01-01") == 2
+    assert result[2] == {"000050": "full_refetch_deferred", "000070": "full_refetch_deferred"}
+    assert set(result[1]) == {"000020", "000040"}

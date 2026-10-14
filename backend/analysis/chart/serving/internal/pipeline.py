@@ -31,6 +31,9 @@ from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
+# Full 2016~ history reads take ~50s each; more than this per run risks KRX blocking and the
+# 240-minute job limit (#267). Deferred stocks keep their stored history and retry next run.
+FULL_REFETCH_LIMIT = 40
 
 
 def official_day(requested=None):
@@ -107,6 +110,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         raise ValueError("Duplicate archived universe")
     flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
     frames, unavailable, raw_hashes, price_archives = {}, {}, {}, {}
+    full_refetches, deferred = 0, []
     archive_builder = BUILDER_ID + "_" + processing_contract()["sha256"][:16]
     for row in universe.itertuples():
         code = row.Code
@@ -135,11 +139,18 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
                     overlap = previous[["Date", "Close", "RawClose", "RawVolume", "Amount"]].merge(
                         fresh[["Date", "Close", "RawClose", "RawVolume", "Amount"]], on="Date", suffixes=("_old", "_new"))
-                    revised = overlap.empty or any(
-                        not np.allclose(overlap[f"{col}_old"], overlap[f"{col}_new"],
-                                                      rtol=1e-10, atol=1e-10, equal_nan=True)
-                        for col in ("Close", "RawClose", "RawVolume", "Amount"))
-                    if revised:
+                    changed = overlap.Date[~np.logical_and.reduce([
+                        np.isclose(overlap[f"{col}_old"], overlap[f"{col}_new"],
+                                   rtol=1e-10, atol=1e-10, equal_nan=True)
+                        for col in ("Close", "RawClose", "RawVolume", "Amount")])]
+                    # A late KRX correction of the last saved session only replaces that row;
+                    # older changes mean adjusted history moved, so the whole history is requeried (#267).
+                    if overlap.empty or changed.lt(pd.to_datetime(previous.Date).max()).any():
+                        if full_refetches >= FULL_REFETCH_LIMIT:
+                            deferred.append(code)
+                            unavailable[code] = "full_refetch_deferred"
+                            continue
+                        full_refetches += 1
                         fresh = _retry_fetch(code, first, as_of)
                     else:
                         fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
@@ -189,6 +200,8 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             if not str(exc).startswith(("KRX prices unavailable", "Price providers exhausted:")):
                 raise
             unavailable[code] = "price_source_unavailable"
+    if deferred:
+        report("full_refetch_deferred", limit=FULL_REFETCH_LIMIT, count=len(deferred), codes=deferred)
     if not frames:
         raise ValueError("No confirmed stock inputs; previous batch retained")
     flow_report["complete_current_rows"] = sum(
