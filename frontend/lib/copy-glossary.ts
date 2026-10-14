@@ -88,8 +88,11 @@ export const PSYCHOLOGY_RULE =
 export const FEW_ARTICLES = 3;
 export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 한두 기사의 말투가 그날 점수를 크게 움직일 수 있어요. 이 값은 참고만 해 주세요.`;
 
-// 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA)
-export const DIRECTION_RULE = "상방·하방은 과거 비슷한 경우를 보고 모델이 본 앞으로 4주의 가격 방향이에요. 맞는다는 보장은 없어요.";
+// 모델 신호 단어 옆에 붙이는 기간. 상방·하방을 "지난 가격이 올랐다"로 읽지 않게 앞으로의 방향임을 바로 보인다(사전 참가자 P0 10/13)
+export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as const;
+
+// 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA). 기간은 위 상수와 같다.
+export const DIRECTION_RULE = `상방·하방은 과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[20]}의 가격 방향이에요. 맞는다는 보장은 없어요.`;
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 

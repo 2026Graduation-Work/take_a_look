@@ -10,7 +10,7 @@ import {
 import { isSupabaseConfigured } from "@/lib/supabase";
 import StepNav from "@/app/components/step-nav";
 import Wordmark from "@/components/brand/Wordmark";
-import { SERVICE_TAGLINE } from "@/lib/brand";
+import { SERVICE_PROMISE, SERVICE_PROMISE_DETAIL } from "@/lib/brand";
 
 type AccountTab = "signin" | "signup";
 
@@ -83,7 +83,8 @@ export default function LoginForm() {
           ) : (
             <>
               <h1 className="sr-only">Take a Look 시작</h1>
-              <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
+              <p className="m-0 text-base font-medium text-ink">{SERVICE_PROMISE}</p>
+              <p className="m-0 text-sm text-body">{SERVICE_PROMISE_DETAIL}</p>
             </>
           )}
         </div>

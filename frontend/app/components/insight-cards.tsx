@@ -152,12 +152,23 @@ export function useDemoStyleAxes(original: StyleAxes | null) {
   const [viewAs, setViewAs] = useState<BitType | null>(null);
   const styleAxes: StyleAxes | null =
     original && viewAs ? presetStyleAxes(original, viewAs) : original;
+  const bitFor = (type: BitType | null) => {
+    const axes = original && type ? presetStyleAxes(original, type) : original;
+    return axes ? classifyBit(axes) : null;
+  };
   return {
     styleAxes,
-    bit: styleAxes ? classifyBit(styleAxes) : null,
+    bit: bitFor(viewAs),
     viewAs,
     setViewAs,
+    bitFor,
   };
+}
+
+// 판단 근거 탭 순서(유형별 카드 순서 → 탭). 탭과 "다른 유형이라면?" 안내가 같이 쓴다.
+function evidenceTabOrder(bit: ReturnType<typeof classifyBit> | null): TabId[] {
+  const order = bit?.cardOrder ?? DEFAULT_CARD_ORDER;
+  return [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
 }
 
 function Why({ children }: { children: ReactNode }) {
@@ -189,6 +200,8 @@ export function Checkpoints({
   extra: string | null; // 성향 대비 위험도 안내(넛지 외). 있으면 체크포인트 뒤에 붙는다
 }) {
   const { bit } = demo;
+  // 유형을 바꿔도 화면이 같아 보이면 바뀐 건지 헷갈린다(사전 참가자 P0 10/13) → 근거 순서가 바뀌었는지 한 줄로
+  const [orderNote, setOrderNote] = useState("");
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
   const items = checkpointItems(nudges, extra);
@@ -244,7 +257,12 @@ export function Checkpoints({
                   key={type ?? "mine"}
                   type="button"
                   aria-pressed={active}
-                  onClick={() => demo.setViewAs(type)}
+                  onClick={() => {
+                    if (active) return;
+                    const changed = evidenceTabOrder(bit).join() !== evidenceTabOrder(demo.bitFor(type)).join();
+                    setOrderNote(changed ? "근거 순서가 바뀌었어요." : "이 종목은 유형과 관계없이 같은 순서예요.");
+                    demo.setViewAs(type);
+                  }}
                   className={`min-h-11 rounded-sm px-4 text-xs font-medium ${
                     active ? "bg-brand-soft text-brand" : "bg-track text-body hover:bg-line"
                   }`}
@@ -254,6 +272,7 @@ export function Checkpoints({
               );
             })}
           </div>
+          <p aria-live="polite" className="m-0 mt-2 min-h-4 text-xs text-body">{orderNote}</p>
         </details>
       )}
     </section>
@@ -278,7 +297,7 @@ export default function EvidenceTabs({
   contributionSpace?: ChartSnapshot["inference"]["contribution_space"];
 }) {
   const order = demo.bit?.cardOrder ?? DEFAULT_CARD_ORDER;
-  const tabs = [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
+  const tabs = evidenceTabOrder(demo.bit);
   const [selected, setSelected] = useState<TabId | null>(null);
   const active = selected ?? tabs[0];
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});

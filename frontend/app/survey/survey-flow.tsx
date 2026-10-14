@@ -32,7 +32,7 @@ import HoldingsStep from "./holdings-step";
 import StepNav from "../components/step-nav";
 import Wordmark from "@/components/brand/Wordmark";
 import LogoMark from "@/components/brand/LogoMark";
-import { SERVICE_NAME } from "@/lib/brand";
+import { SERVICE_NAME, SERVICE_PROMISE_DETAIL } from "@/lib/brand";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 
 const DRAFT_KEY = STORAGE_KEYS.surveyDraft;
@@ -144,13 +144,16 @@ export default function SurveyFlow() {
   const demo = onboardingState.mode === "demo";
   // 처음 온 사람(프로필 없음)만 환영·보유 종목 단계를 거친다. 저장 후 상태가 바뀌어도 흐름은 유지한다.
   const [firstRun] = useState(onboardingState.status === "needs_survey");
-  const [stage, setStage] = useState<Stage>(firstRun ? "welcome" : "survey");
+  const [stageState, setStage] = useState<Stage>(firstRun ? "welcome" : "survey");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [result, setResult] = useState<ProfilingOutput | null>(null);
+  // 결과는 메모리에만 있다. 브라우저 앞으로 가기로 결과 단계에 왔는데 결과가 없으면 마지막 문항을 보여 준다.
+  const stage: Stage = stageState === "result" && !result ? "survey" : stageState;
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+  const restoringRef = useRef(false);
   useEffect(() => {
     // 같은 URL의 단계 전환은 라우트 알림이 갱신되지 않는다. 현재 문항·결과로 포커스를 옮긴다.
     const heading = mainRef.current?.querySelector<HTMLElement>("fieldset legend, [data-question-heading], h1:not([data-route-heading])");
@@ -173,9 +176,42 @@ export default function SurveyFlow() {
     } else {
       setDraft({ ...previous!, page: 0 });
     }
+    restoringRef.current = true; // 중간 저장 복원은 새 기록이 아니라 지금 기록을 고친다
     setStage("survey");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [firstRun]);
+
+  // 단계·문항 이동을 브라우저 기록에 맞춘다. 브라우저 뒤로 가기가 한 단계씩 돌아간다(사전 참가자 P0 10/13:
+  // 진단 마무리에서 뒤로 가기를 누르면 첫 단계로 돌아갔다). 주소는 그대로 /survey다.
+  const position = `${stage}:${draft.page}`;
+  useEffect(() => {
+    const state = window.history.state as Record<string, unknown> | null;
+    if (state?.survey === position) return;
+    const next = { ...state, survey: position, surveyPrev: state?.survey };
+    if (state?.survey === undefined || restoringRef.current) window.history.replaceState(next, "");
+    else window.history.pushState(next, "");
+    restoringRef.current = false;
+  }, [position]);
+  // 화면의 "이전"도 바로 앞 기록이 그 단계면 브라우저 기록을 되돌린다(앞으로 가기가 엉키지 않게)
+  function stepBack(target: string, fallback: () => void) {
+    if ((window.history.state as Record<string, unknown> | null)?.surveyPrev === target) window.history.back();
+    else fallback();
+  }
+  useEffect(() => {
+    function onPopState(event: PopStateEvent) {
+      const saved = (event.state as Record<string, unknown> | null)?.survey;
+      if (typeof saved !== "string") return;
+      const [savedStage, savedPage] = saved.split(":");
+      setStage(savedStage as Stage);
+      setDraft((current) => {
+        const merged = { ...current, page: Math.min(Math.max(0, Number(savedPage) || 0), PAGES[current.mode].length - 1) };
+        writeDraft(merged);
+        return merged;
+      });
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   function update(next: Partial<Draft>) {
     setDraft((current) => {
@@ -332,7 +368,7 @@ export default function SurveyFlow() {
             error={error}
             onAnswer={update}
             onUpdate={update}
-            onBack={() => goTo(draft.page - 1)}
+            onBack={() => stepBack(`survey:${draft.page - 1}`, () => goTo(draft.page - 1))}
             onNext={() => (last ? showResult() : goTo(draft.page + 1))}
             onRestart={restart}
           />
@@ -346,13 +382,13 @@ export default function SurveyFlow() {
             canBeMoreAccurate={draft.mode === "short"}
             onConfirm={confirm}
             onMoreAccurate={moreAccurate}
-            onBack={() => setStage("survey")}
+            onBack={() => stepBack(`survey:${draft.page}`, () => setStage("survey"))}
           />
         )}
         {stage === "holdings" && (
           <HoldingsStep
             mode={onboardingState.mode}
-            onBack={() => setStage("result")}
+            onBack={() => stepBack(`result:${draft.page}`, () => setStage("result"))}
             onDone={() => router.push("/")}
           />
         )}
@@ -374,6 +410,7 @@ function Welcome({ onStart }: { onStart: () => void }) {
         <h1 id="welcome-title" className="text-3xl font-semibold">
           {SERVICE_NAME}은 이렇게 도와줘요
         </h1>
+        <p className="m-0 text-sm text-body">{SERVICE_PROMISE_DETAIL}</p>
       </div>
       <ol className="m-0 flex list-none flex-col gap-5 p-0">
         {steps.map(([title, body], index) => (
