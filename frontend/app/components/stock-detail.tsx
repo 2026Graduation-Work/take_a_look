@@ -27,6 +27,7 @@ import {
   AGREEMENT_ANSWER,
   bandSentence,
   DIRECTION_WORD,
+  HORIZON_AHEAD,
   HORIZON_LABEL,
   riskLevel,
   TERM,
@@ -216,6 +217,7 @@ export default function StockDetailView({
           <div className="flex flex-col gap-1">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
+              {preview && direction && <span className="text-base font-normal text-muted"> · {HORIZON_AHEAD[20]}</span>}
               {!preview && <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             <p className="m-0 text-sm text-body">
@@ -297,7 +299,7 @@ export default function StockDetailView({
                   const direction = preview ? chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
                   return (
                   <li key={key} className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
-                    <span className="text-xs text-muted">{preview ? key === "h5" ? "1주 · 5거래일" : "4주 · 20거래일" : HORIZON_LABEL[key]}</span>
+                    <span className="text-xs text-muted">{preview ? key === "h5" ? `${HORIZON_AHEAD[5]} · 5거래일` : `${HORIZON_AHEAD[20]} · 20거래일` : HORIZON_LABEL[key]}</span>
                     <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
                       {direction ? `${HORIZON_META[direction].arrow} ${preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : "중립" : DIRECTION_WORD[direction]}` : "미제공"}
                     </span>

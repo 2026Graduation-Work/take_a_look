@@ -9,7 +9,7 @@ import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_RULE } from "@/lib/copy-glossary";
+import { DIRECTION_RULE, HORIZON_AHEAD } from "@/lib/copy-glossary";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -462,6 +462,7 @@ function StrongRow({ signal }: { signal: StrongSignal }) {
       </div>
       <span className="flex-none text-sm font-semibold" style={{ color: meta.ink }}>
         {signal.direction === "up" ? "상방" : "하방"}
+        <span className="font-normal text-muted"> · {HORIZON_AHEAD[20]}</span>
       </span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>

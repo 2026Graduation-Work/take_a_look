@@ -3,7 +3,7 @@ import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_RULE } from "@/lib/copy-glossary";
+import { DIRECTION_RULE, HORIZON_AHEAD } from "@/lib/copy-glossary";
 
 interface WeightedHolding {
   holding: PortfolioHolding;
@@ -100,7 +100,7 @@ export default function PortfolioHeatmap({
                   key={holding.code}
                   role="listitem"
                   href={`/stocks/${holding.code}`}
-                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, ${signal.label} 신호`}
+                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, ${HORIZON_AHEAD[20]} ${signal.label} 신호`}
                   className="flex min-h-16 min-w-0 flex-col justify-between overflow-hidden rounded-md px-3 py-2 text-white hover:text-white hover:no-underline hover:brightness-110"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                 >
@@ -117,6 +117,8 @@ export default function PortfolioHeatmap({
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
+        {/* 타일이 좁아 기간은 범례에 한 번(사전 참가자 P0 10/13). 읽기 프로그램은 타일 이름에서 듣는다 */}
+        <span className="font-medium text-body">{HORIZON_AHEAD[20]} 방향</span>
         <DotLegend items={SIGNAL_LEGEND} />
         <span>
           넓이·비중은 내 보유 평가금액 기준
