@@ -884,7 +884,7 @@ function ContributionPanel({
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
-                <span className="ml-auto flex-none text-xs text-body">{contributionWord(feature.contribution, total)}</span>
+                <span className="ml-auto flex-none text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
                 <span className="absolute inset-y-[-3px] left-1/2 w-px bg-line" />
@@ -944,7 +944,7 @@ export function CalculationBasis({
   if (!bit || !styleAxes) {
     return <p className="m-0 text-sm text-muted">성향 진단 결과가 없어 기본 순서로 보여 줘요.</p>;
   }
-  const tabs = [...new Set(bit.cardOrder.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
+  const tabs = evidenceTabOrder(bit);
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 md:grid-cols-2">
