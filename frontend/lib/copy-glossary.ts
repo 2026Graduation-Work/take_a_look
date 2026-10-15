@@ -125,3 +125,5 @@ export const DISCLOSURE_KIND: Record<string, { label: string; explain: string }>
 // Live 문맥 필터 적용 범위. 과거/기타 종목에 동일 기준을 안내하지 않는다.
 export const CONTEXTUAL_LIVE_NEWS_CODES = new Set(["005930", "005380", "035720", "035420", "068270", "247540"]);
 export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업·시장 뉴스를 함께 반영합니다.";
+// 뉴스 감성과 별도로 계산하는 가격 지표 안내.
+export const PRICE_CONTEXT_CAPTION = "뉴스 분위기와 함께 보는 주가 흐름";

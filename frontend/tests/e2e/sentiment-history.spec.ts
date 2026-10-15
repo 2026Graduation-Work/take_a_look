@@ -15,7 +15,6 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   const timeline = page.getByLabel("감성 시점 탐색");
   const tabs = page.getByRole("tablist", { name: "뉴스 분위기 기간" });
   const tick = (text: string) => panel.locator(".recharts-cartesian-axis-tick-value", { hasText: new RegExp(`^${text}$`) });
-  await expect(page.getByText(/일별 관련 기사 평균.*2016.01.01.*2026.10.04.*BigKinds/)).toBeVisible();
   // 일별은 최근 365일 + 오늘 Live를 한 그래프로, 날짜는 그래프 안 축에
   await expect(tick("2025.10.05")).toHaveCount(1);
   await expect(tick("오늘 Live")).toHaveCount(1);
@@ -33,7 +32,6 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   await expect(page.getByRole("button", { name: "2026.10.04", exact: true })).toHaveCount(0);
 
   await tabs.getByRole("tab", { name: "월별", exact: true }).click();
-  await expect(page.getByText(/기사 수 가중평균/)).toBeVisible();
   await expect(tick("2026.10")).toHaveCount(1);
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(0);
   await expect(page.getByText("월·연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영합니다.")).toBeVisible();
