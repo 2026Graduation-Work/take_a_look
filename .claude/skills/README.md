@@ -101,3 +101,17 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | "네이버에 안 뜬다면 3가지"(서치어드바이저·서치콘솔+사이트맵·페이지별 메타) | 채택 | 무료·설치 없음. Next 기본 기능(`app/robots.ts`·`app/sitemap.ts`·`generateMetadata`)으로 적용. 이때 `metadataBase`가 옛 주소(`stock-prediction-v2-chi`)라 og:image가 옛 주소로 나가던 것도 고침. 두 검색 도구 등록·소유 확인은 계정 로그인이 필요해 사람이 한다(받은 확인 코드를 `layout.tsx` `metadata.verification`에 넣기) |
 | [mattpocock/skills](https://github.com/mattpocock/skills) (MIT) grill-me · prototype · handoff | 아이디어만 | grill-me는 별도 `grilling` 스킬을 불러 계획을 한 질문씩 캐묻는다 — 질문이 많아질수록 대화 횟수·토큰이 는다. 계획 확인은 내장 질문 도구로 충분. handoff는 대화 요약 문서 — 자동 요약·메모리·`[인수인계]` 이슈(#265)와 겹친다. prototype(UI)의 "한 경로에서 `?variant=`로 시안 여러 개 비교, main엔 결정만" 방식은 화면 대안을 비교할 때만 아이디어로 쓴다. 디자인 스킬 허용 목록 밖이라 설치하지 않음 |
 | andrej-karpathy-skills ("22만 스타 CLAUDE.md") | 기존 판정 유지 | 10-11 표와 같은 레포(forrestchang, 2026-10-13 별 21.9만). 여전히 라이선스 표기 없음 → 원문 복사 안 함, ponytail·AGENTS.md와 내용 겹침 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-15)
+
+| 도구 | 판정 | 이유 |
+| --- | --- | --- |
+| [REA](https://github.com/morluto/rea) (MIT, 별 약 24.8만) | 기각(10-13 판정 유지) | 실재하고 별이 이틀 새 5.8만 → 24.8만으로 늘었지만 판단은 같다. 로컬 MCP 상시 연결이라 매 대화 토큰이 늘고, 바이너리 분석엔 Ghidra·IDA·Hopper를 따로 준비해야 한다. 분석 대상은 "내가 권리를 가진 앱"으로 제한되는데 우리 앱은 소스가 이미 있고, 남의 앱 분석은 약관 문제 |
+| 입력창 기준(이름표=무엇·placeholder=형식·오류=다음 행동·선택 요소) | 채택 완료(#311) | 같은 스크랩 재수신. 입력칸을 만들 때 이 4가지를 점검한다 |
+| [ui-ux-pro-max-skill](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) · [Taste Skill](https://github.com/Leonxlnx/taste-skill) | 기존 판정 유지 | 09-23·10-11 표 참고. Taste는 2종만 설치(SHA 고정) |
+| [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) (MIT) · DESIGN.md 추출 크롬 확장 | 기각 | 유명 서비스 사이트에서 뽑은 DESIGN.md 모음과 남의 사이트 디자인을 파일로 뽑는 도구. 우리는 자체 `frontend/DESIGN.md`가 있고, 남의 브랜드 화면을 베끼면 "AI가 만든 티"를 다른 티로 바꿀 뿐이다. 레포 라이선스와 별개로 각 브랜드 디자인 권리는 그 회사에 있다 |
+| [design-motion-principles](https://github.com/kylezantos/design-motion-principles) (MIT, 별 1.3k) | 아이디어만(이미 충족) | 핵심 두 규칙 — 자주 반복되는 동작은 즉시/없음, `prefers-reduced-motion` 필수 — 은 DESIGN.md 5장(펼치기·눌림만, 150~200ms)과 `globals.css` 전역 처리로 이미 지킨다. 보유 맵 팝업(#326)도 애니메이션 없이 즉시 뜬다. 허용 목록의 `fixing-motion-performance`와 겹쳐 설치하지 않음 |
+| caveman · caveman-compress · cavecrew | 기각 | 출력 65% 감소는 프로젝트 자체 측정이고, 외부 86개 작업 A/B에선 약 8.5%였다. Claude Code의 Concise 출력 스타일을 이미 쓰고, ponytail(코드 줄이기)은 전역 설치돼 있다. CLAUDE.md는 AGENTS.md를 가리키는 몇 줄뿐이라 압축할 게 없다 |
+| ByteDance [Arco Design](https://github.com/arco-design/arco-design) (MIT) | 기각 | React 컴포넌트 라이브러리. 새 UI 라이브러리를 들이면 DESIGN.md 토큰과 충돌하고 번들이 커진다. "디자인 시스템을 어떻게 문서로 묶는가" 참고 자료로만 |
+| Toss Benchmark(자체 업무 평가) | 생각만 채택 | 공개 범용 점수보다 "우리 업무를 얼마나 잘하나"로 모델을 고른다. 우리에게 옮기면 **AUC보다 우리 거래 규칙의 백테스트(Sharpe·MDD)와 사람 라벨 감성 정확도**를 모델 선택 기준으로 둔다는 뜻. #325(심리 A/B: AUC↑ 수익↓)·#327(수급: pooled AUC↑ 연평균 Sharpe↓)이 바로 그 사례다. 도구 설치 없음 |
+| Salesforce SOQL `FORMULA()` | 해당 없음 | 우리 스택(Supabase Postgres)과 무관. Postgres는 `WHERE a - b > 100`이 원래 된다 |
