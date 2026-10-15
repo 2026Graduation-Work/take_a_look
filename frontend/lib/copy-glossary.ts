@@ -17,6 +17,7 @@ export const TERM = {
   contribution: "모델이 본 이유",
   supply: "누가 사고팔았나",
   sentiment: "뉴스 분위기",
+  relatedNewsSentiment: "종목 관련 뉴스 분위기",
   volatility: "가격 흔들림",
   nudge: "확인할 것",
   market: "시장 분위기",
@@ -120,3 +121,7 @@ export const DISCLOSURE_KIND: Record<string, { label: string; explain: string }>
   securities_filing: { label: "증권 발행 서류", explain: "주식·채권 등을 발행하면서 내는 신고서·설명서예요. 대부분 절차 서류예요." },
   other: { label: "기타", explain: "위 유형에 들지 않는 공시예요. 제목을 눌러 원문을 확인해 보세요." },
 };
+
+// Live 문맥 필터 적용 범위. 과거/기타 종목에 동일 기준을 안내하지 않는다.
+export const CONTEXTUAL_LIVE_NEWS_CODES = new Set(["005930", "005380", "035720", "035420", "068270", "247540"]);
+export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업·시장 뉴스를 함께 반영합니다.";

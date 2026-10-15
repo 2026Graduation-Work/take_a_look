@@ -269,21 +269,21 @@ def test_live_track_uses_exact_preceding_24_hours_and_scores_all_remaining(
     articles = [
         {
             "news_id": "boundary",
-            "title": "삼성전자 경계 기사",
+            "title": "삼성전자 HBM 양산 확대",
             "summary": "정확히 24시간 전",
             "press": "A",
             "published_at": "2026-09-17T12:00:00+09:00",
         },
         {
             "news_id": "newest",
-            "title": "삼성전자 최신 기사",
+            "title": "삼성전자 반도체 실적 개선",
             "summary": "기준 시각",
             "press": "B",
             "published_at": "2026-09-18T12:00:00+09:00",
         },
         {
             "news_id": "too-old",
-            "title": "삼성전자 오래된 기사",
+            "title": "삼성전자 신제품 출시",
             "summary": "경계보다 1초 전",
             "press": "C",
             "published_at": "2026-09-17T11:59:59+09:00",

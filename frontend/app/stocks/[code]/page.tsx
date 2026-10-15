@@ -80,7 +80,7 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[co
               이 종목은 오늘 모델 신호가 없어요. 수집된 뉴스 분위기만 보여 드려요.
             </p>
           </div>
-          <NewsSentimentPanel insights={insights} />
+          <NewsSentimentPanel insights={insights} code={code} />
         </section>
       </main>
     );

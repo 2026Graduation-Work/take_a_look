@@ -1,18 +1,20 @@
 """과거 BigKinds와 최근 NewsAPI.ai가 공유하는 뉴스 심리지수 집계.
 
-두 트랙은 입력 소스와 시간 창만 다르고, 관련성 필터와 감성 산식은
-동일한 결정론적 코어를 사용한다. API 본문은 추론 후 결과에 포함하지 않는다.
+과거 트랙은 기존 관련성 규칙을 유지하고, 실시간 6종목에는 문맥 관련성 규칙을
+적용한다. 감성 산식과 집계 코어는 공유한다. API 본문은 추론 후 결과에 포함하지 않는다.
 """
 from __future__ import annotations
 
 import json
+import logging
+from collections import Counter
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from . import sentiment
+from . import news_relevance, sentiment
 from .agents import relevant_indices
 
 KST = ZoneInfo("Asia/Seoul")
@@ -41,17 +43,43 @@ def _score_relevant(
     relevance_key_override: str | None = None,
     require_finbert: bool = False,
     inference_batch_size: int = 16,
+    contextual: bool = False,
 ) -> tuple[list[tuple[dict[str, Any], float]], str]:
-    relevant = [
-        items[index]
-        for index in relevant_indices(
-            items, company_name, key_override=relevance_key_override
+    if contextual:
+        decisions = [news_relevance.classify_live_relevance(
+            item, company_name, key_override=relevance_key_override,
+        ) for item in items]
+        relevant = [item for item, decision in zip(items, decisions, strict=True) if decision.included]
+        logging.getLogger(__name__).info(
+            "Live news relevance company=%s policy=%s decisions=%s",
+            company_name, news_relevance.POLICY_VERSION,
+            dict(Counter(decision.category for decision in decisions)),
         )
-    ]
+    else:
+        relevant = [items[index] for index in relevant_indices(
+            items, company_name, key_override=relevance_key_override,
+        )]
     scores, backend = sentiment.score_texts(
         [_article_text(item) for item in relevant], require_finbert=require_finbert, batch_size=inference_batch_size
     )
-    return list(zip(relevant, scores, strict=False)), backend
+    scored = list(zip(relevant, scores, strict=False))
+    if contextual:
+        kept_categories = [decision.category for decision in decisions if decision.included]
+        groups = {}
+        for category in ("direct", "indirect", "industry", "market"):
+            values = [score for (_, score), kind in zip(scored, kept_categories, strict=False) if kind == category]
+            groups[category] = {
+                "article_count": len(values),
+                "sentiment_mean": sentiment.aggregate(values)[0] if values else None,
+            }
+        logging.getLogger(__name__).info(json.dumps({
+            "event": "live_news_sentiment_breakdown",
+            "company": company_name,
+            "policy_version": news_relevance.POLICY_VERSION,
+            "decision_counts": dict(Counter(decision.category for decision in decisions)),
+            "groups": groups,
+        }, ensure_ascii=False))
+    return scored, backend
 
 
 def _stats(
@@ -187,6 +215,7 @@ def build_live_track(
         company_name,
         relevance_key_override=relevance_key_override,
         require_finbert=require_finbert,
+        contextual=company_name in news_relevance.CONTEXTUAL_LIVE_COMPANIES,
     )
     coverage = _coverage(len(items), in_window, now)
     if provider_metadata:
