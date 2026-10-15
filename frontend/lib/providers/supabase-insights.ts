@@ -400,13 +400,23 @@ export async function loadSupabaseSentiment(
   };
 }
 
+function positiveFinite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function validPriceDay(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const time = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(time) && new Date(time).toISOString().slice(0, 10) === value;
+}
+
 export async function loadSupabaseFinancial(
   code: string,
   client: InsightQueryClient,
 ): Promise<FinancialSnapshot | null> {
   const snapshotResult = await client
     .from("financial_snapshots")
-    .select("id,as_of,fiscal_year,report_code,statement,receipt_no,filed_at,shares_basis,price_as_of")
+    .select("id,as_of,fiscal_year,report_code,statement,receipt_no,filed_at,shares_basis,price,price_as_of,price_source")
     .eq("stock_code", code)
     .order("as_of", { ascending: false })
     .limit(1)
@@ -420,7 +430,9 @@ export async function loadSupabaseFinancial(
     receipt_no: string;
     filed_at: string;
     shares_basis: string;
+    price: number | null;
     price_as_of: string | null;
+    price_source: string | null;
   } | null;
   if (!snapshot) return null;
 
@@ -449,12 +461,53 @@ export async function loadSupabaseFinancial(
       note: row.note,
     };
   });
-  const priceLabel = snapshot.price_as_of ? ` · 주가 ${snapshot.price_as_of} 종가` : "";
+  // 보고서 수집과 가격 갱신을 분리한다. 같은 이익·자본·주식수 기준에서는
+  // PER/PBR(new) = 저장 배수 × 새 종가 / 저장 주가. 매 조회마다 원본 DB 값에서
+  // 계산하므로 일별 반올림 오차가 누적되지 않는다(저장 배수의 소수점 4자리 정밀도).
+  let priceAsOf = snapshot.price_as_of;
+  let priceSource = snapshot.price_source;
+  let asOf = snapshot.as_of;
+  if (positiveFinite(snapshot.price) && validPriceDay(snapshot.price_as_of)) {
+    try {
+      const quoteResult = await client.from("latest_chart_signal_snapshots")
+        .select("close:payload->inference->close,as_of:payload->>data_asof,source:payload->prices->>source,history:payload->prices->history")
+        .eq("stock_code", code)
+        .eq("horizon", 20)
+        .maybeSingle() as QueryResult;
+      const quote = unwrap(quoteResult, "latest_chart_signal_snapshots") as {
+        close: number; as_of: string; source?: string; history?: Array<{ date: string; close: number }>;
+      } | null;
+      if (quote && positiveFinite(quote.close) && validPriceDay(quote.as_of)
+        && quote.as_of > snapshot.price_as_of) {
+        // 액면분할 뒤의 최신 이력은 과거 가격도 같은 단위로 수정된다.
+        // 원래 기준일이 이력에 없으면 호환성을 확인할 수 없어 갱신하지 않는다.
+        const baseline = quote.history?.find(({ date }) => date === snapshot.price_as_of)?.close;
+        const factor = positiveFinite(baseline) ? quote.close / baseline : NaN;
+        const valuation = metrics.filter(({ key }) => key === "per" || key === "pbr");
+        // 비정상 가격비나 저장값이면 기존 값·날짜를 함께 유지한다.
+        if (positiveFinite(factor) && valuation.every(({ value }) => value === null
+          || (Number.isFinite(value) && Number.isFinite(value * factor)))) {
+          priceSource = (quote.source || "KRX").replace("KRX adjusted daily OHLCV", "KRX 수정종가");
+          for (const metric of valuation) {
+            if (metric.value === null) continue; // 적자·결측은 주가로 채우지 않는다.
+            const original = metric.value;
+            metric.value = Number((original * factor).toFixed(4));
+            metric.basis = `기존 ${original}배 × (${quote.as_of} ${priceSource} ${quote.close.toLocaleString("ko-KR")}원 ÷ ${snapshot.price_as_of} 수정종가 ${baseline!.toLocaleString("ko-KR")}원) · 기존 재무 계산: ${metric.basis}`;
+          }
+          priceAsOf = quote.as_of;
+          asOf = snapshot.as_of && snapshot.as_of > quote.as_of ? snapshot.as_of : quote.as_of;
+        }
+      }
+    } catch {
+      // 가격 공급원 장애가 재무표 전체를 숨기지 않게 기존 주가 기준을 유지한다.
+    }
+  }
+  const priceLabel = priceAsOf ? ` · 주가 ${priceAsOf} 종가${priceSource ? ` (${priceSource})` : ""}` : "";
   return {
     period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준`,
     filing: `${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
     metrics,
-    asOf: snapshot.as_of,
+    asOf,
   };
 }
 

@@ -1,4 +1,4 @@
-"""가장 최근 사업보고서(연간) 기준 재무 스냅샷을 만들어 적재한다(주 1회, 바뀐 종목만).
+"""가장 최근 사업보고서(연간) 기준 재무 스냅샷을 만들어 적재한다(주 1회, 같은 보고서도 가격 기준 갱신).
 분기·반기 누적을 ×4·×2로 연환산하면 일회성 이익이 두 배가 돼 비율이 튄다(#292, SK하이닉스 2026 반기
 금융수익 82.9조 → ROE 102%). 그래서 비율은 연간 보고서 하나로만 만든다.
 - ROE = 지배주주 순이익 ÷ 평균 지배주주지분((당기말 + 전기말) ÷ 2, 같은 보고서의 당기·전기 값)
@@ -87,15 +87,21 @@ def sync(client: supabase_store.SupabaseRestClient, targets: dict[str, str], tod
         try:
             year, statement, frame = latest_report(dart, ticker, today)
             receipt_no = str(frame["rcept_no"].iloc[0])
-            if stored.get(ticker) == receipt_no:
-                result[ticker] = "unchanged"
-                continue
             raw = parse_report(frame)
             raw["fiscal_year"] = year
             if (shares := collectors._fetch_latest_shares(ticker)) is not None:
                 raw["shares_outstanding"] = shares
-            if (price := collectors._fetch_price(ticker, today.isoformat())) is not None:
-                raw["price"], raw["_price_source"] = price, "fdr"
+            elif stored.get(ticker) == receipt_no:
+                result[ticker] = "skipped (shares_unavailable)"
+                continue
+            observation = collectors._fetch_price_observation(ticker, today.isoformat())
+            if observation is not None:
+                raw["price"], raw["_price_as_of"] = observation
+                raw["_price_source"] = "fdr"
+            elif stored.get(ticker) == receipt_no:
+                # 같은 보고서의 가격 조회 실패로 유효한 기존 스냅샷을 숨기지 않는다.
+                result[ticker] = "skipped (price_unavailable)"
+                continue
             track = financial_tracks.build_financial_track(
                 ticker=ticker, company_name=name, as_of=today.isoformat(), raw_financials=raw,
                 statement=statement, receipt_no=receipt_no,

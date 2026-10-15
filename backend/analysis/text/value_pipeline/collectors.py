@@ -342,6 +342,12 @@ def _price_history(ticker: str):
 
 def _fetch_price(ticker: str, date: str) -> float | None:
     """date 이전(120일 창 안) 마지막 종가 (FinanceDataReader, 키 불필요)."""
+    observation = _fetch_price_observation(ticker, date)
+    return observation[0] if observation is not None else None
+
+
+def _fetch_price_observation(ticker: str, date: str) -> tuple[float, str] | None:
+    """마지막 종가와 실제 거래일. 주말·공휴일을 실행 날짜로 잘못 표시하지 않는다."""
     try:
         end = dt.date.fromisoformat(date)
         if end < dt.date.fromisoformat(SETTINGS.price_history_start):
@@ -358,7 +364,7 @@ def _fetch_price(ticker: str, date: str) -> float | None:
         window = df.loc[start.isoformat() : end.isoformat()]
         if len(window) == 0:
             return None
-        return float(window["Close"].iloc[-1])
+        return float(window["Close"].iloc[-1]), window.index[-1].date().isoformat()
     except Exception:
         return None
 
