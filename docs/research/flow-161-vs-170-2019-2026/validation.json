@@ -1,0 +1,24 @@
+{
+  "date_kst": "2026-10-14",
+  "evidence": "32 annual rows, 8 means, 4 pooled summaries; preserved artifact and archive hashes verified",
+  "mutation_check": "Modified mean ROC-AUC rejected; original bytes restored and verified",
+  "ruff": "ruff check . passed",
+  "chart_tests": {
+    "full_run": "307 passed, 6 failed due to missing exchange_calendars, 3 skipped",
+    "after_environment_repair": "pytest -q --lf: 6 passed",
+    "total_passing_tests": 313,
+    "skipped": 3,
+    "environment_only_installs": ["python-dotenv", "exchange-calendars"],
+    "remaining_failures": 0
+  },
+  "frontend": {
+    "command": "pnpm --dir frontend build --webpack",
+    "result": "passed",
+    "environment": "Existing node_modules; placeholder public Supabase settings for local build",
+    "default_build": "Turbopack rejected the external node_modules symlink in the isolated worktree"
+  },
+  "report_links": "All local Markdown targets exist",
+  "git_diff_check": "passed; source CSV CRLF preserved with scoped attributes",
+  "retrained": false,
+  "prediction_metrics_recomputed": false
+}

@@ -1,0 +1,9 @@
+fold_id,fold_name,test_start,test_end,prediction_rows,evaluation_rows,prediction_duplicate_keys,evaluation_duplicate_keys,is_exact_row_match,merged_row_ratio
+0,Fold 0,2019-01-07,2019-12-31,179421,179421,0,0,True,1.0
+1,Fold 1,2020-01-07,2020-12-31,188142,188142,0,0,True,1.0
+2,Fold 2,2021-01-07,2021-12-31,187447,187447,0,0,True,1.0
+3,Fold 3,2022-01-07,2022-12-31,183947,183947,0,0,True,1.0
+4,Fold 4,2023-01-07,2023-12-31,180385,180385,0,0,True,1.0
+5,Fold 5,2024-01-07,2024-12-31,184350,184350,0,0,True,1.0
+6,Fold 6,2025-01-07,2025-12-31,187160,187160,0,0,True,1.0
+7,Fold 7,2026-01-07,2026-10-06,141825,141825,0,0,True,1.0
