@@ -92,3 +92,17 @@ test("4. 진단 중 브라우저 뒤로 가기는 한 단계씩 돌아간다(가
   await expect(page).toHaveURL(/\/survey$/);
   await backStepsOneAtATime(page);
 });
+
+test("4. 진단 완료 → 대시보드에서 뒤로 가기 두 번에 같은 화면에 갇히지 않는다(데모)", async ({ page }) => {
+  await demoReady(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  const urls: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    await page.goBack();
+    await page.waitForLoadState();
+    urls.push(page.url());
+  }
+  // 대시보드로 되돌려 보내는 화면이 끼면 두 번 모두 "/"에 머문다
+  expect(urls.some((url) => !/\/$/.test(new URL(url).pathname))).toBe(true);
+});
