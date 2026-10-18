@@ -323,7 +323,8 @@ export default function SurveyFlow() {
   return (
     <div className="min-h-dvh bg-page">
       <header className="sticky top-0 z-50 glass-bar">
-        <div className="mx-auto flex min-h-14 w-full max-w-[880px] items-center gap-3 px-4 sm:px-8">
+        {/* 로고 위치를 다른 페이지 헤더와 같게(화면 규칙 v2 정렬) */}
+        <div className="page flex min-h-14 items-center gap-3">
           <Link href="/" className="flex min-h-11 flex-none items-center whitespace-nowrap text-lg hover:no-underline">
             <Wordmark size={26} compact />
           </Link>
@@ -354,7 +355,8 @@ export default function SurveyFlow() {
         </div>
       </header>
 
-      <main ref={mainRef} className="mx-auto flex w-full max-w-[720px] flex-col px-4 py-8 sm:px-8 sm:py-12">
+      <main ref={mainRef} className="page pb-12 pt-6">
+      <div className="page-narrow flex flex-col">
         {stage === "survey" && <h1 data-route-heading className="sr-only">투자 성향 설문</h1>}
         <p role="status" aria-atomic="true" className="sr-only">
           {stage === "result" ? "투자 성향 진단을 마쳤어요. 결과를 확인해 주세요." : ""}
@@ -394,6 +396,7 @@ export default function SurveyFlow() {
             onDone={() => router.push("/")}
           />
         )}
+      </div>
       </main>
     </div>
   );

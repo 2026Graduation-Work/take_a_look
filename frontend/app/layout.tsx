@@ -17,7 +17,7 @@ export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f5f5f7" 
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: SERVICE_NAME, template: `%s · ${SERVICE_NAME}` },
+  title: { default: SERVICE_NAME, template: `%s - ${SERVICE_NAME}` },
   description: SERVICE_DESCRIPTION,
   applicationName: SERVICE_NAME,
   openGraph: {

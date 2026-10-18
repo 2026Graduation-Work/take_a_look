@@ -13,7 +13,7 @@ export function oneLineReason(stock: RecommendedStock): string {
   if (stock.reason) return stock.reason;
   const { h5, h10, h20 } = stock.horizonAgreement;
   return h5 === h10 && h10 === h20
-    ? `1주·2주·4주 뒤 모두 ${DIRECTION_WORD[h5]}으로 봤어요`
+    ? `1주, 2주, 4주 뒤 모두 ${DIRECTION_WORD[h5]}으로 봤어요`
     : `1주 뒤 ${DIRECTION_WORD[h5]}, 4주 뒤 ${DIRECTION_WORD[h20]}`;
 }
 
@@ -43,7 +43,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
         </span>
         <span className="truncate text-xs text-muted">{preview
           ? loading ? "최신 게시 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
-            : chart ? `4주 · ${chart.data_asof.slice(5, 10).replace("-", ".")}` : "게시된 예측 결과가 아직 없어요."
+            : chart ? `4주, ${chart.data_asof.slice(5, 10).replace("-", ".")}` : "게시된 예측 결과가 아직 없어요."
           : oneLineReason(stock)}</span>
       </div>
       <div className="flex flex-none flex-col items-end gap-1">

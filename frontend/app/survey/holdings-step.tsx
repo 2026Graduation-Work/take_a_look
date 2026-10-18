@@ -99,14 +99,15 @@ export default function HoldingsStep({
       ) : (
         <>
           {demo && <p className="m-0 text-xs text-muted">예시로 넣어 뒀어요, 바꿔도 돼요.</p>}
+          {/* 목록은 카드 안 회색 상자·행 선 대신 간격(화면 규칙 v2) */}
           {rows.length > 0 && (
-            <ul className="group-list m-0 list-none bg-field p-0">
+            <ul className="m-0 flex list-none flex-col gap-2 p-0">
               {rows.map((row) => (
-                <li key={row.code} className="flex items-center gap-3 px-4 py-3">
+                <li key={row.code} className="flex items-center gap-3">
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium">{row.name}</span>
                     <span className="block text-xs text-muted tabular-nums">
-                      {row.quantity}주 ·{" "}
+                      {row.quantity}주,{" "}
                       {row.avgBuyPrice === null ? "평균 매입가 모름(현재가 기준)" : `평균 ${row.avgBuyPrice.toLocaleString("ko-KR")}원`}
                     </span>
                   </span>
@@ -175,7 +176,7 @@ export default function HoldingsStep({
           )}
 
           <StepNav
-            className="border-t border-line-soft pt-6"
+            className="pt-6"
             onBack={() => setAnswer(null)}
             backDisabled={saving}
             // 예시를 다 지운 사람(보유 없음)도 시작할 수 있게(페르소나 워크스루 2026-10 P1 막힘)
@@ -191,7 +192,7 @@ export default function HoldingsStep({
           {error}
         </p>
       )}
-      {answer === null && <StepNav className="border-t border-line-soft pt-6" onBack={onBack} backDisabled={saving} />}
+      {answer === null && <StepNav className="pt-6" onBack={onBack} backDisabled={saving} />}
     </section>
   );
 }

@@ -58,7 +58,7 @@ export default function StockMarks({ code, name }: { code: string; name: string 
 
       {note && draft === null && (
         <div className="surface flex flex-col gap-2 px-5 py-4">
-          <span className="text-xs text-muted tabular-nums">지난 메모 · {localDate(note.updatedAt)}</span>
+          <span className="text-xs text-muted tabular-nums">지난 메모, {localDate(note.updatedAt)}</span>
           <p className="m-0 whitespace-pre-wrap text-sm text-ink">{note.text}</p>
           <div className="flex gap-4">
             <button type="button" onClick={() => setDraft(note.text)} className="btn-text text-sm">

@@ -71,7 +71,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
       <div className="mx-auto flex min-h-10 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 sm:px-6 lg:px-8">
         {/* 연도까지 보인다: 스냅샷이 오래되면 "12.30"만으로는 오늘 값처럼 읽힌다. */}
         <span className="flex-none text-xs text-muted tabular-nums">
-          {status.date.replaceAll("-", ".")} 기준{stale && <strong className="ml-1 font-medium text-ink">· {stale}</strong>}
+          {status.date.replaceAll("-", ".")} 기준{stale && <strong className="ml-2 font-medium text-ink">{stale}</strong>}
         </span>
         {quotes.length > 0 ? (
           quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)
