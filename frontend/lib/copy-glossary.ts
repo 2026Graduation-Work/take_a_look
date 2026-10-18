@@ -97,9 +97,6 @@ export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as co
 // 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA). 기간은 위 상수와 같다.
 // 대시보드 신호 기간(앞으로 4주 기본, 1주로 바꿔 볼 수 있다 — 지도교수 10/15 "왜 4주?")
 export type SignalHorizon = keyof typeof HORIZON_AHEAD;
-// "맞는다는 보장은 없어요"는 화면 맨 아래 면책 문구(DisclaimerFooter) 한 곳에서 말한다
-export const directionRule = (horizon: SignalHorizon = 20) =>
-  `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[horizon]}의 방향이에요.`;
 export const SHORT_HORIZON_NOTE = "1주 신호는 짧은 흔들림에 더 크게 반응해요.";
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";

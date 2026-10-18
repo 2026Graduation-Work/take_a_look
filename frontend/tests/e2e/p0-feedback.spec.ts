@@ -26,17 +26,17 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
     route.fulfill({ json: [{ code: "005930", market: "KOSPI", risk_grade: 3, risk_flags: [] }] }));
   await demoReady(page);
   // 강한 신호 목록: 기간은 섹션 제목에 한 번, 방향은 묶음 제목. 줄에는 종목명·코드만
-  const strong = page.getByRole("region", { name: "오늘 신호가 강한 종목" });
-  await expect(strong.getByRole("heading", { name: "하락" })).toBeVisible();
-  await expect(strong.getByRole("heading", { name: "상승" })).toHaveCount(0);
-  await expect(page.locator('[data-stock-row="005930"]')).toHaveText("삼성전자005930");
+  const strong = page.getByRole("region", { name: "신호가 강한 종목" });
+  // 묶음 제목 없이 한 목록, 줄 오른쪽에 색 단어 하나
+  await expect(strong.getByRole("heading", { name: /^(상승|하락)$/ })).toHaveCount(0);
+  await expect(page.locator('[data-stock-row="005930"]')).toHaveText("삼성전자005930하락");
   const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
   await expect(tile).toHaveAccessibleName(/앞으로 4주 하락 신호/);
   // 보유 맵 아래는 색 범례만(설명 문장 없음), '틀릴 수 있다'는 맨 아래 면책 문구에
   await expect(page.getByText(/방향이에요|맞는다는 보장/)).toHaveCount(0);
   await expect(page.getByText(/참고 정보로 틀릴 수 있습니다/)).toBeVisible();
   // 성향 줄: 유형별 고정 문구 "놓치기 쉬운 것"(데모 응답 = 추종형)
-  await expect(page.getByText("놓치기 쉬운 것: 많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요.")).toBeVisible();
+  await expect(page.getByText(/조심스럽게 움직이는 편이에요\. 많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요\./)).toBeVisible();
 });
 
 test("2. 첫 화면은 '판단은 내가, 근거는 여기서'를 먼저 말한다", async ({ page }) => {

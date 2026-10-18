@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { SIGNAL_META } from "@/lib/display";
-import type { DataProvenance, PortfolioHolding } from "@/lib/types";
+import type { PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
 import { HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
@@ -123,14 +123,6 @@ export default function PortfolioHeatmap({
   const columnTotals = columns.map((column) =>
     column.reduce((sum, item) => sum + item.amount, 0),
   );
-  // 한 종목이라도 예시면 맵 전체를 예시로 표시한다.
-  const provenance: DataProvenance | null =
-    holdings.length === 0
-      ? null
-      : holdings.every(({ provenance: { kind } }) => kind === "real")
-        ? holdings[0].provenance
-        : { kind: "mock", source: "" };
-
   if (holdings.length === 0) {
     return (
       <div className="surface flex min-h-[280px] flex-col items-center justify-center gap-4 px-6 text-center">
@@ -275,12 +267,9 @@ export default function PortfolioHeatmap({
           검증 상태·예시 표시와, 필요할 때만 생기는 종가 기준 안내는 같은 줄 끝에 짧은 말로 둔다 */}
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
-        <span>
-          {provenance?.kind === "real" ? "모델 검증 전" : provenance && "예시 데이터"}
-          {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
-          {closeAsOf && staleLabel(closeAsOf) && ` · ${closeAsOf.replaceAll("-", ".")} 종가`}
-          {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
-        </span>
+        {/* 개발 표시(모델 검증 전)·예시 표시는 두지 않는다(화면 규칙 v2, 예시는 상단 데모 띠 한 곳). 필요할 때만 생기는 기준 안내만 */}
+        {closeAsOf && staleLabel(closeAsOf) && <span>{closeAsOf.replaceAll("-", ".")} 종가</span>}
+        {holdings.some(({ priceBasis }) => priceBasis !== "close") && <span>종가가 없는 종목은 매입금액 기준</span>}
       </p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
