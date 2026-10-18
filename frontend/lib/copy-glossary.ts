@@ -36,12 +36,6 @@ export function topPercentLabel(rankPercentile: number): string {
   return `오늘 분석한 종목 중 상위 ${Math.max(1, Math.round((1 - rankPercentile) * 100))}%`;
 }
 
-export const DIRECTION_WORD: Record<HorizonDirection, string> = {
-  up: "오르는 쪽",
-  flat: "뚜렷하지 않음",
-  down: "내리는 쪽",
-};
-
 export const AGREEMENT_ANSWER: Record<HorizonAgreement, string> = {
   aligned: "네, 세 기간 모두 같은 방향이에요",
   mixed: "대체로 같지만 한 기간은 달라요",
@@ -91,20 +85,21 @@ export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미
 
 // 모델 신호 방향의 화면 이름. 사전 참가자·지도교수 모두 '상방·하방'을 헷갈려 B안으로 바꿨다(10/15 면담·E2).
 // 화면의 신호 방향 단어는 모두 여기서 가져온다. 내부 값(up/flat/down)과 DB는 그대로.
-// 두 단어 사이는 줄바꿈 없는 공백(390에서 "하락 / 쪽"으로 갈리지 않게)
-export const SIGNAL_WORD = { up: "상승\u00a0쪽", flat: "중립", down: "하락\u00a0쪽" } as const;
+// B안 '상승 쪽·하락 쪽'에서 '쪽'을 뺐다(10/18 사용자 피드백: 상승·중립·하락으로 통일)
+export const SIGNAL_WORD = { up: "상승", flat: "중립", down: "하락" } as const;
 export type SignalWord = (typeof SIGNAL_WORD)[HorizonDirection];
+// 기간별 방향도 신호 이름과 같은 말(상승·중립·하락)로 통일(10/18)
+export const DIRECTION_WORD: Record<HorizonDirection, string> = SIGNAL_WORD;
 
 // 모델 신호 단어 옆에 붙이는 기간. 신호 방향을 "지난 가격이 올랐다"로 읽지 않게 앞으로의 방향임을 바로 보인다(사전 참가자 P0 10/13)
 export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as const;
 
 // 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA). 기간은 위 상수와 같다.
-// 보유 맵은 색 범례(● 상승 쪽 …) 바로 뒤에 붙여 쓰므로 주어 없는 앞부분만 쓴다(같은 단어 두 번 방지).
 // 대시보드 신호 기간(앞으로 4주 기본, 1주로 바꿔 볼 수 있다 — 지도교수 10/15 "왜 4주?")
 export type SignalHorizon = keyof typeof HORIZON_AHEAD;
-export const directionBasis = (horizon: SignalHorizon = 20) =>
-  `과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[horizon]}의 방향이에요. 맞는다는 보장은 없어요.`;
-export const directionRule = (horizon: SignalHorizon = 20) => `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 ${directionBasis(horizon)}`;
+// "맞는다는 보장은 없어요"는 화면 맨 아래 면책 문구(DisclaimerFooter) 한 곳에서 말한다
+export const directionRule = (horizon: SignalHorizon = 20) =>
+  `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[horizon]}의 방향이에요.`;
 export const DIRECTION_RULE = directionRule(20);
 export const SHORT_HORIZON_NOTE = "1주 신호는 짧은 흔들림에 더 크게 반응해요.";
 

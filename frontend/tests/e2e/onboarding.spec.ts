@@ -122,7 +122,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   // 대시보드: 두 결과(성향 + 보유 종목)를 합쳐 보여 준다
   await expect(page).toHaveURL("/");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 1종목 중 하락 쪽 신호는 없어요.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 1종목 중 하락 신호는 없어요.");
   await expect(page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem")).toHaveCount(1);
   // e2e 스텁은 차트 스냅샷 종가를 주지 않아 평균 매입가도 없는 이 종목은 매입금액(0) 기준으로 센다
   await expect(page.getByText("종가가 없는 종목은 매입금액 기준")).toBeVisible();
@@ -201,7 +201,7 @@ test("new user: 보유 종목 '아직 없어요' -> 대시보드 빈 상태", as
   await page.getByRole("button", { name: "아직 없어요" }).click();
 
   await expect(page).toHaveURL("/");
-  // 스텁 게시 배치: 삼성전자(하락 쪽) + SPAC 1종목(상승 쪽). 데모 응답은 SPAC 회피를 골라 1개만 남는다
+  // 스텁 게시 배치: 삼성전자(하락) + SPAC 1종목(상승). 데모 응답은 SPAC 회피를 골라 1개만 남는다
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("오늘 모델 신호가 강한 종목은 1개예요.");
   await expect(page.getByText("관심 가는 종목을 검색해 보세요")).toBeVisible();
   // 돌아온 사용자는 온보딩을 건너뛴다

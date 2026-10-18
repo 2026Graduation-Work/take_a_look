@@ -413,16 +413,15 @@ export default function Dashboard(initialData: DashboardData) {
                     )}
                   </div>
                 )}
-                {/* "모델 검증 전"은 모델 신호가 처음 나오는 곳에 한 번 — 보유 맵이 있으면 그 범례에 있다 */}
-                <p className="m-0 px-1 text-2xs text-muted">
-                  {activeHoldings.length === 0 && "모델 검증 전 · "}신호는 과거 데이터로 만든 참고 정보예요.
-                  {/* 신호 방향 뜻도 처음 나오는 곳에 한 번 — 보유 맵이 있으면 맵 아래에 같은 문장이 있다 */}
-                  {activeHoldings.length === 0 && <><br />{directionRule(horizon)}</>}
-                  {/* 걸린 종목이 없으면 아래 펼침이 안 생겨 제외가 반영됐는지 알 수 없었다(페르소나 워크스루 2026-10 P3) */}
-                  {!keyword && activeAvoidedLabels.length > 0 && activeExcludedStocks.length === 0 && (
-                    <><br />직접 고른 제외 항목({activeAvoidedLabels.join(" · ")})은 목록에서 빼고 보여 줘요.</>
-                  )}
-                </p>
+                {/* '참고 정보'는 맨 아래 면책 문구가 말한다(중복 제거, 10/18). 보유 맵이 없을 때만 검증 상태·방향 뜻을 여기서 한 번 */}
+                {activeHoldings.length === 0 && (
+                  <p className="m-0 px-1 text-2xs text-muted">모델 검증 전 · {directionRule(horizon)}</p>
+                )}
+                {/* 걸린 종목이 없으면 아래 펼침이 안 생겨 제외가 반영됐는지 알 수 없었다(페르소나 워크스루 2026-10 P3).
+                    항목 이름은 내 정보 화면에 있어 여기선 쓰지 않는다(10/18) */}
+                {!keyword && activeAvoidedLabels.length > 0 && activeExcludedStocks.length === 0 && (
+                  <p className="m-0 px-1 text-2xs text-muted">직접 고른 제외 항목은 목록에서 빼고 보여 줘요.</p>
+                )}
                 {!keyword && activeExcludedStocks.length > 0 && (
                   <details className="disclosure surface px-5">
                     <summary>

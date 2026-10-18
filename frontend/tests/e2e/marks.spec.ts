@@ -189,6 +189,6 @@ test("QA #278: 보유 맵과 관심 종목의 신호가 같다", async ({ page }
   await page.getByRole("button", { name: "관심 종목에 두기" }).click();
   await page.goto("/");
   const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
-  await expect(tile).toHaveAccessibleName(/하락\s쪽 신호/);
-  await expect(page.getByRole("region", { name: "관심 종목" }).getByRole("link", { name: /삼성전자/ })).toContainText("하락 쪽");
+  await expect(tile).toHaveAccessibleName(/하락 신호/);
+  await expect(page.getByRole("region", { name: "관심 종목" }).getByRole("link", { name: /삼성전자/ })).toContainText("하락");
 });
