@@ -691,6 +691,7 @@ export function ResultView({
   onMoreAccurate,
   onBack,
   readOnly = false,
+  onDismissSaved,
 }: {
   result: ProfilingOutput;
   submitting?: boolean;
@@ -701,6 +702,7 @@ export function ResultView({
   onMoreAccurate?: () => void;
   onBack: () => void;
   readOnly?: boolean;
+  onDismissSaved?: (field: string) => void; // 내 투자 성향(읽기 전용)에서 자유 답 판정을 바로 지운다
 }) {
   const [adjusting, setAdjusting] = useState(false);
   const [adjusted, setAdjusted] = useState<Partial<Record<StyleAxisId, number>>>({});
@@ -715,7 +717,8 @@ export function ResultView({
 
   return (
     <section className="surface overflow-hidden">
-      <div className="border-b border-line-soft px-6 py-7 sm:px-10">
+      {/* 선 대신 간격으로 나눈다(화면 규칙 v2) */}
+      <div className="px-6 pt-7 sm:px-10">
         <span className="text-xs font-semibold text-brand">{readOnly ? "내 투자 성향" : "진단 결과"}</span>
         <h1 data-bit-type={bit.lowConfidence ? "low_confidence" : bit.type} className="mt-2 text-3xl font-semibold text-ink sm:text-3xl">
           {bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type]}
@@ -748,21 +751,21 @@ export function ResultView({
           <AxisGauge
             label="흔들림 민감도"
             value={summary.sensitivity}
-            caption="조급함·하락 시 이탈·주변 의견 추종을 합친 값"
+            caption="조급함, 하락 때 정리하는 마음, 주변 의견 따르기를 합친 값"
             left="차분함"
             right="흔들림 큼"
           />
           <AxisGauge
             label="투자 기간"
             value={summary.horizonScore}
-            caption={`${HORIZON_LABEL[summary.horizon]} 보유 성향 · 보유 기간과 회전 문항 기준`}
+            caption={`${HORIZON_LABEL[summary.horizon]} 보유 성향, 보유 기간과 회전 문항 기준`}
             left="장기 보유"
             right="단기 매매"
           />
         </div>
 
         {(result.contradictions?.length ?? 0) > 0 && (
-          <div className="mt-8 flex flex-col gap-2 rounded-lg bg-field px-4 py-3">
+          <div className="mt-12 flex flex-col gap-2">
             <span className="text-sm font-medium text-body">답변 중 서로 부딪히는 부분이 있어요</span>
             {result.contradictions!.map((item) => (
               <p key={item.id} className="m-0 text-sm text-body">
@@ -772,44 +775,37 @@ export function ResultView({
           </div>
         )}
 
-        <div className="mt-8 border-t border-line-soft pt-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-2 text-sm font-medium text-ink">제외할 종목 유형</span>
-            {avoidedLabels.length ? (
-              avoidedLabels.map((label) => (
-                <span key={label} className="rounded-sm bg-track px-3 py-1 text-xs text-body">
-                  {label}
-                </span>
-              ))
-            ) : (
-              <span className="text-sm text-muted">선택한 항목 없음</span>
-            )}
+        {/* 제외 항목·자유 답 판정: 상자 없이 글자, 지우기는 글자 버튼(화면 규칙 v2) */}
+        <dl className="mt-12 mb-0 flex flex-col gap-2 text-sm">
+          <div className="flex flex-wrap items-baseline gap-x-3">
+            <dt className="font-medium text-ink">제외할 종목 유형</dt>
+            <dd className="m-0 text-body">{avoidedLabels.length ? avoidedLabels.join(", ") : "선택한 항목 없음"}</dd>
           </div>
-          {/* 자유 답에서 키워드로 읽은 판정. 판정이 없으면 아무것도 보이지 않는다. 지우면 저장할 때 보조값에서 뺀다 */}
+          {/* 판정이 없으면 아무것도 보이지 않는다. 지우면 보조값에서 뺀다(결과 화면은 저장할 때, 내 투자 성향은 바로) */}
           {readings.length > 0 && (
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="mr-2 text-sm font-medium text-ink">자유 답에서 이렇게 읽었어요</span>
+            <div className="flex flex-wrap items-baseline gap-x-3">
+              <dt className="font-medium text-ink">자유 답에서 이렇게 읽었어요</dt>
               {readings.map(({ field, label }) => (
-                <span key={field} className="inline-flex items-center gap-1 rounded-sm bg-track pl-3 text-xs text-body">
+                <dd key={field} className="m-0 inline-flex items-baseline gap-1 text-body">
                   {label}
-                  {!readOnly && (
+                  {(!readOnly || onDismissSaved) && (
                     <button
                       type="button"
                       aria-label={`${label} 지우기`}
-                      className="btn-text min-h-11 px-3 text-xs"
-                      onClick={() => setDismissed((current) => [...current, field])}
+                      className="btn-text min-h-11 px-2 text-sm"
+                      onClick={() => readOnly ? onDismissSaved?.(field) : setDismissed((current) => [...current, field])}
                     >
                       지우기
                     </button>
                   )}
-                </span>
+                </dd>
               ))}
             </div>
           )}
-        </div>
+        </dl>
 
         {adjusting && (
-          <div id="style-axes-adjust" className="mt-8 flex flex-col gap-3 rounded-md bg-field px-5 py-5">
+          <div id="style-axes-adjust" className="mt-12 flex flex-col gap-2">
             <p className="m-0 text-sm text-body">
               결과가 나와 다르다고 느껴지는 축만 옮겨 주세요. 유형과 위의 요약이 바로 다시 계산돼요.
             </p>
@@ -854,7 +850,7 @@ export function ResultView({
           </p>
         )}
 
-        <div className="mt-8 flex flex-col gap-4 border-t border-line-soft pt-6">
+        <div className="mt-12 flex flex-col gap-6">
           {!readOnly && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             {adjusting ? (

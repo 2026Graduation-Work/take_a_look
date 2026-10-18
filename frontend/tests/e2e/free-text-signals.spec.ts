@@ -18,4 +18,11 @@ test("자유 답 판정을 보여 주고, 지운 판정은 저장된 보조값�
   await expect(page.getByRole("heading", { name: "지금 가진 주식이 있나요?" })).toBeVisible();
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("takealook.ips-profile.v1") ?? "{}"));
   expect(saved.free_text_signal.extracted_signals).toEqual({ fomo_index: 0.8 });
+
+  // 내 투자 성향에서도 글자 버튼으로 바로 지운다(상자 없이 글자)
+  await page.getByRole("button", { name: "저장하고 시작" }).click();
+  await page.goto("/profile");
+  await page.getByRole("button", { name: "남보다 늦을까 조급함 지우기" }).click();
+  await expect(page.getByText("자유 답에서 이렇게 읽었어요")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("takealook.ips-profile.v1") ?? "{}").free_text_signal.extracted_signals)).toEqual({});
 });
