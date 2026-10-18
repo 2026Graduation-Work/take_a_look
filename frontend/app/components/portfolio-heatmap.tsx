@@ -223,7 +223,7 @@ export default function PortfolioHeatmap({
           {provenance?.kind === "real" ? " · 모델 검증 전" : provenance && " · 예시 데이터"}
         </span>
       </div>
-      {/* #278 QA: 상방·하방이 무슨 뜻인지 맵 바로 아래에서 한 줄로 */}
+      {/* #278 QA: 신호 방향이 무슨 뜻인지 맵 바로 아래에서 한 줄로 */}
       <p className="m-0 text-2xs text-muted">{DIRECTION_RULE}</p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">

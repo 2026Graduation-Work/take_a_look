@@ -1,6 +1,7 @@
 // 스키마 enum 값 → 화면 표기(라벨·색) 매핑. 점수 산출이 아닌 순수 표시 계층.
 // 표현 제한 원칙: 확률 단정 대신 "과거 유사 신호 구간 상위 N%"류 표현만 사용한다.
 
+import { SIGNAL_WORD, type SignalWord } from "./copy-glossary.ts";
 import type {
   HorizonDirection,
   MarketCondition,
@@ -18,31 +19,31 @@ export interface SignalMeta {
 // 색은 globals.css @theme 토큰만 참조한다. 여기서 새 hex를 만들지 않는다.
 export const SIGNAL_META: Record<SignalLight, SignalMeta> = {
   strong_positive: {
-    label: "강한 상방",
+    label: `강한 ${SIGNAL_WORD.up}`,
     ink: "var(--color-sig-sp)",
     tint: "var(--color-sig-sp-tint)",
     solid: "var(--color-sig-sp-solid)",
   },
   positive: {
-    label: "상방",
+    label: SIGNAL_WORD.up,
     ink: "var(--color-sig-p)",
     tint: "var(--color-sig-p-tint)",
     solid: "var(--color-sig-p-solid)",
   },
   neutral: {
-    label: "중립",
+    label: SIGNAL_WORD.flat,
     ink: "var(--color-sig-n)",
     tint: "var(--color-sig-n-tint)",
     solid: "var(--color-sig-n-solid)",
   },
   negative: {
-    label: "하방",
+    label: SIGNAL_WORD.down,
     ink: "var(--color-sig-ng)",
     tint: "var(--color-sig-ng-tint)",
     solid: "var(--color-sig-ng-solid)",
   },
   strong_negative: {
-    label: "강한 하방",
+    label: `강한 ${SIGNAL_WORD.down}`,
     ink: "var(--color-sig-sn)",
     tint: "var(--color-sig-sn-tint)",
     solid: "var(--color-sig-sn-solid)",
@@ -117,8 +118,8 @@ export function formatShares(value: number): string {
 // 기준: 운영 배치(2026-10-13, 913종목 H20)에서 1위 항목의 중앙값이 약 0.13, 2~3위 항목은 대부분 0.1 미만.
 // 합이 없으면(옛 스냅샷) 크기를 알 수 없어 방향만 쓴다.
 export const CONTRIBUTION_LARGE = 0.1;
-// target은 기여값이 가리키는 분류. "하방 신호를 높임"이 가격 상승으로 읽히지 않게 늘 붙인다.
-export function contributionWord(contribution: number, target: "상방" | "중립" | "하방", total?: number): string {
+// target은 기여값이 가리키는 분류. "하락 쪽 신호를 높임"이 가격 상승으로 읽히지 않게 늘 붙인다.
+export function contributionWord(contribution: number, target: SignalWord, total?: number): string {
   if (contribution === 0) return `${target} 신호를 바꾸지 않음`;
   const verb = contribution > 0 ? "높임" : "낮춤";
   if (!total) return `${target} 신호를 ${verb}`;

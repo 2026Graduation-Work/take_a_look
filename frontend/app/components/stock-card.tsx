@@ -5,7 +5,7 @@ import { isChartPreview } from "@/lib/chart-preview-config";
 import { usePublicCharts } from "@/lib/use-public-charts";
 import { chartDirection } from "@/lib/chart-detail";
 import { SIGNAL_META } from "@/lib/display";
-import { DIRECTION_WORD, topPercentLabel } from "@/lib/copy-glossary";
+import { DIRECTION_WORD, SIGNAL_WORD, topPercentLabel } from "@/lib/copy-glossary";
 import type { RecommendedStock } from "@/lib/types";
 
 // 한 줄 이유. 모델 근거 문장이 있으면 그것을, 없으면 기간별 방향으로 만든 결정론 문장을 쓴다.
@@ -48,7 +48,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
       </div>
       <div className="flex flex-none flex-col items-end gap-1">
         <span className="text-sm font-semibold" style={{ color: signal.ink }}>
-          {preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : direction === "flat" ? "중립" : "신호 미제공" : signal.label}
+          {preview ? direction ? SIGNAL_WORD[direction] : "신호 미제공" : signal.label}
         </span>
         {!preview && <span className="text-2xs text-muted tabular-nums">{topPercentLabel(stock.rankPercentile)}</span>}
       </div>

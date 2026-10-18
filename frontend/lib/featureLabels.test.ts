@@ -84,7 +84,7 @@ const SHOWN = [
 
 test("화면에 나오는 피처명이 모두 쉬운 말로 바뀐다", () => {
   for (const name of SHOWN) {
-    const label = featureLabel(name, "모델 입력 상방 가격");
+    const label = featureLabel(name, "모델 입력 상승 쪽 가격");
     assert.ok(!/[A-Za-z_]/.test(label), `${name} → ${label}`);
     assert.ok(label.length <= 16, `${name} → ${label} (${label.length}자)`);
     assert.ok(!FORBIDDEN_COPY.some(({ pattern }) => pattern.test(label)), label);

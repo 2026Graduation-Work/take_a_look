@@ -9,7 +9,7 @@ import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_RULE, HORIZON_AHEAD } from "@/lib/copy-glossary";
+import { DIRECTION_RULE, HORIZON_AHEAD, SIGNAL_WORD } from "@/lib/copy-glossary";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -359,7 +359,7 @@ export default function Dashboard(initialData: DashboardData) {
                 {/* "모델 검증 전"은 모델 신호가 처음 나오는 곳에 한 번 — 보유 맵이 있으면 그 범례에 있다 */}
                 <p className="m-0 px-1 text-2xs text-muted">
                   {activeHoldings.length === 0 && "모델 검증 전 · "}신호는 과거 데이터로 만든 참고 정보예요
-                  {/* 상방·하방 뜻도 처음 나오는 곳에 한 번 — 보유 맵이 있으면 맵 아래에 같은 문장이 있다 */}
+                  {/* 신호 방향 뜻도 처음 나오는 곳에 한 번 — 보유 맵이 있으면 맵 아래에 같은 문장이 있다 */}
                   {activeHoldings.length === 0 && <><br />{DIRECTION_RULE}</>}
                   {/* 걸린 종목이 없으면 아래 펼침이 안 생겨 제외가 반영됐는지 알 수 없었다(페르소나 워크스루 2026-10 P3) */}
                   {!keyword && activeAvoidedLabels.length > 0 && activeExcludedStocks.length === 0 && (
@@ -461,7 +461,7 @@ function StrongRow({ signal }: { signal: StrongSignal }) {
         <span className="truncate text-xs text-muted">{signal.why ? `가장 크게 본 것: ${signal.why}` : "4주 · 20거래일"}</span>
       </div>
       <span className="flex-none text-sm font-semibold" style={{ color: meta.ink }}>
-        {signal.direction === "up" ? "상방" : "하방"}
+        {SIGNAL_WORD[signal.direction]}
         <span className="font-normal text-muted"> · {HORIZON_AHEAD[20]}</span>
       </span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />

@@ -28,6 +28,7 @@ import {
   LIVE_NEWS_SCOPE,
   PRICE_CONTEXT_CAPTION,
   DISCLOSURE_KIND,
+  SIGNAL_WORD,
 } from "@/lib/copy-glossary";
 import { STYLE_AXIS_IDS } from "@/lib/profiling-rules";
 import {
@@ -845,7 +846,7 @@ function ContributionPanel({
       </>
     );
   }
-  const target = space === "class_0_raw_margin" ? "하방" : space === "class_1_raw_margin" ? "중립" : "상방";
+  const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
   // 쉽게 보이기: 상위 3개만 막대로, 나머지는 "그 밖의 N개" 한 줄. 크기는 말로(contributionWord), 숫자는 계산값 보기에만
   const shown = features.slice(0, 3);
@@ -855,7 +856,7 @@ function ContributionPanel({
     <>
       <Conclusion>
         모델의{" "}
-        <strong className="font-semibold" style={{ color: target === "하방" ? "var(--color-down)" : target === "상방" ? "var(--color-up)" : "var(--color-ink)" }}>
+        <strong className="font-semibold" style={{ color: target === SIGNAL_WORD.down ? "var(--color-down)" : target === SIGNAL_WORD.up ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
         </strong>{" "}
         점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
@@ -863,7 +864,7 @@ function ContributionPanel({
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
-          const color = !up || target === "중립" ? "var(--color-muted)" : target === "하방" ? "var(--color-down)" : "var(--color-up)";
+          const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
