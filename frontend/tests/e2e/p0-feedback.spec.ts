@@ -27,7 +27,6 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
   await demoReady(page);
   // 강한 신호 목록: 기간은 섹션 제목에 한 번, 방향은 묶음 제목. 줄에는 종목명·코드만
   const strong = page.getByRole("region", { name: "오늘 신호가 강한 종목" });
-  await expect(strong.getByText("앞으로 4주", { exact: true })).toBeVisible();
   await expect(strong.getByRole("heading", { name: "하락" })).toBeVisible();
   await expect(strong.getByRole("heading", { name: "상승" })).toHaveCount(0);
   await expect(page.locator('[data-stock-row="005930"]')).toHaveText("삼성전자005930");

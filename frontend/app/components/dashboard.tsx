@@ -9,7 +9,7 @@ import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
-import { directionRule, HORIZON_AHEAD, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { directionRule, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
@@ -376,8 +376,8 @@ export default function Dashboard(initialData: DashboardData) {
               </div>
 
               <section aria-label="오늘 신호가 강한 종목" className="flex flex-col gap-3">
-                {/* 기간은 줄마다 쓰지 않고 섹션에 한 번 */}
-                <SectionHead title="오늘 신호가 강한 종목" action={<span className="text-sm text-muted">{HORIZON_AHEAD[horizon]}</span>} />
+                {/* 기간은 위 전환 버튼 한 곳에서만 보인다(10/18 사용자 피드백) */}
+                <SectionHead title="오늘 신호가 강한 종목" />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (
