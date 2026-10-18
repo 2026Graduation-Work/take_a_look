@@ -181,7 +181,7 @@ export function koreanAuthError(message: string): string {
     return "메일 확인이 아직이에요. 받은 메일의 링크를 누른 뒤 다시 로그인해 주세요.";
   }
   if (lower.includes("rate limit")) {
-    return "메일 발송 한도를 넘었어요. 비밀번호로 가입·로그인하거나 잠시 후 다시 시도해 주세요.";
+    return "메일 발송 한도를 넘었어요. 비밀번호로 가입하거나 로그인하거나 잠시 후 다시 시도해 주세요.";
   }
   if (lower.includes("password should be at least")) return "비밀번호는 6자 이상이어야 해요.";
   return message;

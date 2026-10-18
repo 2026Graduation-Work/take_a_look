@@ -492,7 +492,7 @@ export async function loadSupabaseFinancial(
             if (metric.value === null) continue; // 적자·결측은 주가로 채우지 않는다.
             const original = metric.value;
             metric.value = Number((original * factor).toFixed(4));
-            metric.basis = `기존 ${original}배 × (${quote.as_of} ${priceSource} ${quote.close.toLocaleString("ko-KR")}원 ÷ ${snapshot.price_as_of} 수정종가 ${baseline!.toLocaleString("ko-KR")}원) · 기존 재무 계산: ${metric.basis}`;
+            metric.basis = `기존 ${original}배 × (${quote.as_of} ${priceSource} ${quote.close.toLocaleString("ko-KR")}원 ÷ ${snapshot.price_as_of} 수정종가 ${baseline!.toLocaleString("ko-KR")}원), 기존 재무 계산: ${metric.basis}`;
           }
           priceAsOf = quote.as_of;
           asOf = snapshot.as_of && snapshot.as_of > quote.as_of ? snapshot.as_of : quote.as_of;
