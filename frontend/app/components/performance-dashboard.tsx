@@ -96,12 +96,12 @@ export default function PerformanceDashboard({
             A는 지금 운영 모델과 같은 지표로, B는 여기에 시장 분위기(심리) 지표 4개를 더해 학습했어요. 과거 연도마다 따로 학습해 비교한 연구 결과라, 지금 운영 중인 모델의 성적은 아니에요.
           </p>
           {isSample && (
-            <p role="note" className="m-0 mt-2 rounded-md bg-field px-4 py-3 text-sm text-body">
+            <p role="note" className="-mx-1 m-0 mt-2 rounded-md bg-field px-5 py-3 text-sm text-body">
               <strong className="font-semibold text-ink">예시 데이터</strong> · {conclusion}
             </p>
           )}
           {!isSample && (
-            <p className="m-0 mt-2 rounded-md bg-surface px-4 py-3 text-sm text-ink">
+            <p className="-mx-1 m-0 mt-2 rounded-md bg-surface px-5 py-3 text-sm text-ink">
               <strong className="font-semibold">결론</strong> {conclusion}
             </p>
           )}
