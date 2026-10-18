@@ -65,7 +65,7 @@ const celltrion: RecommendedStock = {
   horizonAgreement: { h5: "up", h10: "up", h20: "flat", agreement: "mixed" },
   riskFlags: ["high_volatility"],
   caution:
-    "위험 2등급 종목으로, 성향 기준 허용 범위(4·5등급) 밖에 있습니다.",
+    "위험 2등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있습니다.",
   reason: "최근 20거래일 거래량이 평소의 2.8배", // 상세 모델 근거 1순위와 같은 문장
   provenance: DEMO,
 };
@@ -84,7 +84,7 @@ const kakao: RecommendedStock = {
   horizonAgreement: { h5: "down", h10: "down", h20: "flat", agreement: "mixed" },
   riskFlags: [],
   caution:
-    "위험 3등급 종목으로, 성향 기준 허용 범위(4·5등급) 밖에 있습니다.",
+    "위험 3등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있습니다.",
   provenance: DEMO,
 };
 
@@ -188,19 +188,19 @@ export const stockDetails: Record<string, StockDetail> = {
     reasons: [
       {
         title: "최근 20거래일 거래량이 평소의 2.8배",
-        detail: "기여도 상 · 매집 또는 이슈성 거래 가능성 모두 포함",
+        detail: "기여도 상, 매집 또는 이슈성 거래 가능성 모두 포함",
         source: "chart",
         sourceLabel: "차트 지표 (거래량)",
       },
       {
         title: "60일 모멘텀이 전체 종목 상위 15%",
-        detail: "기여도 중 · 중기 추세는 우상향 유지",
+        detail: "기여도 중, 중기 추세는 우상향 유지",
         source: "chart",
         sourceLabel: "차트 지표 (모멘텀)",
       },
       {
         title: "최근 2주 뉴스 감성은 중립~약긍정",
-        detail: "기여도 중 · 바이오시밀러 수주 기사 대비 부정 기사 적음",
+        detail: "기여도 중, 바이오시밀러 수주 기사 대비 부정 기사 적음",
         source: "news",
         sourceLabel: "뉴스 감성 분석",
       },
@@ -227,25 +227,25 @@ export const stockDetails: Record<string, StockDetail> = {
     reasons: [
       {
         title: "20일 이동평균이 60일 이동평균을 상향 돌파",
-        detail: "기여도 상 · 교차 이후 8거래일째 추세 유지",
+        detail: "기여도 상, 교차 이후 8거래일째 추세 유지",
         source: "chart",
         sourceLabel: "차트 지표 (추세)",
       },
       {
         title: "최근 2주 반도체 업황 뉴스 감성 긍정 비율 71%",
-        detail: "기여도 중 · HBM 공급 계약 기사 중심",
+        detail: "기여도 중, HBM 공급 계약 기사 중심",
         source: "news",
         sourceLabel: "뉴스 감성 분석",
       },
       {
         title: "직전 분기 영업이익이 시장 예상치를 9% 상회",
-        detail: "기여도 중 · 실적 발표 이후 추정치 상향 반영",
+        detail: "기여도 중, 실적 발표 이후 추정치 상향 반영",
         source: "financial",
         sourceLabel: "재무 지표 (실적)",
       },
     ],
     aiAdvice:
-      "삼성전자의 모델 신호는 상승이고, 1주·2주·4주 뒤 방향이 모두 오르는 쪽이에요. 과거 비슷한 신호 128건의 2주 뒤 수익률은 -0.8%에서 +4.2% 사이였고, 실제로 오른 경우는 61%였어요. 위험도는 낮음으로 김민지님이 답한 위험 감수(33) 범위 안에 있고, 범위가 좁은 편이라 흔들림 민감도(65)가 높은 김민지님에게 오르내림 부담이 덜한 편이에요.",
+      "삼성전자의 모델 신호는 상승이고, 1주, 2주, 4주 뒤 방향이 모두 오르는 쪽이에요. 과거 비슷한 신호 128건의 2주 뒤 수익률은 -0.8%에서 +4.2% 사이였고, 실제로 오른 경우는 61%였어요. 위험도는 낮음으로 김민지님이 답한 위험 감수(33) 범위 안에 있고, 범위가 좁은 편이라 흔들림 민감도(65)가 높은 김민지님에게 오르내림 부담이 덜한 편이에요.",
   },
   [hyundaiMotor.code]: {
     ...hyundaiMotor,
@@ -268,19 +268,19 @@ export const stockDetails: Record<string, StockDetail> = {
     reasons: [
       {
         title: "60일 모멘텀이 전체 종목 상위 5%",
-        detail: "기여도 상 · 최근 3개월 상대강도 지속 상승",
+        detail: "기여도 상, 최근 3개월 상대강도 지속 상승",
         source: "chart",
         sourceLabel: "차트 지표 (모멘텀)",
       },
       {
         title: "최근 20거래일 거래량이 평소의 1.9배",
-        detail: "기여도 중 · 가격 상승과 같은 방향의 거래 증가",
+        detail: "기여도 중, 가격 상승과 같은 방향의 거래 증가",
         source: "chart",
         sourceLabel: "차트 지표 (거래량)",
       },
       {
         title: "북미 판매 실적 관련 뉴스 감성 긍정 우위",
-        detail: "기여도 중 · 부정 기사 비중이 낮은 상태 유지",
+        detail: "기여도 중, 부정 기사 비중이 낮은 상태 유지",
         source: "news",
         sourceLabel: "뉴스 감성 분석",
       },
