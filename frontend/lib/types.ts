@@ -122,6 +122,7 @@ export interface InvestorProfileSummary {
   displayName: string;
   avatarLabel: string;
   profileTypeLabel: string; // BIT 유형명. 예: 추종형 (lib/profiling/bit.ts BIT_LABEL)
+  blindSpot?: string; // 이 유형이 놓치기 쉬운 것(BIT_BLIND_SPOT). 유형을 단정하지 않으면 없음
   personaLabel: string; // 예: 신중한 장기 투자자
   riskTolerance: number; // 0~100, 위험 감수 = mean(loss_tolerance, concentration)
   sentimentSensitivity: number; // 0~100, 흔들림 민감도 = mean(urgency, drawdown_reaction, information_reliance)

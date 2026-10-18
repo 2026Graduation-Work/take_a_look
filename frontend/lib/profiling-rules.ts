@@ -1,7 +1,7 @@
 // 설문 응답 → schema profiling_output v1.1 변환. 8축 채점은 lib/profiling/style-scoring.ts가 정본이다.
 // 결정론이며 LLM을 쓰지 않는다. 종목을 거르는 값은 avoided_assets(사용자가 직접 고른 항목)뿐이다.
 
-import { BIT_LABEL, BIT_SUMMARY, classifyBit } from "./profiling/bit.ts";
+import { BIT_BLIND_SPOT, BIT_LABEL, BIT_SUMMARY, classifyBit } from "./profiling/bit.ts";
 import { extractFreeTextSignals } from "./free-text-signals.ts";
 import type {
   ActionIntent,
@@ -133,6 +133,7 @@ export function summaryFromStyleAxes(
     ...identity,
     profileTypeLabel: bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type],
     personaLabel: bit.lowConfidence ? "응답이 엇갈려 유형을 단정하지 않았어요." : BIT_SUMMARY[bit.type],
+    ...(bit.lowConfidence ? {} : { blindSpot: BIT_BLIND_SPOT[bit.type] }),
     riskTolerance: summary.riskTaking,
     sentimentSensitivity: summary.sensitivity,
     horizon: summary.horizon,

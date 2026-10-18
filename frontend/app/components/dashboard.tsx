@@ -288,9 +288,13 @@ export default function Dashboard(initialData: DashboardData) {
               aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
               className="surface flex items-center gap-3 px-5 py-4 text-sm text-body hover:bg-white/70 hover:no-underline"
             >
-              <span className="min-w-0 flex-1 truncate">
-                <span className="font-semibold text-ink">{activeProfile.profileTypeLabel}</span> ·{" "}
-                {activeProfile.personaLabel}
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="truncate">
+                  <span className="font-semibold text-ink">{activeProfile.profileTypeLabel}</span> ·{" "}
+                  {activeProfile.personaLabel}
+                </span>
+                {/* 유형별 고정 문구(규칙 코드). 종목을 거르거나 순서를 바꾸지 않는다 */}
+                {activeProfile.blindSpot && <span className="text-xs text-muted">놓치기 쉬운 것: {activeProfile.blindSpot}</span>}
               </span>
               <span aria-hidden className="flex-none text-muted">›</span>
             </Link>

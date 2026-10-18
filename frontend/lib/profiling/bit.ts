@@ -99,6 +99,14 @@ export const BIT_LABEL: Record<BitType, string> = {
   ACCUMULATOR: "적극 축적형",
 };
 
+// 대시보드 성향 줄의 "놓치기 쉬운 것"(성우 개선 포인트 2). 유형별 고정 문구 4개, 종목을 거르거나 순서를 바꾸지 않는다.
+export const BIT_BLIND_SPOT: Record<BitType, string> = {
+  PRESERVER: "떨어진 종목을 오래 들고 있느라 회사 상황이 바뀐 걸 놓치기 쉬워요.",
+  FOLLOWER: "많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요.",
+  INDEPENDENT: "내 생각과 다른 근거를 가볍게 넘기기 쉬워요.",
+  ACCUMULATOR: "한 번에 크게 움직이다 손실이 커질 수 있는 걸 놓치기 쉬워요.",
+};
+
 export const BIT_SUMMARY: Record<BitType, string> = {
   PRESERVER: "잃지 않는 것을 먼저 생각하고, 산 종목을 오래 들고 가는 편이에요.",
   FOLLOWER: "시장 흐름과 주변 의견을 참고해 조심스럽게 움직이는 편이에요.",
