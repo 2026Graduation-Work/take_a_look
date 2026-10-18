@@ -1,0 +1,36 @@
+{
+  "prepared_date_kst": "2026-10-14",
+  "reference_pr": "https://github.com/2026Graduation-Work/take_a_look/pull/325",
+  "report_base_commit": "c6c42da4abae6f0cb69dd5828cc746bf826e588e",
+  "source_checkout_commit": "4d3199a0fc8cf97e1b66df4db44196ab3bc458fe",
+  "source_checkout_dirty": true,
+  "runs": {
+    "h5_base": "sliding_2016_2026_h5_kospi_739166ce0d474177",
+    "h5_flow": "sliding_2016_2026_h5_flow_kospi_ecb00d84b00063ca",
+    "h20_base": "sliding_2016_2026_h20_kospi_1734679be11d0369",
+    "h20_flow": "sliding_2016_2026_h20_flow_kospi_b3bdd182d898e80f"
+  },
+  "conditions": [
+    {
+      "horizon": 5,
+      "same_dataset_and_time_split": true,
+      "same_model_labels_strategy_costs": true,
+      "base_feature_prefix_equal": true
+    },
+    {
+      "horizon": 20,
+      "same_dataset_and_time_split": true,
+      "same_model_labels_strategy_costs": true,
+      "base_feature_prefix_equal": true
+    }
+  ],
+  "stock_file_count": 1019,
+  "same_stock_file_list": true,
+  "full_input_base_eligible_rows": 2269713,
+  "full_input_flow_eligible_rows": 1804277,
+  "full_input_flow_excluded_rows": 465436,
+  "retrained": false,
+  "metrics_recomputed_from_predictions": false,
+  "result_artifacts_rehashed": 52,
+  "large_inputs_rehashed": false
+}
