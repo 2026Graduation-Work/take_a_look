@@ -31,7 +31,7 @@ interface Change {
 export interface DailyChange {
   code: string;
   name: string;
-  text: string; // 한 종목의 바뀐 것을 한 줄로. 예: "외국인 순매수로 · 기관 순매도로"
+  text: string; // 한 종목의 바뀐 것을 한 줄로. 예: "외국인 순매수로, 기관 순매도로"
 }
 
 // 받침이 있으면(ㄹ 제외) '으로', 없으면 '로'
@@ -103,7 +103,7 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
     const line = lines.get(change.code) ?? lines.set(change.code, { name: change.name, parts: [] }).get(change.code)!;
     line.parts.push(change);
   }
-  return [...lines].slice(0, MAX_LINES).map(([code, { name, parts }]) => ({ code, name, text: parts.map(phrase).join(" · ") }));
+  return [...lines].slice(0, MAX_LINES).map(([code, { name, parts }]) => ({ code, name, text: parts.map(phrase).join(", ") }));
 }
 
 // 제목에 분류명이 이미 있으면 분류명을 생략한다("기업설명회 · 기업설명회(IR)개최" → 제목만). 띄어쓰기는 무시.

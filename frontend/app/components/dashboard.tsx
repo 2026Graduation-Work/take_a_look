@@ -393,19 +393,24 @@ export default function Dashboard(initialData: DashboardData) {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4">
-                    {(["up", "down"] as const).map((direction) => {
-                      const rows = visibleStrong.filter((signal) => signal.direction === direction);
-                      return rows.length > 0 && (
-                        <div key={direction} className="flex flex-col gap-2">
-                          <h3 className="eyebrow px-1" style={{ color: SIGNAL_META[direction === "up" ? "positive" : "negative"].ink }}>
-                            {SIGNAL_WORD[direction]}
-                          </h3>
-                          <div className="group-list">
-                            {rows.map((signal) => <StrongRow key={signal.code} signal={signal} />)}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {/* 두 묶음을 카드 하나 안에 둔다 — 카드 윗변이 옆 보유 맵 카드와 맞는다(10/18 사용자 피드백) */}
+                    {visibleStrong.length > 0 && (
+                      <div className="group-list">
+                        {(["up", "down"] as const).map((direction) => {
+                          const rows = visibleStrong.filter((signal) => signal.direction === direction);
+                          return rows.length > 0 && (
+                            <div key={direction}>
+                              <h3 className="eyebrow m-0 px-5 pt-3" style={{ color: SIGNAL_META[direction === "up" ? "positive" : "negative"].ink }}>
+                                {SIGNAL_WORD[direction]}
+                              </h3>
+                              <div className="[&>*+*]:border-t [&>*+*]:border-line-soft">
+                                {rows.map((signal) => <StrongRow key={signal.code} signal={signal} />)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {visibleAlerts.length > 0 && (
                       <div className="group-list">
                         {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}

@@ -56,5 +56,5 @@ test("같은 종목의 여러 변화는 한 줄로 합치고, 줄 수는 종목 
   ] };
   const lines = detectChanges(both);
   assert.equal(lines.length, 3);
-  assert.equal(lines.find(({ code }) => code === "035720")!.text, "외국인 순매수로 · 기관 순매도로");
+  assert.equal(lines.find(({ code }) => code === "035720")!.text, "외국인 순매수로, 기관 순매도로");
 });
