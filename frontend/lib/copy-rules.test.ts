@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import * as glossary from "./copy-glossary.ts";
-import { DIRECTION_RULE, SIGNAL_WORD } from "./copy-glossary.ts";
+import { directionRule, SIGNAL_WORD } from "./copy-glossary.ts";
 import { contributionWord } from "./display.ts";
 import { FORBIDDEN_COPY } from "./copy-rules.ts";
 
@@ -87,7 +87,7 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
 
 test("신호 방향 이름(상승·하락)은 확률·전망 금지 규칙에 걸리지 않는다", () => {
   const caught = (text: string) => FORBIDDEN_COPY.filter(({ pattern }) => pattern.test(text)).map(({ reason }) => reason);
-  for (const text of [...Object.values(SIGNAL_WORD), `강한 ${SIGNAL_WORD.up}`, DIRECTION_RULE,
+  for (const text of [...Object.values(SIGNAL_WORD), `강한 ${SIGNAL_WORD.up}`, directionRule(),
     contributionWord(0.12, SIGNAL_WORD.down, 1), `보유 4종목 중 ${SIGNAL_WORD.down} 신호는 없어요.`]) {
     assert.deepEqual(caught(text), [], text);
   }
