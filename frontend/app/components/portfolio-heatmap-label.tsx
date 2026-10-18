@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // 이름은 늘 보인다(길면 말줄임, #326 후속). 아래 줄은 실제 글자 크기를 재서
-// 높이가 모자라면 줄 전체를, 폭이 모자라면 '비중'만 숨긴다. 타일 밖으로 넘치지 않는다.
+// 높이가 모자라면 줄 전체를(두 줄 모두 줄어들지 않게 shrink-0 — 이름이 찌그러지면 높이도 잘못 잰다), 폭이 모자라면 '비중'만 숨긴다. 타일 밖으로 넘치지 않는다.
 export default function HeatmapLabel({ name, signal, weight }: { name: string; signal: string; weight: number | null }) {
   const content = useRef<HTMLSpanElement>(null);
   const [fits, setFits] = useState({ row: true, weight: true });
@@ -32,8 +32,8 @@ export default function HeatmapLabel({ name, signal, weight }: { name: string; s
 
   return (
     <span ref={content} aria-hidden="true" className="absolute inset-0 flex flex-col justify-between gap-1 px-2.5 py-1.5">
-      <span className="truncate text-sm font-semibold">{name}</span>
-      <span className={`relative flex items-baseline justify-between gap-2 text-xs font-medium ${fits.row ? "" : "invisible"}`}>
+      <span className="shrink-0 truncate text-sm font-semibold">{name}</span>
+      <span className={`relative flex shrink-0 items-baseline justify-between gap-2 text-xs font-medium ${fits.row ? "" : "invisible"}`}>
         <span className="truncate">{signal}</span>
         {weight !== null && <span className={`shrink-0 whitespace-nowrap tabular-nums ${fits.weight ? "" : "invisible absolute right-0"}`}>비중 {weight}%</span>}
       </span>

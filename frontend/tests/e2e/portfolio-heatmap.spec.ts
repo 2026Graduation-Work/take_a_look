@@ -58,6 +58,13 @@ test.describe("작은 비중 여러 종목(390)", () => {
       await expect(name).toBeVisible();
       const nameBox = (await name.boundingBox())!;
       expect(nameBox.x + 2).toBeGreaterThanOrEqual(box.x);
+      // 이름 줄이 찌그러지지 않고(한 줄 높이) 칸 안에 온전히 있다
+      expect(nameBox.height).toBeGreaterThanOrEqual(16);
+      expect(nameBox.y).toBeGreaterThanOrEqual(box.y);
+      expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
+      // 아래 줄이 보이면 이름과 겹치지 않는다
+      const signal = tile.getByText(/상승\s쪽/);
+      if (await signal.isVisible()) expect((await signal.boundingBox())!.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 0.5);
     }
   });
 
