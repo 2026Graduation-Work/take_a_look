@@ -28,7 +28,7 @@ async function watchAndNote(page: Page) {
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("실적 발표 뒤에 다시 보기");
   await page.getByRole("button", { name: "저장", exact: true }).click();
-  await expect(page.getByText(/지난 메모 · \d{4}\.\d{2}\.\d{2}/)).toBeVisible();
+  await expect(page.getByText(/지난 메모, \d{4}\.\d{2}\.\d{2}/)).toBeVisible();
 
   await page.goto("/");
   const watched = page.getByRole("region", { name: "관심 종목" });
