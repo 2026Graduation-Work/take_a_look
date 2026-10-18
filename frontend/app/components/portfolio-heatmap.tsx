@@ -6,7 +6,7 @@ import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
-import { directionBasis, HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
+import { HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
 import HeatmapPopup from "./portfolio-heatmap-popup";
 import HeatmapLabel from "./portfolio-heatmap-label";
 
@@ -271,20 +271,17 @@ export default function PortfolioHeatmap({
           onClose={() => setActive(null)}
         />
       )}
-      {/* 색 범례와 방향 뜻을 한 줄로(기간은 이 문장에 한 번, 사전 참가자 P0 10/13). 읽기 프로그램은 타일 이름에서 듣는다 */}
+      {/* 맵 아래는 색 범례 한 줄만(10/18 사용자 피드백). 기간은 위 전환 버튼, '참고 정보'는 맨 아래 면책 문구가 말한다.
+          검증 상태·예시 표시와, 필요할 때만 생기는 종가 기준 안내는 같은 줄 끝에 짧은 말로 둔다 */}
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
-        <span>{directionBasis(horizon)}</span>
-      </p>
-      <div className="text-2xs text-muted">
         <span>
-          넓이·비중은 내 보유 평가금액 기준 · 작은 종목은 이름이 보이게 최소 크기로 그려요.
+          {provenance?.kind === "real" ? "모델 검증 전" : provenance && "예시 데이터"}
           {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
-          {closeAsOf && staleLabel(closeAsOf) && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
+          {closeAsOf && staleLabel(closeAsOf) && ` · ${closeAsOf.replaceAll("-", ".")} 종가`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
-          {provenance?.kind === "real" ? " · 모델 검증 전" : provenance && " · 예시 데이터"}
         </span>
-      </div>
+      </p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
           등록한 종목 중 {withoutSignalCount}개는 오늘 모델 신호가 없어 맵에 넣지 않았어요.

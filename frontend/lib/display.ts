@@ -118,7 +118,7 @@ export function formatShares(value: number): string {
 // 기준: 운영 배치(2026-10-13, 913종목 H20)에서 1위 항목의 중앙값이 약 0.13, 2~3위 항목은 대부분 0.1 미만.
 // 합이 없으면(옛 스냅샷) 크기를 알 수 없어 방향만 쓴다.
 export const CONTRIBUTION_LARGE = 0.1;
-// target은 기여값이 가리키는 분류. "하락 쪽 신호를 높임"이 가격 상승으로 읽히지 않게 늘 붙인다.
+// target은 기여값이 가리키는 분류. "하락 신호를 높임"이 가격 상승으로 읽히지 않게 늘 붙인다.
 export function contributionWord(contribution: number, target: SignalWord, total?: number): string {
   if (contribution === 0) return `${target} 신호를 바꾸지 않음`;
   const verb = contribution > 0 ? "높임" : "낮춤";

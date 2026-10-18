@@ -76,14 +76,15 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
         {quotes.length > 0 ? (
           quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)
         ) : (
-          <span className="text-xs text-muted">지수 데이터가 아직 없어요</span>
+          <span className="text-xs text-muted">지수 데이터가 아직 없어요.</span>
         )}
         {real ? (
           <MarketDetail
             label={
               <>
-                시장 흔들림 <Level score={status.volatilityScore} /> · 거래
-                <Level score={status.volumeScore} />
+                {/* 가운데 점 대신 간격으로 나눈다(10/18 사용자 피드백) */}
+                시장 흔들림 <Level score={status.volatilityScore} />
+                <span className="ml-3">거래</span> <Level score={status.volumeScore} />
                 <span className="ml-1 text-muted underline underline-offset-2">자세히</span>
               </>
             }

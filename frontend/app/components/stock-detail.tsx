@@ -201,7 +201,7 @@ export default function StockDetailView({
                 </span>
               </>
             ) : (
-              <span className="text-sm text-muted">시세 데이터가 아직 없어요</span>
+              <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
             )}
             {own && (
               <span className="text-xs text-muted tabular-nums">
@@ -243,7 +243,7 @@ export default function StockDetailView({
           )}
           <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
             {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
-            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}오른쪽 범위는 과거 비슷한 경우의 {HORIZON_LABEL[horizon]} 수익률이에요. 모델이 예측한 수익률이나 가격 경로가 아니에요.</span>
+            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</span>
             <Link href="/performance" className="btn-text">과거 모델 성적표 보기</Link>
           </div>
         </section>

@@ -227,7 +227,7 @@ export function Checkpoints({
         {demo.viewAs && (
           <p className="m-0 flex items-center gap-2 text-xs text-body">
             <span className="size-1.5 rounded-full bg-caution-mark" aria-hidden />
-            {BIT_LABEL[demo.viewAs]}의 시선으로 보는 중이에요 · 내 결과가 아니에요
+            {BIT_LABEL[demo.viewAs]}의 시선으로 보는 중이에요. 내 결과가 아니에요.
           </p>
         )}
       </div>
@@ -438,8 +438,8 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
         </Conclusion>
       ) : risk ? (
         <Conclusion>
-          최근 1년 {TERM.volatility}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요
-          {risk.asOf && staleLabel(risk.asOf) && <span className="text-xs text-muted tabular-nums"> · {risk.asOf.replaceAll("-", ".")} 기준</span>}
+          최근 1년 {TERM.volatility}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요.
+          {risk.asOf && staleLabel(risk.asOf) && <span className="text-xs text-muted tabular-nums"> ({risk.asOf.replaceAll("-", ".")} 기준)</span>}
         </Conclusion>
       ) : !psychology ? (
         <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유·관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
@@ -933,7 +933,7 @@ export function CalculationBasis({
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-3 md:grid-cols-2">
-        <BasisTile title="내 투자 유형" value={BIT_LABEL[bit.type]} sub={`${signed(bit.composite)} · 답끼리 맞는 정도 ${Math.round(bit.confidence * 100)}%`}
+        <BasisTile title="내 투자 유형" value={BIT_LABEL[bit.type]} sub={bit.lowConfidence ? "답이 서로 엇갈려요" : "답이 대체로 한쪽을 가리켜요"}
           rule={`${STYLE_TYPE_RULE} ${BIAS_MODE_WORD[bit.biasMode]}이에요.`}>
           <Scale value={bit.composite} zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
         </BasisTile>
@@ -945,12 +945,12 @@ export function CalculationBasis({
           ))}
         </div>
         {insights.psychology && (
-          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} sub={signed(insights.psychology.axis)} rule={PSYCHOLOGY_RULE}>
+          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} rule={PSYCHOLOGY_RULE}>
             <Scale value={insights.psychology.axis} left="움츠러듦" right="들뜸" />
           </BasisTile>
         )}
         {nudges.map((nudge) => (
-          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`} sub={signed(nudge.ratio)}>
+          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`}>
             <Scale value={nudge.ratio} left={AXIS_META[nudge.axis].negative} right={AXIS_META[nudge.axis].positive} />
           </BasisTile>
         ))}
@@ -975,13 +975,13 @@ export function CalculationBasis({
 }
 
 // 계산 근거 한 칸: 결론(값) → -1~+1 위치 → 계산식 한 줄. 줄글 대신 위치로 먼저 읽힌다.
-function BasisTile({ title, value, sub, rule, children }: { title: string; value: string; sub: string; rule?: string; children: ReactNode }) {
+function BasisTile({ title, value, sub, rule, children }: { title: string; value: string; sub?: string; rule?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 rounded-md bg-field px-4 py-3">
       <div className="flex flex-col gap-1">
         <span className="text-xs text-muted">{title}</span>
         <span className="text-base font-semibold text-ink">
-          {value} <span className="text-sm font-normal tabular-nums text-muted">{sub}</span>
+          {value}{sub && <span className="text-sm font-normal text-muted"> {sub}</span>}
         </span>
       </div>
       {children}

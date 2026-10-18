@@ -291,7 +291,7 @@ export async function loadStockInsights(
     psychology: psychology
       ? {
           word: psychology.word,
-          explain: "최근 20일 오름세와 석 달 평균 거래 가격 대비 위치로 본 분위기예요",
+          explain: "최근 20일 오름세와 석 달 평균 거래 가격 대비 위치로 본 분위기예요.",
           axis: psychology.axis,
           provenance: psychology.provenance,
         }

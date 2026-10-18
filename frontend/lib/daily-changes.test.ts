@@ -26,7 +26,7 @@ const base: ChangeInput = {
 
 test("신호 전환 → 수급 전환 → 뉴스 부호 전환 순, 최대 3줄", () => {
   assert.deepEqual(detectChanges(base).map(({ name, text }) => `${name} ${text}`), [
-    "현대차 4주 신호 상승\u00a0쪽으로",
+    "현대차 4주 신호 상승으로",
     "카카오 외국인 순매수로",
     "셀트리온 뉴스 분위기 부정으로",
   ]);
@@ -56,5 +56,5 @@ test("같은 종목의 여러 변화는 한 줄로 합치고, 줄 수는 종목 
   ] };
   const lines = detectChanges(both);
   assert.equal(lines.length, 3);
-  assert.equal(lines.find(({ code }) => code === "035720")!.text, "외국인 순매수로 · 기관 순매도로");
+  assert.equal(lines.find(({ code }) => code === "035720")!.text, "외국인 순매수로, 기관 순매도로");
 });
