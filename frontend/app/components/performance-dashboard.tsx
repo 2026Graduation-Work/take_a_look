@@ -26,6 +26,9 @@ interface PerformanceDashboardProps {
   marketStatus: MarketStatus;
 }
 
+// 연구 산출물(artifacts/performance) 문장의 가운데 점은 화면에서만 쉼표로 바꾼다(화면 규칙 v2, 원본 데이터는 그대로)
+const plain = (text: string) => text.replaceAll(" \u00b7 ", ", ").replaceAll("\u00b7", ", ");
+
 const SAMPLE_LABEL: Record<ComparisonSample, string> = {
   all: "전체 테스트 구간",
   volatile_top_20pct: "고변동일 상위 20%",
@@ -59,11 +62,11 @@ const DESIGN: [string, string][] = [
 
 // 대시보드에 있던 "데이터 출처·기준"을 여기로 모은다(10/18 사용자 피드백). 화면별 기준일은 시장 바·각 카드가 말한다
 const SOURCES: [string, string][] = [
-  ["시장 지수·흔들림", "KRX 지수(pykrx), 영업일마다"],
-  ["모델 신호·종가", "LightGBM 게시 배치(앞으로 4주·1주), 모델 검증 전"],
+  ["시장 지수와 흔들림", "KRX 지수(pykrx), 영업일마다"],
+  ["모델 신호와 종가", "LightGBM 게시 배치(앞으로 4주, 1주)"],
   ["누가 사고팔았나", "KRX 투자자별 순매수"],
   ["뉴스 분위기", "NewsAPI.ai 기사를 KR-FinBERT로 하루 단위 분석"],
-  ["공시·회사 체력", "DART 공시와 정기보고서"],
+  ["공시와 회사 체력", "DART 공시와 정기보고서"],
 ];
 
 export default function PerformanceDashboard({
@@ -86,7 +89,8 @@ export default function PerformanceDashboard({
       <SiteHeader profile={profile} marketStatus={marketStatus} activePage="performance" />
 
       {/* 머리말·표·정의가 모두 같은 폭(왼쪽·오른쪽 끝이 맞게, 10/18 사용자 피드백) */}
-      <main className="mx-auto box-border flex w-full max-w-[800px] flex-col gap-8 px-4 pb-12 pt-8 sm:px-8">
+      <main className="page pb-12 pt-6">
+      <div className="page-narrow flex flex-col gap-12">
         <section aria-labelledby="scorecard-title" className="flex flex-col gap-2 px-1">
           <span className="eyebrow">모델 성적표</span>
           <h1 id="scorecard-title" className="text-3xl font-semibold">
@@ -97,7 +101,7 @@ export default function PerformanceDashboard({
           </p>
           {isSample && (
             <p role="note" className="-mx-1 m-0 mt-2 rounded-md bg-field px-5 py-3 text-sm text-body">
-              <strong className="font-semibold text-ink">예시 데이터</strong> · {conclusion}
+              <strong className="mr-2 font-semibold text-ink">예시 데이터</strong>{conclusion}
             </p>
           )}
           {!isSample && (
@@ -147,8 +151,8 @@ export default function PerformanceDashboard({
               </thead>
               {GROUPS.map((group) => (
                 <tbody key={group.title}>
-                  <tr className="border-t border-line">
-                    <th colSpan={4} className="bg-field px-4 py-2 text-left text-xs font-semibold text-body">
+                  <tr>
+                    <th colSpan={4} className="px-4 pb-1 pt-6 text-left text-2xs font-semibold text-muted">
                       {group.title}
                     </th>
                   </tr>
@@ -157,7 +161,7 @@ export default function PerformanceDashboard({
                     const value = delta?.[metric.deltaKey] ?? null;
                     const outcome = deltaOutcome(value, metric);
                     return (
-                      <tr key={key} className="border-t border-line-soft">
+                      <tr key={key}>
                         <th className="px-4 py-3 text-left font-medium text-ink">
                           {metric.label}
                           <span className="block text-2xs font-normal text-muted">
@@ -185,7 +189,7 @@ export default function PerformanceDashboard({
             </p>
           )}
           {data.experiment && <p className="m-0 px-1 text-xs text-muted">
-            지표와 상승 비율은 연도별 평균, 관측치·거래일·거래 수는 합계예요.
+            지표와 상승 비율은 연도별 평균, 관측치, 거래일, 거래 수는 합계예요.
             {sample !== "all" && " 고변동일은 맞히는 능력과 확률만 다시 평가해서 모의 투자 결과는 별도 백테스트 미산출이에요."}
           </p>}
         </section>
@@ -195,8 +199,8 @@ export default function PerformanceDashboard({
             실험 설계
           </h2>
           <Definitions items={data.experiment ? [...DESIGN.filter(([term]) => term !== "고변동일"),
-            ["고변동일", data.experiment.volatile_definition], ["모의 투자 규칙", "상승 점수 0.65 이상인 종목을 하루 최대 5개, 다음 날 시가에 사고팔아요. 사고팔 때마다 비용 0.105%를 빼요."],
-            ["집계", data.experiment.backtest_scope], ["한계", data.experiment.limitations], ["출처", data.experiment.source]] : DESIGN} />
+            ["고변동일", plain(data.experiment.volatile_definition)], ["모의 투자 규칙", "상승 점수 0.65 이상인 종목을 하루 최대 5개, 다음 날 시가에 사고팔아요. 사고팔 때마다 비용 0.105%를 빼요."],
+            ["집계", plain(data.experiment.backtest_scope)], ["한계", plain(data.experiment.limitations)], ["출처", plain(data.experiment.source)]] : DESIGN} />
         </section>
 
         <section aria-labelledby="metrics-title" className="flex flex-col gap-3">
@@ -213,6 +217,7 @@ export default function PerformanceDashboard({
           </h2>
           <Definitions items={SOURCES} />
         </section>
+      </div>
       </main>
 
       <DisclaimerFooter fixed={false} />
@@ -244,11 +249,11 @@ function Segmented<T extends string>({
 
 function Definitions({ items }: { items: [string, string][] }) {
   return (
-    <dl className="surface m-0 grid grid-cols-1 gap-x-6 px-5 py-2 sm:grid-cols-[132px_1fr]">
+    <dl className="surface m-0 grid grid-cols-1 gap-x-6 gap-y-2 p-6 sm:grid-cols-[132px_1fr] sm:gap-y-4">
       {items.map(([term, description]) => (
         <div key={term} className="contents">
-          <dt className="pt-3 text-sm font-medium text-ink sm:pb-3">{term}</dt>
-          <dd className="m-0 border-b border-line-soft pb-3 text-sm text-body last:border-0 sm:pt-3">{description}</dd>
+          <dt className="text-sm font-medium text-ink">{term}</dt>
+          <dd className="m-0 pb-2 text-sm text-body sm:pb-0">{description}</dd>
         </div>
       ))}
     </dl>
