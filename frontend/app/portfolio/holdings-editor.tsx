@@ -180,7 +180,7 @@ function AccountHoldingsEditor({
     }
     const invalid = rows.find((row) => !isValidHolding(row));
     if (invalid) {
-      setSaveError(`${invalid.name}의 수량·평균 매입가는 정수로 적어 주세요.`);
+      setSaveError(`${invalid.name}의 수량과 평균 매입가는 정수로 적어 주세요.`);
       return;
     }
     setStatus("saving");
@@ -204,7 +204,9 @@ function AccountHoldingsEditor({
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} activePage="portfolio" />
 
-      <main className="mx-auto box-border flex w-full max-w-[720px] flex-col gap-6 px-4 pb-12 pt-8 sm:px-8">
+      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2) */}
+      <main className="page pb-12 pt-6">
+      <div className="page-narrow flex flex-col gap-6">
         <div className="flex flex-col gap-1 px-1">
           <h1 className="text-3xl font-semibold">보유 종목</h1>
           <p className="m-0 text-sm text-body">
@@ -229,16 +231,17 @@ function AccountHoldingsEditor({
         ) : (
           <section aria-label="등록한 종목" className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between px-1">
-              <span className="eyebrow tabular-nums">
-                {rows.length}종목
+              <span className="flex gap-x-3 text-2xs text-muted tabular-nums">
+                <span>{rows.length}종목</span>
                 {/* 평단을 하나도 모르면 "합계 0원"이 되므로 숨긴다(#278 점검) */}
-                {rows.some(({ avgBuyPrice }) => avgBuyPrice !== null) && ` · 매입금액 합계 ${formatWon(total)}원`}
+                {rows.some(({ avgBuyPrice }) => avgBuyPrice !== null) && <span>매입금액 합계 {formatWon(total)}원</span>}
               </span>
               <button type="button" onClick={openSheet} className="btn-text text-xs">
                 종목 추가
               </button>
             </div>
-            <ul className="group-list m-0 list-none p-0">
+            {/* 눌러서 들어가는 목록이 아니라 편집 행이라 선 없이 간격으로 나눈다(화면 규칙 v2) */}
+            <ul className="surface m-0 flex list-none flex-col gap-2 p-0 py-2">
               {rows.map((row) => (
                 <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-4 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
                   <div className="col-span-2 flex flex-wrap items-baseline gap-x-2 sm:col-span-1">
@@ -268,7 +271,7 @@ function AccountHoldingsEditor({
                       inputMode="numeric"
                       aria-label={`${row.name} 평균 매입가`}
                       value={texts[`${row.code}:price`] ?? (row.avgBuyPrice === null ? "" : String(row.avgBuyPrice))}
-                      placeholder="모름 · 현재가 기준"
+                      placeholder="모름, 현재가 기준"
                       onChange={(event) => {
                         const text = numberDraft(event.target.value, PRICE_DIGITS);
                         setTexts((current) => ({ ...current, [`${row.code}:price`]: text }));
@@ -321,6 +324,7 @@ function AccountHoldingsEditor({
         </div>
 
         <WatchlistEditor />
+      </div>
       </main>
 
       {/* 종목 추가 시트 — 네이티브 dialog라 포커스 가두기·Esc 닫기를 브라우저가 맡는다 */}

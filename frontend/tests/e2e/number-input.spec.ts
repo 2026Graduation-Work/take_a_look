@@ -25,6 +25,6 @@ test("보유 목록 줄 안 수정칸도 소수점을 보여 주고 저장할 �
   await quantity.pressSequentially("1.5");
   await expect(quantity).toHaveValue("1.5");
   await page.getByRole("button", { name: "저장", exact: true }).click();
-  await expect(page.getByText("삼성전자의 수량·평균 매입가는 정수로 적어 주세요.")).toBeVisible();
+  await expect(page.getByText("삼성전자의 수량과 평균 매입가는 정수로 적어 주세요.")).toBeVisible();
   await expect(page.getByText("저장했어요")).toHaveCount(0);
 });
