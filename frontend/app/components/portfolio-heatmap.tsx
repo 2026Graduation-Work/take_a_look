@@ -15,10 +15,14 @@ interface WeightedHolding {
   amount: number;
 }
 
-function splitIntoColumns(holdings: PortfolioHolding[]): WeightedHolding[][] {
-  const columns: WeightedHolding[][] = [[], []];
-  const totals = [0, 0];
-  const weighted = holdings
+type Tile = WeightedHolding | { others: WeightedHolding[]; amount: number };
+
+// 모든 칸은 높이 44px 이상(이름이 늘 보이게, #326 후속). 280px 맵에 44px 칸 + 4px 간격은 한 열에 5개까지.
+const MAX_PER_COLUMN = 5;
+
+// 금액 큰 순으로 두 열에 나눈다. 다 들어가지 않으면 작은 종목들을 "그 밖의 N종목" 칸 하나로 묶는다.
+function layoutTiles(holdings: PortfolioHolding[]): { columns: Tile[][]; all: WeightedHolding[] } {
+  const all = holdings
     .map((holding) => ({
       holding,
       amount: Math.max(holding.quantity * holding.avgBuyPrice, 1),
@@ -27,14 +31,22 @@ function splitIntoColumns(holdings: PortfolioHolding[]): WeightedHolding[][] {
       (left, right) =>
         right.amount - left.amount || left.holding.code.localeCompare(right.holding.code),
     );
+  const capacity = MAX_PER_COLUMN * 2;
+  const own = all.length > capacity ? all.slice(0, capacity - 1) : all;
+  const rest = all.slice(own.length);
+  const tiles: Tile[] = rest.length
+    ? [...own, { others: rest, amount: rest.reduce((sum, item) => sum + item.amount, 0) }]
+    : own;
 
-  for (const item of weighted) {
-    const columnIndex = totals[0] <= totals[1] ? 0 : 1;
-    columns[columnIndex].push(item);
-    totals[columnIndex] += item.amount;
+  const columns: Tile[][] = [[], []];
+  const totals = [0, 0];
+  for (const tile of tiles) {
+    const columnIndex = columns[1].length >= MAX_PER_COLUMN || (columns[0].length < MAX_PER_COLUMN && totals[0] <= totals[1]) ? 0 : 1;
+    columns[columnIndex].push(tile);
+    totals[columnIndex] += tile.amount;
   }
 
-  return columns.filter((column) => column.length > 0);
+  return { columns: columns.filter((column) => column.length > 0), all };
 }
 
 // 평가금액(수량 × 최신 종가). 종가가 없는 종목은 상위에서 매입금액(수량 × 평균 매입가)으로 채워 넘긴다.
@@ -56,6 +68,8 @@ export default function PortfolioHeatmap({
   emptyAction?: React.ReactNode;
 }) {
   const popupId = useId();
+  const othersId = useId();
+  const [othersOpen, setOthersOpen] = useState(false);
   const map = useRef<HTMLDivElement>(null);
   const pointerType = useRef("");
   const [active, setActive] = useState<{
@@ -81,6 +95,13 @@ export default function PortfolioHeatmap({
       // 터치 선택기의 기본 스크롤이나 팝업 내부 스크롤은 정보를 닫지 않는다.
       // 바깥에서 시작한 터치는 pointerdown에서 닫힌다.
       if (popupInput === "touch") return;
+      // 키보드 포커스는 브라우저가 칸을 화면 안으로 스크롤하므로 닫지 않고 칸을 따라간다
+      const focused = document.activeElement;
+      if (popupInput === "keyboard" && focused instanceof HTMLElement && map.current?.contains(focused)) {
+        const rect = focused.getBoundingClientRect();
+        setActive((current) => current && { ...current, x: rect.right, y: rect.top });
+        return;
+      }
       dismiss();
     };
     window.addEventListener("resize", dismiss);
@@ -95,7 +116,7 @@ export default function PortfolioHeatmap({
     };
   }, [isOpen, popupId, popupInput]);
 
-  const columns = splitIntoColumns(holdings);
+  const { columns, all } = layoutTiles(holdings);
   const closeAsOf = holdings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1);
   const columnTotals = columns.map((column) =>
     column.reduce((sum, item) => sum + item.amount, 0),
@@ -125,7 +146,9 @@ export default function PortfolioHeatmap({
   }
 
   const grandTotal = columnTotals.reduce((sum, value) => sum + value, 0) || 1;
-  const activeItem = columns.flat().find(({ holding }) => holding.code === active?.code);
+  const activeItem = all.find(({ holding }) => holding.code === active?.code);
+  const others = columns.flat().find((tile) => "others" in tile);
+  const weightOf = (amount: number) => Math.round((amount / grandTotal) * 100);
   return (
     <div className="surface flex flex-col gap-4 p-4">
       <div
@@ -136,11 +159,27 @@ export default function PortfolioHeatmap({
       >
         {columns.map((column, columnIndex) => (
           <div
-            key={column.map(({ holding }) => holding.code).join("-")}
+            key={columnIndex}
             className="flex min-w-0 flex-col gap-1"
-            style={{ flexGrow: columnTotals[columnIndex], flexBasis: 0 }}
+            // 좁은 열에서도 이름이 몇 글자는 보이게(넓이는 정확한 비례가 아니다 — 범례에 적음)
+            style={{ flexGrow: columnTotals[columnIndex], flexBasis: 0, minWidth: columns.length > 1 ? "30%" : undefined }}
           >
-            {column.map(({ holding, amount }) => {
+            {column.map((tile) => {
+              if ("others" in tile) return (
+                <div key="others" role="listitem" className="flex min-h-11 min-w-0" style={{ flexGrow: tile.amount, flexBasis: 0 }}>
+                  <button
+                    type="button"
+                    aria-expanded={othersOpen}
+                    aria-controls={othersId}
+                    aria-label={`그 밖의 ${tile.others.length}종목, 비중 ${weightOf(tile.amount)}%. 누르면 목록이 열려요`}
+                    className="relative w-full min-w-0 overflow-hidden rounded-md bg-field text-ink hover:brightness-95 focus-visible:-outline-offset-2"
+                    onClick={() => setOthersOpen((open) => !open)}
+                  >
+                    <HeatmapLabel name={`그 밖의 ${tile.others.length}종목`} signal={othersOpen ? "목록 닫기" : "목록 보기"} weight={weightOf(tile.amount)} />
+                  </button>
+                </div>
+              );
+              const { holding, amount } = tile;
               const signal = SIGNAL_META[holding.signalLight];
               return (
                 <Link
@@ -149,7 +188,7 @@ export default function PortfolioHeatmap({
                   href={`/stocks/${holding.code}`}
                   aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, 비중 ${Math.round((amount / grandTotal) * 100)}%, ${HORIZON_AHEAD[20]} ${signal.label} 신호`}
                   aria-describedby={active?.code === holding.code ? popupId : undefined}
-                  className="relative min-h-16 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
+                  className="relative min-h-11 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
                   onPointerDown={(event) => { pointerType.current = event.pointerType; }}
                   onPointerEnter={(event) => {
@@ -176,7 +215,7 @@ export default function PortfolioHeatmap({
                       : { code: holding.code, x: event.clientX, y: event.clientY, input: "touch" });
                   }}
                 >
-                  <HeatmapLabel name={holding.name} signal={signal.label} weight={Math.round((amount / grandTotal) * 100)} />
+                  <HeatmapLabel name={holding.name} signal={signal.label} weight={weightOf(amount)} />
                 </Link>
               );
             })}
@@ -193,12 +232,30 @@ export default function PortfolioHeatmap({
         }}
       >
         <option value="" disabled>종목을 골라 정보 보기</option>
-        {columns.flat().map(({ holding, amount }) => (
+        {all.map(({ holding, amount }) => (
           <option key={holding.code} value={holding.code}>
-            {holding.name}, 비중 {Math.round((amount / grandTotal) * 100)}%
+            {holding.name}, 비중 {weightOf(amount)}%
           </option>
         ))}
       </select>
+      {others && "others" in others && othersOpen && (
+        <ul id={othersId} aria-label="그 밖의 보유 종목" className="group-list m-0 list-none p-0">
+          {others.others.map(({ holding, amount }) => (
+            <li key={holding.code}>
+              <Link
+                href={`/stocks/${holding.code}`}
+                className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm text-ink hover:bg-field hover:text-ink hover:no-underline"
+              >
+                <span className="min-w-0 flex-1 truncate font-medium">{holding.name}</span>
+                <span className="flex-none text-xs font-semibold" style={{ color: SIGNAL_META[holding.signalLight].ink }}>
+                  {SIGNAL_META[holding.signalLight].label}
+                </span>
+                <span className="flex-none text-xs text-muted tabular-nums">비중 {weightOf(amount)}%</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
       {active && activeItem && (
         <HeatmapPopup
           id={popupId}
@@ -218,7 +275,7 @@ export default function PortfolioHeatmap({
       </p>
       <div className="text-2xs text-muted">
         <span>
-          넓이·비중은 내 보유 평가금액 기준
+          넓이·비중은 내 보유 평가금액 기준 · 작은 종목은 이름이 보이게 최소 크기로 그려요.
           {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
           {closeAsOf && staleLabel(closeAsOf) && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
