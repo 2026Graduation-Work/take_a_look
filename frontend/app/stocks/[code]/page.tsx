@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import Link from "next/link";
 import { NewsSentimentPanel } from "@/app/components/insight-cards";
 import StockDetailBoundary from "@/app/components/stock-detail-boundary";
 import { stockDetails } from "@/lib/mock-data";
@@ -42,7 +41,7 @@ function chartOnlyDetail(code: string, stock: MasterStock): StockDetail {
     code, ...stock, signalLight: "neutral", rankPercentile: 0,
     returnBand: { low: 0, high: 0, ciLevel: 0.68 }, hitRate: 0, similarCaseCount: 0,
     horizonAgreement: { h5: "flat", h10: "flat", h20: "flat", agreement: "mixed" },
-    provenance: { kind: "real", source: "LGBM · 20거래일 · 검증 전" }, asOf: "", reasons: [],
+    provenance: { kind: "real", source: "LGBM 20거래일" }, asOf: "", reasons: [],
   };
 }
 
@@ -54,7 +53,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/stocks/[code]">): Promise<Metadata> {
   const { code } = await params;
   const name = stockDetails[code]?.name ?? (await loadMasterStock(code))?.name;
-  return name ? { title: `${name} ${code}`, description: `${name}의 뉴스 분위기·재무·차트 신호를 근거와 함께 쉽게 보여 드려요.` } : {};
+  return name ? { title: `${name} ${code}`, description: `${name}의 뉴스 분위기, 재무, 차트 신호를 근거와 함께 쉽게 보여 드려요.` } : {};
 }
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
@@ -70,11 +69,10 @@ export default async function StockDetailPage({ params }: PageProps<"/stocks/[co
   if (!initialData) {
     if (!stock) notFound();
     return (
-      <main className="mx-auto flex w-full max-w-[960px] flex-col gap-6 px-4 pb-12 pt-5 sm:px-8">
-        <Link href="/" className="btn-text self-start text-xs">‹ 대시보드</Link>
-        <section className="surface flex flex-col gap-4 p-6">
+      <main className="page pb-12 pt-6">
+        <section className="page-wide surface flex flex-col gap-6 p-6">
           <div>
-            <span className="eyebrow tabular-nums">{code} · {stock.market}</span>
+            <span className="flex gap-x-3 text-2xs text-muted tabular-nums"><span>{code}</span><span>{stock.market}</span></span>
             <h1 className="mt-1 text-3xl font-semibold">{stock.name}</h1>
             <p className="m-0 mt-2 text-sm text-body">
               이 종목은 오늘 모델 신호가 없어요. 수집된 뉴스 분위기만 보여 드려요.

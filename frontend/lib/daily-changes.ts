@@ -109,7 +109,7 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
 // 제목에 분류명이 이미 있으면 분류명을 생략한다("기업설명회 · 기업설명회(IR)개최" → 제목만). 띄어쓰기는 무시.
 export function disclosureHow(kind: string, title: string): string {
   const squash = (text: string) => text.replace(/\s/g, "");
-  return squash(title).includes(squash(kind)) ? title : `${kind} · ${title}`;
+  return squash(title).includes(squash(kind)) ? title : `${title}(${kind})`;
 }
 
 export async function loadDailyChanges(

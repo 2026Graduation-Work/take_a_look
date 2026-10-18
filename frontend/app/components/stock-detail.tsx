@@ -151,10 +151,9 @@ export default function StockDetailView({
     <div className="w-full">
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} />
 
-      <main className="mx-auto box-border flex w-full max-w-[960px] flex-col gap-8 px-4 pb-12 pt-5 sm:px-8">
-        <Link href="/" className="btn-text self-start text-xs">
-          ‹ 대시보드
-        </Link>
+      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 960px(화면 규칙 v2). 대시보드로 가는 길은 상단 메뉴 하나 */}
+      <main className="page pb-12 pt-6">
+      <div className="page-wide flex flex-col gap-12">
 
         {loading && (
           <p role="status" className="m-0 text-sm text-muted">
@@ -178,9 +177,10 @@ export default function StockDetailView({
         {/* 1. 헤더 */}
         <section aria-labelledby="stock-name" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
           <div className="flex flex-col gap-2">
-            <span className="eyebrow tabular-nums">
-              {detail.code} · {detail.market}
-              {detail.riskFlags.length > 0 && ` · ${detail.riskFlags.map((flag) => RISK_FLAG_LABEL[flag]).join(" · ")}`}
+            <span className="flex flex-wrap gap-x-3 text-2xs text-muted tabular-nums">
+              <span>{detail.code}</span>
+              <span>{detail.market}</span>
+              {detail.riskFlags.map((flag) => <span key={flag}>{RISK_FLAG_LABEL[flag]}</span>)}
             </span>
             <h1 id="stock-name" className="text-3xl font-semibold">
               {detail.name}
@@ -193,10 +193,10 @@ export default function StockDetailView({
                 <span className="text-4xl font-semibold tabular-nums">
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
-                <span className="text-base font-medium tabular-nums" style={{ color: changeColor }}>
+                <span className="text-sm font-medium tabular-nums" style={{ color: changeColor }}>
                   {changeArrow} {formatSignedPercent(changePercent)}
-                  <span className="ml-2 text-xs font-normal text-muted">
-                    전일 대비{detail.asOf && staleLabel(detail.asOf) && ` · ${formatDate(detail.asOf)} 기준`}
+                  <span className="ml-2 text-2xs font-normal text-muted">
+                    전일 대비{detail.asOf && staleLabel(detail.asOf) && `, ${formatDate(detail.asOf)} 기준`}
                   </span>
                 </span>
               </>
@@ -204,8 +204,8 @@ export default function StockDetailView({
               <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
             )}
             {own && (
-              <span className="text-xs text-muted tabular-nums">
-                보유 {own.quantity.toLocaleString("ko-KR")}주 · <GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
+              <span className="text-2xs text-muted tabular-nums">
+                보유 {own.quantity.toLocaleString("ko-KR")}주<span className="ml-3" /><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
               </span>
             )}
           </div>
@@ -218,7 +218,7 @@ export default function StockDetailView({
           <div className="flex flex-col gap-1">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
-              {preview && direction && <span className="text-base font-normal text-muted"> · {HORIZON_AHEAD[20]}</span>}
+              {preview && direction && <span className="ml-3 text-sm font-normal text-muted">{HORIZON_AHEAD[20]}</span>}
               {!preview && <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             <p className="m-0 text-sm text-body">
@@ -237,13 +237,13 @@ export default function StockDetailView({
               horizonLabel={HORIZON_LABEL[horizon]}
             />
           ) : (
-            <p className="m-0 rounded-md bg-field px-4 py-8 text-center text-sm text-muted">
+            <p className="m-0 text-sm text-muted">
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
           <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
             {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
-            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && `모델 검증 전${detail.asOf && staleLabel(detail.asOf) ? ` · ${formatDate(detail.asOf)} 기준` : ""} · `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</span>
+            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</span>
             <Link href="/performance" className="btn-text">과거 모델 성적표 보기</Link>
           </div>
         </section>
@@ -262,10 +262,17 @@ export default function StockDetailView({
           <summary>
             <span className="flex flex-col gap-1">
               <span className="text-lg font-semibold">더 알아보기</span>
-              <span className="text-xs text-muted">수익률 분포 · 기간별 비교 · 계산 근거 · 데이터 출처·기준</span>
+              <span className="text-2xs text-muted">판단 근거 탭 순서, 수익률 분포, 기간별 비교, 계산 근거, 데이터 출처</span>
             </span>
           </summary>
-          <div className="mt-6 flex flex-col gap-8">
+          <div className="mt-6 flex flex-col gap-12">
+            <section aria-labelledby="more-basis" className="flex flex-col gap-3">
+              <h3 id="more-basis" className="text-base font-semibold">
+                계산 근거
+              </h3>
+              <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
+            </section>
+
             <section aria-labelledby="more-distribution" className="flex flex-col gap-3">
               <h3 id="more-distribution" className="text-base font-semibold">
                 과거 비슷한 신호 {detail.similarCaseCount}건의 실제 수익률
@@ -293,14 +300,14 @@ export default function StockDetailView({
                 {TERM.horizonAgreement}
               </h3>
               <p className="m-0 text-sm text-body">{preview
-                ? "각 모델에서 가장 높은 분류 점수의 방향이에요. 미래 상승·하락 확률을 뜻하지 않아요."
+                ? "각 모델에서 가장 높은 분류 점수의 방향이에요. 미래에 오르거나 내릴 확률을 뜻하지 않아요."
                 : AGREEMENT_ANSWER[detail.horizonAgreement.agreement]}</p>
               <ul className={`m-0 grid list-none gap-3 p-0 ${preview ? "grid-cols-2" : "grid-cols-3"}`}>
                 {horizons.map(([key, legacyDirection]) => {
                   const direction = preview ? chartDirection(chartSnapshots?.get(key === "h5" ? 5 : 20)) : legacyDirection;
                   return (
-                  <li key={key} className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
-                    <span className="text-xs text-muted">{preview ? key === "h5" ? `${HORIZON_AHEAD[5]} · 5거래일` : `${HORIZON_AHEAD[20]} · 20거래일` : HORIZON_LABEL[key]}</span>
+                  <li key={key} className="flex flex-col gap-1">
+                    <span className="text-2xs text-muted">{preview ? key === "h5" ? `${HORIZON_AHEAD[5]}(5거래일)` : `${HORIZON_AHEAD[20]}(20거래일)` : HORIZON_LABEL[key]}</span>
                     <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
                       {direction ? `${HORIZON_META[direction].arrow} ${preview ? SIGNAL_WORD[direction] : DIRECTION_WORD[direction]}` : "미제공"}
                     </span>
@@ -316,22 +323,16 @@ export default function StockDetailView({
             {detail.aiAdvice?.trim() && (
               <section aria-labelledby="more-ai" className="flex flex-col gap-2">
                 <h3 id="more-ai" className="text-base font-semibold">
-                  숫자를 풀어 쓴 설명 <span className="text-xs font-normal text-muted">AI 작성 · 매매 조언 아님</span>
+                  숫자를 풀어 쓴 설명 <span className="text-2xs font-normal text-muted">AI 작성, 매매 조언 아님</span>
                 </h3>
                 <p className="m-0 text-sm text-body">{detail.aiAdvice}</p>
               </section>
             )}
 
-            <section aria-labelledby="more-basis" className="flex flex-col gap-3">
-              <h3 id="more-basis" className="text-base font-semibold">
-                계산 근거
-              </h3>
-              <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
-            </section>
 
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">
               <h3 id="more-sources" className="text-base font-semibold">
-                데이터 출처·기준
+                데이터 출처
               </h3>
               <SourceList detail={detail} insights={insights} />
             </section>
@@ -340,6 +341,7 @@ export default function StockDetailView({
         </details>
 
         <ScreenGuideBanner bit={demo.bit} />
+      </div>
       </main>
 
       <DisclaimerFooter fixed={false} />

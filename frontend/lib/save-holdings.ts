@@ -64,7 +64,7 @@ export async function saveHoldings(
 ): Promise<void> {
   if (typeof window === "undefined") return;
   if (!holdings.every(isValidHolding) || new Set(holdings.map(({ code }) => code)).size !== holdings.length) {
-    throw new Error("보유 종목의 수량·평균 매입가와 중복 종목을 확인해 주세요.");
+    throw new Error("보유 종목의 수량, 평균 매입가와 중복 종목을 확인해 주세요.");
   }
   const valid = holdings;
 
@@ -115,7 +115,7 @@ export async function saveHoldings(
     .update({ is_active: false, updated_at: now }).eq("user_id", userId).eq("is_active", true);
   if (codes.length) removed = removed.not("stock_code", "in", `(${codes.join(",")})`);
   const { error: resetError } = await removed;
-  if (resetError) throw new Error("추가·수정은 저장됐지만 삭제를 마치지 못했어요. 새로고침 후 보유 목록을 확인해 주세요.");
+  if (resetError) throw new Error("추가와 수정은 저장됐지만 삭제를 마치지 못했어요. 새로고침 후 보유 목록을 확인해 주세요.");
   await currentAccount(db, owner.authUserId);
   persistHoldings(valid);
 }

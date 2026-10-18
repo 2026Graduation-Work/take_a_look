@@ -283,7 +283,7 @@ export async function loadStockInsights(
   // 재무는 DB(최신 정기보고서)만 쓴다. 고정 대체값은 두지 않는다.
   const financial = remoteFinancial;
   const psychology = remotePsychology
-    ? { ...remotePsychology, provenance: { kind: "real", source: "KRX 종가·거래량 · 최신 게시 차트", asOf: remotePsychology.asOf } as DataProvenance }
+    ? { ...remotePsychology, provenance: { kind: "real", source: "KRX 종가와 거래량, 최신 게시 차트", asOf: remotePsychology.asOf } as DataProvenance }
     : offline && STOCK_SNAPSHOT[code]
       ? { ...STOCK_SNAPSHOT[code].psychology, provenance: PRICE_PROVENANCE }
       : null;
@@ -304,20 +304,20 @@ export async function loadStockInsights(
     disclosures,
     provenance: {
       supply: supply
-        ? { kind: "real", source: "KRX 투자자별 순매수 · DB 조회", asOf: supply.at(-1)?.date }
+        ? { kind: "real", source: "KRX 투자자별 순매수, DB 조회", asOf: supply.at(-1)?.date }
         : FIXTURE,
       sentiment:
         sentiment && (remoteSentiment.historical || remoteSentiment.live)
           ? {
               kind: "real",
-              source: remoteSentiment.historical ? "BigKinds · KR-FinBERT · DB 조회" : "NewsAPI.ai · KR-FinBERT · DB 조회",
+              source: remoteSentiment.historical ? "BigKinds와 KR-FinBERT, DB 조회" : "NewsAPI.ai와 KR-FinBERT, DB 조회",
               asOf: (sentiment.asOf && kstDay(Date.parse(sentiment.asOf))) || sentiment.days.at(-1)?.date,
             }
           : FIXTURE,
       liveSentiment: remoteSentiment.live
         ? {
             kind: "real",
-            source: "NewsAPI.ai · KR-FinBERT",
+            source: "NewsAPI.ai와 KR-FinBERT",
             asOf: remoteSentiment.live.asOf,
           }
         : FIXTURE,
@@ -325,7 +325,7 @@ export async function loadStockInsights(
       financial: financial
         ? {
             kind: "real",
-            source: "DART 정기보고서 · DB 조회",
+            source: "DART 정기보고서, DB 조회",
             asOf: financial.asOf,
           }
         : FIXTURE,

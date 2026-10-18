@@ -159,6 +159,19 @@ summary::-webkit-details-marker {
 
 /* ── 컴포넌트 기본형 (DESIGN.md 4장). 유틸리티로 덮어쓸 수 있게 components 층에 둔다 ── */
 @layer components {
+  /* 화면 규칙 v2 정렬: 모든 페이지 본문 왼쪽 끝 = 헤더 로고. 컨테이너는 헤더와 같은 1200px·여백 하나.
+     글을 읽는 페이지는 안쪽 .page-narrow로 폭만 좁히고 왼쪽 정렬은 그대로 둔다 */
+  .page {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 1200px;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 40rem) { .page { padding-inline: 1.5rem; } }
+  @media (min-width: 64rem) { .page { padding-inline: 2rem; } }
+  .page-narrow { max-width: 720px; }
+  .page-wide { max-width: 960px; }
   /* 버튼 3종: 기본(초록, 화면에 하나) · 보조(회색 면) · 글자 */
   .btn-primary,
   .btn-secondary {
