@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import * as glossary from "./copy-glossary.ts";
 import { DIRECTION_RULE, SIGNAL_WORD } from "./copy-glossary.ts";
 import { contributionWord } from "./display.ts";
 import { FORBIDDEN_COPY } from "./copy-rules.ts";
@@ -90,4 +91,19 @@ test("신호 방향 이름(상승 쪽·하락 쪽)은 확률·전망 금지 규�
     contributionWord(0.12, SIGNAL_WORD.down, 1), `보유 4종목 중 ${SIGNAL_WORD.down} 신호는 없어요.`]) {
     assert.deepEqual(caught(text), [], text);
   }
+});
+
+// DESIGN.md 0장 "문장 끝 규칙": 보조 설명 문장은 "~요."로 끝낸다. 라벨·짧은 구는 '요'로 끝나지 않으니 걸리지 않는다
+test("쉬운 말 사전의 설명 문장은 마침표로 끝난다", () => {
+  const LABELS = new Set(Object.values(glossary.AGREEMENT_ANSWER)); // 질문("기간마다 같은 방향인가요?")에 답하는 짧은 말
+  const strings: string[] = [];
+  const walk = (value: unknown) => {
+    if (typeof value === "string") strings.push(value);
+    else if (value && typeof value === "object") Object.values(value).forEach(walk);
+  };
+  walk(Object.values(glossary).filter((value) => typeof value !== "function"));
+  strings.push(glossary.directionRule(5), glossary.directionBasis(5));
+  const bad = strings.filter((text) => /요$/.test(text) && !LABELS.has(text));
+  assert.deepEqual(bad, []);
+  assert.ok(strings.includes(glossary.SHORT_HORIZON_NOTE) && glossary.SHORT_HORIZON_NOTE.endsWith("요."));
 });

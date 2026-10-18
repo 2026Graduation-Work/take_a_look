@@ -300,14 +300,14 @@ function AccountHoldingsEditor({
         <div className="flex flex-wrap items-center justify-end gap-3 px-1">
           {dirty ? (
             <span className="mr-auto flex items-center gap-2 text-xs text-body">
-              저장하지 않은 변경이 있어요
+              저장하지 않은 변경이 있어요.
               <button type="button" onClick={() => { setRows(baseline); setTexts({}); }} className="btn-text min-h-11 text-xs">
                 되돌리기
               </button>
             </span>
           ) : (
             <span className="mr-auto text-xs text-muted">
-              {supabaseMode ? "내 계정에 저장돼요" : "데모 계정이라 이 브라우저에만 저장돼요"}
+              {supabaseMode ? "내 계정에 저장돼요." : "데모 계정이라 이 브라우저에만 저장돼요."}
             </span>
           )}
           {status === "saved" && (

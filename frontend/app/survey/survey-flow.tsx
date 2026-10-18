@@ -795,9 +795,9 @@ export function ResultView({
                   <label key={axis.id} className="flex flex-col gap-1 text-xs">
                     <span className="flex items-center gap-2">
                       <strong className="text-ink">{axis.section}</strong>
-                      <span className="ml-auto font-medium tabular-nums text-ink">
-                        {ratio > 0 ? "+" : ""}
-                        {ratio.toFixed(2)}
+                      {/* 날것의 점수(+0.35) 대신 어느 쪽으로 얼마나 기울었는지 말로 */}
+                      <span className="ml-auto font-medium text-ink">
+                        {leanWord(ratio, axis.negative_label, axis.positive_label)}
                       </span>
                     </span>
                     <input
@@ -863,4 +863,10 @@ export function ResultView({
       </div>
     </section>
   );
+}
+
+// -1~+1 → "가운데" / "장기 보유 쪽으로 조금" / "단기 매매 쪽으로 많이"
+function leanWord(ratio: number, negative: string, positive: string): string {
+  if (Math.abs(ratio) < 0.1) return "가운데";
+  return `${ratio < 0 ? negative : positive} 쪽으로 ${Math.abs(ratio) < 0.5 ? "조금" : "많이"}`;
 }

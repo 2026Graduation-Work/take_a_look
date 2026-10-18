@@ -77,8 +77,8 @@ export const STYLE_TYPE_RULE =
 
 // 스펙트럼 양 끝(감정적 편향)과 가운데(인지적 편향)
 export const BIAS_MODE_WORD = {
-  emotional: "양 끝 유형이라 기분에 흔들리기 쉬운 쪽",
-  cognitive: "가운데 유형이라 익숙한 생각에 기대기 쉬운 쪽",
+  emotional: "양 끝 유형이라 그때그때 기분에 판단이 흔들리기 쉬운 편",
+  cognitive: "가운데 유형이라 이미 알던 정보만 믿고 새 정보를 덜 보기 쉬운 편",
 } as const;
 
 // 가격 흐름 분위기 = (20거래일 수익 ÷ 그동안의 흔들림, 60거래일 평균 매입가 대비 지금 가격의 위치)의 평균

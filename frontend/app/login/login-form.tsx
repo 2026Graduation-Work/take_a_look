@@ -156,7 +156,7 @@ export default function LoginForm() {
                 />
               </label>
               {/* 규칙은 칠 때 사라지는 placeholder 대신 항상 보이는 도움말로(이름표와 따로 읽히게 label 밖) */}
-              {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요</p>}
+              {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요.</p>}
             </div>
             {tab === "signup" && (
               <p className="m-0 text-2xs text-muted">

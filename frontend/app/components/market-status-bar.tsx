@@ -76,7 +76,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
         {quotes.length > 0 ? (
           quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)
         ) : (
-          <span className="text-xs text-muted">지수 데이터가 아직 없어요</span>
+          <span className="text-xs text-muted">지수 데이터가 아직 없어요.</span>
         )}
         {real ? (
           <MarketDetail

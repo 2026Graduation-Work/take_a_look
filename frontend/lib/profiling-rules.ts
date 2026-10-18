@@ -123,7 +123,7 @@ export function summaryFromStyleAxes(
     return {
       ...identity,
       profileTypeLabel: "8축 진단 전",
-      personaLabel: "설문을 다시 하면 유형이 나와요",
+      personaLabel: "설문을 다시 하면 유형이 나와요.",
       riskTolerance: 50,
       sentimentSensitivity: 50,
       horizon: "mid",
@@ -134,7 +134,7 @@ export function summaryFromStyleAxes(
   return {
     ...identity,
     profileTypeLabel: bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type],
-    personaLabel: bit.lowConfidence ? "응답이 엇갈려 유형을 단정하지 않았어요" : BIT_SUMMARY[bit.type],
+    personaLabel: bit.lowConfidence ? "응답이 엇갈려 유형을 단정하지 않았어요." : BIT_SUMMARY[bit.type],
     riskTolerance: summary.riskTaking,
     sentimentSensitivity: summary.sensitivity,
     horizon: summary.horizon,
