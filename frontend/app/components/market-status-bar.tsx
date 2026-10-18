@@ -85,7 +85,9 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
                 {/* 가운데 점 대신 간격으로 나눈다(10/18 사용자 피드백) */}
                 시장 흔들림 <Level score={status.volatilityScore} />
                 <span className="ml-3">거래</span> <Level score={status.volumeScore} />
-                <span className="ml-1 text-muted underline underline-offset-2">자세히</span>
+                {/* "자세히" 글자 대신 ⓘ(누르면 열림, 화면 규칙 v2) */}
+                <span aria-hidden className="ml-1 text-muted">ⓘ</span>
+                <span className="sr-only">설명 보기</span>
               </>
             }
           >

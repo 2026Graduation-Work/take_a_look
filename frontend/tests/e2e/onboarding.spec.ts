@@ -52,10 +52,10 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByRole("heading", { name: "Take a Look 시작" })).toBeVisible();
   // 계정 로그인과 데모 계정이 항상 함께 보인다(환경변수가 없으면 계정 쪽은 안내만)
   await expect(page.getByText(/이메일로 시작|계정 기능이 아직 연결되지 않았어요/).first()).toBeVisible();
-  await expect(page.getByText("데모 계정 · 예시 데이터")).toHaveCount(0);
+  await expect(page.getByText("데모 계정")).toHaveCount(0);
 
   await startDemo(page);
-  await expect(page.getByText("데모 계정 · 예시 데이터")).toBeVisible();
+  await expect(page.getByText("데모 계정")).toBeVisible();
   await assertNoHorizontalOverflow(page, 390, 844);
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.getByRole("button", { name: "시작하기" }).click();
@@ -126,8 +126,8 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem")).toHaveCount(1);
   // e2e 스텁은 차트 스냅샷 종가를 주지 않아 평균 매입가도 없는 이 종목은 매입금액(0) 기준으로 센다
   await expect(page.getByText("종가가 없는 종목은 매입금액 기준")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "오늘 신호가 강한 종목" })).toBeVisible();
-  await expect(page.getByText("데모 계정 · 예시 데이터")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "신호가 강한 종목" })).toBeVisible();
+  await expect(page.getByText("데모 계정")).toBeVisible();
   await expect(page.getByText("적극 축적형", { exact: true })).toBeVisible();
   await expect(page.getByText("추종형", { exact: true })).toHaveCount(0);
   await page.reload();
@@ -159,7 +159,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(
     page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab", { selected: true }),
   ).toHaveText("모델이 본 이유");
-  await expect(page.getByText("데모 계정 · 예시 데이터")).toBeVisible();
+  await expect(page.getByText("데모 계정")).toBeVisible();
 
   // 다른 유형이라면?: 이 화면만 바뀌고 저장된 결과는 그대로
   await page.getByText("다른 유형이라면?").click();

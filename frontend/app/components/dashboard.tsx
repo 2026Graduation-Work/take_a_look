@@ -8,7 +8,7 @@ import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { directionRule, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
@@ -63,12 +63,10 @@ function chooseHorizon(next: SignalHorizon) {
   horizonListeners.forEach((listener) => listener());
 }
 
-function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
+function SectionHead({ title }: { title: string }) {
   return (
-    // 두 열 제목 줄 높이를 같게(편집 링크가 있어도 없어도 44px) — 카드 윗변이 맞는다
-    <div className="flex min-h-11 items-center justify-between gap-3 px-1">
+    <div className="flex min-h-11 items-center px-1">
       <h2 className="text-xl font-semibold">{title}</h2>
-      {action}
     </div>
   );
 }
@@ -253,7 +251,7 @@ export default function Dashboard(initialData: DashboardData) {
       />
 
       <div
-        className="mx-auto box-border flex w-full max-w-[1200px] flex-col gap-8 px-4 pb-12 pt-6 sm:px-8"
+        className="mx-auto box-border flex w-full max-w-[1200px] flex-col gap-6 px-4 pb-12 pt-6 sm:px-6 lg:px-8"
         aria-busy={loadingAuthenticatedData}
       >
         {dataError && (
@@ -281,105 +279,87 @@ export default function Dashboard(initialData: DashboardData) {
           <DashboardLoading />
         ) : (
           <>
+            {/* 성향 한 문장: 유형 이름 + 성향 + 놓치기 쉬운 것. 색·줄을 나누지 않는다(화면 규칙 v2) */}
             <Link
               href="/profile"
               aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
-              className="surface flex items-center gap-3 px-5 py-4 text-sm text-body hover:bg-white/70 hover:no-underline"
+              className="surface flex items-center gap-3 px-6 py-4 text-sm text-ink hover:bg-white/70 hover:no-underline"
             >
-              <span className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="truncate">
-                  <span className="font-semibold text-ink">{activeProfile.profileTypeLabel}</span> ·{" "}
-                  {activeProfile.personaLabel}
-                </span>
-                {/* 유형별 고정 문구(규칙 코드). 종목을 거르거나 순서를 바꾸지 않는다 */}
-                {activeProfile.blindSpot && <span className="text-xs text-muted">놓치기 쉬운 것: {activeProfile.blindSpot}</span>}
+              <span className="min-w-0 flex-1">
+                <span className="mr-2 font-semibold">{activeProfile.profileTypeLabel}</span>
+                {activeProfile.personaLabel}
+                {activeProfile.blindSpot && ` ${activeProfile.blindSpot}`}
               </span>
               <span aria-hidden className="flex-none text-muted">›</span>
             </Link>
 
-            <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1">
-              {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
-              {staleLabel(summaryAsOf) && <span className="eyebrow tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
-              <h1 id="today-summary" className="text-3xl font-semibold">
-                {summary}
-              </h1>
+            {/* 요약(큰 글씨)과 같은 줄 오른쪽에 기간 전환. 1024px 미만은 요약 아래. 요약·맵·목록·달라진 근거가 모두 이 기간을 따른다 */}
+            <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
+              <div className="flex flex-col gap-2">
+                {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
+                {staleLabel(summaryAsOf) && <span className="text-2xs text-muted tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
+                <h1 id="today-summary" className="text-3xl font-semibold">
+                  {summary}
+                </h1>
+              </div>
+              <div className="flex flex-col gap-2 lg:items-end">
+                <div role="group" aria-label="신호 기간" className="flex flex-none items-center gap-2 text-sm">
+                  <span className="text-body">앞으로</span>
+                  {([20, 5] as const).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      aria-pressed={horizon === option}
+                      className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-surface text-body"}`}
+                      onClick={() => chooseHorizon(option)}
+                    >
+                      {option === 20 ? "4주" : "1주"}
+                    </button>
+                  ))}
+                </div>
+                {horizon === 5 && <p className="m-0 text-2xs text-muted">{SHORT_HORIZON_NOTE}</p>}
+              </div>
             </section>
 
-            {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
-
-            {/* 두 섹션(보유 맵·강한 신호)이 같은 기간을 따른다. 위쪽 요약·달라진 근거도 같은 기간 */}
-            <div className="flex flex-col gap-2 px-1">
-              <div role="group" aria-label="신호 기간" className="flex items-center gap-2 text-sm">
-                <span className="text-body">앞으로</span>
-                {([20, 5] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={horizon === option}
-                    className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-surface text-body"}`}
-                    onClick={() => chooseHorizon(option)}
-                  >
-                    {option === 20 ? "4주" : "1주"}
-                  </button>
-                ))}
-              </div>
-              {horizon === 5 && <p className="m-0 text-2xs text-muted">{SHORT_HORIZON_NOTE}</p>}
-            </div>
-            <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-6">
-              <div className="flex flex-col gap-8">
-              <section aria-label="내 보유 종목" className="flex flex-col gap-3">
-                <SectionHead
-                  title="내 보유 종목의 오늘 신호"
-                  action={
-                    activeHoldings.length > 0 && (
-                      <Link href="/portfolio" className="btn-text text-xs">
-                        편집
-                      </Link>
-                    )
-                  }
-                />
-                <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
+            {/* 2단(1024px 이상 8:4): 왼쪽 내 것, 오른쪽 시장 전체. 1단에서는 왼쪽 → 오른쪽 순서 */}
+            <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-6">
+              <section aria-label="내 종목" className="flex flex-col gap-6 lg:col-span-8">
+                <div className="flex flex-col gap-2">
+                  <SectionHead title="내 종목" />
+                  <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
+                </div>
+                {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
+                {watchlist.length > 0 && (
+                  <section aria-label="관심 종목" className="flex flex-col gap-2">
+                    <h3 className="m-0 px-1 text-sm font-semibold">관심 종목</h3>
+                    <ul className="group-list m-0 list-none p-0">
+                      {watchlist.map(({ code, name }) => {
+                        const light = lightFor(code);
+                        return (
+                          <li key={code}>
+                            <Link
+                              href={`/stocks/${code}`}
+                              className="flex min-h-11 items-center gap-2 px-6 py-3 text-ink hover:bg-field hover:text-ink hover:no-underline"
+                            >
+                              <span className="min-w-0 truncate text-sm font-medium">{name}</span>
+                              <span className="flex-1 text-2xs text-muted tabular-nums">{code}</span>
+                              <span
+                                className="flex-none text-sm font-semibold"
+                                style={{ color: light ? SIGNAL_META[light].ink : "var(--color-muted)" }}
+                              >
+                                {light ? SIGNAL_META[light].label : "오늘 신호 없음"}
+                              </span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                )}
               </section>
 
-              {watchlist.length > 0 && (
-                <section aria-label="관심 종목" className="flex flex-col gap-3">
-                  <SectionHead
-                    title="관심 종목"
-                    action={
-                      <Link href="/portfolio" className="btn-text text-xs">
-                        편집
-                      </Link>
-                    }
-                  />
-                  <ul className="group-list m-0 list-none p-0">
-                    {watchlist.map(({ code, name }) => {
-                      const light = lightFor(code);
-                      return (
-                        <li key={code}>
-                          <Link
-                            href={`/stocks/${code}`}
-                            className="flex items-center gap-3 px-5 py-4 text-ink hover:bg-field hover:text-ink hover:no-underline"
-                          >
-                            <span className="min-w-0 flex-1 truncate text-base font-medium">{name}</span>
-                            <span className="flex-none text-xs text-muted tabular-nums">{code}</span>
-                            <span
-                              className="flex-none text-sm font-semibold"
-                              style={{ color: light ? SIGNAL_META[light].ink : "var(--color-muted)" }}
-                            >
-                              {light ? SIGNAL_META[light].label : "오늘 신호 없음"}
-                            </span>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              )}
-              </div>
-
-              <section aria-label="오늘 신호가 강한 종목" className="flex flex-col gap-3">
-                {/* 기간은 위 전환 버튼 한 곳에서만 보인다(10/18 사용자 피드백) */}
-                <SectionHead title="오늘 신호가 강한 종목" />
+              <section aria-label="신호가 강한 종목" className="flex flex-col gap-2 lg:col-span-4">
+                <SectionHead title="신호가 강한 종목" />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (
@@ -394,40 +374,12 @@ export default function Dashboard(initialData: DashboardData) {
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-4">
-                    {/* 두 묶음을 카드 하나 안에 둔다 — 카드 윗변이 옆 보유 맵 카드와 맞는다(10/18 사용자 피드백) */}
-                    {visibleStrong.length > 0 && (
-                      <div className="group-list">
-                        {(["up", "down"] as const).map((direction) => {
-                          const rows = visibleStrong.filter((signal) => signal.direction === direction);
-                          return rows.length > 0 && (
-                            <div key={direction}>
-                              <h3 className="eyebrow m-0 px-5 pt-3" style={{ color: SIGNAL_META[direction === "up" ? "positive" : "negative"].ink }}>
-                                {SIGNAL_WORD[direction]}
-                              </h3>
-                              <div className="[&>*+*]:border-t [&>*+*]:border-line-soft">
-                                {rows.map((signal) => <StrongRow key={signal.code} signal={signal} />)}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {visibleAlerts.length > 0 && (
-                      <div className="group-list">
-                        {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
-                      </div>
-                    )}
+                  // 묶음 제목 없이 한 목록(상승 먼저), 줄 오른쪽에 색 단어 하나(화면 규칙 v2)
+                  <div className="group-list">
+                    {[...visibleStrong.filter(({ direction }) => direction === "up"), ...visibleStrong.filter(({ direction }) => direction === "down")]
+                      .map((signal) => <StrongRow key={signal.code} signal={signal} />)}
+                    {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
                   </div>
-                )}
-                {/* '참고 정보'는 맨 아래 면책 문구가 말한다(중복 제거, 10/18). 보유 맵이 없을 때만 검증 상태·방향 뜻을 여기서 한 번 */}
-                {activeHoldings.length === 0 && (
-                  <p className="m-0 px-1 text-2xs text-muted">모델 검증 전 · {directionRule(horizon)}</p>
-                )}
-                {/* 걸린 종목이 없으면 아래 펼침이 안 생겨 제외가 반영됐는지 알 수 없었다(페르소나 워크스루 2026-10 P3).
-                    항목 이름은 내 정보 화면에 있어 여기선 쓰지 않는다(10/18) */}
-                {!keyword && activeAvoidedLabels.length > 0 && activeExcludedStocks.length === 0 && (
-                  <p className="m-0 px-1 text-2xs text-muted">직접 고른 제외 항목은 목록에서 빼고 보여 줘요.</p>
                 )}
                 {!keyword && activeExcludedStocks.length > 0 && (
                   <details className="disclosure surface px-5">
@@ -436,13 +388,13 @@ export default function Dashboard(initialData: DashboardData) {
                       <span className="count">{activeExcludedStocks.length}개</span>
                     </summary>
                     <div className="flex flex-col gap-2 pb-4 text-xs text-body">
-                      <p className="m-0 text-muted">{activeAvoidedLabels.join(" · ")}을(를) 골라 목록에서 뺐어요.</p>
+                      <p className="m-0 text-muted">{activeAvoidedLabels.join(", ")}을(를) 골라 목록에서 뺐어요.</p>
                       <ul className="m-0 flex list-none flex-col gap-2 p-0">
                         {activeExcludedStocks.map((stock) => (
                           <li key={stock.code} className="flex flex-wrap items-baseline gap-x-2 [word-break:keep-all]">
                             <span className="font-medium text-ink [overflow-wrap:anywhere]">{stock.name}</span>
                             <span className="text-muted tabular-nums">
-                              {stock.code} · {stock.reason}
+                              {stock.code}, {stock.reason}
                             </span>
                           </li>
                         ))}
@@ -467,14 +419,14 @@ export default function Dashboard(initialData: DashboardData) {
 function DailyChanges({ changes }: { changes: DailyChange[] }) {
   return (
     <section aria-labelledby="daily-changes" className="flex flex-col gap-2">
-      <h2 id="daily-changes" className="eyebrow px-1">어제와 달라진 근거</h2>
+      <h3 id="daily-changes" className="m-0 px-1 text-sm font-semibold">어제와 달라진 근거</h3>
       {changes.length ? (
         <ul className="group-list m-0 list-none p-0">
           {changes.map((change) => (
             <li key={change.code}>
               <Link
                 href={`/stocks/${change.code}`}
-                className="flex min-h-11 items-center gap-3 px-5 py-3 text-sm text-ink hover:bg-field hover:text-ink hover:no-underline"
+                className="flex min-h-11 items-center gap-2 px-6 py-3 text-sm text-ink hover:bg-field hover:text-ink hover:no-underline"
               >
                 <span className="flex-none font-medium">{change.name}</span>
                 <span className="min-w-0 flex-1 truncate text-body">
@@ -492,16 +444,19 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
   );
 }
 
-// 한 줄: 종목명 · 코드 · 상세로 가는 화살표. 방향은 묶음 제목, 기간은 섹션 제목, 근거는 상세 화면 '모델이 본 이유'에 있다.
+// 한 줄: 종목명, 코드, 오른쪽 색 단어(상승/하락), 상세로 가는 화살표. 근거는 상세 화면 '모델이 본 이유'에 있다.
 function StrongRow({ signal }: { signal: StrongSignal }) {
   return (
     <Link
       href={`/stocks/${signal.code}`}
       data-stock-row={signal.code}
-      className="flex min-h-11 items-center gap-2 px-5 py-3 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
+      className="flex min-h-11 items-center gap-2 px-6 py-3 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
     >
-      <span className="min-w-0 truncate text-base font-medium">{signal.name}</span>
-      <span className="flex-1 text-xs text-muted tabular-nums">{signal.code}</span>
+      <span className="min-w-0 truncate text-sm font-medium">{signal.name}</span>
+      <span className="flex-1 text-2xs text-muted tabular-nums">{signal.code}</span>
+      <span className="flex-none text-sm font-semibold" style={{ color: SIGNAL_META[signal.direction === "up" ? "positive" : "negative"].ink }}>
+        {SIGNAL_WORD[signal.direction]}
+      </span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>
   );
