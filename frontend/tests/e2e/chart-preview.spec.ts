@@ -32,7 +32,7 @@ test("public predictions retain the original detail UI and both model directions
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText(contributionWord(feature.contribution, "상승 쪽")); // 미리보기 표본은 class_2(상승 쪽). 전체 합이 없으면 크기 말 없이 방향만
+      await expect(row).toContainText(contributionWord(feature.contribution, "상승\u00a0쪽")); // 미리보기 표본은 class_2(상승 쪽). 전체 합이 없으면 크기 말 없이 방향만
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
@@ -73,7 +73,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
-    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상승 쪽", 1));
+    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상승\u00a0쪽", 1));
   }
   await expect(model).not.toContainText("기여도");
   if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);

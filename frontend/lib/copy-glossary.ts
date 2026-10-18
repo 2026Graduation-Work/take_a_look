@@ -91,14 +91,17 @@ export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미
 
 // 모델 신호 방향의 화면 이름. 사전 참가자·지도교수 모두 '상방·하방'을 헷갈려 B안으로 바꿨다(10/15 면담·E2).
 // 화면의 신호 방향 단어는 모두 여기서 가져온다. 내부 값(up/flat/down)과 DB는 그대로.
-export const SIGNAL_WORD = { up: "상승 쪽", flat: "중립", down: "하락 쪽" } as const;
+// 두 단어 사이는 줄바꿈 없는 공백(390에서 "하락 / 쪽"으로 갈리지 않게)
+export const SIGNAL_WORD = { up: "상승\u00a0쪽", flat: "중립", down: "하락\u00a0쪽" } as const;
 export type SignalWord = (typeof SIGNAL_WORD)[HorizonDirection];
 
 // 모델 신호 단어 옆에 붙이는 기간. 신호 방향을 "지난 가격이 올랐다"로 읽지 않게 앞으로의 방향임을 바로 보인다(사전 참가자 P0 10/13)
 export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as const;
 
 // 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA). 기간은 위 상수와 같다.
-export const DIRECTION_RULE = `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[20]}의 방향이에요. 맞는다는 보장은 없어요.`;
+// 보유 맵은 색 범례(● 상승 쪽 …) 바로 뒤에 붙여 쓰므로 주어 없는 앞부분만 쓴다(같은 단어 두 번 방지).
+export const DIRECTION_BASIS = `과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[20]}의 방향이에요. 맞는다는 보장은 없어요.`;
+export const DIRECTION_RULE = `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 ${DIRECTION_BASIS}`;
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 

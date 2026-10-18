@@ -20,12 +20,29 @@ export interface ChangeInput {
   disclosures: { stock_code: string; kind: string; title: string; filed_on: string }[];
 }
 
-export interface DailyChange {
+interface Change {
   code: string;
   name: string;
   what: string; // 무엇이
-  how: string; // 어떻게 바뀌었는지
+  how: string; // 어떻게 바뀌었는지("A → B" 또는 공시 제목)
 }
+
+export interface DailyChange {
+  code: string;
+  name: string;
+  text: string; // 한 종목의 바뀐 것을 한 줄로. 예: "외국인 순매수로 · 기관 순매도로"
+}
+
+// 받침이 있으면(ㄹ 제외) '으로', 없으면 '로'
+const ro = (word: string) => {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  return code >= 0 && code < 11172 && code % 28 && code % 28 !== 8 ? "으로" : "로";
+};
+// "외국인 · 순매도 → 순매수" → "외국인 순매수로". 공시는 "새 공시: 제목"
+const phrase = ({ what, how }: Change) => {
+  const to = how.split(" → ")[1];
+  return to ? `${what} ${to}${ro(to)}` : `${what}: ${how}`;
+};
 
 function direction(status: string | null, scores: Scores): Direction | null {
   if (status !== "available" || !scores) return null;
@@ -37,7 +54,7 @@ const flow = (value: number) => (value > 0 ? "순매수" : "순매도");
 
 // 우선순위: 4주 신호 전환 → 주의 유형 공시 → 수급 전환 → 뉴스 분위기 전환 → 그 밖의 새 공시
 export function detectChanges(input: ChangeInput): DailyChange[] {
-  const ranked: [number, DailyChange][] = [];
+  const ranked: [number, Change][] = [];
   for (const { code, name } of input.stocks) {
     const [latestId, previousId] = input.batchIds;
     const find = (id?: string) => input.signals.find((signal) => signal.stock_code === code && signal.batch_id === id);
@@ -79,7 +96,13 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
       ranked.push([CAUTION_KINDS.has(filings[0].kind) ? 1 : 4, { code, name, what, how: disclosureHow(kind, filings[0].title) }]);
     }
   }
-  return ranked.sort((left, right) => left[0] - right[0]).slice(0, MAX_LINES).map(([, change]) => change);
+  // 같은 종목은 한 줄로 합친다(우선순위가 가장 높은 변화의 자리에). 줄 수 제한은 합친 뒤 종목 수 기준
+  const lines = new Map<string, { name: string; parts: Change[] }>();
+  for (const [, change] of ranked.sort((left, right) => left[0] - right[0])) {
+    const line = lines.get(change.code) ?? lines.set(change.code, { name: change.name, parts: [] }).get(change.code)!;
+    line.parts.push(change);
+  }
+  return [...lines].slice(0, MAX_LINES).map(([code, { name, parts }]) => ({ code, name, text: parts.map(phrase).join(" · ") }));
 }
 
 // 제목에 분류명이 이미 있으면 분류명을 생략한다("기업설명회 · 기업설명회(IR)개최" → 제목만). 띄어쓰기는 무시.

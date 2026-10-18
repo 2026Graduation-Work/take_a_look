@@ -332,7 +332,8 @@ export default function Dashboard(initialData: DashboardData) {
               </div>
 
               <section aria-label="오늘 신호가 강한 종목" className="flex flex-col gap-3">
-                <SectionHead title="오늘 신호가 강한 종목" />
+                {/* 기간은 줄마다 쓰지 않고 섹션에 한 번 */}
+                <SectionHead title="오늘 신호가 강한 종목" action={<span className="text-sm text-muted">{HORIZON_AHEAD[20]}</span>} />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (
@@ -347,13 +348,25 @@ export default function Dashboard(initialData: DashboardData) {
                     </Link>
                   </div>
                 ) : (
-                  <div className="group-list">
-                    {visibleStrong.map((signal) => (
-                      <StrongRow key={signal.code} signal={signal} />
-                    ))}
-                    {visibleAlerts.map((stock) => (
-                      <StockRow key={stock.code} stock={stock} />
-                    ))}
+                  <div className="flex flex-col gap-4">
+                    {(["up", "down"] as const).map((direction) => {
+                      const rows = visibleStrong.filter((signal) => signal.direction === direction);
+                      return rows.length > 0 && (
+                        <div key={direction} className="flex flex-col gap-2">
+                          <h3 className="eyebrow px-1" style={{ color: SIGNAL_META[direction === "up" ? "positive" : "negative"].ink }}>
+                            {SIGNAL_WORD[direction]}
+                          </h3>
+                          <div className="group-list">
+                            {rows.map((signal) => <StrongRow key={signal.code} signal={signal} />)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {visibleAlerts.length > 0 && (
+                      <div className="group-list">
+                        {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
+                      </div>
+                    )}
                   </div>
                 )}
                 {/* "모델 검증 전"은 모델 신호가 처음 나오는 곳에 한 번 — 보유 맵이 있으면 그 범례에 있다 */}
@@ -423,14 +436,14 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
       {changes.length ? (
         <ul className="group-list m-0 list-none p-0">
           {changes.map((change) => (
-            <li key={`${change.code}:${change.what}`}>
+            <li key={change.code}>
               <Link
                 href={`/stocks/${change.code}`}
                 className="flex min-h-11 items-center gap-3 px-5 py-3 text-sm text-ink hover:bg-field hover:text-ink hover:no-underline"
               >
                 <span className="flex-none font-medium">{change.name}</span>
                 <span className="min-w-0 flex-1 truncate text-body">
-                  {change.what} · <span className="tabular-nums">{change.how}</span>
+                  {change.text}
                 </span>
                 <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
               </Link>
@@ -444,26 +457,16 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
   );
 }
 
-// 한 줄: 종목명 · 왜(기여도 1위 항목) · 방향. 검증 상태는 섹션 출처 줄에 한 번만.
+// 한 줄: 종목명 · 코드 · 상세로 가는 화살표. 방향은 묶음 제목, 기간은 섹션 제목, 근거는 상세 화면 '모델이 본 이유'에 있다.
 function StrongRow({ signal }: { signal: StrongSignal }) {
-  const meta = SIGNAL_META[signal.direction === "up" ? "positive" : "negative"];
   return (
     <Link
       href={`/stocks/${signal.code}`}
       data-stock-row={signal.code}
-      className="flex items-center gap-4 px-5 py-4 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
+      className="flex min-h-11 items-center gap-2 px-5 py-3 text-ink transition-colors hover:bg-field hover:text-ink hover:no-underline"
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex items-baseline gap-2">
-          <span className="truncate text-base font-medium">{signal.name}</span>
-          <span className="flex-none text-xs text-muted tabular-nums">{signal.code}</span>
-        </span>
-        <span className="truncate text-xs text-muted">{signal.why ? `가장 크게 본 것: ${signal.why}` : "4주 · 20거래일"}</span>
-      </div>
-      <span className="flex-none text-sm font-semibold" style={{ color: meta.ink }}>
-        {SIGNAL_WORD[signal.direction]}
-        <span className="font-normal text-muted"> · {HORIZON_AHEAD[20]}</span>
-      </span>
+      <span className="min-w-0 truncate text-base font-medium">{signal.name}</span>
+      <span className="flex-1 text-xs text-muted tabular-nums">{signal.code}</span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>
   );

@@ -3,7 +3,7 @@ import test from "node:test";
 import { rankSignals, type SnapshotRow } from "./strong-signals.ts";
 
 const row = (code: string, down: number, neutral: number, up: number, status = "available"): SnapshotRow =>
-  ({ stock_code: code, name: code, as_of: "2026-10-08", status, scores: { down, neutral, up }, why: "20일 종가 변동 폭" });
+  ({ stock_code: code, name: code, as_of: "2026-10-08", status, scores: { down, neutral, up } });
 
 test("확신도(1위 − 2위 점수) 내림차순, 중립 1위·추론 불가는 뺀다", () => {
   const ranked = rankSignals([
@@ -15,5 +15,4 @@ test("확신도(1위 − 2위 점수) 내림차순, 중립 1위·추론 불가�
   ]);
   assert.deepEqual(ranked.map(({ code, direction }) => [code, direction]), [["B", "down"], ["A", "up"], ["E", "down"]]);
   assert.ok(Math.abs(ranked[0].confidence - 0.5) < 1e-12);
-  assert.equal(ranked[0].why, "20일 종가 변동 폭");
 });

@@ -22,7 +22,7 @@ async function openHeatmap(page: Page, weights = [86, 14], secondName = "삼성�
   await page.goto("/");
   const map = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" });
   await expect(map.getByRole("listitem")).toHaveCount(2);
-  await expect(map.getByRole("listitem", { name: /삼성전자/ })).toHaveAccessibleName(/상승 쪽 신호/);
+  await expect(map.getByRole("listitem", { name: /삼성전자/ })).toHaveAccessibleName(/상승\s쪽 신호/);
   return map;
 }
 
