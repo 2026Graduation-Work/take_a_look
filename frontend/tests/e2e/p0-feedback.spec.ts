@@ -35,6 +35,8 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
   // 보유 맵 아래는 색 범례만(설명 문장 없음), '틀릴 수 있다'는 맨 아래 면책 문구에
   await expect(page.getByText(/방향이에요|맞는다는 보장/)).toHaveCount(0);
   await expect(page.getByText(/참고 정보로 틀릴 수 있습니다/)).toBeVisible();
+  // 성향 줄: 유형별 고정 문구 "놓치기 쉬운 것"(데모 응답 = 추종형)
+  await expect(page.getByText("놓치기 쉬운 것: 많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요.")).toBeVisible();
 });
 
 test("2. 첫 화면은 '판단은 내가, 근거는 여기서'를 먼저 말한다", async ({ page }) => {
