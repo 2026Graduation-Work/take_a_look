@@ -15,6 +15,7 @@ import {
   getSavedProfileSnapshot,
   getServerProfileSnapshot,
   parseSavedProfile,
+  saveProfile,
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
 
@@ -31,7 +32,9 @@ export default function ProfileView() {
   return (
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} />
-      <main className="mx-auto flex w-full max-w-[720px] flex-col gap-8 px-4 py-8 sm:px-8">
+      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2) */}
+      <main className="page pb-12 pt-6">
+      <div className="page-narrow flex flex-col gap-12">
         {saved?.style_axes ? (
           <ResultView
             result={saved}
@@ -39,6 +42,11 @@ export default function ProfileView() {
             nextLabel="다시 진단"
             onConfirm={() => router.push("/survey")}
             onBack={() => router.push("/")}
+            onDismissSaved={(field) => {
+              const signals = { ...saved.free_text_signal.extracted_signals };
+              delete signals[field];
+              void saveProfile({ ...saved, free_text_signal: { ...saved.free_text_signal, extracted_signals: signals } }, account.mode === "supabase" ? "supabase" : "demo");
+            }}
           />
         ) : (
           <section className="surface flex flex-col items-start gap-4 px-6 py-8">
@@ -55,11 +63,12 @@ export default function ProfileView() {
           </h2>
           <div className="flex flex-col gap-1">
             {account.displayName && <p className="m-0 text-sm font-semibold text-ink">{account.displayName}</p>}
-            <p className="m-0 text-sm text-body">{account.email ?? "데모 계정 · 이 브라우저에만 저장돼요"}</p>
+            <p className="m-0 text-sm text-body">{account.email ?? "데모 계정이라 이 브라우저에만 저장돼요."}</p>
           </div>
           <SignOutButton className="btn-text" label="로그아웃" />
           <DeleteAccountButton />
         </section>
+      </div>
       </main>
       <DisclaimerFooter fixed={false} />
     </div>
