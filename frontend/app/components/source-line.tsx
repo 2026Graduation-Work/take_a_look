@@ -20,5 +20,7 @@ export function SourceTable({ rows, children }: { rows: [string, DataProvenance 
 // 출처 전체 목록(더 알아보기)용 한 줄 글.
 function sourceText(provenance: DataProvenance): string {
   if (provenance.kind !== "real") return "예시 데이터";
-  return [provenance.source, provenance.asOf && formatKstDateTime(provenance.asOf)].filter(Boolean).join(", ");
+  // DB·수집기가 적은 출처 이름의 가운데 점도 화면에서는 쉼표로(화면 규칙 v2, 원본 데이터는 그대로)
+  const source = provenance.source.replaceAll("\u00b7", ", ");
+  return [source, provenance.asOf && formatKstDateTime(provenance.asOf)].filter(Boolean).join(", ");
 }
