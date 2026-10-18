@@ -32,7 +32,7 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
   await expect(strong.getByRole("heading", { name: "상승 쪽" })).toHaveCount(0);
   await expect(page.locator('[data-stock-row="005930"]')).toHaveText("삼성전자005930");
   const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
-  await expect(tile).toHaveAccessibleName(/앞으로 4주 하락 쪽 신호/);
+  await expect(tile).toHaveAccessibleName(/앞으로 4주 하락\s쪽 신호/);
   // 보유 맵 아래: 색 범례와 방향 뜻이 한 줄, 같은 단어를 두 번 쓰지 않는다
   await expect(page.getByText(/^과거 비슷한 경우를 보고 모델이 본 앞으로 4주의 방향이에요/)).toBeVisible();
   await expect(page.getByText(/상승 쪽·하락 쪽은/)).toHaveCount(0);

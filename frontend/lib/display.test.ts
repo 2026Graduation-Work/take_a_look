@@ -18,10 +18,10 @@ test("수급 수량 표기는 -0을 만들지 않는다", () => {
 });
 
 test("모델 근거 크기 말: 전체 합의 10분의 1 기준, 합이 없으면 방향만", () => {
-  assert.equal(contributionWord(0.12, "하락 쪽", 1), "하락 쪽 신호를 크게 높임");
-  assert.equal(contributionWord(0.05, "상승 쪽", 1), "상승 쪽 신호를 조금 높임");
-  assert.equal(contributionWord(-0.05, "하락 쪽", 1), "하락 쪽 신호를 조금 낮춤");
+  assert.equal(contributionWord(0.12, "하락\u00a0쪽", 1), "하락\u00a0쪽 신호를 크게 높임");
+  assert.equal(contributionWord(0.05, "상승\u00a0쪽", 1), "상승\u00a0쪽 신호를 조금 높임");
+  assert.equal(contributionWord(-0.05, "하락\u00a0쪽", 1), "하락\u00a0쪽 신호를 조금 낮춤");
   assert.equal(contributionWord(-0.1, "중립", 1), "중립 신호를 크게 낮춤");
-  assert.equal(contributionWord(0.3, "상승 쪽"), "상승 쪽 신호를 높임");
-  assert.equal(contributionWord(0, "하락 쪽", 1), "하락 쪽 신호를 바꾸지 않음");
+  assert.equal(contributionWord(0.3, "상승\u00a0쪽"), "상승\u00a0쪽 신호를 높임");
+  assert.equal(contributionWord(0, "하락\u00a0쪽", 1), "하락\u00a0쪽 신호를 바꾸지 않음");
 });

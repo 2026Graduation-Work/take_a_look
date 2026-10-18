@@ -91,7 +91,8 @@ export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미
 
 // 모델 신호 방향의 화면 이름. 사전 참가자·지도교수 모두 '상방·하방'을 헷갈려 B안으로 바꿨다(10/15 면담·E2).
 // 화면의 신호 방향 단어는 모두 여기서 가져온다. 내부 값(up/flat/down)과 DB는 그대로.
-export const SIGNAL_WORD = { up: "상승 쪽", flat: "중립", down: "하락 쪽" } as const;
+// 두 단어 사이는 줄바꿈 없는 공백(390에서 "하락 / 쪽"으로 갈리지 않게)
+export const SIGNAL_WORD = { up: "상승\u00a0쪽", flat: "중립", down: "하락\u00a0쪽" } as const;
 export type SignalWord = (typeof SIGNAL_WORD)[HorizonDirection];
 
 // 모델 신호 단어 옆에 붙이는 기간. 신호 방향을 "지난 가격이 올랐다"로 읽지 않게 앞으로의 방향임을 바로 보인다(사전 참가자 P0 10/13)
