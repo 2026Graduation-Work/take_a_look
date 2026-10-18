@@ -32,7 +32,7 @@ test("public predictions retain the original detail UI and both model directions
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText(contributionWord(feature.contribution)); // 전체 합이 없으면 크기 말 없이 방향만
+      await expect(row).toContainText(contributionWord(feature.contribution, "상방")); // 미리보기 표본은 class_2(상방). 전체 합이 없으면 크기 말 없이 방향만
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
@@ -73,7 +73,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
-    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, 1));
+    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상방", 1));
   }
   await expect(model).not.toContainText("기여도");
   if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);
@@ -166,8 +166,8 @@ for (const [space, target, scores, color] of [
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText(`모델의 ${target} 점수`);
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
-    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText("신호를 크게 높임");
-    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText("신호를 크게 낮춤");
+    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 신호를 크게 높임`);
+    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 신호를 크게 낮춤`);
     // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
     expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
     expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
