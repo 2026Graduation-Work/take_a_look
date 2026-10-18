@@ -314,7 +314,7 @@ export default function Dashboard(initialData: DashboardData) {
                     key={option}
                     type="button"
                     aria-pressed={horizon === option}
-                    className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-field text-body"}`}
+                    className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-surface text-body"}`}
                     onClick={() => chooseHorizon(option)}
                   >
                     {option === 20 ? "4주" : "1주"}
