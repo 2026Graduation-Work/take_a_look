@@ -6,7 +6,7 @@ import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_RULE, HORIZON_AHEAD } from "@/lib/copy-glossary";
+import { DIRECTION_BASIS, HORIZON_AHEAD } from "@/lib/copy-glossary";
 import HeatmapPopup from "./portfolio-heatmap-popup";
 import HeatmapLabel from "./portfolio-heatmap-label";
 
@@ -211,10 +211,12 @@ export default function PortfolioHeatmap({
           onClose={() => setActive(null)}
         />
       )}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-        {/* 타일이 좁아 기간은 범례에 한 번(사전 참가자 P0 10/13). 읽기 프로그램은 타일 이름에서 듣는다 */}
-        <span className="font-medium text-body">{HORIZON_AHEAD[20]} 방향</span>
+      {/* 색 범례와 방향 뜻을 한 줄로(기간은 이 문장에 한 번, 사전 참가자 P0 10/13). 읽기 프로그램은 타일 이름에서 듣는다 */}
+      <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
+        <span>{DIRECTION_BASIS}</span>
+      </p>
+      <div className="text-2xs text-muted">
         <span>
           넓이·비중은 내 보유 평가금액 기준
           {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
@@ -223,8 +225,6 @@ export default function PortfolioHeatmap({
           {provenance?.kind === "real" ? " · 모델 검증 전" : provenance && " · 예시 데이터"}
         </span>
       </div>
-      {/* #278 QA: 신호 방향이 무슨 뜻인지 맵 바로 아래에서 한 줄로 */}
-      <p className="m-0 text-2xs text-muted">{DIRECTION_RULE}</p>
       {withoutSignalCount > 0 && (
         <p className="text-2xs text-muted">
           등록한 종목 중 {withoutSignalCount}개는 오늘 모델 신호가 없어 맵에 넣지 않았어요.

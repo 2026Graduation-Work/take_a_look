@@ -98,7 +98,9 @@ export type SignalWord = (typeof SIGNAL_WORD)[HorizonDirection];
 export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as const;
 
 // 보유 맵 아래·오늘 신호 목록 각주가 같은 문장을 쓴다(#278 QA). 기간은 위 상수와 같다.
-export const DIRECTION_RULE = `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[20]}의 방향이에요. 맞는다는 보장은 없어요.`;
+// 보유 맵은 색 범례(● 상승 쪽 …) 바로 뒤에 붙여 쓰므로 주어 없는 앞부분만 쓴다(같은 단어 두 번 방지).
+export const DIRECTION_BASIS = `과거 비슷한 경우를 보고 모델이 본 ${HORIZON_AHEAD[20]}의 방향이에요. 맞는다는 보장은 없어요.`;
+export const DIRECTION_RULE = `${SIGNAL_WORD.up}·${SIGNAL_WORD.down}은 ${DIRECTION_BASIS}`;
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
