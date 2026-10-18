@@ -22,7 +22,7 @@ async function openHeatmap(page: Page, weights = [86, 14], secondName = "삼성�
   await page.goto("/");
   const map = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" });
   await expect(map.getByRole("listitem")).toHaveCount(2);
-  await expect(map.getByRole("listitem", { name: /삼성전자/ })).toHaveAccessibleName(/상방 신호/);
+  await expect(map.getByRole("listitem", { name: /삼성전자/ })).toHaveAccessibleName(/상승 쪽 신호/);
   return map;
 }
 
@@ -40,7 +40,7 @@ test("치우친 비중에서도 타일은 비례하고 정보는 포인터 오�
   await page.mouse.move(point.x, point.y);
   const popup = page.getByRole("tooltip");
   await expect(popup).toContainText("삼성전자");
-  await expect(popup).toContainText("앞으로 4주 상방");
+  await expect(popup).toContainText("앞으로 4주 상승 쪽");
   await expect(popup).toContainText("비중 14%");
   await expect(popup).toContainText("평가금액 140만원");
   const popupBox = (await popup.boundingBox())!;
@@ -99,11 +99,11 @@ test("타일 공간이 줄었다가 넓어지면 이름, 신호, 비중을 함�
   const map = await openHeatmap(page, [60, 40]);
   const small = map.getByRole("listitem", { name: /삼성전자/ });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
-  await expect(small.getByText("상방", { exact: true })).toBeVisible();
+  await expect(small.getByText("상승 쪽", { exact: true })).toBeVisible();
   await expect(small.getByText("비중 40%", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });
   await expect(small.getByText("삼성전자", { exact: true })).toBeHidden();
-  await expect(small.getByText("상방", { exact: true })).toBeHidden();
+  await expect(small.getByText("상승 쪽", { exact: true })).toBeHidden();
   await expect(small.getByText("비중 40%", { exact: true })).toBeHidden();
   await page.setViewportSize({ width: 1280, height: 900 });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();

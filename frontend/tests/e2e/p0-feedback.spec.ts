@@ -20,14 +20,14 @@ const signal = {
   scores: { down: 0.6, neutral: 0.2, up: 0.2 }, why: null, why_name: null,
 };
 
-test("1. 상방·하방 옆에 '앞으로 4주'를 붙여 미래 방향임을 보인다", async ({ page }) => {
+test("1. 상승 쪽·하락 쪽 옆에 '앞으로 4주'를 붙여 미래 방향임을 보인다", async ({ page }) => {
   await page.route(/\/rest\/v1\/latest_chart_signal_snapshots/, (route) => route.fulfill({ json: [signal] }));
   await page.route(/\/rest\/v1\/stocks\?/, (route) =>
     route.fulfill({ json: [{ code: "005930", market: "KOSPI", risk_grade: 3, risk_flags: [] }] }));
   await demoReady(page);
-  await expect(page.locator('[data-stock-row="005930"]')).toContainText("하방 · 앞으로 4주");
+  await expect(page.locator('[data-stock-row="005930"]')).toContainText("하락 쪽 · 앞으로 4주");
   const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
-  await expect(tile).toHaveAccessibleName(/앞으로 4주 하방 신호/);
+  await expect(tile).toHaveAccessibleName(/앞으로 4주 하락 쪽 신호/);
   await expect(page.getByText("앞으로 4주 방향", { exact: true })).toBeVisible();
 });
 

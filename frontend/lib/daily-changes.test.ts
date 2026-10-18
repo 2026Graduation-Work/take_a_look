@@ -26,7 +26,7 @@ const base: ChangeInput = {
 
 test("신호 전환 → 수급 전환 → 뉴스 부호 전환 순, 최대 3줄", () => {
   assert.deepEqual(detectChanges(base).map(({ name, what, how }) => `${name} ${what} ${how}`), [
-    "현대차 4주 신호 하방 → 상방",
+    "현대차 4주 신호 하락 쪽 → 상승 쪽",
     "카카오 외국인 순매도 → 순매수",
     "셀트리온 뉴스 분위기 긍정 → 부정",
   ]);

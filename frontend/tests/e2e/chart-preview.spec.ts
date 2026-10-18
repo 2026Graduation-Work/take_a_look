@@ -17,7 +17,7 @@ test("public predictions retain the original detail UI and both model directions
   });
   await page.goto("/stocks/005930");
   await expect(page.getByTestId("preview-provenance")).toHaveText(/모델 검증 전 · 2026.09.21/);
-  await expect(page.getByRole("heading", { name: /^모델 신호 하방 · 앞으로 4주$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /^모델 신호 하락 쪽 · 앞으로 4주$/ })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
   await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
@@ -32,7 +32,7 @@ test("public predictions retain the original detail UI and both model directions
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText(contributionWord(feature.contribution, "상방")); // 미리보기 표본은 class_2(상방). 전체 합이 없으면 크기 말 없이 방향만
+      await expect(row).toContainText(contributionWord(feature.contribution, "상승 쪽")); // 미리보기 표본은 class_2(상승 쪽). 전체 합이 없으면 크기 말 없이 방향만
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
@@ -40,8 +40,8 @@ test("public predictions retain the original detail UI and both model directions
   await page.locator("summary", { hasText: "더 알아보기" }).click();
   const horizons = page.locator('section[aria-labelledby="more-horizons"]');
   await expect(horizons.getByRole("listitem")).toHaveCount(2);
-  await expect(horizons.getByRole("listitem").filter({ hasText: "5거래일" })).toContainText("↓ 하방");
-  await expect(horizons.getByRole("listitem").filter({ hasText: "20거래일" })).toContainText("↓ 하방");
+  await expect(horizons.getByRole("listitem").filter({ hasText: "5거래일" })).toContainText("↓ 하락 쪽");
+  await expect(horizons.getByRole("listitem").filter({ hasText: "20거래일" })).toContainText("↓ 하락 쪽");
   await expect(page.getByText(/상위 \d+%/)).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -73,7 +73,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
-    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상방", 1));
+    await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상승 쪽", 1));
   }
   await expect(model).not.toContainText("기여도");
   if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);
@@ -139,16 +139,16 @@ test("another stock reads the latest batch and refreshes after returning to the 
   }
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.22");
-  await expect(page.getByRole("heading", { name: /모델 신호 상방/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /모델 신호 상승 쪽/ })).toBeVisible();
   await page.locator("summary", { hasText: "더 알아보기" }).click();
   for (const h of [5, 20]) await expect(page.locator('section[aria-labelledby="more-horizons"]')
-    .getByRole("listitem").filter({ hasText: `${h}거래일` })).toContainText("↑ 상방");
+    .getByRole("listitem").filter({ hasText: `${h}거래일` })).toContainText("↑ 상승 쪽");
 });
 
 for (const [space, target, scores, color] of [
-  ["class_0_raw_margin", "하방", { down: .7, neutral: .2, up: .1 }, "var(--color-down)"],
+  ["class_0_raw_margin", "하락 쪽", { down: .7, neutral: .2, up: .1 }, "var(--color-down)"],
   ["class_1_raw_margin", "중립", { down: .2, neutral: .7, up: .1 }, "var(--color-muted)"],
-  ["class_2_raw_margin", "상방", { down: .1, neutral: .2, up: .7 }, "var(--color-up)"],
+  ["class_2_raw_margin", "상승 쪽", { down: .1, neutral: .2, up: .7 }, "var(--color-up)"],
 ] as const) {
   test(`contributions explain ${target} with strengthening and weakening factors`, async ({ page }) => {
     const selected = structuredClone(rows);

@@ -1,5 +1,6 @@
 // 대시보드 맨 위 한 줄 요약. 결정론 문장 템플릿(LLM을 쓰지 않는다): 같은 입력 → 같은 문장.
 
+import { SIGNAL_WORD } from "./copy-glossary.ts";
 import type { SignalLight } from "./types";
 
 const NEGATIVE: readonly SignalLight[] = ["negative", "strong_negative"];
@@ -16,6 +17,6 @@ export function dashboardSummary({
   if (holdingCount === 0) return `오늘 모델 신호가 강한 종목은 ${strongCount}개예요.`;
   const negative = holdingSignals.filter((signal) => NEGATIVE.includes(signal)).length;
   return negative > 0
-    ? `보유 ${holdingCount}종목 중 ${negative}종목에 하방 신호가 있어요.`
-    : `보유 ${holdingCount}종목 중 하방 신호는 없어요.`;
+    ? `보유 ${holdingCount}종목 중 ${negative}종목에 ${SIGNAL_WORD.down} 신호가 있어요.`
+    : `보유 ${holdingCount}종목 중 ${SIGNAL_WORD.down} 신호는 없어요.`;
 }

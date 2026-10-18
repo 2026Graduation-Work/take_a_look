@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { DIRECTION_RULE, SIGNAL_WORD } from "./copy-glossary.ts";
+import { contributionWord } from "./display.ts";
 import { FORBIDDEN_COPY } from "./copy-rules.ts";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -70,6 +72,8 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     "SignalLab",
     "signallab",
     "KRX · 2025.12.30 · 실데이터",
+    "모델 신호 상방",
+    "강한 하방",
   ]) {
     assert.ok(caught(text), text);
   }
@@ -78,4 +82,12 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   assert.ok(!caught("const h10 = agreement.h10"));
   assert.ok(!caught("signalLabel"));
   assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않습니다."));
+});
+
+test("신호 방향 이름(상승 쪽·하락 쪽)은 확률·전망 금지 규칙에 걸리지 않는다", () => {
+  const caught = (text: string) => FORBIDDEN_COPY.filter(({ pattern }) => pattern.test(text)).map(({ reason }) => reason);
+  for (const text of [...Object.values(SIGNAL_WORD), `강한 ${SIGNAL_WORD.up}`, DIRECTION_RULE,
+    contributionWord(0.12, SIGNAL_WORD.down, 1), `보유 4종목 중 ${SIGNAL_WORD.down} 신호는 없어요.`]) {
+    assert.deepEqual(caught(text), [], text);
+  }
 });

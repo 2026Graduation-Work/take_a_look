@@ -1,4 +1,6 @@
-// 색 범례: 시장 바와 같은 색 점 + 단어(● 상방 ● 중립 ● 하방). 글자로 색 이름을 늘어놓지 않는다.
+import { SIGNAL_WORD } from "@/lib/copy-glossary";
+
+// 색 범례: 시장 바와 같은 색 점 + 단어(● 상승 쪽 ● 중립 ● 하락 쪽). 글자로 색 이름을 늘어놓지 않는다.
 export default function DotLegend({ items }: { items: [color: string, word: string][] }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-x-3">
@@ -13,7 +15,7 @@ export default function DotLegend({ items }: { items: [color: string, word: stri
 }
 
 export const SIGNAL_LEGEND: [string, string][] = [
-  ["var(--color-sig-p-solid)", "상방"],
-  ["var(--color-sig-n-solid)", "중립"],
-  ["var(--color-sig-ng-solid)", "하방"],
+  ["var(--color-sig-p-solid)", SIGNAL_WORD.up],
+  ["var(--color-sig-n-solid)", SIGNAL_WORD.flat],
+  ["var(--color-sig-ng-solid)", SIGNAL_WORD.down],
 ];

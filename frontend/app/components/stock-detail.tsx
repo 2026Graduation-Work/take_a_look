@@ -32,6 +32,7 @@ import {
   riskLevel,
   TERM,
   topPercentLabel,
+  SIGNAL_WORD,
 } from "@/lib/copy-glossary";
 import { formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
@@ -119,7 +120,7 @@ export default function StockDetailView({
   const direction = chartDirection(chart);
   const signal = preview
     ? { ...SIGNAL_META[direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral"],
-        label: direction === "up" ? "상방" : direction === "down" ? "하방" : direction === "flat" ? "중립" : "미제공" }
+        label: direction ? SIGNAL_WORD[direction] : "미제공" }
     : SIGNAL_META[detail.signalLight];
   const hasBand = !preview || Boolean(chart?.distribution.histogram.central_68);
   const horizon = detail.returnHorizon ?? "h10";
@@ -301,7 +302,7 @@ export default function StockDetailView({
                   <li key={key} className="flex flex-col gap-1 rounded-md bg-field px-4 py-3">
                     <span className="text-xs text-muted">{preview ? key === "h5" ? `${HORIZON_AHEAD[5]} · 5거래일` : `${HORIZON_AHEAD[20]} · 20거래일` : HORIZON_LABEL[key]}</span>
                     <span className="text-sm font-semibold" style={{ color: direction ? HORIZON_META[direction].ink : "var(--color-muted)" }}>
-                      {direction ? `${HORIZON_META[direction].arrow} ${preview ? direction === "up" ? "상방" : direction === "down" ? "하방" : "중립" : DIRECTION_WORD[direction]}` : "미제공"}
+                      {direction ? `${HORIZON_META[direction].arrow} ${preview ? SIGNAL_WORD[direction] : DIRECTION_WORD[direction]}` : "미제공"}
                     </span>
                   </li>
                   );
