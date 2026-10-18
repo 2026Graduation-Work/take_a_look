@@ -26,16 +26,68 @@ async function openHeatmap(page: Page, weights = [86, 14], secondName = "삼성�
   return map;
 }
 
-test("치우친 비중에서도 타일은 비례하고 정보는 포인터 오른쪽 위에 온전히 보인다", async ({ page }, testInfo) => {
+// #326 후속: 이름이 안 보이는 칸이 없게 — 모든 칸 44px 이상 + 이름, 넘치면 "그 밖의 N종목"
+const CODES = ["000660", "005930", "005380", "035720", "068270", "000270", "051910", "006400", "035420", "105560", "055550", "012330"];
+async function openMany(page: Page, weights: number[]) {
+  const holdings = weights.map((quantity, index) => ({ code: CODES[index], name: `종목${index + 1}`, quantity, avgBuyPrice: 100_000 }));
+  await page.addInitScript(({ profile, holdings }) => {
+    localStorage.setItem("takealook.demo-session.v1", JSON.stringify({ userId: "demo_heatmap", displayName: "히트맵 확인", signedInAt: new Date().toISOString() }));
+    localStorage.setItem("takealook.ips-profile.v1", JSON.stringify(profile));
+    localStorage.setItem("takealook.holdings.v1", JSON.stringify(holdings));
+  }, { profile, holdings });
+  await page.route(/\/rest\/v1\/latest_chart_signal_snapshots/, (route) => route.fulfill({ json: holdings.map((holding) => ({
+    stock_code: holding.code, close: 100_000, as_of: "2026-10-14", status: "available", scores: { up: 0.7, neutral: 0.2, down: 0.1 },
+  })) }));
+  await page.goto("/");
+  return page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" });
+}
+
+test.describe("작은 비중 여러 종목(390)", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+  test("1%·3%·5% 종목 10개: 모든 칸이 44px 이상이고 이름이 칸 안에 보인다", async ({ page }) => {
+    const map = await openMany(page, [60, 15, 5, 5, 5, 3, 3, 2, 1, 1]);
+    const items = map.getByRole("listitem");
+    await expect(items).toHaveCount(10);
+    const mapBox = (await map.boundingBox())!;
+    for (let index = 0; index < 10; index++) {
+      const tile = items.nth(index);
+      const box = (await tile.boundingBox())!;
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      expect(box.y + box.height).toBeLessThanOrEqual(mapBox.y + mapBox.height + 0.5);
+      const name = tile.getByText(/^종목\d+$/);
+      await expect(name).toBeVisible();
+      const nameBox = (await name.boundingBox())!;
+      expect(nameBox.x + 2).toBeGreaterThanOrEqual(box.x);
+    }
+  });
+
+  test("12개면 작은 것들을 '그 밖의 N종목' 칸으로 묶고, 누르면 목록이 열린다(키보드 포함)", async ({ page }) => {
+    const map = await openMany(page, [40, 15, 10, 8, 6, 5, 5, 3, 3, 2, 2, 1]);
+    const others = map.getByRole("button", { name: /그 밖의 3종목/ });
+    await expect(others).toBeVisible();
+    for (let index = 1; index <= 9; index++) await expect(map.getByText(`종목${index}`, { exact: true })).toBeVisible();
+    const list = page.getByRole("list", { name: "그 밖의 보유 종목" });
+    await expect(list).toHaveCount(0);
+    await others.click();
+    await expect(others).toHaveAttribute("aria-expanded", "true");
+    await expect(list.getByRole("link")).toHaveText([/종목11/, /종목10/, /종목12/]); // 같은 금액은 코드 순
+    await others.focus();
+    await page.keyboard.press("Enter");
+    await expect(list).toHaveCount(0);
+  });
+});
+
+test("치우친 비중에서도 작은 칸은 최소 폭으로 이름을 보이고, 정보는 포인터 오른쪽 위에 온전히 보인다", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const map = await openHeatmap(page);
   await expect(page.getByLabel("보유 종목 정보 선택")).toBeHidden();
   const small = map.getByRole("listitem", { name: /삼성전자/ });
-  await expect(small.getByText("삼성전자", { exact: true })).toBeHidden();
+  await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
   await expect(map.getByRole("listitem", { name: /SK하이닉스/ }).getByText("SK하이닉스", { exact: true })).toBeVisible();
   const box = (await small.boundingBox())!;
   const large = (await map.getByRole("listitem", { name: /SK하이닉스/ }).boundingBox())!;
-  expect(box.width / (box.width + large.width)).toBeCloseTo(0.14, 2);
+  // 14%지만 이름이 보이게 열 최소 폭(30%)으로 그린다
+  expect(box.width / (box.width + large.width)).toBeCloseTo(0.3, 1);
   const point = { x: box.x + box.width / 2, y: box.y + box.height * 0.9 };
   await page.mouse.move(point.x, point.y);
   const popup = page.getByRole("tooltip");
@@ -69,7 +121,8 @@ test("99:1 비중과 화면 가장자리에서도 팝업이 화면 밖으로 잘
   const small = map.getByRole("listitem", { name: /삼성전자/ });
   const box = (await small.boundingBox())!;
   const large = (await map.getByRole("listitem", { name: /SK하이닉스/ }).boundingBox())!;
-  expect(box.width / (box.width + large.width)).toBeCloseTo(0.01, 2);
+  expect(box.width / (box.width + large.width)).toBeCloseTo(0.3, 1);
+  await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
   await small.hover();
   const popup = page.getByRole("tooltip");
   await expect(popup).toContainText("비중 1%");
@@ -94,7 +147,7 @@ test("키보드 포커스로 정보를 읽고 Enter로 상세 화면에 들어�
   await expect(page).toHaveURL(/\/stocks\/005930$/);
 });
 
-test("타일 공간이 줄었다가 넓어지면 이름, 신호, 비중을 함께 숨기고 다시 표시한다", async ({ page }) => {
+test("타일 공간이 줄었다 넓어져도 이름은 늘 보이고, 좁으면 비중만 숨긴다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const map = await openHeatmap(page, [60, 40]);
   const small = map.getByRole("listitem", { name: /삼성전자/ });
@@ -102,11 +155,14 @@ test("타일 공간이 줄었다가 넓어지면 이름, 신호, 비중을 함�
   await expect(small.getByText("상승 쪽", { exact: true })).toBeVisible();
   await expect(small.getByText("비중 40%", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });
-  await expect(small.getByText("삼성전자", { exact: true })).toBeHidden();
-  await expect(small.getByText("상승 쪽", { exact: true })).toBeHidden();
-  await expect(small.getByText("비중 40%", { exact: true })).toBeHidden();
-  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
+  const tile = (await small.boundingBox())!;
+  const weight = small.getByText("비중 40%", { exact: true });
+  if (await weight.isVisible()) {
+    const box = (await weight.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(tile.x + tile.width);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
   await expect(small.getByText("비중 40%", { exact: true })).toBeVisible();
 });
 
