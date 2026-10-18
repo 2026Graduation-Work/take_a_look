@@ -241,8 +241,8 @@ test("운영(DB 연결)에서 live만 있으면 과거 감성·기여도는 대�
   assert.equal(insights.liveSentiment?.score, 0.6);
   assert.equal(insights.sentiment?.headlines.length, 3);
   assert.equal(insights.financial, null); // 고정 재무 대체값은 두지 않는다(최신 정기보고서만)
-  assert.equal(insights.provenance.liveSentiment.source, "NewsAPI.ai · KR-FinBERT");
-  assert.equal(insights.provenance.sentiment.source, "NewsAPI.ai · KR-FinBERT · DB 조회");
+  assert.equal(insights.provenance.liveSentiment.source, "NewsAPI.ai와 KR-FinBERT");
+  assert.equal(insights.provenance.sentiment.source, "NewsAPI.ai와 KR-FinBERT, DB 조회");
   const collectedAt = Date.parse("2026-09-26T09:00:00+09:00");
   assert.equal(marketSentimentView(insights, collectedAt + 73 * 3_600_000), null);
   assert.deepEqual(marketSentimentView(insights, collectedAt), {

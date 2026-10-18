@@ -16,8 +16,8 @@ test("public predictions retain the original detail UI and both model directions
     return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
-  await expect(page.getByTestId("preview-provenance")).toHaveText(/모델 검증 전 · 2026.09.21/);
-  await expect(page.getByRole("heading", { name: /^모델 신호 하락 · 앞으로 4주$/ })).toBeVisible();
+  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. 과거에 오늘과/);
+  await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 4주$/ })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
   await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();

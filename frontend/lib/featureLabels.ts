@@ -17,13 +17,13 @@ const WINDOWED: Record<string, string> = {
   qtld: "{n}일 낮은 가격대",
   imax: "{n}일 최고가 시점",
   imin: "{n}일 최저가 시점",
-  imxd: "{n}일 고점·저점 간격",
+  imxd: "{n}일 고점과 저점 간격",
   cntp: "{n}일 중 오른 날 비중",
   cntn: "{n}일 중 내린 날 비중",
-  cntd: "{n}일 오른 날·내린 날 차",
+  cntd: "{n}일 오른 날과 내린 날 차",
   sump: "{n}일 오른 폭 비중",
   sumn: "{n}일 내린 폭 비중",
-  sumd: "{n}일 오른 폭·내린 폭 차",
+  sumd: "{n}일 오른 폭과 내린 폭 차",
   corr: "{n}일 가격과 거래량 동행",
   cord: "{n}일 등락과 거래량 동행",
   vma: "{n}일 평균 거래량",
@@ -40,13 +40,13 @@ const WINDOWED: Record<string, string> = {
 const FIXED: Record<string, string> = {
   Change: "하루 등락률",
   kmid: "하루 시가 대비 종가",
-  kmid_2: "하루 폭 중 시가·종가 차이",
+  kmid_2: "하루 폭 중 시가와 종가 차이",
   klen: "하루 가격 폭",
   kup: "고가에서 밀린 폭",
   kup_2: "고가에서 밀린 비중",
   klow: "저가에서 오른 폭",
   klow_2: "저가에서 오른 비중",
-  ksft: "종가가 고가·저가 중 가까운 쪽",
+  ksft: "종가가 쏠린 쪽(고가, 저가)",
   ksft_2: "하루 폭 안 종가 위치",
   open_0: "종가 대비 시가",
   high_0: "종가 대비 고가",
@@ -61,7 +61,7 @@ export function featureGroup(name: string): string {
   const head = name.toLowerCase().split(/[^a-z0-9]+/)[0];
   if (/^(news|sentiment|finbert|headline)/.test(head)) return "뉴스 분위기";
   if (/^(dart|financial|fundamental|revenue|per|pbr|roe|eps|debt)/.test(head)) return "재무";
-  if (/^(flow|vma|vstd|wvma|vsum|volume|amount|turnover)/.test(head)) return "거래·수급";
+  if (/^(flow|vma|vstd|wvma|vsum|volume|amount|turnover)/.test(head)) return "거래와 수급";
   return "가격 흐름";
 }
 

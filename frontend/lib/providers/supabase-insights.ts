@@ -502,10 +502,10 @@ export async function loadSupabaseFinancial(
       // 가격 공급원 장애가 재무표 전체를 숨기지 않게 기존 주가 기준을 유지한다.
     }
   }
-  const priceLabel = priceAsOf ? ` · 주가 ${priceAsOf} 종가${priceSource ? ` (${priceSource})` : ""}` : "";
+  const priceLabel = priceAsOf ? `, 주가 ${priceAsOf} 종가${priceSource ? ` (${priceSource})` : ""}` : "";
   return {
     period: `${snapshot.fiscal_year}년 ${REPORT_LABEL[snapshot.report_code ?? "11011"]} 기준`,
-    filing: `${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표 · ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}) · 주식수 ${snapshot.shares_basis}${priceLabel}`,
+    filing: `${STATEMENT_LABEL[snapshot.statement] ?? snapshot.statement}재무제표, ${snapshot.filed_at} 공시(접수번호 ${snapshot.receipt_no}), 주식수 ${snapshot.shares_basis}${priceLabel}`,
     metrics,
     asOf,
   };

@@ -1,7 +1,7 @@
 import { chartChange, type ChartSnapshot } from "./chart-public.ts";
 import type { DataProvenance, HorizonDirection, ReturnBin, StockDetail } from "./types.ts";
 
-export const chartProvenance = (asOf?: string): DataProvenance => ({ kind: "real", source: "LGBM · 20거래일 · 검증 전", asOf });
+export const chartProvenance = (asOf?: string): DataProvenance => ({ kind: "real", source: "LGBM 20거래일", asOf });
 
 export function chartDirection(chart: ChartSnapshot | undefined): HorizonDirection | null {
   return inferenceDirection(chart?.inference);

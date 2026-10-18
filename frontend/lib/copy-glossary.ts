@@ -67,7 +67,7 @@ export function riskLevel(grade: RiskGrade): { word: RiskLevel; filled: number }
 
 // 유형 점수 = (보유 기간 답 + (손실 감내 답 + 집중 답) ÷ 2) ÷ 2, -1~+1을 4구간으로 나눈다
 export const STYLE_TYPE_RULE =
-  "'얼마나 자주 사고파는지' 답과 '손실을 견디고 몇 종목에 모으는지' 답을 평균한 -1~+1 점수를 -0.5 · 0 · +0.5에서 네 유형으로 나눴어요.";
+  "'얼마나 자주 사고파는지' 답과 '손실을 견디고 몇 종목에 모으는지' 답을 평균한 -1~+1 점수를 -0.5, 0, +0.5에서 네 유형으로 나눴어요.";
 
 // 스펙트럼 양 끝(감정적 편향)과 가운데(인지적 편향)
 export const BIAS_MODE_WORD = {
@@ -103,31 +103,31 @@ export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고,
 
 export const STYLE_TYPE_SOURCE = "행동재무학의 투자자 유형 연구(Pompian)에서 착안해 설문으로 가늠한 분류예요.";
 
-// 공시 유형(docs/disclosure-kinds.md) → 화면 이름과 쉬운 풀이
-export const DISCLOSURE_KIND: Record<string, { label: string; explain: string }> = {
-  market_action: { label: "거래 주의", explain: "거래소가 투자 주의·경고, 관리종목 지정, 거래 정지 같은 조치를 알린 공시예요." },
-  business_risk: { label: "경영 위험", explain: "횡령·배임, 자본잠식, 생산 중단처럼 회사 운영에 큰 문제가 생겼다는 공시예요." },
-  inquiry: { label: "조회 공시", explain: "소문이나 보도에 대해 거래소가 사실인지 묻고, 회사가 답한 공시예요." },
-  periodic: { label: "정기보고서", explain: "분기·반기·1년마다 내는 실적과 재무 상태 보고서예요." },
-  earnings: { label: "실적 발표", explain: "확정 전 실적(잠정치)이나 매출·이익이 크게 바뀐 사실을 알린 공시예요." },
-  contract: { label: "공급 계약", explain: "큰 규모의 판매·공급 계약을 맺었다는 공시예요. 계약 금액이 매출 대비 얼마인지 보세요." },
-  capital_raise: { label: "유상증자", explain: "새 주식을 팔아 돈을 모으는 결정이에요. 주식 수가 늘어 한 주의 가치가 낮아질 수 있어요." },
-  bonus_issue: { label: "무상증자", explain: "돈을 받지 않고 주주에게 새 주식을 나눠 주는 결정이에요. 회사 가치 자체는 그대로예요." },
-  bond: { label: "사채 발행", explain: "나중에 주식으로 바꿀 수 있는 채권 등을 발행한 공시예요. 주식으로 바뀌면 주식 수가 늘 수 있어요." },
-  buyback: { label: "자사주", explain: "회사가 자기 주식을 사거나 팔거나 없앤다는 공시예요." },
-  dividend: { label: "배당", explain: "이익의 일부를 주주에게 나눠 주는 결정이에요." },
-  restructure: { label: "합병·분할", explain: "회사를 합치거나 나누거나 사업을 사고판다는 공시예요." },
-  ownership: { label: "지분 변동", explain: "대주주·임원이나 큰 투자자가 가진 주식 수가 바뀌었다는 공시예요." },
-  lawsuit: { label: "소송", explain: "회사가 관련된 소송이 시작되거나 결과가 나왔다는 공시예요." },
-  investment: { label: "투자·보증", explain: "다른 회사 주식을 사거나 남의 빚을 대신 갚기로 보증한 공시예요." },
-  shareholder_meeting: { label: "주주총회", explain: "주주총회 소집이나 결과, 의결권 관련 공시예요." },
-  investor_relations: { label: "기업설명회", explain: "회사가 투자자에게 실적·사업을 설명하는 자리를 열거나 실적 발표 날짜를 알린 공시예요." },
-  securities_filing: { label: "증권 발행 서류", explain: "주식·채권 등을 발행하면서 내는 신고서·설명서예요. 대부분 절차 서류예요." },
-  other: { label: "기타", explain: "위 유형에 들지 않는 공시예요. 제목을 눌러 원문을 확인해 보세요." },
+// 공시 유형(docs/disclosure-kinds.md) → 화면 이름. 풀이(ⓘ) 없이 이름만으로 이해되게 쓴다(화면 규칙 v2)
+export const DISCLOSURE_KIND: Record<string, { label: string }> = {
+  market_action: { label: "거래소 투자 주의" },
+  business_risk: { label: "경영 위험" },
+  inquiry: { label: "거래소 질문에 답변" },
+  periodic: { label: "정기 실적 보고서" },
+  earnings: { label: "실적 발표" },
+  contract: { label: "공급 계약" },
+  capital_raise: { label: "유상증자(새 주식 발행)" },
+  bonus_issue: { label: "무상증자(주식 나눠 주기)" },
+  bond: { label: "채권 발행" },
+  buyback: { label: "자기 주식 사고팔기" },
+  dividend: { label: "배당" },
+  restructure: { label: "합병과 분할" },
+  ownership: { label: "대주주 지분 변동" },
+  lawsuit: { label: "소송" },
+  investment: { label: "다른 회사 투자와 보증" },
+  shareholder_meeting: { label: "주주총회" },
+  investor_relations: { label: "기업설명회" },
+  securities_filing: { label: "증권 발행 서류" },
+  other: { label: "그 밖의 공시" },
 };
 
 // Live 문맥 필터 적용 범위. 과거/기타 종목에 동일 기준을 안내하지 않는다.
 export const CONTEXTUAL_LIVE_NEWS_CODES = new Set(["005930", "005380", "035720", "035420", "068270", "247540"]);
-export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업·시장 뉴스를 함께 반영합니다.";
+export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업과 시장 뉴스를 함께 반영합니다.";
 // 뉴스 감성과 별도로 계산하는 가격 지표 안내.
 export const PRICE_CONTEXT_CAPTION = "뉴스 분위기와 함께 보는 주가 흐름";

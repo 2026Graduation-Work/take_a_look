@@ -203,7 +203,7 @@ export function mapPredictionReasons(
       const signedValue = `${row.contribution > 0 ? "+" : ""}${row.contribution.toFixed(4)}`;
       return {
         title: featureLabel(row.feature, row.label_ko),
-        detail: `${direction} · 모델 기여값 ${signedValue}`,
+        detail: `${direction}, 모델 기여값 ${signedValue}`,
         source: source.type,
         sourceLabel: source.label,
       };

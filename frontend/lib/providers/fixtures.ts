@@ -33,7 +33,7 @@ export const CONTRIBUTION_FIXTURE: Record<string, ContributionSignalInput[]> = {
   "005930": [
     {
       signal: "ma_cross_20_60",
-      label: "20일·60일 이동평균 위치",
+      label: "20일과 60일 이동평균 위치",
       category: "technical",
       weight: 31,
       description: "단기 추세선이 중기 추세선 위에 있는지와 그 기간을 봅니다.",

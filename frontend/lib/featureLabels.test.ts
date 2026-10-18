@@ -94,8 +94,8 @@ test("화면에 나오는 피처명이 모두 쉬운 말로 바뀐다", () => {
 test("사전에 없는 피처는 원문 대신 묶음 이름", () => {
   assert.equal(featureLabel("news_sentiment_7"), "뉴스 분위기");
   assert.equal(featureLabel("dart_roe"), "재무");
-  assert.equal(featureLabel("flow_pension_5"), "거래·수급");
+  assert.equal(featureLabel("flow_pension_5"), "거래와 수급");
   assert.equal(featureLabel("unknown_x", "raw_name"), "가격 흐름");
   assert.equal(featureLabel("unknown_x", "최근 쏠림"), "최근 쏠림");
-  assert.equal(featureGroup("vsumd_99"), "거래·수급");
+  assert.equal(featureGroup("vsumd_99"), "거래와 수급");
 });
