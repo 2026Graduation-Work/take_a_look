@@ -242,7 +242,8 @@ function buildExperimentConclusion(data: ComparisonResults): string {
 
   if (data.experiment) {
     const auc = (value: number | null) => value === null ? "미산출" : `${value > 0 ? "+" : ""}${value.toFixed(6)}`;
-    return `주지표인 연도별 평균 ROC-AUC의 B−A 차이는 안정형 ${auc(allStable.delta_B_minus_A_auc)}, 공격형 ${auc(allAggressive.delta_B_minus_A_auc)}입니다. 독립 연도 수익률 평균 차이는 각각 ${signedPercentPoint(allStable.delta_B_minus_A_cumulative_return)}, ${signedPercentPoint(allAggressive.delta_B_minus_A_cumulative_return)}입니다. 판별력과 수익률을 함께 보며, 이 차이를 통계적으로 유의한 개선으로 단정하지 않습니다.`;
+    // 성적표는 처음 보는 사람도 읽게 쉬운 말 + 괄호에 전공 용어(10/18 사용자 피드백)
+    return `오를 종목을 가려내는 능력(ROC-AUC 연도별 평균)은 B가 안정형 ${auc(allStable.delta_B_minus_A_auc)}, 공격형 ${auc(allAggressive.delta_B_minus_A_auc)}만큼 달라 거의 같았어요. 해마다 새로 시작한 모의 투자 수익률은 각각 ${signedPercentPoint(allStable.delta_B_minus_A_cumulative_return)}, ${signedPercentPoint(allAggressive.delta_B_minus_A_cumulative_return)} 차이였어요. 의미 있는 개선이라고 보기는 어려워요.`;
   }
   return `Sharpe의 B-A 차이는 전체 구간에서 안정형 ${signedDecimal(allStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(allAggressive.delta_B_minus_A_sharpe)}, 급변 구간에서 안정형 ${signedDecimal(volatileStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(volatileAggressive.delta_B_minus_A_sharpe)}였습니다. 이는 관측 차이의 기술적 요약이며 통계적 유의성을 의미하지 않습니다.`;
 }
