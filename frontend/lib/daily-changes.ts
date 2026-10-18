@@ -76,10 +76,16 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
       const kind = DISCLOSURE_KIND[filings[0].kind]?.label ?? "공시";
       // 건수를 앞에 둔다 — 390px에서 긴 제목 끝이 잘려도 몇 건인지는 보이게
       const what = filings.length > 1 ? `새 공시 ${filings.length}건` : "새 공시";
-      ranked.push([CAUTION_KINDS.has(filings[0].kind) ? 1 : 4, { code, name, what, how: `${kind} · ${filings[0].title}` }]);
+      ranked.push([CAUTION_KINDS.has(filings[0].kind) ? 1 : 4, { code, name, what, how: disclosureHow(kind, filings[0].title) }]);
     }
   }
   return ranked.sort((left, right) => left[0] - right[0]).slice(0, MAX_LINES).map(([, change]) => change);
+}
+
+// 제목에 분류명이 이미 있으면 분류명을 생략한다("기업설명회 · 기업설명회(IR)개최" → 제목만). 띄어쓰기는 무시.
+export function disclosureHow(kind: string, title: string): string {
+  const squash = (text: string) => text.replace(/\s/g, "");
+  return squash(title).includes(squash(kind)) ? title : `${kind} · ${title}`;
 }
 
 export async function loadDailyChanges(
