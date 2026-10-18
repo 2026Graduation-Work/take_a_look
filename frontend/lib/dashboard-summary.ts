@@ -17,5 +17,5 @@ export function dashboardSummary({
   const negative = holdingSignals.filter((signal) => NEGATIVE.includes(signal)).length;
   return negative > 0
     ? `보유 ${holdingCount}종목 중 ${negative}종목에 하방 신호가 있어요.`
-    : `보유 ${holdingCount}종목 모두 하방 신호는 없어요.`;
+    : `보유 ${holdingCount}종목 중 하방 신호는 없어요.`;
 }
