@@ -7,6 +7,9 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+# 행이 빠진 표가 남은 행만으로 통과하지 않게 기대 개수를 고정한다(PR #327 리뷰)
+EXPECTED_ARTIFACTS, EXPECTED_MEANS, EXPECTED_POOLED = 52, 8, 4
+FLOW_FEATURES = [f'flow_{who}_{days}' for who in ['individual', 'institution', 'foreign'] for days in [1, 5, 20]]
 
 
 def read_csv(path):
@@ -22,6 +25,7 @@ def sha256(path):
 def verify():
     provenance = json.loads((ROOT / 'provenance.json').read_text())
     artifacts = read_csv(ROOT / 'output_artifact_hashes.csv')
+    assert len(artifacts) == EXPECTED_ARTIFACTS, len(artifacts)
     for row in artifacts:
         if row['included'] == 'True':
             path = ROOT / 'originals' / Path(row['path']).parent.name / Path(row['path']).name
@@ -38,6 +42,7 @@ def verify():
         base, flow = [json.loads((run / 'run_manifest.json').read_text())['config'] for run in runs]
         assert len(base['feature_columns']) == 161 and len(flow['feature_columns']) == 170
         assert flow['feature_columns'][:161] == base['feature_columns']
+        assert flow['feature_columns'][161:] == FLOW_FEATURES, flow['feature_columns'][161:]
         for key in ['dataset', 'model', 'labels', 'strategy', 'backtest', 'evaluation', 'training']:
             assert base[key] == flow[key], key
         data = [dict(config['data']) for config in [base, flow]]
@@ -59,12 +64,16 @@ def verify():
         for key in ['total_return', 'sharpe_ratio', 'max_drawdown', 'number_of_trades', 'final_equity']:
             assert float(row[key]) == float(backtest[key]), (row, key)
         assert math.isclose(float(row['final_equity']), 1e7 * (1 + float(row['total_return'])), abs_tol=0.01)
-    for mean in read_csv(ROOT / 'comparison_mean.csv'):
+    means = read_csv(ROOT / 'comparison_mean.csv')
+    assert len(means) == EXPECTED_MEANS, len(means)
+    for mean in means:
         rows = [x for x in annual if x['horizon'] == mean['horizon'] and x['variant'] == mean['variant'] and (mean['period'].endswith('partial') or int(x['year']) < 2026)]
         assert len(rows) == int(mean['year_count'])
         for key in ['roc_auc', 'pr_auc', 'total_return', 'sharpe_ratio', 'max_drawdown', 'ic_mean']:
             assert math.isclose(float(mean[key]), sum(float(x[key]) for x in rows) / len(rows), abs_tol=1e-12)
-    for pooled in json.loads((ROOT / 'pooled_metrics.json').read_text()):
+    pooled_rows = json.loads((ROOT / 'pooled_metrics.json').read_text())
+    assert len(pooled_rows) == EXPECTED_POOLED, len(pooled_rows)
+    for pooled in pooled_rows:
         key = f"h{pooled['horizon']}_{pooled['variant']}"
         original = json.loads((ROOT / 'originals' / provenance['runs'][key] / 'ml_metrics_summary.json').read_text())
         assert all(pooled[k] == value for k, value in original.items())
