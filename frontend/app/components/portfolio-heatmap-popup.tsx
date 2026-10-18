@@ -4,12 +4,13 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { SIGNAL_META } from "@/lib/display";
-import { HORIZON_AHEAD } from "@/lib/copy-glossary";
+import { HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
 import type { PortfolioHolding } from "@/lib/types";
 
 export default function HeatmapPopup({
-  id, x, y, touch, holding, amount, weight, onClose,
+  id, x, y, touch, holding, amount, weight, horizon, onClose,
 }: {
+  horizon: SignalHorizon;
   id: string;
   x: number;
   y: number;
@@ -50,7 +51,7 @@ export default function HeatmapPopup({
     >
       <span className="shrink-0 wrap-anywhere text-base font-semibold">{holding.name}</span>
       <div className="flex shrink-0 flex-col gap-1">
-        <span className="font-medium" style={{ color: signal.ink }}>{HORIZON_AHEAD[20]} {signal.label}</span>
+        <span className="font-medium" style={{ color: signal.ink }}>{HORIZON_AHEAD[horizon]} {signal.label}</span>
         <span className="tabular-nums">비중 {weight}%</span>
         <span className="text-xs tabular-nums text-muted">{holding.quantity.toLocaleString("ko-KR")}주, {amount}</span>
       </div>

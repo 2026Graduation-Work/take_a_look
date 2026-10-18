@@ -9,7 +9,8 @@ import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { SourceTable } from "./source-line";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_RULE, HORIZON_AHEAD, SIGNAL_WORD } from "@/lib/copy-glossary";
+import { directionRule, HORIZON_AHEAD, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -39,6 +40,29 @@ import {
   parseSavedProfile,
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
+
+// 신호 기간 선택. 저장소를 못 쓰는 브라우저(사생활 보호 창 등)에서도 이 화면 안에서는 바뀌게 메모리 값을 먼저 본다
+let chosenHorizon: SignalHorizon | null = null;
+const horizonListeners = new Set<() => void>();
+function subscribeHorizon(listener: () => void) {
+  horizonListeners.add(listener);
+  return () => void horizonListeners.delete(listener);
+}
+function readHorizon(): SignalHorizon {
+  if (chosenHorizon) return chosenHorizon;
+  try {
+    return localStorage.getItem(STORAGE_KEYS.signalHorizon) === "5" ? 5 : 20;
+  } catch {
+    return 20;
+  }
+}
+function chooseHorizon(next: SignalHorizon) {
+  chosenHorizon = next;
+  try {
+    localStorage.setItem(STORAGE_KEYS.signalHorizon, String(next));
+  } catch {}
+  horizonListeners.forEach((listener) => listener());
+}
 
 function SectionHead({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
@@ -124,14 +148,16 @@ export default function Dashboard(initialData: DashboardData) {
   const savedHoldings = parseSavedHoldings(savedHoldingsSnapshot);
   // 보유·관심 종목의 최신 종가·신호(최신 게시 차트). 오늘 목록 종목도 같은 요청으로 읽어 출처 줄에 기준일을 붙인다.
   const savedCodes = [...(savedHoldings ?? []), ...watchlist, ...stocks].map(({ code }) => code).join(",");
+  // 신호 기간: 기본 4주, 1주로 바꿔 볼 수 있다. 선택은 이 기기에만 기억(서버 렌더는 4주)
+  const horizon = useSyncExternalStore(subscribeHorizon, readHorizon, () => 20 as SignalHorizon);
   const [closes, setCloses] = useState<LatestCloses>(new Map());
   useEffect(() => {
     let active = true;
-    void loadLatestCloses(getSupabaseClient(), savedCodes ? savedCodes.split(",") : []).then((next) => active && setCloses(next));
+    void loadLatestCloses(getSupabaseClient(), savedCodes ? savedCodes.split(",") : [], horizon).then((next) => active && setCloses(next));
     return () => {
       active = false;
     };
-  }, [savedCodes]);
+  }, [savedCodes, horizon]);
   // 사용자가 등록한 종목에 오늘 신호를 붙인다. 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값.
   // 신호가 없는 종목은 중립으로 꾸미지 않고 맵에서 빼고 개수만 알린다 — 없는 판단을 지어내지 않는다.
   const signalByCode = new Map(
@@ -166,11 +192,11 @@ export default function Dashboard(initialData: DashboardData) {
   useEffect(() => {
     let active = true;
     const stocks = (JSON.parse(changeKey) as [string, string][]).map(([code, name]) => ({ code, name }));
-    void loadDailyChanges(getSupabaseClient(), stocks).then((next) => active && setChanges(next));
+    void loadDailyChanges(getSupabaseClient(), stocks, horizon).then((next) => active && setChanges(next));
     return () => {
       active = false;
     };
-  }, [changeKey]);
+  }, [changeKey, horizon]);
   const holdingsWithoutSignal = savedHoldings
     ? savedHoldings.length - activeHoldings.length
     : 0;
@@ -188,12 +214,12 @@ export default function Dashboard(initialData: DashboardData) {
   const [strong, setStrong] = useState<Awaited<ReturnType<typeof loadStrongSignals>> | undefined>(undefined);
   useEffect(() => {
     let active = true;
-    void loadStrongSignals(getSupabaseClient(), { userMaxRiskTier: null, avoided: new Set(avoidedKey ? avoidedKey.split(",") : []) })
+    void loadStrongSignals(getSupabaseClient(), { userMaxRiskTier: null, avoided: new Set(avoidedKey ? avoidedKey.split(",") : []) }, horizon)
       .then((next) => active && setStrong(next));
     return () => {
       active = false;
     };
-  }, [avoidedKey]);
+  }, [avoidedKey, horizon]);
   const strongSignals = strong ? [...strong.up, ...strong.down] : [];
   const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
@@ -279,6 +305,24 @@ export default function Dashboard(initialData: DashboardData) {
 
             {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
 
+            {/* 두 섹션(보유 맵·강한 신호)이 같은 기간을 따른다. 위쪽 요약·달라진 근거도 같은 기간 */}
+            <div className="flex flex-col gap-2 px-1">
+              <div role="group" aria-label="신호 기간" className="flex items-center gap-2 text-sm">
+                <span className="text-body">앞으로</span>
+                {([20, 5] as const).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={horizon === option}
+                    className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-field text-body"}`}
+                    onClick={() => chooseHorizon(option)}
+                  >
+                    {option === 20 ? "4주" : "1주"}
+                  </button>
+                ))}
+              </div>
+              {horizon === 5 && <p className="m-0 text-2xs text-muted">{SHORT_HORIZON_NOTE}</p>}
+            </div>
             <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-2 lg:gap-6">
               <div className="flex flex-col gap-8">
               <section aria-label="내 보유 종목" className="flex flex-col gap-3">
@@ -292,7 +336,7 @@ export default function Dashboard(initialData: DashboardData) {
                     )
                   }
                 />
-                <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} />
+                <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
               </section>
 
               {watchlist.length > 0 && (
@@ -333,7 +377,7 @@ export default function Dashboard(initialData: DashboardData) {
 
               <section aria-label="오늘 신호가 강한 종목" className="flex flex-col gap-3">
                 {/* 기간은 줄마다 쓰지 않고 섹션에 한 번 */}
-                <SectionHead title="오늘 신호가 강한 종목" action={<span className="text-sm text-muted">{HORIZON_AHEAD[20]}</span>} />
+                <SectionHead title="오늘 신호가 강한 종목" action={<span className="text-sm text-muted">{HORIZON_AHEAD[horizon]}</span>} />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (
@@ -373,7 +417,7 @@ export default function Dashboard(initialData: DashboardData) {
                 <p className="m-0 px-1 text-2xs text-muted">
                   {activeHoldings.length === 0 && "모델 검증 전 · "}신호는 과거 데이터로 만든 참고 정보예요
                   {/* 신호 방향 뜻도 처음 나오는 곳에 한 번 — 보유 맵이 있으면 맵 아래에 같은 문장이 있다 */}
-                  {activeHoldings.length === 0 && <><br />{DIRECTION_RULE}</>}
+                  {activeHoldings.length === 0 && <><br />{directionRule(horizon)}</>}
                   {/* 걸린 종목이 없으면 아래 펼침이 안 생겨 제외가 반영됐는지 알 수 없었다(페르소나 워크스루 2026-10 P3) */}
                   {!keyword && activeAvoidedLabels.length > 0 && activeExcludedStocks.length === 0 && (
                     <><br />직접 고른 제외 항목({activeAvoidedLabels.join(" · ")})은 목록에서 빼고 보여 줘요</>
@@ -413,7 +457,7 @@ export default function Dashboard(initialData: DashboardData) {
                     ["보유 종목 신호·종가", activeHoldings[0]?.provenance ?? null],
                     ["오늘 신호가 강한 종목", strongSignals.length ? listProvenance : null],
                     ["어제와 달라진 근거", changes?.length
-                      ? { kind: "real", source: "직전 게시 배치 대비 4주 신호 · KRX 투자자별 순매수 · NewsAPI.ai × KR-FinBERT 일별 · DART 공시" }
+                      ? { kind: "real", source: `직전 게시 배치 대비 ${horizon === 5 ? "1주" : "4주"} 신호 · KRX 투자자별 순매수 · NewsAPI.ai × KR-FinBERT 일별 · DART 공시` }
                       : null],
                   ]}
                 />

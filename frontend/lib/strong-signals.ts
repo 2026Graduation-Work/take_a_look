@@ -2,8 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AVOIDED_ASSET_LABELS } from "./profiling-rules.ts";
 import { passesHardConstraints, type HardConstraints } from "./recommendation-filter.ts";
 import type { RiskFlag } from "./types.ts";
+import type { SignalHorizon } from "./copy-glossary.ts";
 
-// 대시보드 "오늘 신호가 강한 종목": 최신 게시 배치의 코스피 전 종목에서 4주(H20) 분류 점수의
+// 대시보드 "오늘 신호가 강한 종목": 최신 게시 배치의 코스피 전 종목에서 선택 기간(기본 4주 H20, 1주 H5) 분류 점수의
 // 확신도(가장 높은 점수 − 두 번째 점수)가 큰 순으로 상승 쪽·하락 쪽 각 SHOW개. 규칙 코드이며 성향으로 거르지 않는다.
 // 사용자가 직접 고른 회피 항목(하드 제약)만 뺀다. payload 전체 대신 필요한 경로만 한 번에 읽는다.
 const SHOW = 5;
@@ -39,12 +40,13 @@ export function rankSignals(rows: SnapshotRow[]): StrongSignal[] {
 export async function loadStrongSignals(
   client: Pick<SupabaseClient, "from"> | null,
   constraints: HardConstraints,
+  horizon: SignalHorizon = 20,
 ): Promise<{ up: StrongSignal[]; down: StrongSignal[]; excluded: { code: string; name: string; reason: string }[] } | null> {
   if (!client) return null;
   const { data, error } = await client
     .from("latest_chart_signal_snapshots")
     .select("stock_code,name:payload->>stock_name,as_of:payload->>data_asof,status:payload->inference->>status,scores:payload->inference->scores")
-    .eq("horizon", 20);
+    .eq("horizon", horizon);
   if (error) return null;
   const ranked = rankSignals((data ?? []) as SnapshotRow[]);
   const shortlist = [...ranked.filter(({ direction }) => direction === "up").slice(0, SHORTLIST),

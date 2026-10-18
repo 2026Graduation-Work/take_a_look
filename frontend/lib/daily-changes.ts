@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { DISCLOSURE_KIND, SIGNAL_WORD } from "./copy-glossary.ts";
+import { DISCLOSURE_KIND, SIGNAL_WORD, type SignalHorizon } from "./copy-glossary.ts";
 
 // 대시보드 상단 "어제와 달라진 근거": 보유·관심 종목에서 직전 대비 바뀐 사실만 규칙으로 찾는다(최대 MAX_LINES줄).
 // 판단(사라·팔아라)은 붙이지 않는다(HITL). 새 테이블 없이 공개 읽기 가능한 기존 테이블만 쓴다.
-// 4주 신호의 전일 값은 예측 요약 로그(0009)가 service_role 전용이라, 같은 값이 남아 있는 직전 게시 배치 스냅샷에서 읽는다.
+// 신호(선택 기간)의 전일 값은 예측 요약 로그(0009)가 service_role 전용이라, 같은 값이 남아 있는 직전 게시 배치 스냅샷에서 읽는다.
 const MAX_LINES = 3;
 const CAUTION_KINDS = new Set(["market_action", "business_risk", "inquiry"]);
 const DIRECTION = SIGNAL_WORD;
@@ -18,6 +18,7 @@ export interface ChangeInput {
   sentiment: { stock_code: string; track: string; sentiment_date: string; sentiment_mean: number }[];
   supply: { stock_code: string; trade_date: string; foreign_investor: number; institution: number }[];
   disclosures: { stock_code: string; kind: string; title: string; filed_on: string }[];
+  horizon?: SignalHorizon; // 신호 전환을 볼 기간(기본 4주)
 }
 
 interface Change {
@@ -52,7 +53,7 @@ function direction(status: string | null, scores: Scores): Direction | null {
 
 const flow = (value: number) => (value > 0 ? "순매수" : "순매도");
 
-// 우선순위: 4주 신호 전환 → 주의 유형 공시 → 수급 전환 → 뉴스 분위기 전환 → 그 밖의 새 공시
+// 우선순위: 신호 전환 → 주의 유형 공시 → 수급 전환 → 뉴스 분위기 전환 → 그 밖의 새 공시
 export function detectChanges(input: ChangeInput): DailyChange[] {
   const ranked: [number, Change][] = [];
   for (const { code, name } of input.stocks) {
@@ -63,7 +64,7 @@ export function detectChanges(input: ChangeInput): DailyChange[] {
     const before = previous ? direction(previous.status, previous.scores) : null;
     // 모델(pack)이 바뀐 날은 비교하지 않는다 — 모델 교체를 시장 변화처럼 보이지 않게
     if (now && before && now !== before && latest!.pack === previous!.pack) {
-      ranked.push([0, { code, name, what: "4주 신호", how: `${DIRECTION[before]} → ${DIRECTION[now]}` }]);
+      ranked.push([0, { code, name, what: `${input.horizon === 5 ? "1주" : "4주"} 신호`, how: `${DIRECTION[before]} → ${DIRECTION[now]}` }]);
     }
 
     // 같은 날은 Live가 있으면 Live, 없으면 과거 트랙. 가장 최근 두 날의 부호를 비교한다.
@@ -114,6 +115,7 @@ export function disclosureHow(kind: string, title: string): string {
 export async function loadDailyChanges(
   client: Pick<SupabaseClient, "from"> | null,
   stocks: { code: string; name: string }[],
+  horizon: SignalHorizon = 20,
 ): Promise<DailyChange[] | null> {
   if (!client || !stocks.length) return client ? [] : null;
   const codes = stocks.map(({ code }) => code);
@@ -126,7 +128,7 @@ export async function loadDailyChanges(
   const [signals, sentiment, supply, disclosures] = await Promise.all([
     client.from("chart_signal_snapshots")
       .select("stock_code,batch_id,pack:payload->>pack_id,status:payload->inference->>status,scores:payload->inference->scores")
-      .in("batch_id", ids).eq("horizon", 20).in("stock_code", codes),
+      .in("batch_id", ids).eq("horizon", horizon).in("stock_code", codes),
     client.from("news_sentiment_daily").select("stock_code,track,sentiment_date,sentiment_mean")
       .in("stock_code", codes).gte("sentiment_date", since).not("sentiment_mean", "is", null),
     client.from("supply_demand").select("stock_code,trade_date,foreign_investor,institution")
@@ -141,5 +143,6 @@ export async function loadDailyChanges(
     sentiment: (sentiment.data ?? []) as ChangeInput["sentiment"],
     supply: (supply.data ?? []) as ChangeInput["supply"],
     disclosures: (disclosures.data ?? []) as ChangeInput["disclosures"],
+    horizon,
   });
 }

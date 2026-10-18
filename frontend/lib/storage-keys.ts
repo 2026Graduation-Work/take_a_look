@@ -10,6 +10,8 @@ export const STORAGE_KEYS = {
   // 관심 종목·판단 메모. 데모는 여기가 원본, 로그인 사용자는 Supabase 값을 여기에 비춰 둔다(lib/stock-marks.ts).
   watchlist: "takealook.watchlist.v1",
   stockNotes: "takealook.stock-notes.v1",
+  // 대시보드 신호 기간(4주 기본 / 1주). 이 기기에만 기억
+  signalHorizon: "takealook.signal-horizon.v1",
 } as const;
 
 // 2027-02 이후 제거: 옛 키(signallab.*) 이전. 그때쯤이면 옛 키를 가진 브라우저가 남지 않는다.
