@@ -95,6 +95,13 @@ export default function PortfolioHeatmap({
       // 터치 선택기의 기본 스크롤이나 팝업 내부 스크롤은 정보를 닫지 않는다.
       // 바깥에서 시작한 터치는 pointerdown에서 닫힌다.
       if (popupInput === "touch") return;
+      // 키보드 포커스는 브라우저가 칸을 화면 안으로 스크롤하므로 닫지 않고 칸을 따라간다
+      const focused = document.activeElement;
+      if (popupInput === "keyboard" && focused instanceof HTMLElement && map.current?.contains(focused)) {
+        const rect = focused.getBoundingClientRect();
+        setActive((current) => current && { ...current, x: rect.right, y: rect.top });
+        return;
+      }
       dismiss();
     };
     window.addEventListener("resize", dismiss);
@@ -268,7 +275,7 @@ export default function PortfolioHeatmap({
       </p>
       <div className="text-2xs text-muted">
         <span>
-          넓이·비중은 내 보유 평가금액 기준 · 작은 종목은 이름이 보이게 최소 크기로 그려요
+          넓이·비중은 내 보유 평가금액 기준 · 작은 종목은 이름이 보이게 최소 크기로 그려요.
           {/* 기준일은 시장 바에 한 번. 종가가 2영업일 넘게 밀렸을 때만 적는다 */}
           {closeAsOf && staleLabel(closeAsOf) && `(${closeAsOf.replaceAll("-", ".")} 종가)`}
           {holdings.some(({ priceBasis }) => priceBasis !== "close") && " · 종가가 없는 종목은 매입금액 기준"}
