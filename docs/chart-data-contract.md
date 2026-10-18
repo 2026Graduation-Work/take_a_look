@@ -60,6 +60,17 @@
 | `supply_demand.trade_date` · `retail` · `foreign_investor` · `institution` | date · bigint(주) | 최근 20행 | 비면 사고판 주체 탭에 "사고판 기록이 아직 없어요" 안내 | `serving/supply.py` |
 | `stocks.code` · `name` · `market` · `risk_grade` · `risk_flags` · `volatility_annual` · `volatility_percentile` · `risk_as_of` | text · text · `KOSPI`/`KOSDAQ` · 1~5 · text[] · number\|null · number\|null · date | `code`·`market` 필수 | `market`이 `KOSPI`가 아니면 강한 신호에서 빠짐. `risk_flags`가 회피 항목이면 "제외한 종목"으로 이동 | `serving/stock_master.py` |
 
+## 3-1. 대시보드 '신호가 강한 종목' 선정 규칙 (2026-10-19 코드 확인, `frontend/lib/strong-signals.ts`)
+
+| 항목 | 규칙 |
+|---|---|
+| 대상 | `latest_chart_signal_snapshots`에서 선택한 기간(`horizon` 20 = 앞으로 4주 기본, 5 = 1주)의 행. `inference.status = "available"`이고 `scores`가 있는 행만. 종목 마스터 `stocks.market = "KOSPI"`만 남긴다 |
+| 방향 | `scores`(down·neutral·up) 중 가장 큰 쪽. **중립이 1위면 넣지 않는다** |
+| 정렬 | 확신도 = 1위 점수 − 2위 점수, 큰 순. 같으면 종목 코드 오름차순 |
+| 개수 | 방향마다 확신도 상위 30개를 후보로 종목 마스터를 조회한 뒤, KOSPI·제외 조건을 통과한 것 중 **상승 5 + 하락 5**. 화면은 한 목록(상승 먼저) |
+| 제외 | 사용자가 직접 고른 회피 항목(하드 제약, 예: SPAC·관리종목)에 걸린 종목만 뺀다. 성향(소프트 틸트)으로는 거르거나 순서를 바꾸지 않는다. 제외는 **후보 30개 전체**에서 세어 "직접 고른 제외 항목 N개" 펼침에 보인다 — 그래서 상위 5개 밖(예: 6~30위)의 종목 때문에도 펼침이 생길 수 있다 |
+| 그 밖 | 우선주·거래대금·위험등급으로 따로 거르지 않는다(필터 여부는 #208 팀 결정) |
+
 ## 4. 모델을 바꿀 때 지켜야 할 것
 
 - [ ] `contract`·`profile`·`horizon` 값(5=aggressive, 20=stable)과 종목당 두 기간을 그대로 낸다. 바뀌면 `chart-public.ts`부터 고친다.
