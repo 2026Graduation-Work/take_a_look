@@ -115,3 +115,13 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | ByteDance [Arco Design](https://github.com/arco-design/arco-design) (MIT) | 기각 | React 컴포넌트 라이브러리. 새 UI 라이브러리를 들이면 DESIGN.md 토큰과 충돌하고 번들이 커진다. "디자인 시스템을 어떻게 문서로 묶는가" 참고 자료로만 |
 | Toss Benchmark(자체 업무 평가) | 생각만 채택 | 공개 범용 점수보다 "우리 업무를 얼마나 잘하나"로 모델을 고른다. 우리에게 옮기면 **AUC보다 우리 거래 규칙의 백테스트(Sharpe·MDD)와 사람 라벨 감성 정확도**를 모델 선택 기준으로 둔다는 뜻. #325(심리 A/B: AUC↑ 수익↓)·#327(수급: pooled AUC↑ 연평균 Sharpe↓)이 바로 그 사례다. 도구 설치 없음 |
 | Salesforce SOQL `FORMULA()` | 해당 없음 | 우리 스택(Supabase Postgres)과 무관. Postgres는 `WHERE a - b > 100`이 원래 된다 |
+
+## 검토했지만 설치하지 않은 도구 (2026-10-18)
+
+| 도구 | 판정 | 이유 |
+| --- | --- | --- |
+| [Ollama](https://github.com/ollama/ollama) (MIT) | 기각 | 로컬 실행은 무료지만 우리 화면 문장은 LLM 없이 결정론 템플릿이다(`lib/dashboard-summary.ts`). Vercel 서버리스에서는 돌릴 수 없어 쓰려면 모델 서버를 따로 띄워 관리해야 하고, Ollama Cloud는 무료 구간이 작고 이후 월 과금이다. 뉴스 감성은 이미 정해진 모델이 있다 |
+| [OpenClaw](https://github.com/openclaw/openclaw) (옛 Clawdbot) | 기각 | 메신저로 PC를 원격 조작하는 상시 실행 에이전트. 2026년 초 인증 없는 원격 코드 실행(CVE-2026-25253)과 스킬 장터(ClawHub) 악성 스킬 사고가 있었다. 컴퓨터 전체 권한을 주는 데몬이라 보안·관리 부담이 크고 우리 작업엔 쓸 곳이 없다 |
+| Playwright MCP | 사용 중(10-11 판정 유지) | 플러그인으로 이미 켜져 있다. 다만 MCP 스냅샷은 화면 전체 구조를 매번 돌려줘 토큰이 크다 → 전후 스크린샷·화면 확인은 `@playwright/test` 스크립트를 먼저 쓰고, MCP 도구는 한 번 눌러 보는 정도에만 |
+| [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (GPL-3.0) | 기각 | 로컬 GPU 이미지·영상 생성. 서비스에 생성 이미지가 필요 없고, 모델 파일 관리 부담이 있다. 발표 영상은 HyperFrames(10-06 판정) |
+| [MarkItDown](https://github.com/microsoft/markitdown) (MIT) | 기존 판정 유지 | 10-09 표와 같다. PDF·이미지는 Read로 바로 읽고, docx·xlsx·pptx를 글로 바꿀 일이 생기면 설치 없이 `pipx run markitdown 파일`로 한 번만 |
