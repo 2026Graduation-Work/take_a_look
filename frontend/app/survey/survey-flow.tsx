@@ -25,6 +25,7 @@ import {
   type StyleQuestion,
 } from "@/lib/profiling/style-scoring";
 import { saveProfile } from "@/lib/save-profile";
+import { freeTextReadings } from "@/lib/free-text-signals";
 import type { ProfilingOutput, RiskFlag, StyleAxes, StyleAxisId } from "@/lib/types";
 import { useOnboarding } from "../components/onboarding-provider";
 import SignOutButton from "../components/sign-out-button";
@@ -229,7 +230,7 @@ export default function SurveyFlow() {
     update({ page: Math.min(Math.max(0, index), pages.length - 1) });
   }
 
-  function payload(adjusted?: Partial<Record<StyleAxisId, number>>): SurveyAnswers {
+  function payload(adjusted?: Partial<Record<StyleAxisId, number>>, dismissed: string[] = []): SurveyAnswers {
     return {
       user_id: "u_minji_001",
       session_id: result?.session_id ?? createSessionId(),
@@ -240,6 +241,7 @@ export default function SurveyFlow() {
       avoided_assets: draft.avoided,
       free_text: draft.freeText,
       ...(adjusted && Object.keys(adjusted).length ? { adjusted_axes: adjusted } : {}),
+      ...(dismissed.length ? { dismissed_signals: dismissed } : {}),
       preferred_sectors: ["semiconductor", "healthcare"],
       // 보유 종목은 다음 단계(또는 보유 종목 화면)에서 따로 저장한다. 데모 계정만 김민지 보유 종목을 쓴다.
       ...(demo ? { portfolio: DEMO_PORTFOLIO } : {}),
@@ -282,10 +284,10 @@ export default function SurveyFlow() {
     });
   }
 
-  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했으면 조정값으로 다시 계산해 저장한다.
-  function confirm(adjusted: Partial<Record<StyleAxisId, number>>) {
+  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했거나 자유 답 판정을 지웠으면 다시 계산해 저장한다.
+  function confirm(adjusted: Partial<Record<StyleAxisId, number>>, dismissed: string[] = []) {
     void run(async () => {
-      const profile = Object.keys(adjusted).length ? await requestProfile(payload(adjusted)) : result!;
+      const profile = Object.keys(adjusted).length || dismissed.length ? await requestProfile(payload(adjusted, dismissed)) : result!;
       await saveProfile(profile, onboardingState.mode);
       writeDraft({ ...draft, page: 0 }, ANSWERS_KEY);
       writeDraft(null);
@@ -695,13 +697,15 @@ export function ResultView({
   error?: string;
   nextLabel: string;
   canBeMoreAccurate?: boolean;
-  onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>) => void;
+  onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>, dismissed?: string[]) => void;
   onMoreAccurate?: () => void;
   onBack: () => void;
   readOnly?: boolean;
 }) {
   const [adjusting, setAdjusting] = useState(false);
   const [adjusted, setAdjusted] = useState<Partial<Record<StyleAxisId, number>>>({});
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const readings = freeTextReadings(result.free_text_signal.extracted_signals).filter(({ field }) => !dismissed.includes(field));
   const scored = result.style_axes!;
   const styleAxes: StyleAxes = applyAdjustments(scored, adjusted);
   const bit = classifyBit(styleAxes);
@@ -781,6 +785,27 @@ export function ResultView({
               <span className="text-sm text-muted">선택한 항목 없음</span>
             )}
           </div>
+          {/* 자유 답에서 키워드로 읽은 판정. 판정이 없으면 아무것도 보이지 않는다. 지우면 저장할 때 보조값에서 뺀다 */}
+          {readings.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="mr-2 text-sm font-medium text-ink">자유 답에서 이렇게 읽었어요</span>
+              {readings.map(({ field, label }) => (
+                <span key={field} className="inline-flex items-center gap-1 rounded-sm bg-track pl-3 text-xs text-body">
+                  {label}
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      aria-label={`${label} 지우기`}
+                      className="btn-text min-h-11 px-3 text-xs"
+                      onClick={() => setDismissed((current) => [...current, field])}
+                    >
+                      지우기
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {adjusting && (
@@ -856,7 +881,7 @@ export function ResultView({
             backLabel={readOnly ? "뒤로" : "이전"}
             backDisabled={submitting}
             nextLabel={submitting ? "저장 중" : nextLabel}
-            onNext={() => onConfirm(changed ? adjusted : {})}
+            onNext={() => onConfirm(changed ? adjusted : {}, dismissed)}
             nextDisabled={submitting}
           />
         </div>

@@ -2,6 +2,7 @@
 // 결정론이며 LLM을 쓰지 않는다. 종목을 거르는 값은 avoided_assets(사용자가 직접 고른 항목)뿐이다.
 
 import { BIT_LABEL, BIT_SUMMARY, classifyBit } from "./profiling/bit.ts";
+import { extractFreeTextSignals } from "./free-text-signals.ts";
 import type {
   ActionIntent,
   InvestorProfileSummary,
@@ -58,11 +59,6 @@ const CURRENT_MARKET_ANXIETY_INITIAL = 0.5; // text 블록이 채운다
 const OVERHEATING_CAUTION_INITIAL = 0.61; // chart·text 블록이 채운다
 const OVERHEATING_CAUTION_CONFIDENCE = 0.55;
 
-const FREE_TEXT_SIGNAL_RULES = [
-  { field: "fomo_index", keywords: ["남들 다 버는데", "뒤처지는", "놓칠까"], value: 0.8 },
-  { field: "panic_sell_tendency", keywords: ["마이너스", "손실", "잠을 못"], value: 0.75 },
-] as const;
-
 export interface SurveyAnswers {
   user_id: string;
   session_id: string;
@@ -72,6 +68,8 @@ export interface SurveyAnswers {
   experience: ExperienceChoice;
   avoided_assets: RiskFlag[];
   free_text?: string;
+  // 결과 화면에서 사용자가 지운 자유 답 판정(lib/free-text-signals.ts의 field). 이 판정은 보조값에 넣지 않는다.
+  dismissed_signals?: string[];
   // 결과 확인 단계에서 사용자가 직접 옮긴 축. 있으면 채점값 대신 이 ratio를 쓴다.
   adjusted_axes?: Partial<Record<StyleAxisId, number>>;
   preferred_sectors?: string[];
@@ -174,12 +172,7 @@ export function convertSurveyAnswers(input: unknown): ProfilingOutput {
   const experience = EXPERIENCE_CHOICES.find(({ id }) => id === answers.experience)!;
 
   const rawText = answers.free_text?.trim() ?? "";
-  const extractedSignals: Record<string, number> = {};
-  for (const rule of FREE_TEXT_SIGNAL_RULES) {
-    if (rule.keywords.some((keyword) => rawText.includes(keyword))) {
-      extractedSignals[rule.field] = rule.value;
-    }
-  }
+  const extractedSignals = extractFreeTextSignals(rawText, answers.dismissed_signals);
 
   return {
     user_id: requireText(answers.user_id, "user_id"),
@@ -269,6 +262,7 @@ function parseSurveyAnswers(input: unknown): SurveyAnswers {
     experience: input.experience as ExperienceChoice,
     avoided_assets: avoided as RiskFlag[],
     free_text: optionalText(input.free_text, "free_text"),
+    dismissed_signals: parseStringArray(input.dismissed_signals ?? [], "dismissed_signals"),
     adjusted_axes: parseAdjustedAxes(input.adjusted_axes),
     preferred_sectors: parseStringArray(input.preferred_sectors ?? [], "preferred_sectors"),
     portfolio: parsePortfolio(input.portfolio),
