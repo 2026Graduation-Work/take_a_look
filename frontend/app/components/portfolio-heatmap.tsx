@@ -6,7 +6,7 @@ import { SIGNAL_META } from "@/lib/display";
 import type { DataProvenance, PortfolioHolding } from "@/lib/types";
 import DotLegend, { SIGNAL_LEGEND } from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
-import { DIRECTION_BASIS, HORIZON_AHEAD } from "@/lib/copy-glossary";
+import { directionBasis, HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
 import HeatmapPopup from "./portfolio-heatmap-popup";
 import HeatmapLabel from "./portfolio-heatmap-label";
 
@@ -62,7 +62,9 @@ export default function PortfolioHeatmap({
   holdings,
   withoutSignalCount = 0,
   emptyAction,
+  horizon = 20,
 }: {
+  horizon?: SignalHorizon;
   holdings: PortfolioHolding[];
   withoutSignalCount?: number;
   emptyAction?: React.ReactNode;
@@ -186,7 +188,7 @@ export default function PortfolioHeatmap({
                   key={holding.code}
                   role="listitem"
                   href={`/stocks/${holding.code}`}
-                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, 비중 ${Math.round((amount / grandTotal) * 100)}%, ${HORIZON_AHEAD[20]} ${signal.label} 신호`}
+                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, 비중 ${Math.round((amount / grandTotal) * 100)}%, ${HORIZON_AHEAD[horizon]} ${signal.label} 신호`}
                   aria-describedby={active?.code === holding.code ? popupId : undefined}
                   className="relative min-h-11 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
                   style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
@@ -265,13 +267,14 @@ export default function PortfolioHeatmap({
           holding={activeItem.holding}
           amount={`${amountLabel(activeItem.holding)} ${formatAmount(activeItem.amount)}`}
           weight={Math.round((activeItem.amount / grandTotal) * 100)}
+          horizon={horizon}
           onClose={() => setActive(null)}
         />
       )}
       {/* 색 범례와 방향 뜻을 한 줄로(기간은 이 문장에 한 번, 사전 참가자 P0 10/13). 읽기 프로그램은 타일 이름에서 듣는다 */}
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
-        <span>{DIRECTION_BASIS}</span>
+        <span>{directionBasis(horizon)}</span>
       </p>
       <div className="text-2xs text-muted">
         <span>
