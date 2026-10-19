@@ -69,7 +69,7 @@ test.describe("터치", () => {
     await readyDashboard(page);
     await page.getByRole("button", { name: /시장 흔들림/ }).tap();
     await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).toBeVisible();
-    await page.getByRole("heading", { name: "내 종목" }).tap();
+    await page.getByRole("heading", { name: "내 포트폴리오" }).tap();
     await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).toBeHidden();
   });
 });
