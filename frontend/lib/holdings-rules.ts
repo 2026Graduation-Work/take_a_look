@@ -77,3 +77,11 @@ export function gainRatio(avgBuyPrice: number | null, close: number | undefined)
   if (!avgBuyPrice || avgBuyPrice <= 0 || close === undefined || !(close > 0)) return null;
   return close / avgBuyPrice - 1;
 }
+
+// 스크린샷에서 읽은 목록을 편집 중인 목록에 합친다. 이미 있는 종목은 새 값으로 바꾸고(이름을 돌려줘 화면에 표시), 없으면 뒤에 붙인다.
+export function mergeImported(rows: SavedHolding[], imported: SavedHolding[]): { rows: SavedHolding[]; replaced: string[] } {
+  const incoming = new Map(imported.map((row) => [row.code, row]));
+  const replaced = rows.filter((row) => incoming.has(row.code)).map((row) => row.name);
+  const kept = rows.map((row) => incoming.get(row.code) ?? row);
+  return { rows: [...kept, ...imported.filter((row) => !rows.some(({ code }) => code === row.code))], replaced };
+}

@@ -10,7 +10,8 @@ import { useStockOptions } from "./use-stock-options";
 import GainText from "../components/gain-text";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
-import { numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { mergeImported, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import ScreenshotImport from "./screenshot-import";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -156,6 +157,15 @@ function AccountHoldingsEditor({
     sheetRef.current?.close();
   }
 
+  // 스크린샷에서 읽은 목록: 이미 있는 종목은 새 값으로 바꾼다(그 줄의 입력 중 글자도 지운다). 저장은 저장 버튼이 한다
+  function importRows(imported: SavedHolding[]): string[] {
+    const merged = mergeImported(rows, imported);
+    setRows(merged.rows);
+    setTexts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !imported.some(({ code }) => key.startsWith(`${code}:`)))));
+    setStatus("idle");
+    return merged.replaced;
+  }
+
   function updateRow(code: string, patch: Partial<SavedHolding>) {
     setRows((current) =>
       current.map((row) => (row.code === code ? { ...row, ...patch } : row)),
@@ -213,6 +223,8 @@ function AccountHoldingsEditor({
             직접 입력한 수량으로 대시보드의 보유 종목 맵을 만들어요. 증권사 계좌와 연결하지 않아요.
           </p>
         </div>
+
+        {loaded && <ScreenshotImport catalog={catalog} onAdd={importRows} />}
 
         {!loaded ? (
           <div className="surface flex flex-col gap-4 px-6 py-8">
