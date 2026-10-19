@@ -85,7 +85,7 @@ export default function HoldingsStep({
         <h1 id="holdings-step-title" className="text-3xl font-semibold">
           지금 가진 주식이 있나요?
         </h1>
-        <p className="m-0 text-sm text-body">대시보드에서 내 종목의 오늘 신호를 먼저 보여 드려요. 증권사 계좌와 연결하지 않아요.</p>
+        <p className="m-0 text-sm text-body">대시보드에서 보유 종목의 오늘 신호를 먼저 보여 드려요. 증권사 계좌와 연결하지 않아요.</p>
       </div>
 
       {answer === null ? (
