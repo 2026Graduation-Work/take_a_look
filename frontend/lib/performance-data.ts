@@ -90,7 +90,7 @@ export async function loadPerformanceData(): Promise<PerformanceDataBundle> {
   return {
     data,
     isSample: false,
-    conclusion: buildExperimentConclusion(data),
+    conclusion: NO_MEANINGFUL_GAIN,
   };
 }
 
@@ -234,19 +234,9 @@ function validateDeltaConsistency(
   }
 }
 
-function buildExperimentConclusion(data: ComparisonResults): string {
-  const allStable = findDelta(data, "stable", "all");
-  const allAggressive = findDelta(data, "aggressive", "all");
-  const volatileStable = findDelta(data, "stable", "volatile_top_20pct");
-  const volatileAggressive = findDelta(data, "aggressive", "volatile_top_20pct");
-
-  if (data.experiment) {
-    const auc = (value: number | null) => value === null ? "미산출" : `${value > 0 ? "+" : ""}${value.toFixed(6)}`;
-    // 성적표는 처음 보는 사람도 읽게 쉬운 말 + 괄호에 전공 용어(10/18 사용자 피드백)
-    return `오를 종목을 가려내는 능력(ROC-AUC 연도별 평균)은 B가 안정형 ${auc(allStable.delta_B_minus_A_auc)}, 공격형 ${auc(allAggressive.delta_B_minus_A_auc)}만큼 달라 거의 같았어요. 해마다 새로 시작한 모의 투자 수익률은 각각 ${signedPercentPoint(allStable.delta_B_minus_A_cumulative_return)}, ${signedPercentPoint(allAggressive.delta_B_minus_A_cumulative_return)} 차이였어요. 의미 있는 개선이라고 보기는 어려워요.`;
-  }
-  return `Sharpe의 B-A 차이는 전체 구간에서 안정형 ${signedDecimal(allStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(allAggressive.delta_B_minus_A_sharpe)}, 급변 구간에서 안정형 ${signedDecimal(volatileStable.delta_B_minus_A_sharpe)}, 공격형 ${signedDecimal(volatileAggressive.delta_B_minus_A_sharpe)}였습니다. 이는 관측 차이의 기술적 요약이며 통계적 유의성을 의미하지 않습니다.`;
-}
+// 결론 판정 로직은 없다: 지금 결과(B − A가 AUC 0.001 미만, 수익률은 오히려 낮음)에 맞춘 '의미 있는 개선 아님' 문장이다.
+// 수치는 화면이 comparison_deltas에서 두 줄로 따로 읽는다.
+const NO_MEANINGFUL_GAIN = "시장 분위기 지표를 더해도 거의 달라지지 않았어요.";
 
 function validateExperiment(value: unknown): PerformanceExperiment {
   assertRecord(value, "experiment");
@@ -314,18 +304,6 @@ function findMetric(
   return row;
 }
 
-function findDelta(
-  data: ComparisonResults,
-  profile: ComparisonProfile,
-  sample: ComparisonSample,
-): ComparisonDeltaRow {
-  const row = data.comparison_deltas.find(
-    (candidate) => candidate.profile === profile && candidate.sample === sample,
-  );
-  if (!row) throw new Error(`델타 행을 찾지 못했습니다: ${profile}:${sample}`);
-  return row;
-}
-
 function assertRecord(
   value: unknown,
   pathLabel: string,
@@ -379,16 +357,6 @@ function assertRange(
 function sameNumber(actual: number | null, expected: number | null): boolean {
   if (actual === null || expected === null) return actual === expected;
   return Math.abs(actual - expected) <= 1e-8;
-}
-
-function signedDecimal(value: number | null): string {
-  if (value === null) return "미산출";
-  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
-}
-
-function signedPercentPoint(value: number | null): string {
-  if (value === null) return "미산출";
-  return `${value > 0 ? "+" : ""}${(value * 100).toFixed(1)}%p`;
 }
 
 function isMissingFile(error: unknown): boolean {

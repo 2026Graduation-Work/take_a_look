@@ -42,7 +42,7 @@ export const METRICS: MetricDefinition[] = [
     label: "ROC-AUC",
     direction: "higher",
     format: "decimal6",
-    description: "오를 종목에 더 높은 점수를 주는지 보는 값이에요. 0.5면 동전 던지기 수준, 1에 가까울수록 잘 가려요.",
+    description: "상승 종목을 위에 세우는 능력이에요. 실제로 오른 종목에 더 높은 점수를 줬는지 보고, 0.5면 동전 던지기 수준, 1에 가까울수록 잘 세워요.",
   },
   {
     key: "hit_rate",
@@ -101,10 +101,19 @@ export const METRICS: MetricDefinition[] = [
   },
 ];
 
+// 실험 런 id(stable, aggressive)는 데이터 계약 그대로 두고 화면에는 기간 이름만(대시보드 기간 전환과 같은 말)
 export const PROFILE_LABEL: Record<ComparisonProfile, string> = {
-  stable: "안정형",
-  aggressive: "공격형",
+  stable: "4주",
+  aggressive: "1주",
 };
+
+export const AUC_ABILITY = "상승 종목을 위에 세우는 능력";
+
+// 결론 줄의 AUC 차이: 0.001 아래 차이가 보이게 소수 넷째 자리
+export function formatAucDelta(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "미산출";
+  return `${value > 0 ? "+" : ""}${value.toFixed(4)}`;
+}
 
 export function formatMetricValue(
   value: ComparisonMetricRow[MetricKey],
