@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import Segmented from "./segmented";
 import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
@@ -229,7 +230,7 @@ export default function Dashboard(initialData: DashboardData) {
   const noResult = keyword && visibleStrong.length + visibleAlerts.length === 0;
   const holdingCount = savedHoldings ? savedHoldings.length : activeHoldings.length;
   const summary = dashboardSummary({
-    holdingSignals: activeHoldings.map(({ signalLight }) => signalLight),
+    holdings: activeHoldings.map(({ name, signalLight }) => ({ name, signal: signalLight })),
     holdingCount,
     strongCount: strongSignals.length,
   });
@@ -279,11 +280,11 @@ export default function Dashboard(initialData: DashboardData) {
           <DashboardLoading />
         ) : (
           <>
-            {/* 성향 한 문장: 유형 이름 + 성향 + 놓치기 쉬운 것. 색·줄을 나누지 않는다(화면 규칙 v2) */}
+            {/* 성향 한 문장: 유형 이름 + 성향 + 놓치기 쉬운 것. 상자 없는 한 줄 + › (화면 규칙 v2) */}
             <Link
               href="/profile"
               aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
-              className="surface flex items-center gap-3 px-6 py-4 text-sm text-ink hover:bg-white/70 hover:no-underline"
+              className="flex min-h-11 items-center gap-3 px-1 text-sm text-ink hover:text-ink hover:no-underline"
             >
               <span className="min-w-0 flex-1">
                 <span className="mr-2 font-semibold">{activeProfile.profileTypeLabel}</span>
@@ -303,19 +304,9 @@ export default function Dashboard(initialData: DashboardData) {
                 </h1>
               </div>
               <div className="flex flex-col gap-2 lg:items-end">
-                <div role="group" aria-label="신호 기간" className="flex flex-none items-center gap-2 text-sm">
+                <div className="flex flex-none items-center gap-2 text-sm">
                   <span className="text-body">앞으로</span>
-                  {([20, 5] as const).map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      aria-pressed={horizon === option}
-                      className={`min-h-11 rounded-full px-4 font-medium ${horizon === option ? "bg-ink text-surface" : "bg-surface text-body"}`}
-                      onClick={() => chooseHorizon(option)}
-                    >
-                      {option === 20 ? "4주" : "1주"}
-                    </button>
-                  ))}
+                  <Segmented label="신호 기간" value={horizon} options={[[20, "4주"], [5, "1주"]]} onChange={chooseHorizon} />
                 </div>
                 {horizon === 5 && <p className="m-0 text-2xs text-muted">{SHORT_HORIZON_NOTE}</p>}
               </div>
@@ -323,9 +314,9 @@ export default function Dashboard(initialData: DashboardData) {
 
             {/* 2단(1024px 이상 8:4): 왼쪽 내 것, 오른쪽 시장 전체. 1단에서는 왼쪽 → 오른쪽 순서 */}
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-6">
-              <section aria-label="내 종목" className="flex flex-col gap-6 lg:col-span-8">
+              <section aria-label="내 포트폴리오" className="flex flex-col gap-6 lg:col-span-8">
                 <div className="flex flex-col gap-2">
-                  <SectionHead title="내 종목" />
+                  <SectionHead title="내 포트폴리오" />
                   <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
                 </div>
                 {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}

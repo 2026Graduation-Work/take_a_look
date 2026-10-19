@@ -213,7 +213,7 @@ test.describe("터치", () => {
     await popup.getByRole("button", { name: "닫기" }).tap();
     await expect(popup).toBeHidden();
     await small.tap();
-    await page.getByRole("heading", { name: "내 종목" }).tap();
+    await page.getByRole("heading", { name: "내 포트폴리오" }).tap();
     await expect(popup).toBeHidden();
     await small.tap();
     await popup.getByRole("link", { name: "종목 상세 보기" }).tap();
