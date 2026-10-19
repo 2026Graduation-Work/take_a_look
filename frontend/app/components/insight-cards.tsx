@@ -782,8 +782,9 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
                 </>
               ) : (
                 <>
-                  {oneDecimal(metric.value)}
-                  {metric.unit}
+                  {metric.key === "revenue_growth" ? (
+                    <ChangeText value={metric.value} precision={1}>{signedPercent(metric.value / 100)}</ChangeText>
+                  ) : <>{oneDecimal(metric.value)}{metric.unit}</>}
                 </>
               )}
             </dd>

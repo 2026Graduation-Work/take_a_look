@@ -229,7 +229,7 @@ export default function ReturnHistogram({
             y={baseline + 16}
             textAnchor="middle"
             fontSize={11}
-            style={{ fill: "var(--color-muted)" }}
+            style={{ fill: changeMeta(edge, 1).color }}
           >
             {formatSigned(edge)}
           </text>
