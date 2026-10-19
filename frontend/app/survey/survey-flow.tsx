@@ -406,7 +406,7 @@ export default function SurveyFlow() {
 function Welcome({ onStart }: { onStart: () => void }) {
   const steps = [
     ["내 성향 알기", "16개 질문으로 투자 습관을 알아봐요. 2분이면 끝나요."],
-    ["내 종목 등록", "가진 주식을 넣으면 그 종목의 오늘 신호를 먼저 보여 드려요."],
+    ["보유 종목 등록", "가진 주식을 넣으면 그 종목의 오늘 신호를 먼저 보여 드려요."],
     ["오늘 확인할 것만 보기", "대시보드 맨 위 한 줄로 오늘 볼 것을 알려 드려요."],
   ] as const;
   return (
