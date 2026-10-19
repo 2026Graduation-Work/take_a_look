@@ -1,0 +1,525 @@
+{
+  "A-light": {
+    "form": "A",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "005930",
+        "name": "삼성전자",
+        "quantity": 37,
+        "avgBuyPrice": 71200,
+        "avgSource": "computed"
+      },
+      {
+        "code": "012450",
+        "name": "한화에어로스페이스",
+        "quantity": 3,
+        "avgBuyPrice": 512000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "035720",
+        "name": "카카오",
+        "quantity": 64,
+        "avgBuyPrice": 52300,
+        "avgSource": "computed"
+      },
+      {
+        "code": "207940",
+        "name": "삼성바이오로직스",
+        "quantity": 2,
+        "avgBuyPrice": 948000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "035420",
+        "name": "NAVER",
+        "quantity": 11,
+        "avgBuyPrice": 198700,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "KODEX 200"
+    ]
+  },
+  "A-dark": {
+    "form": "A",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "000660",
+        "name": "SK하이닉스",
+        "quantity": 5,
+        "avgBuyPrice": 182500,
+        "avgSource": "computed"
+      },
+      {
+        "code": "373220",
+        "name": "LG에너지솔루션",
+        "quantity": 4,
+        "avgBuyPrice": 401000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "105560",
+        "name": "KB금융",
+        "quantity": 21,
+        "avgBuyPrice": 78400,
+        "avgSource": "computed"
+      },
+      {
+        "code": "068270",
+        "name": "셀트리온",
+        "quantity": 13,
+        "avgBuyPrice": 176300,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "TIGER 미국S&P500"
+    ]
+  },
+  "B-dark": {
+    "form": "B",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "005930",
+        "name": "삼성전자",
+        "quantity": 37,
+        "avgBuyPrice": 71200,
+        "avgSource": "computed"
+      },
+      {
+        "code": "034020",
+        "name": "두산에너빌리티",
+        "quantity": 120,
+        "avgBuyPrice": 19870,
+        "avgSource": "computed"
+      },
+      {
+        "code": "005380",
+        "name": "현대차",
+        "quantity": 8,
+        "avgBuyPrice": 236000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "005490",
+        "name": "POSCO홀딩스",
+        "quantity": 6,
+        "avgBuyPrice": 389000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "035720",
+        "name": "카카오",
+        "quantity": 64,
+        "avgBuyPrice": 52300,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "KODEX 200",
+      "TIGER 미국S&P500",
+      "애플"
+    ]
+  },
+  "B-light": {
+    "form": "B",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "035420",
+        "name": "NAVER",
+        "quantity": 11,
+        "avgBuyPrice": 198700,
+        "avgSource": "computed"
+      },
+      {
+        "code": "000660",
+        "name": "SK하이닉스",
+        "quantity": 5,
+        "avgBuyPrice": 182500,
+        "avgSource": "computed"
+      },
+      {
+        "code": "207940",
+        "name": "삼성바이오로직스",
+        "quantity": 2,
+        "avgBuyPrice": 948000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "105560",
+        "name": "KB금융",
+        "quantity": 21,
+        "avgBuyPrice": 78400,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "애플"
+    ]
+  },
+  "C-light": {
+    "form": "C",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "005930",
+        "name": "삼성전자",
+        "quantity": 37,
+        "avgBuyPrice": 71200,
+        "avgSource": "label"
+      },
+      {
+        "code": "000660",
+        "name": "SK하이닉스",
+        "quantity": 5,
+        "avgBuyPrice": 182500,
+        "avgSource": "label"
+      },
+      {
+        "code": "012450",
+        "name": "한화에어로스페이스",
+        "quantity": 3,
+        "avgBuyPrice": 512000,
+        "avgSource": "label"
+      },
+      {
+        "code": "373220",
+        "name": "LG에너지솔루션",
+        "quantity": 4,
+        "avgBuyPrice": 401000,
+        "avgSource": "label"
+      },
+      {
+        "code": "068270",
+        "name": "셀트리온",
+        "quantity": 13,
+        "avgBuyPrice": 176300,
+        "avgSource": "label"
+      },
+      {
+        "code": "005490",
+        "name": "POSCO홀딩스",
+        "quantity": 6,
+        "avgBuyPrice": 389000,
+        "avgSource": "label"
+      },
+      {
+        "code": "034020",
+        "name": "두산에너빌리티",
+        "quantity": 120,
+        "avgBuyPrice": 19870,
+        "avgSource": "label"
+      }
+    ],
+    "unsupported": [
+      "KODEX 200"
+    ]
+  },
+  "C-dark": {
+    "form": "C",
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "035720",
+        "name": "카카오",
+        "quantity": 64,
+        "avgBuyPrice": 52300,
+        "avgSource": "label"
+      },
+      {
+        "code": "035420",
+        "name": "NAVER",
+        "quantity": 11,
+        "avgBuyPrice": 198700,
+        "avgSource": "label"
+      },
+      {
+        "code": "005380",
+        "name": "현대차",
+        "quantity": 8,
+        "avgBuyPrice": 236000,
+        "avgSource": "label"
+      },
+      {
+        "code": "105560",
+        "name": "KB금융",
+        "quantity": 21,
+        "avgBuyPrice": 78400,
+        "avgSource": "label"
+      },
+      {
+        "code": "207940",
+        "name": "삼성바이오로직스",
+        "quantity": 2,
+        "avgBuyPrice": 948000,
+        "avgSource": "label"
+      }
+    ],
+    "unsupported": []
+  },
+  "A-light-v2": {
+    "form": "A",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "000270",
+        "name": "기아",
+        "quantity": 15,
+        "avgBuyPrice": 98300,
+        "avgSource": "computed"
+      },
+      {
+        "code": "055550",
+        "name": "신한지주",
+        "quantity": 33,
+        "avgBuyPrice": 47150,
+        "avgSource": "computed"
+      },
+      {
+        "code": "138040",
+        "name": "메리츠금융지주",
+        "quantity": 6,
+        "avgBuyPrice": 101200,
+        "avgSource": "computed"
+      },
+      {
+        "code": "051910",
+        "name": "LG화학",
+        "quantity": 2,
+        "avgBuyPrice": 455000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "329180",
+        "name": "HD현대중공업",
+        "quantity": 2,
+        "avgBuyPrice": 287000,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "KODEX 레버리지"
+    ]
+  },
+  "A-dark-v2": {
+    "form": "A",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "006400",
+        "name": "삼성SDI",
+        "quantity": 3,
+        "avgBuyPrice": 389500,
+        "avgSource": "computed"
+      },
+      {
+        "code": "015760",
+        "name": "한국전력",
+        "quantity": 40,
+        "avgBuyPrice": 21450,
+        "avgSource": "computed"
+      },
+      {
+        "code": "086790",
+        "name": "하나금융지주",
+        "quantity": 18,
+        "avgBuyPrice": 61200,
+        "avgSource": "computed"
+      },
+      {
+        "code": "259960",
+        "name": "크래프톤",
+        "quantity": 1,
+        "avgBuyPrice": 268000,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "ACE 미국나스닥100"
+    ]
+  },
+  "B-dark-v2": {
+    "form": "B",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "010130",
+        "name": "고려아연",
+        "quantity": 1,
+        "avgBuyPrice": 512000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "000270",
+        "name": "기아",
+        "quantity": 15,
+        "avgBuyPrice": 98300,
+        "avgSource": "computed"
+      },
+      {
+        "code": "138040",
+        "name": "메리츠금융지주",
+        "quantity": 6,
+        "avgBuyPrice": 101200,
+        "avgSource": "computed"
+      },
+      {
+        "code": "015760",
+        "name": "한국전력",
+        "quantity": 40,
+        "avgBuyPrice": 21450,
+        "avgSource": "computed"
+      },
+      {
+        "code": "055550",
+        "name": "신한지주",
+        "quantity": 33,
+        "avgBuyPrice": 47150,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "ACE 미국나스닥100",
+      "애플"
+    ]
+  },
+  "B-light-v2": {
+    "form": "B",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "329180",
+        "name": "HD현대중공업",
+        "quantity": 2,
+        "avgBuyPrice": 287000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "051910",
+        "name": "LG화학",
+        "quantity": 2,
+        "avgBuyPrice": 455000,
+        "avgSource": "computed"
+      },
+      {
+        "code": "086790",
+        "name": "하나금융지주",
+        "quantity": 18,
+        "avgBuyPrice": 61200,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "KODEX 레버리지",
+      "애플"
+    ]
+  },
+  "C-light-v2": {
+    "form": "C",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "000270",
+        "name": "기아",
+        "quantity": 15,
+        "avgBuyPrice": 98300,
+        "avgSource": "label"
+      },
+      {
+        "code": "055550",
+        "name": "신한지주",
+        "quantity": 33,
+        "avgBuyPrice": 47150,
+        "avgSource": "label"
+      },
+      {
+        "code": "051910",
+        "name": "LG화학",
+        "quantity": 2,
+        "avgBuyPrice": 455000,
+        "avgSource": "label"
+      },
+      {
+        "code": "006400",
+        "name": "삼성SDI",
+        "quantity": 3,
+        "avgBuyPrice": 389500,
+        "avgSource": "label"
+      },
+      {
+        "code": "086790",
+        "name": "하나금융지주",
+        "quantity": 18,
+        "avgBuyPrice": 61200,
+        "avgSource": "label"
+      },
+      {
+        "code": "259960",
+        "name": "크래프톤",
+        "quantity": 1,
+        "avgBuyPrice": 268000,
+        "avgSource": "label"
+      },
+      {
+        "code": "015760",
+        "name": "한국전력",
+        "quantity": 40,
+        "avgBuyPrice": 21450,
+        "avgSource": "label"
+      },
+      {
+        "code": "329180",
+        "name": "HD현대중공업",
+        "quantity": 2,
+        "avgBuyPrice": 287000,
+        "avgSource": "label"
+      }
+    ],
+    "unsupported": [
+      "KODEX 레버리지"
+    ]
+  },
+  "C-dark-v2": {
+    "form": "C",
+    "holdout": true,
+    "holdings": [
+      {
+        "code": "138040",
+        "name": "메리츠금융지주",
+        "quantity": 6,
+        "avgBuyPrice": 101200,
+        "avgSource": "label"
+      },
+      {
+        "code": "010130",
+        "name": "고려아연",
+        "quantity": 1,
+        "avgBuyPrice": 512000,
+        "avgSource": "label"
+      },
+      {
+        "code": "000270",
+        "name": "기아",
+        "quantity": 15,
+        "avgBuyPrice": 98300,
+        "avgSource": "label"
+      },
+      {
+        "code": "055550",
+        "name": "신한지주",
+        "quantity": 33,
+        "avgBuyPrice": 47150,
+        "avgSource": "label"
+      }
+    ],
+    "unsupported": [
+      "ACE 미국나스닥100"
+    ]
+  }
+}
