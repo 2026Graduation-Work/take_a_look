@@ -34,7 +34,7 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   await tabs.getByRole("tab", { name: "월별", exact: true }).click();
   await expect(tick("2026.10")).toHaveCount(1);
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(0);
-  await expect(page.getByText("월·연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영합니다.")).toBeVisible();
+  await expect(page.getByText("월 평균과 연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영해요.")).toBeVisible();
   await expect(page.getByText(/직전 24시간.*NewsAPI.ai/)).toBeVisible();
   await tabs.getByRole("tab", { name: "연별", exact: true }).click();
   await expect(tick("2016")).toHaveCount(1);

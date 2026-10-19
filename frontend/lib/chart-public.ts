@@ -58,7 +58,7 @@ const date = (value: unknown): value is string =>
 export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
   const p = row.payload;
   if (!record(p) || !record(p.inference) || !record(p.distribution) || !record(p.prices)) {
-    throw new Error("차트 응답 구조가 올바르지 않습니다.");
+    throw new Error("차트 응답 구조가 올바르지 않아요.");
   }
   const inference = p.inference;
   const scores = inference.scores;
@@ -100,19 +100,19 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
     !history.every((point: unknown) => record(point) && date(point.date) && number(point.close) &&
       point.close > 0 && number(point.volume) && point.volume >= 0)
   ) {
-    throw new Error("차트 응답 값이 계약과 일치하지 않습니다.");
+    throw new Error("차트 응답 값이 계약과 일치하지 않아요.");
   }
   if (distribution.status === "available" &&
       (!central || !distribution.sample_count || !distribution.stock_count || !distribution.period_start || !distribution.period_end)) {
-    throw new Error("과거 사례 분포가 완전하지 않습니다.");
+    throw new Error("과거 사례 분포가 완전하지 않아요.");
   }
   if (history.some((point: { date: string }, i: number) => point.date > String(p.data_asof) ||
-      (i > 0 && point.date <= history[i - 1].date))) throw new Error("가격 기준일이 올바르지 않습니다.");
+      (i > 0 && point.date <= history[i - 1].date))) throw new Error("가격 기준일이 올바르지 않아요.");
   if (inference.contribution_abs_sum !== undefined && (
     !number(inference.contribution_abs_sum) || inference.contribution_abs_sum < 0 ||
     inference.features.reduce((sum: number, f: { contribution: number }) => sum + Math.abs(f.contribution), 0)
       > inference.contribution_abs_sum + 1e-8
-  )) throw new Error("전체 피처 기여도 기준값이 올바르지 않습니다.");
+  )) throw new Error("전체 피처 기여도 기준값이 올바르지 않아요.");
   const snapshot = p as unknown as ChartSnapshot;
   // 화면 표시 이름만 쉬운 말로(#257). 원본 피처명(name)은 그대로 둔다.
   return { ...snapshot, inference: { ...snapshot.inference, features: snapshot.inference.features.map((feature) =>
@@ -121,7 +121,7 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
 
 export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map<ChartHorizon, ChartSnapshot>>> {
   const client = getSupabaseClient();
-  if (!client) throw new Error("차트 연결 설정이 없습니다. 잠시 뒤 다시 시도해 주세요.");
+  if (!client) throw new Error("차트 연결 설정이 없어요. 잠시 뒤 다시 시도해 주세요.");
   const unique = [...new Set(codes.filter((code) => /^[0-9A-Z]{6}$/.test(code)))];
   const result = new Map<string, Map<ChartHorizon, ChartSnapshot>>();
   if (!unique.length) return result;
@@ -137,17 +137,17 @@ export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map
   const rows = (data ?? []) as ChartRow[];
   const batchIds = new Set(rows.map((row) => row.batch_id));
   const asOfDates = new Set<string>();
-  if (batchIds.size > 1) throw new Error("서로 다른 차트 배치가 섞였습니다.");
+  if (batchIds.size > 1) throw new Error("서로 다른 차트 배치가 섞였어요.");
   for (const row of rows) {
     if (!unique.includes(row.stock_code)) continue;
     const snapshot = parseChartSnapshot(row);
     asOfDates.add(snapshot.data_asof);
     const byHorizon = result.get(row.stock_code) ?? new Map<ChartHorizon, ChartSnapshot>();
-    if (byHorizon.has(snapshot.horizon)) throw new Error("중복된 기간 데이터가 있습니다.");
+    if (byHorizon.has(snapshot.horizon)) throw new Error("중복된 기간 데이터가 있어요.");
     byHorizon.set(snapshot.horizon, snapshot);
     result.set(row.stock_code, byHorizon);
   }
-  if (asOfDates.size > 1) throw new Error("서로 다른 차트 기준일이 섞였습니다.");
+  if (asOfDates.size > 1) throw new Error("서로 다른 차트 기준일이 섞였어요.");
   for (const horizons of result.values()) {
     if (horizons.size !== 2) throw new Error("두 기간의 차트가 모두 준비되지 않았어요.");
   }

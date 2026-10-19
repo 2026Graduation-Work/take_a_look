@@ -50,7 +50,7 @@ export default function LoginForm() {
       }
       const { needsEmailConfirmation } = await signUpWithPassword(email.trim(), password, name.trim());
       if (needsEmailConfirmation) {
-        setNotice(`${email.trim()}로 확인 메일을 보냈어요. 메일의 링크를 누르면 로그인됩니다.`);
+        setNotice(`${email.trim()}로 확인 메일을 보냈어요. 메일의 링크를 누르면 로그인돼요.`);
         return;
       }
       await refresh(true);

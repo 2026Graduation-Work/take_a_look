@@ -24,6 +24,7 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /\bH(5|10|20)\b/, reason: "개발 용어 → '1주 뒤/2주 뒤/4주 뒤'" },
   { pattern: /상방|하방/, reason: "사전 참가자·지도교수가 헷갈린 말 → '상승'·'하락'(copy-glossary SIGNAL_WORD)" },
   { pattern: /·/, reason: "화면 규칙 v2: 가운데 점 금지(AI 느낌) → 간격 또는 쉼표" },
+  { pattern: /니다[.?!]/, reason: "문장 끝은 해요체(DESIGN.md 0장, 10/20) → '~해요.' '~없어요.'" },
   { pattern: /신뢰구간/, reason: "개발 용어 → '10번 중 N번 이 범위'" },
   { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다" },
   // 화면에 값과 함께 쓴 경우만 잡는다(코드 식별자 bit.composite는 통과)

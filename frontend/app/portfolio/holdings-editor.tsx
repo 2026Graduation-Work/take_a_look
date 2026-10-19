@@ -138,11 +138,11 @@ function AccountHoldingsEditor({
     };
 
     if (!match) {
-      setError("목록에 있는 종목을 골라 주세요. 종목명을 입력하면 후보가 나옵니다.");
+      setError("목록에 있는 종목을 골라 주세요. 종목명을 입력하면 후보가 나와요.");
       return;
     }
     if (rows.some((row) => row.code === candidate.code)) {
-      setError(`${name}은(는) 이미 목록에 있습니다. 아래에서 수량을 고쳐 주세요.`);
+      setError(`${name}은(는) 이미 목록에 있어요. 아래에서 수량을 고쳐 주세요.`);
       return;
     }
     if (!isValidHolding(candidate)) {

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return NextResponse.json(convertSurveyAnswers(answers));
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "설문 응답을 변환하지 못했습니다.";
+      error instanceof Error ? error.message : "설문 응답을 변환하지 못했어요.";
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

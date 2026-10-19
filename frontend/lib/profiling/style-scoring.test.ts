@@ -102,7 +102,7 @@ test("시나리오형 문항: 고른 선택지의 축 점수가 해당 축에 �
   assert.equal(axis(held, "loss_tolerance").answered_count, 1);
   assert.equal(axis(held, "turnover").question_count, 0);
   close(axis(score({ sc01: "sell" }), "loss_tolerance").ratio, -0.5, "sell.loss_tolerance");
-  assert.throws(() => score({ sc01: "unknown" }), /선택지에 없습니다/);
+  assert.throws(() => score({ sc01: "unknown" }), /선택지에 없어요/);
 });
 
 test("모드에 없는 문항 응답과 범위 밖 리커트 값은 거부한다", () => {

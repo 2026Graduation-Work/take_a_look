@@ -24,7 +24,7 @@ export async function saveProfile(
 
   const { data, error: userAuthError } = await client.auth.getUser();
   assertOk(userAuthError, "로그인 사용자 확인");
-  if (!data.user) throw new Error("로그인 후 설문 결과를 저장할 수 있습니다.");
+  if (!data.user) throw new Error("로그인 후 설문 결과를 저장할 수 있어요.");
 
   const now = new Date().toISOString();
   const displayName = displayNameFor(data.user);
@@ -58,7 +58,7 @@ export async function saveProfile(
   const freeText = profile.free_text_signal;
   const context = profile.context;
   // 성향 카드 3축(8축 묶음 요약)을 그대로 컬럼에 둔다. SQL로 봐도 화면과 같은 숫자가 나온다.
-  if (!profile.style_axes) throw new Error("8축 진단 결과(style_axes)가 없어 저장할 수 없습니다.");
+  if (!profile.style_axes) throw new Error("8축 진단 결과(style_axes)가 없어 저장할 수 없어요.");
   const summary = threeAxisSummary(profile.style_axes);
   const { error: profileError } = await client.from("ips_profiles").upsert(
     {

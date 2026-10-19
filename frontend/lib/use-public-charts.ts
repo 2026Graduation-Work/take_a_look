@@ -36,7 +36,7 @@ export function usePublicCharts(codes: string[]) {
       .catch((error: unknown) => {
         if (active) setState((previous) => ({
           key, charts: previous.key === key ? previous.charts : null,
-          error: error instanceof Error ? error.message : "공개 차트 조회에 실패했습니다.", loading: false,
+          error: error instanceof Error ? error.message : "공개 차트 조회에 실패했어요.", loading: false,
         }));
       });
     return () => { active = false; };

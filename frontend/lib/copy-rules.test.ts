@@ -76,6 +76,8 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     "모델 신호 상방",
     "005930 · KOSPI",
     "강한 하방",
+    "데이터를 불러오지 못했습니다.",
+    "함께 반영합니다.",
   ]) {
     assert.ok(caught(text), text);
   }
@@ -83,7 +85,7 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   assert.ok(!caught("getSupabaseClient()"));
   assert.ok(!caught("const h10 = agreement.h10"));
   assert.ok(!caught("signalLabel"));
-  assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않습니다."));
+  assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않아요."));
 });
 
 test("신호 방향 이름(상승·하락)은 확률·전망 금지 규칙에 걸리지 않는다", () => {

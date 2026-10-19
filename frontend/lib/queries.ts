@@ -116,7 +116,7 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
 
   const { data: authData, error: authError } = await client.auth.getUser();
   assertOk(authError, "로그인 사용자 확인");
-  if (!authData.user) throw new Error("로그인 사용자 정보가 없습니다.");
+  if (!authData.user) throw new Error("로그인 사용자 정보가 없어요.");
 
   const { data: appUser, error: appUserError } = await client
     .from("users")
@@ -124,7 +124,7 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
   assertOk(appUserError, "대시보드 사용자 확인");
-  if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
+  if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없어요.");
 
   const [currentMarketStatus, profileContext, holdingRows] = await Promise.all([
     loadMarketStatus(),
@@ -172,7 +172,7 @@ export async function getAuthenticatedStockDetailData(
 
   const { data: authData, error: authError } = await client.auth.getUser();
   assertOk(authError, "로그인 사용자 확인");
-  if (!authData.user) throw new Error("로그인 사용자 정보가 없습니다.");
+  if (!authData.user) throw new Error("로그인 사용자 정보가 없어요.");
 
   const { data: appUser, error: appUserError } = await client
     .from("users")
@@ -180,7 +180,7 @@ export async function getAuthenticatedStockDetailData(
     .eq("auth_user_id", authData.user.id)
     .maybeSingle();
   assertOk(appUserError, "상세 화면 사용자 확인");
-  if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
+  if (!appUser) throw new Error("연결된 서비스 사용자 정보가 없어요.");
 
   return queryStockDetail(client, appUser.id, code);
 }
@@ -333,7 +333,7 @@ async function queryStockDetail(
   assertOk(profileResult.error, "상세 화면 IPS 프로필 조회");
   assertOk(stockResult.error, "상세 화면 종목 조회");
   if (!userResult.data || !profileResult.data) {
-    throw new Error("사용자 또는 IPS 프로필 데이터가 없습니다.");
+    throw new Error("사용자 또는 IPS 프로필 데이터가 없어요.");
   }
   if (!stockResult.data) throw new Error(`종목 정보를 찾지 못했습니다: ${code}`);
 
@@ -350,7 +350,7 @@ async function queryStockDetail(
     .maybeSingle();
   assertOk(predictionError, "상세 화면 예측 조회");
   if (!predictionData) {
-    throw new Error(`${code}의 ${profile.profile_type} 모델 예측이 없습니다.`);
+    throw new Error(`${code}의 ${profile.profile_type} 모델 예측이 없어요.`);
   }
 
   const prediction = predictionData as PredictionDetailRow;
@@ -410,7 +410,7 @@ async function loadProfileQueryContext(
   assertOk(profileResult.error, "IPS 프로필 조회");
   assertOk(avoidedResult.error, "회피 설정 조회");
   if (!userResult.data || !profileResult.data) {
-    throw new Error("사용자 또는 IPS 프로필 데이터가 없습니다.");
+    throw new Error("사용자 또는 IPS 프로필 데이터가 없어요.");
   }
 
   const avoidedRows = (avoidedResult.data ?? []) as AvoidedAssetRow[];
@@ -450,7 +450,7 @@ async function loadProfileSettings(
   ]);
   assertOk(profileResult.error, "성향 설정 조회");
   assertOk(avoidedResult.error, "제외 항목 조회");
-  if (!profileResult.data) throw new Error("투자 성향 프로필이 없습니다.");
+  if (!profileResult.data) throw new Error("투자 성향 프로필이 없어요.");
 
   return toProfileSettings(
     profileResult.data as ProfileSettingsRow,

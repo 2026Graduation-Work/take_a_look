@@ -84,12 +84,12 @@ function orientedScores(
   if (raw === undefined) return null;
   if (question.type === "likert") {
     if (!LIKERT_OPTIONS.some(({ value }) => value === raw)) {
-      throw new Error(`${question.id} 응답은 1~5여야 합니다.`);
+      throw new Error(`${question.id} 응답은 1~5여야 해요.`);
     }
     return { [question.axis]: ((raw as number) - LIKERT_NEUTRAL) * question.direction };
   }
   const option = question.options.find(({ id }) => id === raw);
-  if (!option) throw new Error(`${question.id} 응답이 선택지에 없습니다.`);
+  if (!option) throw new Error(`${question.id} 응답이 선택지에 없어요.`);
   return Object.fromEntries(axesOf(question).map((axis) => [axis, option.scores[axis] ?? 0]));
 }
 
@@ -279,9 +279,9 @@ export function confidencePerAxis(styleAxes: StyleAxes): Record<string, number> 
 
 // turnover ratio → 투자 기간(일). 회전율이 낮을수록 길다.
 export function daysForTurnover(ratio: number): number {
-  if (ratio < -1 || ratio > 1) throw new Error("turnover ratio는 -1~1이어야 합니다.");
+  if (ratio < -1 || ratio > 1) throw new Error("turnover ratio는 -1~1이어야 해요.");
   const rule = TURNOVER_DAY_RULES.find(({ max_ratio }) => ratio < max_ratio);
-  if (!rule) throw new Error("보유기간 구간표가 -1~1 전체를 덮어야 합니다.");
+  if (!rule) throw new Error("보유기간 구간표가 -1~1 전체를 덮어야 해요.");
   return rule.days;
 }
 
