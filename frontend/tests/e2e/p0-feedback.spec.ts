@@ -39,9 +39,11 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
   await expect(page.getByText(/조심스럽게 움직이는 편이에요\. 많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요\./)).toBeVisible();
 });
 
-test("2. 첫 화면은 '판단은 내가, 근거는 여기서'를 먼저 말한다", async ({ page }) => {
+// 첫 화면은 한 줄 소개만(10/20 사용자 피드백), '골라 주지 않는다'는 설명은 환영 화면이 말한다
+test("2. 첫 화면은 한 줄 소개, 환영 화면이 '살 종목을 골라 주지 않아요'를 말한다", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByText("판단은 내가, 근거는 여기서")).toBeVisible();
+  await expect(page.getByText("초보 투자자를 위한 판단 근거 서비스")).toBeVisible();
+  await expect(page.getByText(/살 종목을 골라 주지 않아요/)).toHaveCount(0);
   await page.getByRole("button", { name: "데모로 둘러보기" }).click();
   await expect(page.getByText(/살 종목을 골라 주지 않아요/)).toBeVisible();
 });
