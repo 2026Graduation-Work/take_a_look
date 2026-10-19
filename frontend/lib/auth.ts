@@ -59,7 +59,7 @@ export async function resolveOnboardingState(): Promise<OnboardingState> {
   const { data: userData, error: userError } = await client.auth.getUser();
   if (userError || !userData.user) {
     throw new Error(
-      `로그인 사용자 확인 실패: ${userError?.message ?? "사용자 정보가 없습니다."}`,
+      `로그인 사용자 확인 실패: ${userError?.message ?? "사용자 정보가 없어요."}`,
     );
   }
 
@@ -155,7 +155,7 @@ export async function signUpWithPassword(
   name: string,
 ): Promise<{ needsEmailConfirmation: boolean }> {
   const client = getSupabaseClient();
-  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
+  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았어요.");
   const { data, error } = await client.auth.signUp({
     email,
     password,
@@ -167,7 +167,7 @@ export async function signUpWithPassword(
 
 export async function signInWithPassword(email: string, password: string): Promise<void> {
   const client = getSupabaseClient();
-  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
+  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았어요.");
   const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`로그인 실패: ${koreanAuthError(error.message)}`);
 }
@@ -190,7 +190,7 @@ export function koreanAuthError(message: string): string {
 // 계정과 Supabase에 저장된 성향·보유·관심·메모를 모두 지운다(0008 delete_my_account, cascade).
 export async function deleteAccount(): Promise<void> {
   const client = getSupabaseClient();
-  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았습니다.");
+  if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았어요.");
   const { error } = await client.rpc("delete_my_account");
   if (error) throw new Error(`계정 삭제 실패: ${error.message}`);
 }

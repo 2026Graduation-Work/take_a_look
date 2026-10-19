@@ -56,7 +56,7 @@ export default function StockDetailBoundary({
           error:
             error instanceof Error
               ? error.message
-              : "종목 상세 데이터를 불러오지 못했습니다.",
+              : "종목 상세 데이터를 불러오지 못했어요.",
         });
       });
 

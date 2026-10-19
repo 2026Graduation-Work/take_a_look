@@ -65,7 +65,7 @@ const celltrion: RecommendedStock = {
   horizonAgreement: { h5: "up", h10: "up", h20: "flat", agreement: "mixed" },
   riskFlags: ["high_volatility"],
   caution:
-    "위험 2등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있습니다.",
+    "위험 2등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있어요.",
   reason: "최근 20거래일 거래량이 평소의 2.8배", // 상세 모델 근거 1순위와 같은 문장
   provenance: DEMO,
 };
@@ -84,7 +84,7 @@ const kakao: RecommendedStock = {
   horizonAgreement: { h5: "down", h10: "down", h20: "flat", agreement: "mixed" },
   riskFlags: [],
   caution:
-    "위험 3등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있습니다.",
+    "위험 3등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있어요.",
   provenance: DEMO,
 };
 

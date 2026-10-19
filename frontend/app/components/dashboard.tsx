@@ -102,7 +102,7 @@ export default function Dashboard(initialData: DashboardData) {
           error:
             error instanceof Error
               ? error.message
-              : "내 대시보드 데이터를 불러오지 못했습니다.",
+              : "내 대시보드 데이터를 불러오지 못했어요.",
         });
       });
 
@@ -262,7 +262,7 @@ export default function Dashboard(initialData: DashboardData) {
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-body">
-                내 데이터를 불러오지 못해 샘플 데이터를 표시합니다.
+                내 데이터를 불러오지 못해 샘플 데이터를 표시해요.
               </p>
               <p className="mt-1 break-words text-xs text-body">{dataError}</p>
             </div>

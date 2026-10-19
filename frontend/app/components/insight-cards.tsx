@@ -499,7 +499,7 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
             </div>
             {selectedSentimentPeriod !== "day" && (
               <p className="mt-2 mb-0 text-2xs text-muted">
-                월 평균과 연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영합니다.
+                월 평균과 연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영해요.
               </p>
             )}
           </div>

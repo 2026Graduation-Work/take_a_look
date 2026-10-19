@@ -51,7 +51,7 @@ export function classifyBit(styleAxes: StyleAxes): BitResult {
   const byId = new Map(styleAxes.axes.map((axis) => [axis.axis_id, axis]));
   const axis = (id: StyleAxisId) => {
     const found = byId.get(id);
-    if (!found) throw new Error(`style_axes에 ${id} 축이 없습니다.`);
+    if (!found) throw new Error(`style_axes에 ${id} 축이 없어요.`);
     return found;
   };
 

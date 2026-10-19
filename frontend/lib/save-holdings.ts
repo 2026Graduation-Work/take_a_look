@@ -29,7 +29,7 @@ async function holdingOwner(client: SupabaseClient | null, expectedAuthUserId?: 
   const { data: user, error: userError } = await client.from("users")
     .select("id").eq("auth_user_id", authUser.id).maybeSingle();
   assertOk(userError, "서비스 사용자 확인");
-  if (!user) throw new Error("연결된 서비스 사용자 정보가 없습니다.");
+  if (!user) throw new Error("연결된 서비스 사용자 정보가 없어요.");
   return { client, userId: user.id as string, authUserId: authUser.id };
 }
 

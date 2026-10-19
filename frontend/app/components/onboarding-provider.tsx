@@ -57,7 +57,7 @@ export default function OnboardingProvider({
           ? STORAGE_BLOCKED
           : error instanceof Error
             ? error.message
-            : "로그인 상태를 확인하지 못했습니다.",
+            : "로그인 상태를 확인하지 못했어요.",
       });
     }
   }, []);
@@ -94,7 +94,7 @@ export default function OnboardingProvider({
     return (
       <OnboardingError
         title={state.error === STORAGE_BLOCKED ? "저장이 막혀 있어요" : "연결을 확인해 주세요"}
-        message={state.error ?? "로그인 상태를 확인하지 못했습니다."}
+        message={state.error ?? "로그인 상태를 확인하지 못했어요."}
         onRetry={() => void refresh(true)}
       />
     );
@@ -124,7 +124,7 @@ function DemoAccountBanner() {
 export function useOnboarding(): OnboardingContextValue {
   const value = useContext(OnboardingContext);
   if (!value) {
-    throw new Error("useOnboarding은 OnboardingProvider 안에서 사용해야 합니다.");
+    throw new Error("useOnboarding은 OnboardingProvider 안에서 사용해야 해요.");
   }
   return value;
 }

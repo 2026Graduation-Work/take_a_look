@@ -235,23 +235,23 @@ export function convertSurveyAnswers(input: unknown): ProfilingOutput {
 }
 
 function parseSurveyAnswers(input: unknown): SurveyAnswers {
-  if (!isRecord(input)) throw new Error("설문 응답이 존재하지 않습니다.");
+  if (!isRecord(input)) throw new Error("설문 응답이 존재하지 않아요.");
 
   const timestamp = requireText(input.timestamp, "timestamp");
   if (Number.isNaN(Date.parse(timestamp))) {
-    throw new Error("timestamp는 ISO 8601 날짜여야 합니다.");
+    throw new Error("timestamp는 ISO 8601 날짜여야 해요.");
   }
-  if (!isRecord(input.style)) throw new Error("8축 문항 응답(style)이 필요합니다.");
+  if (!isRecord(input.style)) throw new Error("8축 문항 응답(style)이 필요해요.");
   if (!EXPERIENCE_CHOICES.some(({ id }) => id === input.experience)) {
-    throw new Error("투자 경험 응답이 올바르지 않습니다.");
+    throw new Error("투자 경험 응답이 올바르지 않아요.");
   }
   const avoided = input.avoided_assets ?? [];
   if (!Array.isArray(avoided) || avoided.some((flag) => !(flag in AVOIDED_ASSET_LABELS))) {
-    throw new Error("제외할 종목 유형 응답이 올바르지 않습니다.");
+    throw new Error("제외할 종목 유형 응답이 올바르지 않아요.");
   }
 
   if (input.mode !== undefined && input.mode !== "short" && input.mode !== "quick") {
-    throw new Error("진단 모드(mode)는 short 또는 quick이어야 합니다.");
+    throw new Error("진단 모드(mode)는 short 또는 quick이어야 해요.");
   }
 
   return {
@@ -286,7 +286,7 @@ function parseAdjustedAxes(value: unknown): SurveyAnswers["adjusted_axes"] {
       ([id, ratio]) => !STYLE_AXIS_IDS.includes(id as StyleAxisId) || !inRange(ratio, -1, 1),
     )
   ) {
-    throw new Error("adjusted_axes는 축 id별 -1~1 값이어야 합니다.");
+    throw new Error("adjusted_axes는 축 id별 -1~1 값이어야 해요.");
   }
   return value as SurveyAnswers["adjusted_axes"];
 }
@@ -326,7 +326,7 @@ function round6(value: number) {
 
 function parseStringArray(value: unknown, field: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
-    throw new Error(`${field} 응답은 문자열 배열이어야 합니다.`);
+    throw new Error(`${field} 응답은 문자열 배열이어야 해요.`);
   }
   return [...new Set(value)];
 }
@@ -334,11 +334,11 @@ function parseStringArray(value: unknown, field: string): string[] {
 function parsePortfolio(value: unknown): ProfilingOutput["portfolio"] | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value) || !Array.isArray(value.holdings)) {
-    throw new Error("portfolio 응답이 올바르지 않습니다.");
+    throw new Error("portfolio 응답이 올바르지 않아요.");
   }
   const holdings = value.holdings.map((holding, index) => {
     if (!isRecord(holding)) {
-      throw new Error(`portfolio.holdings[${index}] 응답이 올바르지 않습니다.`);
+      throw new Error(`portfolio.holdings[${index}] 응답이 올바르지 않아요.`);
     }
     return {
       ticker: requireText(holding.ticker, `holdings[${index}].ticker`),
@@ -367,14 +367,14 @@ function parseActionIntent(value: unknown): ActionIntent | undefined {
     "hold_consideration",
   ];
   if (typeof value !== "string" || !allowed.includes(value as ActionIntent)) {
-    throw new Error("action_intent 응답이 올바르지 않습니다.");
+    throw new Error("action_intent 응답이 올바르지 않아요.");
   }
   return value as ActionIntent;
 }
 
 function optionalText(value: unknown, field: string): string | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new Error(`${field} 값은 문자열이어야 합니다.`);
+  if (typeof value !== "string") throw new Error(`${field} 값은 문자열이어야 해요.`);
   return value.trim();
 }
 
@@ -387,7 +387,7 @@ function optionalNonNegativeInteger(
 
 function requireNonNegativeInteger(value: unknown, field: string): number {
   if (!Number.isInteger(value) || (value as number) < 0) {
-    throw new Error(`${field} 값은 0 이상의 정수여야 합니다.`);
+    throw new Error(`${field} 값은 0 이상의 정수여야 해요.`);
   }
   return value as number;
 }
@@ -399,8 +399,8 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 
 function requireText(value: unknown, field: string) {
-  if (typeof value !== "string") throw new Error(`${field} 값은 문자열이어야 합니다.`);
+  if (typeof value !== "string") throw new Error(`${field} 값은 문자열이어야 해요.`);
   const normalized = value.trim();
-  if (!normalized) throw new Error(`${field} 값이 필요합니다.`);
+  if (!normalized) throw new Error(`${field} 값이 필요해요.`);
   return normalized;
 }

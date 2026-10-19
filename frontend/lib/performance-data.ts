@@ -46,13 +46,13 @@ const DELTA_METRIC_MAP = [
 ] as const;
 
 const SAMPLE_CONCLUSION =
-  "현재 수치는 화면 구조 검증용 샘플입니다. 실제 비교 실험 결과가 들어오기 전에는 A/B 성능 차이에 대한 연구 결론으로 사용하지 않습니다.";
+  "현재 수치는 화면 구조 검증용 샘플이에요. 실제 비교 실험 결과가 들어오기 전에는 A/B 성능 차이에 대한 연구 결론으로 사용하지 않아요.";
 
 export async function loadPerformanceData(): Promise<PerformanceDataBundle> {
   const configuredFile = process.env.PERFORMANCE_RESULTS_FILE?.trim();
   if (configuredFile && path.basename(configuredFile) !== configuredFile) {
     throw new Error(
-      "PERFORMANCE_RESULTS_FILE은 artifacts/performance 아래의 파일명만 지정할 수 있습니다.",
+      "PERFORMANCE_RESULTS_FILE은 artifacts/performance 아래의 파일명만 지정할 수 있어요.",
     );
   }
   const resultsPath = path.join(
@@ -122,8 +122,8 @@ function validateMetricRows(
   label: string,
   expectedSample: ComparisonSample,
 ): ComparisonMetricRow[] {
-  if (!Array.isArray(value)) throw new Error(`${label}는 배열이어야 합니다.`);
-  if (value.length !== 4) throw new Error(`${label}는 정확히 4런이어야 합니다.`);
+  if (!Array.isArray(value)) throw new Error(`${label}는 배열이어야 해요.`);
+  if (value.length !== 4) throw new Error(`${label}는 정확히 4런이어야 해요.`);
 
   const rows = value.map((candidate, index) => {
     const rowPath = `${label}[${index}]`;
@@ -132,12 +132,12 @@ function validateMetricRows(
     assertEnum(candidate.variant, VARIANTS, `${rowPath}.variant`);
     assertEnum(candidate.sample, SAMPLES, `${rowPath}.sample`);
     if (candidate.sample !== expectedSample) {
-      throw new Error(`${rowPath}.sample은 ${expectedSample}이어야 합니다.`);
+      throw new Error(`${rowPath}.sample은 ${expectedSample}이어야 해요.`);
     }
     const expectedFeatureSet = candidate.variant === "A" ? "baseline" : "treatment";
     if (candidate.feature_set !== expectedFeatureSet) {
       throw new Error(
-        `${rowPath}.feature_set은 ${candidate.variant} 런에서 ${expectedFeatureSet}이어야 합니다.`,
+        `${rowPath}.feature_set은 ${candidate.variant} 런에서 ${expectedFeatureSet}이어야 해요.`,
       );
     }
 
@@ -168,7 +168,7 @@ function validateMetricRows(
     const a = findMetric(rows, profile, "A");
     const b = findMetric(rows, profile, "B");
     if (a.sample_rows !== b.sample_rows || a.sample_dates !== b.sample_dates || !sameNumber(a.positive_rate, b.positive_rate)) {
-      throw new Error(`${label}:${profile}의 A/B 공통 표본이 일치하지 않습니다.`);
+      throw new Error(`${label}:${profile}의 A/B 공통 표본이 일치하지 않아요.`);
     }
   }
   return rows;
@@ -176,8 +176,8 @@ function validateMetricRows(
 
 function validateDeltaRows(value: unknown): ComparisonDeltaRow[] {
   const label = "comparison_deltas";
-  if (!Array.isArray(value)) throw new Error(`${label}는 배열이어야 합니다.`);
-  if (value.length !== 4) throw new Error(`${label}는 정확히 4행이어야 합니다.`);
+  if (!Array.isArray(value)) throw new Error(`${label}는 배열이어야 해요.`);
+  if (value.length !== 4) throw new Error(`${label}는 정확히 4행이어야 해요.`);
 
   const rows = value.map((candidate, index) => {
     const rowPath = `${label}[${index}]`;
@@ -226,7 +226,7 @@ function validateDeltaConsistency(
             : treatmentValue - baselineValue;
         if (!sameNumber(actual, expected)) {
           throw new Error(
-            `${profile}:${sample} ${deltaKey}가 B-A와 일치하지 않습니다.`,
+            `${profile}:${sample} ${deltaKey}가 B-A와 일치하지 않아요.`,
           );
         }
       }
@@ -241,22 +241,22 @@ const NO_MEANINGFUL_GAIN = "시장 분위기 지표를 더해도 거의 달라�
 function validateExperiment(value: unknown): PerformanceExperiment {
   assertRecord(value, "experiment");
   for (const key of ["id", "run_id", "start", "end", "source", "limitations", "backtest_scope", "volatile_definition"]) {
-    if (typeof value[key] !== "string" || !value[key].trim()) throw new Error(`experiment.${key}가 필요합니다.`);
+    if (typeof value[key] !== "string" || !value[key].trim()) throw new Error(`experiment.${key}가 필요해요.`);
   }
   if (value.primary_metric !== "annual_mean_roc_auc" || value.aggregation !== "equal_weight_annual_mean") {
-    throw new Error("실험 주지표와 집계 방식이 지원되는 계약과 다릅니다.");
+    throw new Error("실험 주지표와 집계 방식이 지원되는 계약과 달라요.");
   }
   if (!Array.isArray(value.years) || !value.years.length || new Set(value.years).size !== value.years.length) {
-    throw new Error("평가 연도가 없거나 중복됐습니다.");
+    throw new Error("평가 연도가 없거나 중복됐어요.");
   }
   value.years.forEach((year) => assertInteger(year, "experiment.years", 2000));
   for (const key of ["start", "end"]) {
     const day = value[key] as string;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day) {
-      throw new Error(`experiment.${key}의 날짜가 올바르지 않습니다.`);
+      throw new Error(`experiment.${key}의 날짜가 올바르지 않아요.`);
     }
   }
-  if ((value.start as string) > (value.end as string)) throw new Error("평가 시작일이 종료일보다 늦습니다.");
+  if ((value.start as string) > (value.end as string)) throw new Error("평가 시작일이 종료일보다 늦어요.");
   assertInteger(value.initial_cash, "experiment.initial_cash", 1);
   for (const key of ["classification_threshold", "strategy_threshold"]) {
     assertFiniteNumber(value[key], `experiment.${key}`);
@@ -309,7 +309,7 @@ function assertRecord(
   pathLabel: string,
 ): asserts value is Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(`${pathLabel}는 객체여야 합니다.`);
+    throw new Error(`${pathLabel}는 객체여야 해요.`);
   }
 }
 
@@ -319,13 +319,13 @@ function assertEnum<const T extends readonly string[]>(
   pathLabel: string,
 ): asserts value is T[number] {
   if (typeof value !== "string" || !choices.includes(value)) {
-    throw new Error(`${pathLabel} 값이 올바르지 않습니다.`);
+    throw new Error(`${pathLabel} 값이 올바르지 않아요.`);
   }
 }
 
 function assertFiniteNumber(value: unknown, pathLabel: string): asserts value is number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new Error(`${pathLabel}는 유한한 숫자여야 합니다.`);
+    throw new Error(`${pathLabel}는 유한한 숫자여야 해요.`);
   }
 }
 
@@ -338,7 +338,7 @@ function assertNullableFiniteNumber(
 
 function assertInteger(value: unknown, pathLabel: string, minimum: number): void {
   if (!Number.isInteger(value) || (value as number) < minimum) {
-    throw new Error(`${pathLabel}는 ${minimum} 이상의 정수여야 합니다.`);
+    throw new Error(`${pathLabel}는 ${minimum} 이상의 정수여야 해요.`);
   }
 }
 
@@ -350,7 +350,7 @@ function assertRange(
 ): asserts value is number {
   assertFiniteNumber(value, pathLabel);
   if (value < min || value > max) {
-    throw new Error(`${pathLabel}는 ${min}~${max} 범위여야 합니다.`);
+    throw new Error(`${pathLabel}는 ${min}~${max} 범위여야 해요.`);
   }
 }
 
