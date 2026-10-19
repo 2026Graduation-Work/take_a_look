@@ -154,23 +154,24 @@ test("키보드 포커스로 정보를 읽고 Enter로 상세 화면에 들어�
   await expect(page).toHaveURL(/\/stocks\/005930$/);
 });
 
-test("타일 공간이 줄었다 넓어져도 이름은 늘 보이고, 좁으면 비중만 숨긴다", async ({ page }) => {
+test("타일 공간이 줄었다 넓어져도 이름은 늘 보이고, 좁으면 평가금액 (비중)만 숨긴다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   const map = await openHeatmap(page, [60, 40]);
   const small = map.getByRole("listitem", { name: /삼성전자/ });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
-  await expect(small.getByText("상승", { exact: true })).toBeVisible();
-  await expect(small.getByText("비중 40%", { exact: true })).toBeVisible();
+  // 칸 안에는 신호 단어 없이 이름과 '평가금액 (비중)'만(10/20)
+  await expect(small.getByText("상승", { exact: true })).toHaveCount(0);
+  await expect(small.getByText(/만원 \(40%\)$/)).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
   const tile = (await small.boundingBox())!;
-  const weight = small.getByText("비중 40%", { exact: true });
+  const weight = small.getByText(/만원 \(40%\)$/);
   if (await weight.isVisible()) {
     const box = (await weight.boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(tile.x + tile.width);
   }
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(small.getByText("비중 40%", { exact: true })).toBeVisible();
+  await expect(small.getByText(/만원 \(40%\)$/)).toBeVisible();
 });
 
 test.describe("터치", () => {

@@ -18,6 +18,7 @@ const PAD = { top: 20, bottom: 34 };
 const X0 = 14; // 실선 시작
 const X1 = 668; // 실선 끝 = 오늘
 const XH = 780; // H10 세로 구간 중심
+const XAXIS = X1 + 10; // 가격 눈금: 오늘 선 오른쪽 빈 칸(실선과 겹치지 않게, 10/20 사용자 피드백)
 
 // 눈금 간격을 1/2/2.5/5 × 10^n 으로 스냅
 function niceStep(rough: number) {
@@ -77,6 +78,11 @@ export default function PriceHistoryChart({
   for (let v = Math.ceil(vMin / step) * step; v <= vMax; v += step) ticks.push(v);
 
   const points = prices.map((p, i) => `${xAt(i).toFixed(1)},${y(p).toFixed(1)}`).join(" ");
+  // 최고가, 최저가, 오늘 가격은 늘 보인다(10/20 사용자 피드백). 오늘 가격은 눈금 칸의 가격표
+  const maxIndex = prices.indexOf(Math.max(...prices));
+  const minIndex = prices.indexOf(Math.min(...prices));
+  const clampX = (x: number) => Math.min(Math.max(x, X0 + 40), X1 - 40);
+  const yLast = y(last);
   const yHigh = y(bandHighPrice);
   const yLow = y(bandLowPrice);
 
@@ -107,9 +113,11 @@ export default function PriceHistoryChart({
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={X0} y1={y(tick)} x2={VB_W - 10} y2={y(tick)} style={{ stroke: "var(--color-line-soft)" }} />
-            <text x={X0 + 4} y={y(tick) - 5} fontSize={11} style={{ fill: "var(--color-muted)" }}>
-              {tick.toLocaleString("ko-KR")}
-            </text>
+            {Math.abs(y(tick) - yLast) > 16 && (
+              <text x={XAXIS} y={y(tick) + 4} fontSize={11} style={{ fill: "var(--color-muted)" }}>
+                {tick.toLocaleString("ko-KR")}
+              </text>
+            )}
           </g>
         ))}
 
@@ -130,7 +138,20 @@ export default function PriceHistoryChart({
           strokeWidth={2}
           strokeLinejoin="round"
         />
-        <circle cx={X1} cy={y(last)} r={4} style={{ fill: CHART.priceLine }} stroke="#ffffff" strokeWidth={1.5} />
+        <circle cx={X1} cy={yLast} r={4} style={{ fill: CHART.priceLine }} stroke="#ffffff" strokeWidth={1.5} />
+        <text x={XAXIS} y={yLast + 4} fontSize={12} fontWeight={600} style={{ fill: "var(--color-ink)" }}>
+          {last.toLocaleString("ko-KR")}원
+        </text>
+        {maxIndex !== prices.length - 1 && (
+          <text x={clampX(xAt(maxIndex))} y={y(prices[maxIndex]) - 8} fontSize={11} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
+            최고 {prices[maxIndex].toLocaleString("ko-KR")}원
+          </text>
+        )}
+        {minIndex !== prices.length - 1 && (
+          <text x={clampX(xAt(minIndex))} y={y(prices[minIndex]) + 16} fontSize={11} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
+            최저 {prices[minIndex].toLocaleString("ko-KR")}원
+          </text>
+        )}
 
         {band && <>
         {/* H10 세로 구간: 분포 범위(경로 아님)를 캡슐 하나로 */}
