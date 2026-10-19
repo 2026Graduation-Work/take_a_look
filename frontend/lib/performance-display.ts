@@ -35,6 +35,11 @@ export interface MetricDefinition {
   description?: string;
 }
 
+export const AUC_ABILITY = "상승 종목을 위에 세우는 능력";
+// 지도교수님 면담(10/19): AUC를 한눈에 읽게. 짝 비교로 설명하고 값 옆에 '100쌍 중 N쌍'을 둔다
+export const AUC_DEFINITION = "상승한 종목과 상승하지 않은 종목을 하나씩 짝지었을 때, 상승한 종목에 더 높은 점수를 준 비율이에요. 0.5면 무작위로 줄 세운 것과 같아요.";
+export const aucPairs = (value: number | null) => (value === null || !Number.isFinite(value) ? null : `100쌍 중 ${(value * 100).toFixed(1)}쌍`);
+
 export const METRICS: MetricDefinition[] = [
   {
     key: "auc",
@@ -42,7 +47,7 @@ export const METRICS: MetricDefinition[] = [
     label: "ROC-AUC",
     direction: "higher",
     format: "decimal6",
-    description: "상승 종목을 위에 세우는 능력이에요. 실제로 오른 종목에 더 높은 점수를 줬는지 보고, 0.5면 동전 던지기 수준, 1에 가까울수록 잘 세워요.",
+    description: AUC_DEFINITION,
   },
   {
     key: "hit_rate",
@@ -107,7 +112,6 @@ export const PROFILE_LABEL: Record<ComparisonProfile, string> = {
   aggressive: "1주",
 };
 
-export const AUC_ABILITY = "상승 종목을 위에 세우는 능력";
 
 // 결론 줄의 AUC 차이: 0.001 아래 차이가 보이게 소수 넷째 자리
 export function formatAucDelta(value: number | null): string {

@@ -6,11 +6,14 @@
 import { useState } from "react";
 import DisclaimerFooter from "./disclaimer-footer";
 import LabelRows from "./label-rows";
+import MarketDetail from "./market-detail";
 import Segmented from "./segmented";
 import SiteHeader from "./site-header";
 import {
   METRICS,
   AUC_ABILITY,
+  AUC_DEFINITION,
+  aucPairs,
   PROFILE_LABEL,
   deltaOutcome,
   formatAucDelta,
@@ -122,7 +125,19 @@ export default function PerformanceDashboard({
               <LabelRows
                 className="tabular-nums"
                 rows={[
-                  [`${AUC_ABILITY}(AUC)`, both((row) => formatAucDelta(row.delta_B_minus_A_auc))],
+                  [
+                    <span key="auc" className="inline-flex items-center gap-1">
+                      {AUC_ABILITY}(AUC)
+                      <MarketDetail
+                        title="AUC 설명"
+                        className="-my-3 inline-flex" // 누르는 높이 44px는 두고 줄 높이는 늘리지 않는다
+                        label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">AUC 설명 보기</span></>}
+                      >
+                        <p className="m-0">{AUC_DEFINITION}</p>
+                      </MarketDetail>
+                    </span>,
+                    both((row) => formatAucDelta(row.delta_B_minus_A_auc)),
+                  ],
                   ["모의 투자 연수익률", both((row) => formatDeltaValue(row.delta_B_minus_A_cumulative_return, RETURN_METRIC))],
                 ]}
               />
@@ -189,8 +204,14 @@ export default function PerformanceDashboard({
                             {metric.direction === "higher" ? "↑ 높을수록 좋음" : metric.direction === "lower" ? "↓ 낮을수록 좋음" : "참고"}
                           </span>
                         </th>
-                        <td className="px-3 py-3 text-right text-body">{a ? formatMetricValue(a[key], metric) : "-"}</td>
-                        <td className="px-3 py-3 text-right font-medium text-ink">{b ? formatMetricValue(b[key], metric) : "-"}</td>
+                        <td className="px-3 py-3 text-right text-body">
+                          {a ? formatMetricValue(a[key], metric) : "-"}
+                          {key === "auc" && a && <span className="block text-2xs text-muted">{aucPairs(a.auc)}</span>}
+                        </td>
+                        <td className="px-3 py-3 text-right font-medium text-ink">
+                          {b ? formatMetricValue(b[key], metric) : "-"}
+                          {key === "auc" && b && <span className="block text-2xs font-normal text-muted">{aucPairs(b.auc)}</span>}
+                        </td>
                         <td className={`px-4 py-3 text-right ${outcome === "improved" ? "font-semibold text-ink" : "text-muted"}`}>
                           {formatDeltaValue(value, metric)}
                           {OUTCOME_WORD[outcome] && <span className="block text-2xs font-normal">{OUTCOME_WORD[outcome]}</span>}
