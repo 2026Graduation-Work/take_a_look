@@ -517,8 +517,10 @@ test("보고서가 같아도 새 종가로 PER·PBR만 갱신하고 두 기준�
   assert.match(result?.filing ?? "", /2026-03-10 공시.*주가 2026-10-13 종가/);
   assert.match(result?.filing ?? "", /KRX 수정종가/);
   assert.equal(result?.asOf, "2026-10-13");
+  assert.equal(result?.valuationPriceAsOf, "2026-10-13");
   assert.match(result?.metrics[0].basis ?? "", /12,000원/);
-  assert.match(result?.metrics[0].basis ?? "", /2026-10-13/);
+  assert.match(result?.metrics[0].basis ?? "", /주당순이익 약 1,000원 = 12배/);
+  assert.match(result?.metrics[1].basis ?? "", /주당순자산 약 5,000원 = 2.4배/);
   assert.equal(result?.metrics[2].basis, "roe 원래 근거");
 });
 
@@ -535,6 +537,7 @@ for (const [label, quote] of [
     assert.deepEqual(result?.metrics.map(({ value }) => value), [10, 2, 8, 15, 60, 12]);
     assert.match(result?.filing ?? "", /주가 2026-10-07 종가/);
     assert.equal(result?.asOf, "2026-10-07");
+    assert.equal(result?.valuationPriceAsOf, "2026-10-07");
   });
 }
 
@@ -582,7 +585,7 @@ test("액면분할 뒤에는 원래 기준일의 수정종가와 비교해 배�
   const result = await loadSupabaseFinancial("005930", client as never);
   assert.equal(result?.metrics[0].value, 12);
   assert.equal(result?.metrics[1].value, 2.4);
-  assert.match(result?.metrics[0].basis ?? "", /5,000원/);
+  assert.match(result?.metrics[0].basis ?? "", /주가 6,000원 ÷ 주당순이익 약 500원 = 12배/);
 });
 
 test("비교할 기준일의 수정종가가 없으면 기존 배수와 가격 기준일을 유지한다", async () => {
