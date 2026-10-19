@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { costBasis, digitsOnly, numberDraft, gainRatio, isValidHolding, parseSavedHoldings, parseWholeNumber, type SavedHolding } from "./holdings-rules.ts";
+import { costBasis, digitsOnly, mergeImported, numberDraft, gainRatio, isValidHolding, parseSavedHoldings, parseWholeNumber, type SavedHolding } from "./holdings-rules.ts";
 
 const ok: SavedHolding = { code: "005930", name: "삼성전자", quantity: 15, avgBuyPrice: 71_200 };
 
@@ -67,4 +67,17 @@ test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 
   assert.ok(Number.isNaN(parseWholeNumber("10abc")));
   assert.equal(parseWholeNumber("1,200"), 1200);
   assert.equal(parseWholeNumber(" "), null);
+});
+
+test("스크린샷에서 읽은 목록 합치기: 이미 있는 종목은 새 값으로 바꾸고 이름을 알려 준다", () => {
+  const rows: SavedHolding[] = [
+    { code: "005930", name: "삼성전자", quantity: 10, avgBuyPrice: null },
+    { code: "035720", name: "카카오", quantity: 3, avgBuyPrice: 50000 },
+  ];
+  const result = mergeImported(rows, [
+    { code: "005930", name: "삼성전자", quantity: 37, avgBuyPrice: 71200 },
+    { code: "000660", name: "SK하이닉스", quantity: 5, avgBuyPrice: 182500 },
+  ]);
+  assert.deepEqual(result.replaced, ["삼성전자"]);
+  assert.deepEqual(result.rows.map(({ code, quantity }) => [code, quantity]), [["005930", 37], ["035720", 3], ["000660", 5]]);
 });

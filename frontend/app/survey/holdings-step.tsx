@@ -5,7 +5,8 @@
 
 import { useState } from "react";
 import { isValidHolding, saveHoldings, type SavedHolding } from "@/lib/save-holdings";
-import { numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { mergeImported, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import ScreenshotImport from "../portfolio/screenshot-import";
 import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import { useStockOptions } from "../portfolio/use-stock-options";
 import StepNav from "../components/step-nav";
@@ -123,6 +124,15 @@ export default function HoldingsStep({
               ))}
             </ul>
           )}
+
+          <ScreenshotImport
+            catalog={KNOWN_STOCKS}
+            onAdd={(imported) => {
+              const merged = mergeImported(rows, imported);
+              setRows(merged.rows);
+              return merged.replaced;
+            }}
+          />
 
           <form
             onSubmit={(event) => {
