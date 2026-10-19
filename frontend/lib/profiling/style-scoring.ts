@@ -188,7 +188,7 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
     axes: ["loss_tolerance", "concentration"],
     conditions: { loss_tolerance: ["<=", -0.2], concentration: [">=", 0.3] },
     severity: "high",
-    observation: "원금 보전을 우선한다고 답했으나 소수 종목 집중을 선호한다고도 답했습니다.",
+    observation: "'원금을 지키는 게 먼저'라고 답했지만 '몇 종목에 몰아서 투자'하는 쪽도 골랐어요.",
     follow_up_question: "한 종목이 전체의 몇 %를 넘으면 부담스럽게 느끼시나요?",
   },
   {
@@ -196,7 +196,7 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
     axes: ["turnover", "urgency", "drawdown_reaction"],
     conditions: { turnover: ["<=", -0.2], urgency: [">=", 0.3], drawdown_reaction: [">=", 0.2] },
     severity: "caution",
-    observation: "투자 기간은 길게 잡았지만 조급함과 하락 시 이탈 경향이 함께 높게 나왔습니다.",
+    observation: "투자 기간은 길게 잡았지만, 조급함과 하락 때 팔고 나가고 싶은 마음도 크게 나왔어요.",
     follow_up_question: "하락 폭이 어느 정도일 때 계획을 다시 보고 싶으신가요?",
   },
   {
@@ -204,7 +204,7 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
     axes: ["rule_adherence", "loss_tolerance"],
     conditions: { rule_adherence: [">=", 0.3], loss_tolerance: ["<=", -0.3] },
     severity: "caution",
-    observation: "손실을 크게 부담스러워하면서도 미리 정한 기준보다 그때의 판단을 선호한다고 답했습니다.",
+    observation: "손실은 크게 부담스럽다고 답했지만, 미리 정한 기준보다 그때의 판단을 따르는 쪽을 골랐어요.",
     follow_up_question: "다시 점검할 기준을 미리 정해두는 것과 그때 판단하는 것 중 어느 쪽이 편하신가요?",
   },
   {
@@ -212,7 +212,7 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
     axes: ["information_reliance", "concentration"],
     conditions: { information_reliance: [">=", 0.4], concentration: [">=", 0.4] },
     severity: "high",
-    observation: "주변과 시장 분위기를 판단 근거로 삼는 편이면서 소수 종목 집중도 함께 선호합니다.",
+    observation: "주변 의견과 시장 분위기를 판단 근거로 삼는 편인데, 몇 종목에 몰아서 투자하는 쪽도 골랐어요.",
     follow_up_question: "그 종목을 담은 이유를 직접 확인한 자료로 설명할 수 있으신가요?",
   },
   {
@@ -220,10 +220,16 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
     axes: ["market_participation", "turnover"],
     conditions: { market_participation: ["<=", -0.3], turnover: [">=", 0.3] },
     severity: "caution",
-    observation: "시장 지수를 따라가는 성과를 중시하면서 보유 기간은 짧게 가져가려 합니다.",
+    observation: "시장 지수만큼의 성과를 중요하게 보면서, 보유 기간은 짧게 가져가려 해요.",
     follow_up_question: "성과를 어느 기간 단위로 지수와 비교해 보고 싶으신가요?",
   },
 ];
+
+// 화면 문장: 관측 + 확인 질문 한 줄(해요체). 예전에 저장된 결과도 지금 문장으로 보이게 id로 다시 찾는다.
+export function contradictionText(item: Pick<Contradiction, "id" | "observation" | "follow_up_question">): string {
+  const rule = CONTRADICTION_RULES.find(({ id }) => id === item.id) ?? item;
+  return `${rule.observation} ${rule.follow_up_question}`;
+}
 
 export function detectContradictions(styleAxes: StyleAxes): Contradiction[] {
   const byId = new Map(styleAxes.axes.map((axis) => [axis.axis_id, axis]));

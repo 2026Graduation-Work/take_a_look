@@ -15,7 +15,6 @@ import {
   getSavedProfileSnapshot,
   getServerProfileSnapshot,
   parseSavedProfile,
-  saveProfile,
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
 
@@ -42,11 +41,6 @@ export default function ProfileView() {
             nextLabel="다시 진단"
             onConfirm={() => router.push("/survey")}
             onBack={() => router.push("/")}
-            onDismissSaved={(field) => {
-              const signals = { ...saved.free_text_signal.extracted_signals };
-              delete signals[field];
-              void saveProfile({ ...saved, free_text_signal: { ...saved.free_text_signal, extracted_signals: signals } }, account.mode === "supabase" ? "supabase" : "demo");
-            }}
           />
         ) : (
           <section className="surface flex flex-col items-start gap-4 px-6 py-8">
