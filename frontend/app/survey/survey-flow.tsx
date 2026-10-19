@@ -26,6 +26,8 @@ import {
 } from "@/lib/profiling/style-scoring";
 import { saveProfile } from "@/lib/save-profile";
 import { freeTextReadings } from "@/lib/free-text-signals";
+import { contradictionText } from "@/lib/profiling/style-scoring";
+import LabelRows from "../components/label-rows";
 import type { ProfilingOutput, RiskFlag, StyleAxes, StyleAxisId } from "@/lib/types";
 import { useOnboarding } from "../components/onboarding-provider";
 import SignOutButton from "../components/sign-out-button";
@@ -230,7 +232,7 @@ export default function SurveyFlow() {
     update({ page: Math.min(Math.max(0, index), pages.length - 1) });
   }
 
-  function payload(adjusted?: Partial<Record<StyleAxisId, number>>, dismissed: string[] = []): SurveyAnswers {
+  function payload(adjusted?: Partial<Record<StyleAxisId, number>>): SurveyAnswers {
     return {
       user_id: "u_minji_001",
       session_id: result?.session_id ?? createSessionId(),
@@ -241,7 +243,6 @@ export default function SurveyFlow() {
       avoided_assets: draft.avoided,
       free_text: draft.freeText,
       ...(adjusted && Object.keys(adjusted).length ? { adjusted_axes: adjusted } : {}),
-      ...(dismissed.length ? { dismissed_signals: dismissed } : {}),
       preferred_sectors: ["semiconductor", "healthcare"],
       // 보유 종목은 다음 단계(또는 보유 종목 화면)에서 따로 저장한다. 데모 계정만 김민지 보유 종목을 쓴다.
       ...(demo ? { portfolio: DEMO_PORTFOLIO } : {}),
@@ -284,10 +285,10 @@ export default function SurveyFlow() {
     });
   }
 
-  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했거나 자유 답 판정을 지웠으면 다시 계산해 저장한다.
-  function confirm(adjusted: Partial<Record<StyleAxisId, number>>, dismissed: string[] = []) {
+  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했으면 다시 계산해 저장한다.
+  function confirm(adjusted: Partial<Record<StyleAxisId, number>>) {
     void run(async () => {
-      const profile = Object.keys(adjusted).length || dismissed.length ? await requestProfile(payload(adjusted, dismissed)) : result!;
+      const profile = Object.keys(adjusted).length ? await requestProfile(payload(adjusted)) : result!;
       await saveProfile(profile, onboardingState.mode);
       writeDraft({ ...draft, page: 0 }, ANSWERS_KEY);
       writeDraft(null);
@@ -694,23 +695,20 @@ export function ResultView({
   onMoreAccurate,
   onBack,
   readOnly = false,
-  onDismissSaved,
 }: {
   result: ProfilingOutput;
   submitting?: boolean;
   error?: string;
   nextLabel: string;
   canBeMoreAccurate?: boolean;
-  onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>, dismissed?: string[]) => void;
+  onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>) => void;
   onMoreAccurate?: () => void;
   onBack: () => void;
   readOnly?: boolean;
-  onDismissSaved?: (field: string) => void; // 내 투자 성향(읽기 전용)에서 자유 답 판정을 바로 지운다
 }) {
   const [adjusting, setAdjusting] = useState(false);
   const [adjusted, setAdjusted] = useState<Partial<Record<StyleAxisId, number>>>({});
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  const readings = freeTextReadings(result.free_text_signal.extracted_signals).filter(({ field }) => !dismissed.includes(field));
+  const readings = freeTextReadings(result.free_text_signal.extracted_signals);
   const scored = result.style_axes!;
   const styleAxes: StyleAxes = applyAdjustments(scored, adjusted);
   const bit = classifyBit(styleAxes);
@@ -772,40 +770,20 @@ export function ResultView({
             <span className="text-sm font-medium text-body">답변 중 서로 부딪히는 부분이 있어요</span>
             {result.contradictions!.map((item) => (
               <p key={item.id} className="m-0 text-sm text-body">
-                {item.observation} <span className="text-body">→ {item.follow_up_question}</span>
+                {contradictionText(item)}
               </p>
             ))}
           </div>
         )}
 
-        {/* 제외 항목·자유 답 판정: 상자 없이 글자, 지우기는 글자 버튼(화면 규칙 v2) */}
-        <dl className="mt-12 mb-0 flex flex-col gap-2 text-sm">
-          <div className="flex flex-wrap items-baseline gap-x-3">
-            <dt className="font-medium text-ink">제외할 종목 유형</dt>
-            <dd className="m-0 text-body">{avoidedLabels.length ? avoidedLabels.join(", ") : "선택한 항목 없음"}</dd>
-          </div>
-          {/* 판정이 없으면 아무것도 보이지 않는다. 지우면 보조값에서 뺀다(결과 화면은 저장할 때, 내 투자 성향은 바로) */}
-          {readings.length > 0 && (
-            <div className="flex flex-wrap items-baseline gap-x-3">
-              <dt className="font-medium text-ink">자유 답에서 이렇게 읽었어요</dt>
-              {readings.map(({ field, label }) => (
-                <dd key={field} className="m-0 inline-flex items-baseline gap-1 text-body">
-                  {label}
-                  {(!readOnly || onDismissSaved) && (
-                    <button
-                      type="button"
-                      aria-label={`${label} 지우기`}
-                      className="btn-text min-h-11 px-2 text-sm"
-                      onClick={() => readOnly ? onDismissSaved?.(field) : setDismissed((current) => [...current, field])}
-                    >
-                      지우기
-                    </button>
-                  )}
-                </dd>
-              ))}
-            </div>
-          )}
-        </dl>
+        {/* 제외 항목, 자유 답 판정: 상자 없이 글자, 쉼표로(화면 규칙 v2). 판정이 없으면 줄을 두지 않는다 */}
+        <LabelRows
+          className="mt-12"
+          rows={[
+            ["제외할 종목 유형", avoidedLabels.length ? avoidedLabels.join(", ") : "선택한 항목 없음"],
+            ...(readings.length ? [["자유 답에서 읽은 것", readings.map(({ label }) => label).join(", ")] as [string, string]] : []),
+          ]}
+        />
 
         {adjusting && (
           <div id="style-axes-adjust" className="mt-12 flex flex-col gap-2">
@@ -880,7 +858,7 @@ export function ResultView({
             backLabel={readOnly ? "뒤로" : "이전"}
             backDisabled={submitting}
             nextLabel={submitting ? "저장 중" : nextLabel}
-            onNext={() => onConfirm(changed ? adjusted : {}, dismissed)}
+            onNext={() => onConfirm(changed ? adjusted : {})}
             nextDisabled={submitting}
           />
         </div>
