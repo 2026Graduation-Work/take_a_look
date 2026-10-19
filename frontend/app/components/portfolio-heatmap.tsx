@@ -55,7 +55,7 @@ function amountLabel(holding: PortfolioHolding): string {
 }
 
 function formatAmount(amount: number): string {
-  return `${Math.round(amount / 10_000).toLocaleString("ko-KR")}만원`;
+  return amount < 10_000 ? `${Math.round(amount).toLocaleString("ko-KR")}원` : `${Math.round(amount / 10_000).toLocaleString("ko-KR")}만원`;
 }
 
 export default function PortfolioHeatmap({
@@ -169,7 +169,7 @@ export default function PortfolioHeatmap({
                     className="relative w-full min-w-0 overflow-hidden rounded-md bg-field text-ink hover:brightness-95 focus-visible:-outline-offset-2"
                     onClick={() => setOthersOpen((open) => !open)}
                   >
-                    <HeatmapLabel name={`그 밖의 ${tile.others.length}종목`} signal={othersOpen ? "목록 닫기" : "목록 보기"} weight={weightOf(tile.amount)} />
+                    <HeatmapLabel name={`그 밖의 ${tile.others.length}종목`} detail={`${formatAmount(tile.amount)} (${weightOf(tile.amount)}%)`} />
                   </button>
                 </div>
               );
@@ -209,7 +209,8 @@ export default function PortfolioHeatmap({
                       : { code: holding.code, x: event.clientX, y: event.clientY, input: "touch" });
                   }}
                 >
-                  <HeatmapLabel name={holding.name} signal={signal.label} weight={weightOf(amount)} />
+                  {/* 종가도 평균 매입가도 없으면 금액을 모르므로 비중만 */}
+                  <HeatmapLabel name={holding.name} detail={holding.avgBuyPrice > 0 ? `${formatAmount(amount)} (${weightOf(amount)}%)` : `(${weightOf(amount)}%)`} />
                 </Link>
               );
             })}
@@ -267,6 +268,7 @@ export default function PortfolioHeatmap({
           검증 상태·예시 표시와, 필요할 때만 생기는 종가 기준 안내는 같은 줄 끝에 짧은 말로 둔다 */}
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
+        <span>평가금액 (비중)</span>
         {/* 개발 표시(모델 검증 전)·예시 표시는 두지 않는다(화면 규칙 v2, 예시는 상단 데모 띠 한 곳). 필요할 때만 생기는 기준 안내만 */}
         {closeAsOf && staleLabel(closeAsOf) && <span>{closeAsOf.replaceAll("-", ".")} 종가</span>}
         {holdings.some(({ priceBasis }) => priceBasis !== "close") && <span>종가가 없는 종목은 매입금액 기준</span>}

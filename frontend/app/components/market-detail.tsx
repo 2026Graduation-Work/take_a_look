@@ -7,7 +7,17 @@ import { createPortal } from "react-dom";
 // 누르면 열리고 다시 누르거나 바깥을 누르거나 Esc로 닫힌다(마우스·키보드·터치 모두 같음). 올리기·포커스만으로는 열리지 않는다.
 // 시장 막대가 가로 스크롤(overflow)이라 absolute는 잘린다 → 열 때 트리거 위치로 fixed 좌표를 계산한다.
 // 헤더의 backdrop-filter가 fixed의 기준 상자가 되므로 설명은 body로 portal한다.
-export default function MarketDetail({ label, children }: { label: ReactNode; children: ReactNode }) {
+export default function MarketDetail({
+  label,
+  children,
+  title = "시장 흔들림 설명",
+  className = "flex-none lg:ml-auto",
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  title?: string;
+  className?: string;
+}) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -45,7 +55,7 @@ export default function MarketDetail({ label, children }: { label: ReactNode; ch
   }, [open]);
 
   return (
-    <div ref={root} className="flex-none lg:ml-auto">
+    <div ref={root} className={className}>
       <button
         ref={trigger}
         type="button"
@@ -62,7 +72,7 @@ export default function MarketDetail({ label, children }: { label: ReactNode; ch
             ref={panel}
             id={id}
             role="region"
-            aria-label="시장 흔들림 설명"
+            aria-label={title}
             style={{ top: position.top, left: position.left }}
             className="glass fixed z-50 w-[min(320px,calc(100vw-32px))] rounded-md bg-white/90 p-4 text-xs text-body"
           >

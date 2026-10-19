@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import Segmented from "./segmented";
+import MarketDetail from "./market-detail";
 import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
@@ -304,11 +305,18 @@ export default function Dashboard(initialData: DashboardData) {
                 </h1>
               </div>
               <div className="flex flex-col gap-2 lg:items-end">
+                {/* 1주, 4주 오름차순(기본은 4주). 1주 설명은 ⓘ를 눌러야 열려 컨트롤 위치가 바뀌지 않는다(10/20 사용자 피드백) */}
                 <div className="flex flex-none items-center gap-2 text-sm">
                   <span className="text-body">앞으로</span>
-                  <Segmented label="신호 기간" value={horizon} options={[[20, "4주"], [5, "1주"]]} onChange={chooseHorizon} />
+                  <Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />
+                  <MarketDetail
+                    title="신호 기간 설명"
+                    className="flex-none"
+                    label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">신호 기간 설명 보기</span></>}
+                  >
+                    <p className="m-0">4주 신호는 앞으로 약 20거래일, 1주 신호는 약 5거래일을 봐요. {SHORT_HORIZON_NOTE}</p>
+                  </MarketDetail>
                 </div>
-                {horizon === 5 && <p className="m-0 text-2xs text-muted">{SHORT_HORIZON_NOTE}</p>}
               </div>
             </section>
 
