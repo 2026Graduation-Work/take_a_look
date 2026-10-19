@@ -1,8 +1,7 @@
 // 서비스 이름과 부제. 화면·메타데이터가 모두 여기서 가져간다.
 export const SERVICE_NAME = "Take a Look";
 export const SERVICE_TAGLINE = "초보 투자자를 위한 판단 근거 서비스";
-// 첫인상을 "어디에 투자할지 정해 주는 서비스"로 읽지 않게(사전 참가자 P0 10/13). 로그인·환영 화면이 쓴다.
-export const SERVICE_PROMISE = "판단은 내가, 근거는 여기서";
+// 첫인상을 "어디에 투자할지 정해 주는 서비스"로 읽지 않게(사전 참가자 P0 10/13). 환영 화면이 쓴다.
 export const SERVICE_PROMISE_DETAIL = "살 종목을 골라 주지 않아요. 내가 보는 종목의 모델 신호와 뉴스, 재무 근거를 한곳에서 확인해요.";
 export const SERVICE_DESCRIPTION = "투자 성향에 맞춰 종목을 판단할 근거를 쉽게 보여 주는 서비스";
 // 공개 운영 주소. og:image·robots·sitemap 절대 주소가 여기서 나온다(옛 stock-prediction-v2-chi 주소도 열리지만 대표는 이것)

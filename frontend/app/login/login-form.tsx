@@ -10,7 +10,7 @@ import {
 import { isSupabaseConfigured } from "@/lib/supabase";
 import StepNav from "@/app/components/step-nav";
 import Wordmark from "@/components/brand/Wordmark";
-import { SERVICE_PROMISE, SERVICE_PROMISE_DETAIL } from "@/lib/brand";
+import { SERVICE_TAGLINE } from "@/lib/brand";
 
 type AccountTab = "signin" | "signup";
 
@@ -83,8 +83,8 @@ export default function LoginForm() {
           ) : (
             <>
               <h1 className="sr-only">Take a Look 시작</h1>
-              <p className="m-0 text-base font-medium text-ink">{SERVICE_PROMISE}</p>
-              <p className="m-0 text-sm text-body">{SERVICE_PROMISE_DETAIL}</p>
+              {/* 첫 화면은 한 줄만(10/20 사용자 피드백: 소개 두 줄은 길다). '살 종목을 골라 주지 않는다'는 설명은 환영 화면이 말한다 */}
+              <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
             </>
           )}
         </div>
