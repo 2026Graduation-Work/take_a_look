@@ -60,7 +60,8 @@ import {
   type SupplyDemandDay,
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
-import { contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
+import ChangeText from "./change-text";
+import { changeMeta, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -179,7 +180,7 @@ function evidenceTabOrder(bit: ReturnType<typeof classifyBit> | null): TabId[] {
 function Why({ children }: { children: ReactNode }) {
   return (
     <p className="m-0 text-xs text-muted">
-      <span className="font-medium text-body">왜 봐야 하나요? </span>
+      <span>왜 봐야 하나요? </span>
       {children}
     </p>
   );
@@ -277,7 +278,7 @@ export function Checkpoints({
               );
             })}
           </div>
-          <p aria-live="polite" className="m-0 mt-2 min-h-4 text-xs text-body">{orderNote}</p>
+          <p aria-live="polite" className="m-0 mt-2 min-h-4 text-xs text-muted">{orderNote}</p>
         </details>
       )}
     </section>
@@ -519,8 +520,8 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
               label={`${TERM.volatility}(1년, 코스피 상위 ${Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}%)`}
               value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`}
             />
-            <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} />
-            <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} />
+            <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} change={risk.drawdownFrom3mHigh * 100} />
+            <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} change={risk.return3d * 100} />
           </dl>
           {risk.asOf && staleLabel(risk.asOf) && <p className="m-0 text-2xs text-muted tabular-nums">{risk.asOf.replaceAll("-", ".")} 종가 기준</p>}
         </>
@@ -574,11 +575,11 @@ function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosur
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, change }: { label: string; value: string; change?: number }) {
   return (
     <div className="flex flex-col gap-1">
       <dt className="text-2xs text-muted">{label}</dt>
-      <dd className="m-0 text-sm font-semibold tabular-nums">{value}</dd>
+      <dd className="m-0 text-sm font-semibold tabular-nums text-ink">{change === undefined ? value : <ChangeText value={change} precision={1}>{value}</ChangeText>}</dd>
     </div>
   );
 }
@@ -701,13 +702,19 @@ function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
   return (
     <>
       <Conclusion>
-        최근 20영업일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
-        {seller.label}이 가장 많이 팔았어요.
+        {buyer.total > 0 && seller.total < 0 ? <>
+          최근 20영업일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
+          {seller.label}이 가장 많이 팔았어요.
+        </> : buyer.total > 0 ? <>
+          최근 20영업일 동안 {buyer.label}의 순매수 수량이 가장 많았어요.
+        </> : seller.total < 0 ? <>
+          최근 20영업일 동안 {seller.label}의 순매도 수량이 가장 많았어요.
+        </> : "최근 20영업일 동안 투자자별 순매수 수량의 합계가 모두 0이에요."}
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {totals.map(({ key, label, total, latest }) => {
-          const buy = total >= 0;
-          const color = buy ? "var(--color-up)" : "var(--color-down)";
+          const buy = total > 0;
+          const { color } = changeMeta(total);
           return (
             <li key={key} className="grid grid-cols-[4rem_minmax(0,1fr)_auto] items-center gap-3">
               <span className="text-sm text-body">{label}</span>
@@ -723,9 +730,9 @@ function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
                 />
               </div>
               <span className="text-right text-sm font-semibold tabular-nums text-ink">
-                {formatShares(total)}
+                <ChangeText value={total}>{formatShares(total)}</ChangeText>
                 <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                  {buy ? "순매수" : "순매도"}, 최근일 {formatShares(latest)}
+                  최근일 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                 </span>
               </span>
             </li>
@@ -767,7 +774,7 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
         {financial.metrics.map((metric) => (
           <div key={metric.key} className="flex items-baseline justify-between gap-3">
             <dt className="text-sm text-body">{FINANCIAL_TERM[metric.key] ?? metric.label}</dt>
-            <dd className="m-0 flex-none text-right text-sm font-semibold tabular-nums">
+            <dd className="m-0 flex-none text-right text-sm font-semibold tabular-nums text-ink">
               {metric.value === null ? (
                 <>
                   확인 불가
@@ -775,8 +782,9 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
                 </>
               ) : (
                 <>
-                  {oneDecimal(metric.value)}
-                  {metric.unit}
+                  {metric.key === "revenue_growth" ? (
+                    <ChangeText value={metric.value} precision={1}>{signedPercent(metric.value / 100)}</ChangeText>
+                  ) : <>{oneDecimal(metric.value)}{metric.unit}</>}
                 </>
               )}
             </dd>
@@ -785,10 +793,10 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
       </dl>
       <details className="disclosure">
         <summary>계산 근거</summary>
-        <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs text-body">
+        <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
           {financial.metrics.map((metric) => (
             <li key={metric.key}>
-              <span className="font-medium text-ink">{metric.label}</span> = {metric.basis}
+              <span>{metric.label}</span> = {metric.basis}
             </li>
           ))}
         </ul>

@@ -61,7 +61,7 @@ export default function SiteHeader({
               <StockSearch query={query ?? ""} onQueryChange={onQueryChange} />
             </div>
           ) : (
-            <div className="hidden min-w-0 flex-1 truncate text-sm font-medium text-muted sm:block">
+            <div className="hidden min-w-0 flex-1 truncate text-xs font-normal text-muted sm:block">
               {sectionLabel}
             </div>
           )}

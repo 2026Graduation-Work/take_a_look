@@ -504,7 +504,7 @@ function QuestionPage({
       <div className="mt-8 flex flex-1 flex-col">
         {page.kind === "style" && (
           <fieldset key={page.question.id} className="m-0 flex flex-col gap-5 border-0 p-0">
-            <p className="m-0 text-sm text-muted">{page.axis.help}</p>
+            <p className="m-0 text-xs text-muted">{page.axis.help}</p>
             <legend className="sr-only">{page.question.text}</legend>
             <h1 aria-hidden className="text-xl font-semibold">
               {page.question.text}
@@ -530,7 +530,7 @@ function QuestionPage({
             <h1 aria-hidden className="text-xl font-semibold">
               직접 투자한 경험은 얼마나 되나요?
             </h1>
-            <p className="m-0 text-sm text-muted">주식이나 ETF를 직접 사고판 기간으로 골라 주세요.</p>
+            <p className="m-0 text-xs text-muted">주식이나 ETF를 직접 사고판 기간으로 골라 주세요.</p>
             <div className="flex flex-col gap-2">
               {EXPERIENCE_CHOICES.map((choice) => (
                 <ChoiceRow
@@ -552,7 +552,7 @@ function QuestionPage({
             <h1 aria-hidden className="text-xl font-semibold">
               목록에서 빼고 싶은 종목 유형이 있나요?
             </h1>
-            <p className="m-0 text-sm text-muted">
+            <p className="m-0 text-xs text-muted">
               직접 고른 항목만 목록에서 빠져요. 성향 점수로는 종목을 빼지 않아요. 없으면 넘어가도 돼요.
             </p>
             <div className="flex flex-col gap-2">
@@ -580,7 +580,7 @@ function QuestionPage({
         {page.kind === "freeText" && (
           <div className="flex flex-col gap-5">
             <h2 data-question-heading className="text-xl font-semibold">요즘 투자하면서 걱정되는 점이 있나요?</h2>
-            <p className="m-0 text-sm text-muted">점수 계산에는 쓰지 않고 결과를 설명할 때 참고만 해요. 비워 둬도 돼요.</p>
+            <p className="m-0 text-xs text-muted">점수 계산에는 쓰지 않고 결과를 설명할 때 참고만 해요. 비워 둬도 돼요.</p>
             <textarea
               value={draft.freeText}
               onChange={(event) => onUpdate({ freeText: event.target.value })}
@@ -726,7 +726,7 @@ export function ResultView({
         <h1 data-bit-type={bit.lowConfidence ? "low_confidence" : bit.type} className="mt-2 text-3xl font-semibold text-ink sm:text-3xl">
           {bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type]}
         </h1>
-        <p className="mt-1 text-sm font-semibold text-muted">
+        <p className="mt-1 text-base font-normal text-body">
           {bit.lowConfidence
             ? "몇몇 질문의 답이 서로 엇갈려 유형을 단정하지 않았어요. 다시 답하거나 아래에서 직접 조정할 수 있어요."
             : BIT_SUMMARY[bit.type]}

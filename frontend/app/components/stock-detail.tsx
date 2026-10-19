@@ -16,6 +16,7 @@ import EvidenceTabs, {
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
 import GainText from "./gain-text";
+import ChangeText from "./change-text";
 import { costBasis, parseSavedHoldings } from "@/lib/holdings-rules";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -34,7 +35,7 @@ import {
   topPercentLabel,
   SIGNAL_WORD,
 } from "@/lib/copy-glossary";
-import { formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
+import { changeMeta, formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
@@ -133,9 +134,7 @@ export default function StockDetailView({
     typeof detail.changePercent === "number" &&
     Number.isFinite(detail.changePercent);
   const changePercent = detail.changePercent ?? 0;
-  const changeColor =
-    changePercent > 0 ? "var(--color-up)" : changePercent < 0 ? "var(--color-down)" : "var(--color-muted)";
-  const changeArrow = changePercent > 0 ? "▲" : changePercent < 0 ? "▼" : "";
+  const { color: changeColor, arrow: changeArrow } = changeMeta(changePercent, 1);
   const safeMaxRiskTier =
     Number.isInteger(maxRiskTier) && maxRiskTier >= 1 && maxRiskTier <= 5 ? maxRiskTier : 4;
   // 성향에서 나온 허용 범위(소프트 틸트)보다 위험한 종목이면 체크포인트에 한 줄 더한다. 종목을 거르지 않는다.
@@ -156,7 +155,7 @@ export default function StockDetailView({
       <div className="page-wide flex flex-col gap-12">
 
         {loading && (
-          <p role="status" className="m-0 text-sm text-muted">
+          <p role="status" className="m-0 text-xs text-muted">
             내 성향에 맞춘 신호와 근거를 불러오는 중이에요.
           </p>
         )}
@@ -194,7 +193,7 @@ export default function StockDetailView({
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
                 <span className="text-sm font-medium tabular-nums" style={{ color: changeColor }}>
-                  {changeArrow} {formatSignedPercent(changePercent)}
+                  {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
                   <span className="ml-2 text-2xs font-normal text-muted">
                     전일 대비{detail.asOf && staleLabel(detail.asOf) && `, ${formatDate(detail.asOf)} 기준`}
                   </span>
@@ -218,13 +217,17 @@ export default function StockDetailView({
           <div className="flex flex-col gap-1">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
-              {preview && direction && <span className="ml-3 text-sm font-normal text-muted">{HORIZON_AHEAD[20]}</span>}
-              {!preview && <span className="block text-sm font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
+              {preview && direction && <span className="ml-3 text-xs font-normal text-muted">{HORIZON_AHEAD[20]}</span>}
+              {!preview && <span className="block text-xs font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
               <strong className="font-semibold tabular-nums text-ink">
-                {hasBand ? `${formatSignedPercent(detail.returnBand.low)} ~ ${formatSignedPercent(detail.returnBand.high)}` : "미제공"}
+                {hasBand ? <>
+                  <ChangeText value={detail.returnBand.low} precision={1}>{formatSignedPercent(detail.returnBand.low)}</ChangeText>
+                  {" ~ "}
+                  <ChangeText value={detail.returnBand.high} precision={1}>{formatSignedPercent(detail.returnBand.high)}</ChangeText>
+                </> : "미제공"}
               </strong>
             </p>
           </div>
@@ -237,7 +240,7 @@ export default function StockDetailView({
               horizonLabel={HORIZON_LABEL[horizon]}
             />
           ) : (
-            <p className="m-0 text-sm text-muted">
+            <p className="m-0 text-xs text-muted">
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
@@ -262,7 +265,7 @@ export default function StockDetailView({
           <summary>
             <span className="flex flex-col gap-1">
               <span className="text-lg font-semibold">더 알아보기</span>
-              <span className="text-2xs text-muted">판단 근거 탭 순서, 수익률 분포, 기간별 비교, 계산 근거, 데이터 출처</span>
+              <span className="text-2xs font-normal text-muted">판단 근거 탭 순서, 수익률 분포, 기간별 비교, 계산 근거, 데이터 출처</span>
             </span>
           </summary>
           <div className="mt-6 flex flex-col gap-12">
@@ -291,7 +294,7 @@ export default function StockDetailView({
                   </p>
                 </>
               ) : (
-                <p className="m-0 text-sm text-muted">분포 원본이 아직 저장되지 않아 그림은 생략했어요.</p>
+                <p className="m-0 text-xs text-muted">분포 원본이 아직 저장되지 않아 그림은 생략했어요.</p>
               )}
             </section>
 

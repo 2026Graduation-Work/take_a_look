@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { SignalMeta } from "@/lib/display";
+import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
+import ChangeText from "./change-text";
 import { clipReturnBins } from "@/lib/chart-detail";
 import type { ReturnBand, ReturnBin } from "@/lib/types";
 
@@ -14,8 +15,7 @@ const PAD = { top: 44, right: 14, bottom: 34, left: 40 };
 const BAR_GAP = 2; // 인접 막대 사이 표면 여백
 
 function formatSigned(value: number) {
-  const text = Number.isInteger(value) ? String(value) : value.toFixed(1);
-  return `${value > 0 ? "+" : ""}${text}%`;
+  return formatSignedPercent(value, Number.isInteger(value) ? 0 : 1);
 }
 
 // 데이터 끝(위)만 둥글고 베이스라인 쪽은 각진 막대
@@ -114,8 +114,9 @@ export default function ReturnHistogram({
   const keptMax = bins[bins.length - 1].tail ? bins[bins.length - 1].from : xMax;
   const labelledEdges = [];
   for (let tick = Math.ceil(keptMin / xStep) * xStep; tick <= keptMax; tick += xStep) labelledEdges.push(tick);
+  const endpoint = (value: number) => <ChangeText value={value} precision={1}>{formatSigned(value)}</ChangeText>;
   const binLabel = (bin: (typeof bins)[number]) =>
-    bin.tail === "low" ? `${formatSigned(bin.to)} 이하` : bin.tail === "high" ? `${formatSigned(bin.from)} 이상` : `${formatSigned(bin.from)} ~ ${formatSigned(bin.to)}`;
+    bin.tail === "low" ? <>{endpoint(bin.to)} 이하</> : bin.tail === "high" ? <>{endpoint(bin.from)} 이상</> : <>{endpoint(bin.from)} ~ {endpoint(bin.to)}</>;
   const maxIndex = bins.findIndex((bin) => bin.count === maxCount);
   const ciPercent = Math.round(band.ciLevel * 100);
 
@@ -155,9 +156,9 @@ export default function ReturnHistogram({
           textAnchor="middle"
           fontSize={12}
           fontWeight={600}
-          style={{ fill: signal.ink }}
+          style={{ fill: "var(--color-body)" }}
         >
-          10번 중 {Math.round(ciPercent / 10)}번 {formatSigned(band.low)} ~ {formatSigned(band.high)}
+          10번 중 {Math.round(ciPercent / 10)}번 <tspan style={{ fill: changeMeta(band.low, 1).color }}>{formatSigned(band.low)}</tspan>{" ~ "}<tspan style={{ fill: changeMeta(band.high, 1).color }}>{formatSigned(band.high)}</tspan>
         </text>
 
         {/* 수평 그리드 + 건수 라벨 */}
@@ -228,7 +229,7 @@ export default function ReturnHistogram({
             y={baseline + 16}
             textAnchor="middle"
             fontSize={11}
-            style={{ fill: "var(--color-muted)" }}
+            style={{ fill: changeMeta(edge, 1).color }}
           >
             {formatSigned(edge)}
           </text>

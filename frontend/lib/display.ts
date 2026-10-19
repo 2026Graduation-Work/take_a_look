@@ -101,8 +101,19 @@ export function formatKstDateTime(iso: string) {
 
 // 부호 붙은 퍼센트 한 자리. signedPercent는 비율(0.12 → "+12.0%"), formatSignedPercent는 이미 % 단위인 값(1.2 → "+1.2%").
 export const signedPercent = (ratio: number) => formatSignedPercent(ratio * 100);
-export function formatSignedPercent(value: number) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+// 표시 자릿수에서 0이 되는 값은 방향 없음. 계산에 쓰는 원본 값은 바꾸지 않는다.
+export function changeMeta(value: number, precision?: number) {
+  const displayed = precision === undefined ? value : Number(value.toFixed(precision));
+  return displayed > 0
+    ? { color: "var(--color-up)", arrow: "▲" }
+    : displayed < 0
+      ? { color: "var(--color-down)", arrow: "▼" }
+      : { color: "var(--color-body)", arrow: "" };
+}
+
+export function formatSignedPercent(value: number, precision = 1) {
+  const displayed = Number(value.toFixed(precision));
+  return `${displayed > 0 ? "+" : ""}${displayed.toFixed(precision)}%`;
 }
 
 // 순매수 수량(주). 만 주 단위로 줄여 읽기 쉽게: +5,276,406 → +527.6만 주.

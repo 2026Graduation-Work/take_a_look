@@ -2,7 +2,7 @@
 
 import { CHART } from "@/lib/chart-colors";
 import { useRef, useState } from "react";
-import { formatSignedPercent, type SignalMeta } from "@/lib/display";
+import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
 // 최근 60거래일 실제 주가 실선. 미래 영역에는 H10 시점의 수익률 분포 범위를
@@ -167,7 +167,7 @@ export default function PriceHistoryChart({
           y={yHigh - 9}
           fontSize={12}
           fontWeight={600}
-          style={{ fill: signal.ink }}
+          style={{ fill: changeMeta(band.high, 1).color }}
           textAnchor="middle"
         >
           {formatSignedPercent(band.high)}
@@ -177,7 +177,7 @@ export default function PriceHistoryChart({
           y={yLow + 17}
           fontSize={12}
           fontWeight={600}
-          style={{ fill: signal.ink }}
+          style={{ fill: changeMeta(band.low, 1).color }}
           textAnchor="middle"
         >
           {formatSignedPercent(band.low)}

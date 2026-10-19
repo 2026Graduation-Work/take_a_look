@@ -263,7 +263,7 @@ export default function Dashboard(initialData: DashboardData) {
               <p className="text-sm font-medium text-body">
                 내 데이터를 불러오지 못해 샘플 데이터를 표시합니다.
               </p>
-              <p className="mt-1 break-words text-xs text-body">{dataError}</p>
+              <p className="mt-1 break-words text-xs text-muted">{dataError}</p>
             </div>
             <button
               type="button"
