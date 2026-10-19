@@ -175,7 +175,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   // 모델 성적표는 내비가 아니라 푸터의 작은 링크
   await page.locator("footer").getByRole("link", { name: "모델 성적표" }).click();
   await expect(page).toHaveURL(/\/performance$/);
-  await expect(page.getByRole("heading", { name: "A와 B 비교" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "A/B 비교" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "시장 분위기 지표를 더하면 예측이 나아질까요?" })).toBeVisible();
 
   await page.locator("header summary", { hasText: "김민지" }).click();
