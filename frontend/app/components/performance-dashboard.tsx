@@ -5,17 +5,21 @@
 
 import { useState } from "react";
 import DisclaimerFooter from "./disclaimer-footer";
+import LabelRows from "./label-rows";
+import Segmented from "./segmented";
 import SiteHeader from "./site-header";
 import {
   METRICS,
+  AUC_ABILITY,
   PROFILE_LABEL,
   deltaOutcome,
+  formatAucDelta,
   formatDeltaValue,
   formatMetricValue,
   type DeltaOutcome,
   type MetricDefinition,
 } from "@/lib/performance-display";
-import type { ComparisonProfile, ComparisonResults, ComparisonSample } from "@/lib/performance-types";
+import type { ComparisonDeltaRow, ComparisonProfile, ComparisonResults, ComparisonSample } from "@/lib/performance-types";
 import type { InvestorProfileSummary, MarketStatus } from "@/lib/types";
 
 interface PerformanceDashboardProps {
@@ -33,8 +37,8 @@ const SAMPLE_LABEL: Record<ComparisonSample, string> = {
   all: "전체 테스트 구간",
   volatile_top_20pct: "고변동일 상위 20%",
 };
-// 대시보드 기간 전환(앞으로 4주 | 1주)과 같은 말
-const HORIZON: Record<ComparisonProfile, string> = { stable: "4주", aggressive: "1주" };
+
+const RETURN_METRIC = METRICS.find((metric) => metric.key === "cumulative_return")!;
 
 const GROUPS: { title: string; keys: MetricDefinition["key"][] }[] = [
   { title: "분류 성능", keys: ["auc", "hit_rate"] },
@@ -52,8 +56,8 @@ const OUTCOME_WORD: Record<DeltaOutcome, string> = {
 };
 
 const DESIGN: [string, string][] = [
-  ["모델", "LightGBM 분류 모델이 하락, 중립, 상승 중 하나를 골라요. A와 B는 설정이 같아요."],
-  ["정답(라벨)", "안정형은 20거래일(약 4주), 공격형은 5거래일(약 1주) 안에 위아래 기준선 중 어느 쪽에 먼저 닿는지예요."],
+  ["모델", "LightGBM 분류 모델이 하락, 중립, 상승 중 하나를 골라요. A/B 모두 설정이 같아요."],
+  ["정답(라벨)", "4주 모델은 20거래일, 1주 모델은 5거래일 안에 위아래 기준선 중 어느 쪽에 먼저 닿는지예요."],
   ["A (기준)", "가격과 거래량 지표 161개, 투자자별 매매(수급) 9개로 모두 170개를 넣어요."],
   ["B (비교)", "A에 시장 분위기(심리) 지표 4개를 더해 174개예요. 뉴스 분위기와 설문 점수는 넣지 않았어요."],
   ["같게 둔 것", "종목, 기간 나누기, 무작위 시드, 평가 방법이 모두 같고 바뀐 것은 지표 묶음뿐이에요."],
@@ -66,7 +70,7 @@ const SOURCES: [string, string][] = [
   ["모델 신호와 종가", "LightGBM 게시 배치(앞으로 4주, 1주)"],
   ["누가 사고팔았나", "KRX 투자자별 순매수"],
   ["뉴스 분위기", "NewsAPI.ai 기사를 KR-FinBERT로 하루 단위 분석"],
-  ["공시와 회사 체력", "DART 공시와 정기보고서"],
+  ["공시와 재무 상태", "DART 공시와 정기보고서"],
 ];
 
 export default function PerformanceDashboard({
@@ -83,6 +87,14 @@ export default function PerformanceDashboard({
   const a = rows.find((row) => row.profile === runProfile && row.variant === "A");
   const b = rows.find((row) => row.profile === runProfile && row.variant === "B");
   const delta = data.comparison_deltas.find((row) => row.profile === runProfile && row.sample === sample);
+  // 결론 아래 두 줄 비교: 전체 구간의 B − A(4주, 1주 순)
+  const both = (format: (row: ComparisonDeltaRow) => string) =>
+    (["stable", "aggressive"] as const)
+      .map((id) => {
+        const row = data.comparison_deltas.find((candidate) => candidate.profile === id && candidate.sample === "all");
+        return `${PROFILE_LABEL[id]} ${row ? format(row) : "미산출"}`;
+      })
+      .join(", ");
 
   return (
     <div className="min-h-screen w-full">
@@ -105,9 +117,16 @@ export default function PerformanceDashboard({
             </p>
           )}
           {!isSample && (
-            <p className="-mx-1 m-0 mt-2 rounded-md bg-surface px-5 py-3 text-sm text-ink">
-              <strong className="font-semibold">결론</strong> {conclusion}
-            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="m-0 text-xl font-semibold text-ink">{conclusion}</p>
+              <LabelRows
+                className="tabular-nums"
+                rows={[
+                  [`${AUC_ABILITY}(AUC)`, both((row) => formatAucDelta(row.delta_B_minus_A_auc))],
+                  ["모의 투자 연수익률", both((row) => formatDeltaValue(row.delta_B_minus_A_cumulative_return, RETURN_METRIC))],
+                ]}
+              />
+            </div>
           )}
           {data.experiment && (
             <p className="m-0 text-xs text-muted tabular-nums">
@@ -118,20 +137,22 @@ export default function PerformanceDashboard({
 
         <section aria-labelledby="compare-title" className="flex flex-col gap-3">
           <h2 id="compare-title" className="px-1 text-xl font-semibold">
-            A와 B 비교
+            A/B 비교
           </h2>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Segmented
-              label="성향"
+              label="모델"
               value={runProfile}
-              options={(["stable", "aggressive"] as const).map((id) => [id, `${PROFILE_LABEL[id]} ${HORIZON[id]}`])}
+              options={(["stable", "aggressive"] as const).map((id) => [id, `${PROFILE_LABEL[id]} 모델`])}
               onChange={setRunProfile}
+              className="grid flex-1 grid-cols-2"
             />
             <Segmented
               label="표본"
               value={sample}
               options={(["all", "volatile_top_20pct"] as const).map((id) => [id, SAMPLE_LABEL[id]])}
               onChange={setSample}
+              className="grid flex-1 grid-cols-2"
             />
           </div>
 
@@ -221,28 +242,6 @@ export default function PerformanceDashboard({
       </main>
 
       <DisclaimerFooter fixed={false} />
-    </div>
-  );
-}
-
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: [T, string][];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <div role="tablist" aria-label={label} className="segmented grid flex-1 grid-cols-2">
-      {options.map(([id, text]) => (
-        <button key={id} type="button" role="tab" aria-selected={value === id} onClick={() => onChange(id)}>
-          {text}
-        </button>
-      ))}
     </div>
   );
 }
