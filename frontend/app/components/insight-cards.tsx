@@ -789,7 +789,6 @@ const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFra
 // 비교 기준: DB에 업종 분류가 없어 코스피 중간값(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
 // 업종 분류가 생기면 같은 업종 10개사 이상일 때 업종 중간값으로 바꾼다(#372).
 const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
-const NOT_COMPUTED: Record<string, string> = { negative_earnings: "적자라 계산하지 않아요." };
 
 function FinancialPanel({ financial, why }: { financial: FinancialSnapshot | null; why: string }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
@@ -816,7 +815,7 @@ function FinancialPanel({ financial, why }: { financial: FinancialSnapshot | nul
               </dd>
               <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
                 {metric.value === null
-                  ? NOT_COMPUTED[metric.note ?? ""] ?? "계산할 자료가 모자라요."
+                  ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
                   : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
               </dd>
             </div>

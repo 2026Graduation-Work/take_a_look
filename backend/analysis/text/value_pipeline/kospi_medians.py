@@ -26,10 +26,12 @@ _ACCOUNTS = {"매출액": "revenue", "영업이익": "operating_profit", "당기
 _BATCH = 100
 
 
-def _ratio(a: float | None, b: float | None, *, positive_b: bool = True) -> float | None:
-    if a is None or b is None or b == 0 or (positive_b and b < 0):
-        return None
-    return a / b
+def _ratio(a: float | None, b: float | None) -> float | None:
+    return None if a is None or b is None or b <= 0 else a / b
+
+
+def _pct(a: float | None, b: float | None) -> float | None:
+    return None if (ratio := _ratio(a, b)) is None else ratio * 100
 
 
 def company_metrics(accounts: dict[str, float | None], marcap: float | None) -> dict[str, float | None]:
@@ -41,9 +43,9 @@ def company_metrics(accounts: dict[str, float | None], marcap: float | None) -> 
     return {
         "per": _ratio(marcap, ni) if ni and ni > 0 else None,
         "pbr": _ratio(marcap, eq),
-        "roe": (r * 100) if (r := _ratio(ni, avg_eq)) is not None else None,
-        "operating_margin": (m * 100) if (m := _ratio(accounts.get("operating_profit"), rev)) is not None else None,
-        "debt_ratio": (d * 100) if (d := _ratio(accounts.get("total_liabilities"), eq)) is not None else None,
+        "roe": _pct(ni, avg_eq),
+        "operating_margin": _pct(accounts.get("operating_profit"), rev),
+        "debt_ratio": _pct(accounts.get("total_liabilities"), eq),
         "revenue_growth": (growth - 1) * 100 if growth is not None else None,
     }
 

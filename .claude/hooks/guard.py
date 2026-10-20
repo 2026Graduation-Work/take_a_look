@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def protect(tool_input: dict) -> str | None:
-    name = Path(tool_input.get("file_path") or tool_input.get("notebook_path") or "").name
+    name = Path(tool_input.get("file_path", "")).name
     if re.fullmatch(r"\.env(\..+)?", name) and name != ".env.example":
         return f"{name}는 비밀키 파일이라 Claude가 고치지 않아요. 바꿀 값은 사람이 직접 넣어 주세요."
     return None
