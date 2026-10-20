@@ -4,6 +4,9 @@ on:
   schedule:
     # GitHub cron uses UTC: weekdays 18:47 Asia/Seoul. :00/:30 are avoided (queue delays, 10/08 started 7h late).
     - cron: "47 9 * * 1-5"
+    # Backup: next morning 06:17 KST (Tue-Sat). Scheduled runs have started 5-7h late; if the evening run
+    # already published that trading day, the guard job ends this run without touching anything.
+    - cron: "17 21 * * 1-5"
   workflow_dispatch:
     inputs:
       as_of:
@@ -34,6 +37,10 @@ on:
         description: "Collect investor net purchases only (skip serving)"
         type: boolean
         default: false
+      backup_check:
+        description: "Run the backup guard as the 06:17 KST schedule does (skip if already published)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,7 +51,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The backup schedule runs only when the previous KST weekday is not yet published.
+  # Holidays are not known here; a holiday target behaves like the evening run on that holiday.
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          BACKUP: ${{ github.event.schedule == '17 21 * * 1-5' || inputs.backup_check == true }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: |
+          if [ "$BACKUP" != "true" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          python3 - <<'PYTHON'
+          import json, os
+          from datetime import datetime, timedelta, timezone
+          from urllib.request import Request, urlopen
+          key = os.environ["SUPABASE_SECRET_KEY"]
+          request = Request(os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/budget_usage", data=b"{}",
+                            headers={"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"})
+          published = json.loads(urlopen(request, timeout=30).read())["last_published_as_of"]
+          target = datetime.now(timezone(timedelta(hours=9))).date() - timedelta(days=1)
+          while target.weekday() >= 5:
+              target -= timedelta(days=1)
+          done = published is not None and published >= target.isoformat()
+          print(f"::notice::backup guard: last published {published}, target {target}, {'skip' if done else 'run'}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"run={'false' if done else 'true'}\n")
+          PYTHON
+
   publish:
+    needs: guard
+    if: ${{ needs.guard.outputs.run == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     defaults:
