@@ -168,3 +168,4 @@ backend/analysis/chart/serving/config.local.yaml
 # Preserve the current main local CLI and team permission rules.
 supabase/.temp/
 !.claude/settings.json
+!.claude/hooks/
