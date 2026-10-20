@@ -552,6 +552,12 @@ export async function loadSupabaseSupply(code: string, client: InsightQueryClien
   }));
 }
 
+// 수급 기간(첫날~마지막 날)의 하루 평균 거래량(주). 겹치는 날이 없으면 null
+export function averageVolume(history: Array<{ date: string; volume: number }>, start: string, end: string): number | null {
+  const days = history.filter(({ date }) => date >= start && date <= end);
+  return days.length ? days.reduce((sum, { volume }) => sum + volume, 0) / days.length : null;
+}
+
 // 가격 흐름 분위기(psychology_market_v1의 psych_greed_fear_axis)를 최신 게시 차트의 종가·거래량으로 같은 산식으로 계산한다.
 // 원본: backend/analysis/chart/experiments/features/psychology/market_psychology.py · frontend/scripts/build_demo_snapshot.py mood_word
 export function psychologyAxis(history: Array<{ close: number; volume: number }>): number | null {
@@ -580,7 +586,8 @@ export async function loadSupabasePsychology(code: string, client: InsightQueryC
   const result = await client.from("latest_chart_signal_snapshots")
     .select("as_of:payload->>data_asof,history:payload->prices->history")
     .eq("stock_code", code).eq("horizon", 20).maybeSingle() as QueryResult;
-  const row = unwrap(result, "latest_chart_signal_snapshots") as { as_of: string; history: Array<{ close: number; volume: number }> | null } | null;
+  const row = unwrap(result, "latest_chart_signal_snapshots") as { as_of: string; history: Array<{ date: string; close: number; volume: number }> | null } | null;
   const axis = row?.history ? psychologyAxis(row.history) : null;
-  return axis === null ? null : { axis, word: moodWord(axis), asOf: row!.as_of };
+  // history는 수급 탭의 '하루 평균 거래량 대비'에도 쓴다(같은 조회 한 번)
+  return axis === null ? null : { axis, word: moodWord(axis), asOf: row!.as_of, history: row!.history! };
 }

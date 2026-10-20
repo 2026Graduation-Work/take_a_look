@@ -23,6 +23,7 @@ import {
   loadSupabaseDisclosures,
   loadSupabaseFinancial,
   loadSupabasePsychology,
+  averageVolume,
   loadSupabaseSentiment,
   loadSupabaseSupply,
   type Disclosure,
@@ -223,6 +224,7 @@ export interface PsychologyLine {
 export interface StockInsights {
   psychology: PsychologyLine | null;
   supply: SupplyDemandDay[] | null;
+  supplyVolume: number | null; // 수급 기간 하루 평균 거래량(주). 순매수의 비교 기준
   sentiment: SentimentData | null;
   liveSentiment: LiveSentimentSummary | null;
   contributions: ContributionSignal[] | null;
@@ -298,6 +300,7 @@ export async function loadStockInsights(
         }
       : null,
     supply,
+    supplyVolume: supply && remotePsychology ? averageVolume(remotePsychology.history, supply[0].date, supply.at(-1)!.date) : null,
     sentiment,
     liveSentiment: remoteSentiment.live,
     contributions: offline ? contributions : null,

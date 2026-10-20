@@ -23,10 +23,10 @@ test("public predictions retain the original detail UI and both model directions
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
   const expected = snapshots.find((s: { horizon: number }) => s.horizon === 20).inference.features;
-  await expect(model.getByText("계산값 보기", { exact: true })).toBeVisible();
+  await expect(model.getByText("계산 근거", { exact: true })).toBeVisible();
   await expect(model.getByText(expected[0].contribution.toFixed(4), { exact: true })).not.toBeVisible();
-  await model.locator("summary", { hasText: "계산값 보기" }).click();
-  // 비중을 모르면(전체 합 없음) 상위 3개를 막대로, 계산값 보기에는 모두
+  await model.locator("summary", { hasText: "계산 근거" }).click();
+  // 비중을 모르면(전체 합 없음) 상위 3개를 막대로, 계산 근거에는 모두
   await expect(model.locator("[data-model-feature]")).toHaveCount(Math.min(3, expected.length));
   for (const [index, feature] of expected.entries()) {
     if (index < 3) {
@@ -78,7 +78,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await expect(model).not.toContainText("기여도");
   if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
-  await model.locator("summary", { hasText: "계산값 보기" }).click();
+  await model.locator("summary", { hasText: "계산 근거" }).click();
   await expect(model.locator("dd").first()).toHaveText(features[0].contribution.toFixed(4));
   await expect(model).toContainText("10분의 1 이상이면");
   await page.setViewportSize({ width: 390, height: 844 });

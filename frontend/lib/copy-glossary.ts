@@ -18,7 +18,6 @@ export const TERM = {
   supply: "누가 사고팔았나",
   sentiment: "뉴스 분위기",
   relatedNewsSentiment: "종목 관련 뉴스 분위기",
-  volatility: "가격 흔들림",
   nudge: "확인할 것",
   market: "시장 분위기",
   financial: "재무 상태",
@@ -42,15 +41,52 @@ export const AGREEMENT_ANSWER: Record<HorizonAgreement, string> = {
   conflict: "아니요, 기간마다 엇갈려요",
 };
 
-// 재무 지표는 이름을 그대로 두고 괄호로 풀어 쓴다
-export const FINANCIAL_TERM: Record<string, string> = {
-  per: "PER(주가가 1년 이익의 몇 배인지)",
-  pbr: "PBR(주가가 회사 순자산의 몇 배인지)",
-  roe: "ROE(자기 돈으로 1년에 얼마를 벌었는지)",
-  operating_margin: "영업이익률(매출 100원에서 남긴 영업이익)",
-  debt_ratio: "부채비율(빚이 자기 돈의 몇 %인지)",
-  revenue_growth: "매출 증가율(1년 전보다 매출이 늘어난 정도)",
-};
+// 용어 설명 단계(DESIGN.md '용어 설명 단계'). 라벨 = 쉬운 이름 + 약어 괄호, ⓘ = 정의 한 문장 + 읽는 법 한 문장.
+// 약어와 전문 용어만 ⓘ(tip)를 단다. 매출, 영업이익처럼 일상어에 가까운 말은 라벨만으로 읽힌다.
+// 모든 용어에 쉬운 이름, 정의, 읽는 법이 있는지 copy-rules.test.ts가 지킨다.
+export interface TermInfo {
+  label: string;
+  define: string;
+  read: string;
+  tip: boolean;
+}
+export const TERM_INFO = {
+  per: { label: "이익 대비 주가(PER)", tip: true,
+    define: "주가가 회사 1년 이익의 몇 배인지예요.",
+    read: "업종마다 보통 수준이 달라, 코스피 전체와 견준 값은 대략적인 위치로만 봐요." },
+  pbr: { label: "순자산 대비 주가(PBR)", tip: true,
+    define: "주가가 회사가 가진 순자산(자산에서 빚을 뺀 것)의 몇 배인지예요.",
+    read: "1배보다 낮으면 주가가 순자산보다 낮게 매겨졌다는 뜻이에요. 이익을 못 내는 회사도 낮게 나와요." },
+  roe: { label: "자기자본 수익률(ROE)", tip: true,
+    define: "회사가 자기 돈으로 1년에 몇 %를 벌었는지예요.",
+    read: "꾸준히 높으면 가진 돈을 잘 굴린다는 뜻이에요. 한 해만 보지 말고 흐름을 함께 봐요." },
+  operating_margin: { label: "영업이익률", tip: false,
+    define: "매출 100원 중 본업으로 남긴 이익이에요.",
+    read: "같은 업종끼리 비교해야 뜻이 있어요." },
+  debt_ratio: { label: "부채비율", tip: true,
+    define: "빚이 자기 돈의 몇 %인지예요.",
+    read: "높을수록 빚에 기대는 정도가 크다는 뜻이에요. 은행처럼 빚이 사업인 업종은 원래 높아요." },
+  revenue_growth: { label: "매출 증가율", tip: false,
+    define: "1년 전보다 매출이 늘어난 정도예요.",
+    read: "한 해 값은 크게 흔들릴 수 있어 몇 해 흐름을 함께 봐요." },
+  volatility: { label: "가격 흔들림", tip: true,
+    define: "하루하루 가격이 오르내린 폭을 1년 기준으로 환산한 변동성이에요.",
+    read: "높을수록 짧은 기간에 크게 오르거나 내릴 수 있어요." },
+  net_buy: { label: "순매수", tip: true,
+    define: "산 주식 수에서 판 주식 수를 뺀 값이에요.",
+    read: "+면 판 것보다 많이 샀고, −면 많이 팔았어요. 거래량과 견줘 보면 크기를 알 수 있어요." },
+} as const satisfies Record<string, TermInfo>;
+export type TermKey = keyof typeof TERM_INFO;
+
+// 비교 기준 한 줄. 높아요, 낮아요, 비슷해요까지만 쓰고 싸다, 비싸다 같은 판정은 쓰지 않는다(#372).
+// 차이가 기준값의 10% 안이면 비슷해요.
+export function compareLine(value: number, median: number, basis: string, unit: string): string {
+  const level = Math.abs(value - median) <= Math.abs(median) * 0.1 ? "비슷해요" : value > median ? "높아요" : "낮아요";
+  const shown = median.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+  return level === "비슷해요"
+    ? `${basis} 중간값 ${shown}${unit}와 비슷해요.`
+    : `${basis} 중간값 ${shown}${unit}보다 ${level}.`;
+}
 
 export type RiskLevel = "낮음" | "보통" | "높음";
 
