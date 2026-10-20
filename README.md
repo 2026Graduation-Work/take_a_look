@@ -9,19 +9,21 @@
 [![Python CI](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**라이브 데모 → https://takealook-skku.vercel.app** (기존 주소 https://stock-prediction-v2-chi.vercel.app 도 그대로 동작합니다. 가입 없이 "데모로 둘러보기"로 모든 화면을 볼 수 있습니다)
+**라이브 데모 → https://takealook-skku.vercel.app** (가입 없이 "데모로 둘러보기"로 모든 화면을 볼 수 있습니다. 처음이라면 [이용 안내](https://takealook-skku.vercel.app/guide)부터 보세요. 기존 주소 https://stock-prediction-v2-chi.vercel.app 도 그대로 동작합니다)
 
 <p>
-  <img src="docs/images/dashboard.png" alt="대시보드: 한 줄 요약, 보유 종목 맵, 모델 신호가 강한 종목" width="100%" />
+  <img src="docs/images/dashboard.png" alt="대시보드: 요약 한 문장, 성향 한 줄, 내 포트폴리오, 신호가 강한 종목" width="100%" />
 </p>
 
 ## 무엇을 하나
 
-- **성향 진단** — 16문항(8축) 진단으로 투자 유형을 정합니다. 더 정확히 하고 싶으면 24문항 진단도 있습니다.
-- **성향에 맞춘 근거** — 종목마다 네 가지 근거(시장 분위기 · 누가 사고팔았나 · 회사 체력 · 모델이 본 이유)를 성향에 맞는 순서와 체크포인트로 보여 줍니다. 종목을 걸러 내지는 않습니다.
-- **설명 가능한 숫자** — 모든 수치에 비교 기준과 출처를 붙입니다. "상승 확률 70%" 대신 "과거 비슷한 경우 10번 중 7번은 이 범위였어요"처럼 말하고, 미래 가격 곡선은 그리지 않습니다.
-- **대시보드** — 맨 위 한 줄로 "오늘 확인할 것"을 알려 주고, 보유 종목 맵(최신 종가 기준 평가금액)과 신호가 강한 종목을 보여 줍니다.
-- **코스피 전 종목** — 헤더 검색으로 코스피 전 종목의 상세(모델 신호·최근 공시·수급·가격 흔들림)를 볼 수 있고 보유 종목으로 등록할 수 있습니다. 보유·관심 종목은 뉴스 분위기와 최신 정기보고서 재무도 매일·매주 채워집니다.
+- **성향 진단**: 16문항(8축) 진단으로 투자 유형을 정합니다. 더 정확히 하고 싶으면 24문항 진단도 있습니다.
+- **읽는 순서가 정해진 대시보드**: 결론(요약 한 문장) → 나에게 해당하는 것(성향 한 줄, 내 포트폴리오, 어제와 달라진 근거) → 둘러볼 것(신호가 강한 종목) 순서로 읽힙니다. 1주, 4주 신호를 바꿔 볼 수 있고 화면 전체가 같은 기간을 따릅니다.
+- **성향에 맞춘 근거**: 종목마다 네 가지 근거(시장 분위기, 누가 사고팔았나, 재무 상태, 모델이 본 이유)를 성향에 맞는 순서와 확인할 것으로 보여 줍니다. 종목을 걸러 내지는 않습니다.
+- **설명 가능한 숫자**: 모든 수치에 비교 기준과 출처를 붙입니다. 재무 지표는 코스피 중간값과 견주고("코스피 중간값 11.2배보다 높아요"), 용어는 ⓘ에 정의와 읽는 법을 둡니다. "상승 확률 70%" 대신 "과거 비슷한 경우 10번 중 7번은 이 범위였어요"처럼 말하고, 미래 가격 곡선은 그리지 않습니다.
+- **보유 종목 넣기**: 검색으로 넣거나 증권 앱 캡처를 올리면 기기 안에서 글자를 읽어 종목과 수량을 채웁니다(사진은 어디에도 보내지 않음). ETF, 해외 주식은 아직 다루지 않는다고 따로 알려 줍니다.
+- **코스피 전 종목**: 검색으로 코스피 전 종목의 상세(모델 신호, 최근 공시, 수급, 가격 흔들림)를 보고 보유 종목으로 넣을 수 있습니다. 보유, 관심 종목은 뉴스 분위기와 최신 정기보고서 재무도 매일, 매주 채워집니다.
+- **이용 안내**: 서비스 취지, 시작하는 순서, 하루 5분 공부 루틴, 화면 읽는 법, 용어 모음을 한 페이지([/guide](https://takealook-skku.vercel.app/guide))에 모았습니다. 로그인 없이 열립니다.
 
 <p>
   <img src="docs/images/onboarding-welcome-mobile.png" alt="모바일 환영 화면" width="30%" />
@@ -34,6 +36,7 @@
 - **화이트박스**: 점수는 전부 규칙으로 계산합니다(결정론). LLM은 설명 문장에만 씁니다.
 - **사람이 결정**: 매수·매도 지시나 자동 매매는 하지 않습니다. 근거와 출처를 보여 주고 판단은 사용자가 합니다.
 - **데이터 정직성**: 실데이터가 아닌 값에는 화면에 "예시 데이터"를 표시합니다. 어떤 수치가 실데이터인지는 [docs/data-inventory.md](docs/data-inventory.md)에 있습니다.
+- **화면 규칙**: 색과 글자 크기, 읽는 순서, 용어 설명 단계는 [frontend/DESIGN.md](frontend/DESIGN.md)가 정합니다. 화면 문구의 금지 표현은 테스트(`frontend/lib/copy-rules.ts`)가 막습니다.
 
 ## 빠르게 시작하기
 
@@ -68,8 +71,8 @@ ruff check . && pytest
 
 | 블록 | 하는 일 | 문서 |
 |---|---|---|
-| `backend/analysis/chart` | 가격·거래량 피처 + LightGBM 단기 예측, 백테스트 | [ONBOARDING.md](backend/analysis/chart/ONBOARDING.md) |
-| `backend/analysis/text` | 뉴스 감성(과거 BigKinds · 최근 NewsAPI.ai, KR-FinBERT)·재무(DART) 분석 | [README](backend/analysis/text/README.md) |
+| `backend/analysis/chart` | 가격, 거래량 피처 + LightGBM 단기 예측, 백테스트, 운영 기록 채점(`experiments/live_record.py`) | [README](backend/analysis/chart/README.md) |
+| `backend/analysis/text` | 뉴스 감성(과거 BigKinds, 최근 NewsAPI.ai, KR-FinBERT), 재무(DART) 분석, 코스피 재무 중간값(`value_pipeline/kospi_medians.py`) | [README](backend/analysis/text/README.md) |
 | `backend/profiling` | 성향 설문 정의와 출력 스키마 | [README](backend/profiling/README.md) |
 
 API 키(`DART_API_KEY`, `NEWSAPI_AI_KEY` 등)는 저장소 루트의 `.env`에 둡니다. `.env`는 gitignore되어 있으니 절대 커밋하지 마세요.
@@ -110,7 +113,9 @@ docs/               설계·데이터·설정 문서 (색인: docs/README.md)
 
 - 별도 API 서버 없이 프론트가 Supabase를 직접 조회하고, 블록 사이는 `schema/`의 JSON 스키마로만 주고받습니다.
 - 새 데이터 소스나 모델을 붙이려면 해당 스키마를 맞춰 출력하면 화면에 그대로 연결됩니다.
-- 모든 서비스는 2027-02-01까지 무료 한도 안에서 돌립니다. 한도·보존 정책은 [docs/ops/free-tier-budget.md](docs/ops/free-tier-budget.md), 주 1회 감시 워크플로가 기준을 넘으면 이슈를 남깁니다.
+- 모든 서비스는 2027-02-01까지 무료 한도 안에서 돌립니다. 한도와 보존 정책은 [docs/ops/free-tier-budget.md](docs/ops/free-tier-budget.md)에 있고, 주 1회 감시 워크플로가 기준을 넘으면 이슈를 남깁니다.
+- 보안: 모든 public 테이블에 RLS가 켜져 있고 개인 데이터는 본인만 읽고 씁니다(2026-10 점검에서 익명, 다른 사용자로 직접 시험). 주간 감시는 RLS가 꺼진 테이블이 하나라도 있으면 실패합니다. 점검 결과는 [docs/security/2026-10-audit.md](docs/security/2026-10-audit.md)에 있습니다.
+- 차트 신호는 평일 저녁 정기 실행으로 게시하고, 늦어지면 다음 날 06:17 예비 실행이 이어 받습니다.
 
 **기술 스택**: Next.js 16 · React 19 · TypeScript · Tailwind CSS v4 · Recharts · Supabase · Vercel / Python · LightGBM · KR-FinBERT · FinanceDataReader
 
