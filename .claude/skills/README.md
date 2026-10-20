@@ -147,3 +147,10 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | 스크랩 | 판정 | 이유 |
 | --- | --- | --- |
 | "깃허브 인기 클로드 스킬 5개"(Superpowers, Anthropic Skills, UI UX Pro Max, Caveman, Taste Skill) | 기존 판정 유지 | 다섯 개 모두 이미 판정했다. Superpowers는 개인 선택(서환 개인 설치, 레포 공용 아님), Anthropic Skills는 `frontend-design`만 SHA 고정 설치하고 문서(docx, xlsx)는 Claude 기본 기능으로 충분, UI UX Pro Max는 기각(스타일 고르는 도구, 우리는 DESIGN.md로 정함), Caveman은 오늘 첫 번째 표에서 기각, Taste Skill은 2종만 설치. "댓글 남기면 DM으로 설치 가이드"는 받지 않는다(원본 레포 SKILL.md만 본다) |
+
+## 검토한 스크랩 (2026-10-21)
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| "깃허브 인기 클로드 스킬 5개"(같은 목록 다시) | 기존 판정 유지 | 10/20 세 번째 표와 같은 다섯 개다. 다시 판정하지 않는다 |
+| "별 30만, 스킬 TOP 10은 '멈춰'"(Superpowers, Matt Pocock, Karpathy, Graphify, Ponytail, UI UX Pro Max, Taste, Anthropic, Caveman, Agent Skills) | 9개 기존 판정 유지, Agent Skills 기각 | 9개는 이미 판정했다(Superpowers 개인 선택, Matt Pocock과 Karpathy는 아이디어만, Graphify 기각, Ponytail 사용 중, UI UX Pro Max 기각, Taste 2종 설치, Anthropic은 `frontend-design`만, Caveman 기각). Karpathy 저장소는 `multica-ai/andrej-karpathy-skills`이고 지금도 라이선스가 없어 복사하지 않는다(카파시 본인 저장소가 아니라는 스크랩 말이 맞다). 새로 본 `addyosmani/agent-skills`(MIT, 별 약 10.9만, 스크랩의 별 수와 다름)는 기획부터 배포까지 스킬 24개와 훅, 명령 묶음이다. 우리는 같은 순서를 AGENTS.md PR 규칙, `/code-review`, `/security-review`, ponytail, 완료 기준으로 이미 하고 있어 중복이고, 훅까지 들이면 규칙이 두 벌이 된다 |
