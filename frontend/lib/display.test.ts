@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contributionWord, formatKstDateTime, formatShares } from "./display.ts";
+import { changeMeta, contributionWord, formatKstDateTime, formatShares, formatSignedPercent, signedPercent } from "./display.ts";
 
 test("formatKstDateTime shows UTC timestamps in Korean time and leaves dates alone", () => {
   assert.equal(formatKstDateTime("2026-10-06T03:53:12.940604+00:00"), "2026.10.06 12:53");
@@ -24,4 +24,21 @@ test("모델 근거 크기 말: 전체 합의 10분의 1 기준, 합이 없으�
   assert.equal(contributionWord(-0.1, "중립", 1), "중립 신호를 크게 낮춤");
   assert.equal(contributionWord(0.3, "상승"), "상승 신호를 높임");
   assert.equal(contributionWord(0, "하락", 1), "하락 신호를 바꾸지 않음");
+});
+
+
+test("증감 표시의 방향은 표시 자릿수에 맞추고 반올림된 0에는 부호를 붙이지 않는다", () => {
+  for (const value of [0, -0, 0.04, -0.04]) {
+    assert.equal(formatSignedPercent(value), "0.0%");
+    assert.equal(changeMeta(value, 1).arrow, "");
+    assert.equal(changeMeta(value, 1).color, "var(--color-body)");
+  }
+  assert.equal(formatSignedPercent(1.26), "+1.3%");
+  assert.equal(formatSignedPercent(-1.26), "-1.3%");
+  assert.equal(signedPercent(0.0126), "+1.3%");
+  assert.equal(formatSignedPercent(-0.004, 2), "0.00%");
+  assert.equal(changeMeta(0.06, 1).arrow, "▲");
+  assert.equal(changeMeta(-0.06, 1).arrow, "▼");
+  // 수급처럼 '1만 주 미만'을 말로 표시하는 값은 작은 수량도 실제 방향을 유지한다.
+  assert.equal(changeMeta(-1).arrow, "▼");
 });

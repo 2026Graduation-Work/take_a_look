@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MARKET_CONDITION_META } from "@/lib/display";
+import { changeMeta, formatSignedPercent, MARKET_CONDITION_META } from "@/lib/display";
 import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
@@ -14,16 +14,13 @@ function formatValue(quote: MarketIndexQuote): string {
 }
 
 function Quote({ quote }: { quote: MarketIndexQuote }) {
-  const color =
-    quote.change > 0 ? "var(--color-up)" : quote.change < 0 ? "var(--color-down)" : "var(--color-muted)";
-  const arrow = quote.change > 0 ? "▲" : quote.change < 0 ? "▼" : "";
+  const { color, arrow } = changeMeta(quote.changePercent, 2);
   return (
     <span className="flex flex-none items-baseline gap-2 whitespace-nowrap">
       <span className="text-xs text-muted">{quote.label}</span>
       <span className="text-sm font-medium tabular-nums">{formatValue(quote)}</span>
       <span className="text-xs tabular-nums" style={{ color }}>
-        {arrow}
-        {Math.abs(quote.changePercent).toFixed(2)}%
+        {arrow && `${arrow} `}{formatSignedPercent(quote.changePercent, 2)}
       </span>
     </span>
   );
@@ -98,7 +95,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
             <p className="m-0 mt-2 text-muted">{meta.comment}.</p>
           </MarketDetail>
         ) : (
-          <span className="flex-none whitespace-nowrap text-xs text-body lg:ml-auto">{meta.comment}</span>
+          <span className="flex-none whitespace-nowrap text-xs text-muted lg:ml-auto">{meta.comment}</span>
         )}
         {!real && <span className="flex-none text-2xs text-muted">예시 데이터</span>}
       </div>
