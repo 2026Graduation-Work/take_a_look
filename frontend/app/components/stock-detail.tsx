@@ -253,7 +253,7 @@ export default function StockDetailView({
             </p>
           )}
           {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다. 성적표는 맨 아래 면책 문구에서 간다 */}
-          <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</p>
+          <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.</p>
         </section>
 
         {/* 3. 나에게 맞춘 체크포인트 */}

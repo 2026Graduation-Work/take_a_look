@@ -126,8 +126,8 @@ export default function ScreenshotImport({
   }
 
   return (
-    <section aria-label="스크린샷으로 불러오기" className="flex flex-col gap-2">
-      <div className="flex flex-col gap-1">
+    <section aria-label="스크린샷으로 불러오기" className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading" || phase === "downloading"} className="btn-secondary self-start">
           스크린샷으로 불러오기
         </button>
@@ -143,11 +143,10 @@ export default function ScreenshotImport({
             event.target.value = ""; // 같은 파일을 다시 골라도 읽게
           }}
         />
-        <p className="m-0 text-xs text-muted">
-          증권 앱의 보유 종목 화면을 캡처해 올리면 종목과 수량을 채워 드려요. 사진은 이 기기 안에서만 읽고 어디에도 보내지 않아요.
+        {/* 첫 실행은 읽는 도구 24.9MB를 받아 43초~2분(2026-10-20 실측). 용량은 사용자에게 의미가 없어 시간만 적는다 */}
+        <p className="m-0 max-w-2xl px-1 text-xs text-muted">
+          증권 앱의 보유 종목 화면을 캡처해 올리면 종목과 수량을 채워 드려요. 사진은 이 기기 안에서만 읽고 어디에도 보내지 않아요. 처음 한 번은 1분쯤 걸려요.
         </p>
-        {/* 2026-10-20 실측: 처음 받는 양 24.9MB, 집 인터넷에서 50초~2분 */}
-        <p className="m-0 text-xs text-muted">처음 한 번은 읽는 도구를 내려받느라 1분쯤 걸려요(약 25MB).</p>
       </div>
 
       <div aria-live="polite" className="flex flex-col gap-2">
