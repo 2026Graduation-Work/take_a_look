@@ -11,7 +11,7 @@ const dev = process.env.NODE_ENV !== "production";
 const PAGE_CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${dev ? " 'unsafe-eval'" : ""}`,
-  "worker-src 'self' blob:",
+  "worker-src 'self'",
   `connect-src 'self' ${SUPABASE} ${SUPABASE.replace(/^https/, "wss")}${dev ? " ws:" : ""}`,
   "img-src 'self' data: blob:",
   "style-src 'self' 'unsafe-inline'",
@@ -21,8 +21,10 @@ const PAGE_CSP = [
   "form-action 'self'",
   "frame-ancestors 'none'",
 ].join("; ");
-// 글자 읽기 워커(와 그 워커가 자기 파일로 만드는 하위 워커)용. 모델·wasm도 같은 출처에서 받는다
-const OCR_CSP = "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' data:; object-src 'none'";
+// 글자 읽기 워커(와 그 워커가 자기 파일로 만드는 하위 워커)용. 모델·wasm도 같은 출처에서 받는다.
+// /ocr 아래 없는 주소의 404 문서도 이 CSP를 받으므로 문서용 지시어(base-uri, form-action, frame-ancestors)도 닫는다
+const OCR_CSP =
+  "default-src 'self'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 const headers = (csp: string) => [
   { key: "Content-Security-Policy", value: csp },
