@@ -44,7 +44,8 @@ const SAMPLE_LABEL: Record<ComparisonSample, string> = {
 const RETURN_METRIC = METRICS.find((metric) => metric.key === "cumulative_return")!;
 
 const GROUPS: { title: string; keys: MetricDefinition["key"][] }[] = [
-  { title: "분류 성능", keys: ["auc", "hit_rate"] },
+  // '상승 여부 일치율'은 "상승 아님"만 답해도 0.60이 나와 실력을 보여 주지 못해 표에서 뺐다(docs/research/metric-choice.md 5장)
+  { title: "분류 성능", keys: ["auc"] },
   { title: "확률 보정", keys: ["calibration_brier", "calibration_ece"] },
   { title: "백테스트", keys: ["sharpe", "mdd", "cumulative_return", "trade_count"] },
 ];

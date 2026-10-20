@@ -1,0 +1,49 @@
+{
+  "source": "chart_prediction_log(게시 배치) + chart_prices",
+  "rule": "strong-signals rankSignals, 방향별 상위 5",
+  "label": "barrier_labels(σ 상승 1.5배, 하락 1.2배, 먼저 닿은 쪽)",
+  "min_days": 20,
+  "log_days": 11,
+  "horizons": {
+    "5": {
+      "days": 5,
+      "first_day": "2026-10-01",
+      "last_day": "2026-10-08",
+      "sufficient": false,
+      "up": {
+        "list_rate": 0.5417,
+        "list_n": 24,
+        "list_unscored": 1,
+        "all_rate": 0.3778,
+        "all_n": 4417
+      },
+      "down": {
+        "list_rate": null,
+        "list_n": 0,
+        "list_unscored": 25,
+        "all_rate": 0.5495,
+        "all_n": 4417
+      }
+    },
+    "20": {
+      "days": 0,
+      "first_day": null,
+      "last_day": null,
+      "sufficient": false,
+      "up": {
+        "list_rate": null,
+        "list_n": 0,
+        "list_unscored": 0,
+        "all_rate": null,
+        "all_n": 0
+      },
+      "down": {
+        "list_rate": null,
+        "list_n": 0,
+        "list_unscored": 0,
+        "all_rate": null,
+        "all_n": 0
+      }
+    }
+  }
+}
