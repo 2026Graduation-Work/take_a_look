@@ -25,7 +25,7 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   await finishDemo(page);
   await page.goto("/portfolio");
 
-  await expect(page.getByText("사진은 이 기기 안에서만 읽고 어디에도 보내지 않아요.")).toBeVisible();
+  await expect(page.getByText("캡처는 이 기기 안에서만 읽고 어디에도 보내지 않아요.", { exact: false })).toBeVisible();
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
   await expect(page.getByRole("heading", { name: "읽은 내용을 확인해 주세요" })).toBeVisible();
   const review = page.getByRole("list", { name: "읽은 보유 종목" });

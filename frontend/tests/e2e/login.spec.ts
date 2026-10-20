@@ -85,12 +85,15 @@ test("로그인: 종목 마스터의 종목(우선주)을 보유 종목으로 �
   await expect(page).toHaveURL("/");
 
   await page.goto("/portfolio");
-  await page.getByRole("button", { name: "종목 추가" }).first().click();
-  const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("종목명 또는 코드").fill("삼성전자우");
+  const search = page.getByLabel("종목 검색");
+  await search.fill("삼성전자우");
   await expect.poll(() => calls.some((call) => call.startsWith("GET /rest/v1/stocks"))).toBe(true);
-  await sheet.getByLabel("수량(주)").fill("3");
-  await sheet.getByRole("button", { name: "추가" }).click();
+  // 검색 후보가 온 뒤 Enter로 고르면 바로 행이 생긴다
+  await expect(async () => {
+    await search.press("Enter");
+    await expect(page.getByLabel("삼성전자우 수량")).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await page.getByLabel("삼성전자우 수량").fill("3");
   await expect(page.getByLabel("삼성전자우 수량")).toHaveValue("3");
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect(page.getByText("저장했어요.")).toBeVisible();

@@ -4,7 +4,7 @@
 // 사진은 이 기기 안(웹 워커)에서만 읽고 어디에도 보내지 않는다. 읽은 값은 사용자가 확인하고 고친 뒤
 // '목록에 넣기'를 눌러야 편집 목록에 들어가고, 저장은 기존 저장 버튼이 한다.
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { init, recognize, toolLoaded } from "@/lib/holdings-ocr/recognize";
 import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type StockRef } from "@/lib/holdings-ocr/parse";
@@ -55,12 +55,17 @@ function CheckMark({ show }: { show: boolean }) {
   );
 }
 
+// leading: 버튼 왼쪽에 둘 것(종목 검색칸). children: 버튼 줄과 읽은 결과 사이에 둘 안내(평균 매입가 설명 등)
 export default function ScreenshotImport({
   catalog,
   onAdd,
+  leading,
+  children,
 }: {
   catalog: StockRef[];
   onAdd: (rows: SavedHolding[]) => string[]; // 이미 있어서 새 값으로 바꾼 종목 이름
+  leading?: ReactNode;
+  children?: ReactNode;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -133,10 +138,12 @@ export default function ScreenshotImport({
   }
 
   return (
-    <section aria-label="스크린샷으로 불러오기" className="flex flex-col gap-3">
-      <div className="flex flex-col gap-3">
-        <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading" || phase === "downloading"} className="btn-secondary self-start">
-          스크린샷으로 불러오기
+    <section aria-label="종목 넣기" className="flex flex-col gap-3">
+      {/* 검색칸 + 오른쪽 '캡처로 불러오기'. 390에서는 검색 아래 줄 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        {leading && <div className="min-w-0 flex-1">{leading}</div>}
+        <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading" || phase === "downloading"} className="btn-secondary flex-none self-start sm:self-auto">
+          캡처로 불러오기
         </button>
         <input
           ref={input}
@@ -150,11 +157,8 @@ export default function ScreenshotImport({
             event.target.value = ""; // 같은 파일을 다시 골라도 읽게
           }}
         />
-        {/* 첫 실행은 읽는 도구 24.9MB를 받아 43초~2분(2026-10-20 실측). 용량은 사용자에게 의미가 없어 시간만 적는다 */}
-        <p className="m-0 max-w-2xl px-1 text-xs text-muted">
-          증권 앱의 보유 종목 화면을 캡처해 올리면 종목과 수량을 채워 드려요. 사진은 이 기기 안에서만 읽고 어디에도 보내지 않아요. 처음 한 번은 1분쯤 걸려요.
-        </p>
       </div>
+      {children}
 
       <div aria-live="polite" className="flex flex-col gap-2">
         {phase === "downloading" && (

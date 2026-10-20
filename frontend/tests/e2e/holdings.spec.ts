@@ -55,9 +55,9 @@ test("로그인: 보유 조회 실패를 빈 목록으로 보이지 않고 저�
   await page.goto("/portfolio");
   await expect(page.getByRole("alert").filter({ hasText: "보유 종목 조회 실패" })).toBeVisible();
   await expect(page.getByRole("button", { name: "저장", exact: true })).toBeDisabled();
-  await expect(page.getByText("아직 등록한 종목이 없어요.")).toHaveCount(0);
+  await expect(page.getByText("아직 넣은 종목이 없어요.")).toHaveCount(0);
   expect(calls.filter((call) => /^(POST|PATCH).*portfolio_holdings/.test(call))).toEqual([]);
   holdingErrors.read = false;
   await page.getByRole("button", { name: "다시 불러오기" }).click();
-  await expect(page.getByText("아직 등록한 종목이 없어요.")).toBeVisible();
+  await expect(page.getByText("아직 넣은 종목이 없어요.")).toBeVisible();
 });
