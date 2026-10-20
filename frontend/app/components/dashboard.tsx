@@ -9,7 +9,7 @@ import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
@@ -66,14 +66,18 @@ function chooseHorizon(next: SignalHorizon) {
 
 // 섹션 제목 줄: 제목 + 오른쪽 컨트롤(그것이 바꾸는 내용의 제목 줄, DESIGN.md '읽는 순서') + 아래 13px 한 줄.
 // 두 열의 제목 줄 높이를 같게(min-h-11) 두어 같은 높이에서 시작한다
+// 제목 줄: 제목 왼쪽, [설명][컨트롤] 오른쪽. 390처럼 한 줄에 안 들어가면 [설명][컨트롤]이 제목 아래 둘째 줄로 가고
+// (컨트롤은 오른쪽), 설명이 없어도 컨트롤이 그 줄 높이를 잡아 아래 내용이 흔들리지 않는다
 function SectionHead({ title, note, control }: { title: string; note?: string; control?: ReactNode }) {
   return (
-    <div className="flex flex-col gap-1 px-1">
-      <div className="flex min-h-11 items-center justify-between gap-3">
-        <h2 className="text-xl font-semibold">{title}</h2>
-        {control}
-      </div>
-      {note && <p className="m-0 truncate text-2xs text-muted">{note}</p>}
+    <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
+      <h2 className="basis-full text-xl font-semibold sm:basis-auto">{title}</h2>
+      {control && (
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-3 sm:flex-none">
+          {note && <p className="m-0 mr-auto truncate text-2xs text-muted sm:mr-0">{note}</p>}
+          {control}
+        </div>
+      )}
     </div>
   );
 }
@@ -314,7 +318,7 @@ export default function Dashboard(initialData: DashboardData) {
                   {/* 기간 전환은 그것이 바꾸는 내용(맵, 요약, 목록)의 제목 줄에. 1주, 4주 오름차순(기본 4주) */}
                   <SectionHead
                     title="내 포트폴리오"
-                    note={HORIZON_NOTE[horizon]}
+                    note={horizon === 5 ? SHORT_HORIZON_NOTE : undefined}
                     control={<Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />}
                   />
                   <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
@@ -350,7 +354,7 @@ export default function Dashboard(initialData: DashboardData) {
               </section>
 
               <section aria-label="신호가 강한 종목" className="flex flex-col gap-2 lg:col-span-4">
-                <SectionHead title="신호가 강한 종목" note={`${horizon === 20 ? "4주" : "1주"} 기준`} />
+                <SectionHead title="신호가 강한 종목" />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (
