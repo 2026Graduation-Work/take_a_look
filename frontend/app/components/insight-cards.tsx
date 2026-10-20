@@ -116,7 +116,7 @@ const TAB_META: Record<TabId, { label: string; question: string; why: string }> 
   financial: {
     label: TERM.financial,
     question: "이 회사는 돈을 잘 벌고 있나요?",
-    why: "가격 움직임과 별개로 회사의 기초 체력을 보는 지표예요. 오래 들고 갈 종목이라면 특히 중요해요.",
+    why: "가격 움직임만으로는 회사의 재무 상태를 알기 어려워요. 돈을 버는 정도, 빚의 수준, 이익과 자산 대비 주가를 함께 확인할 수 있어요.",
   },
   contribution: {
     label: TERM.contribution,
@@ -373,7 +373,7 @@ export default function EvidenceTabs({
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
           />
         )}
-        {active !== "financial" && <Why>{TAB_META[active].why}</Why>}
+        <Why>{TAB_META[active].why}</Why>
       </div>
     </section>
   );
@@ -732,7 +732,11 @@ function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
               <span className="text-right text-sm font-semibold tabular-nums text-ink">
                 <ChangeText value={total}>{formatShares(total)}</ChangeText>
                 <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                  최근일 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
+                  <span className="sr-only">최근 거래일 </span>
+                  <time dateTime={supply[supply.length - 1].date} aria-label={supply[supply.length - 1].date.replaceAll("-", ".")}>
+                    {supply[supply.length - 1].date.slice(5).replace("-", ".")}
+                  </time>{" "}
+                  <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                 </span>
               </span>
             </li>
