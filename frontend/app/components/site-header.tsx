@@ -30,9 +30,7 @@ export default function SiteHeader({ query, onQueryChange, profile, marketStatus
             <div className="order-last flex min-w-0 basis-full items-center sm:order-none sm:flex-1 sm:basis-auto sm:justify-end">
               <StockSearch query={query ?? ""} onQueryChange={onQueryChange} />
             </div>
-          ) : (
-            <div className="hidden flex-1 sm:block" />
-          )}
+          ) : null /* 검색이 없는 화면은 이름 메뉴가 ml-auto로 오른쪽 끝에 붙는다 */}
 
           <AccountControls profile={profile} />
         </div>

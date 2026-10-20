@@ -133,3 +133,11 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | "CLAUDE.md 규칙은 부탁이라 어긴다 → 훅으로" (보호 파일 훅, 커밋 전 테스트 훅) | **채택(적용)** | 사실 확인: Claude Code 공식 문서대로 CLAUDE.md는 시스템 프롬프트가 아닌 맥락으로 들어가 엄격한 준수 보장이 없고, PreToolUse 훅은 **종료 코드 2만 막는다**(1은 알림만). 되돌리기 힘든 두 가지만 `.claude/hooks/guard.py`로 옮겼다: ① `.env` 류 수정 차단(`.env.example` 제외) ② `git commit` 전 바뀐 블록의 빠른 검사(프론트 단위 테스트, 파이썬 ruff) 실패 시 차단. pytest 전체와 build는 CI 필수 체크가 막아 훅에 넣지 않았다(커밋마다 느려짐). 스키마는 이미 `ask` 권한으로 묻는다 |
 | "에이전트 말고 스킬(업무별 설명서)" (Anthropic 발표 인용) | 생각만 채택(이미 하고 있음) | 우리 구조가 이미 이 방식이다: AI 하나 + 업무별 설명서(`AGENTS.md` 규칙, `frontend/DESIGN.md` 화면, 허용 목록 스킬 5종, 메모리의 '도구 꺼내 쓰기 표'), 완료 기준(PR 규칙의 필수 체크, 화면 PR 3문항), "틀리면 채팅이 아니라 설명서를 고친다"(피드백마다 DESIGN.md·copy-rules 갱신). 새 스킬은 만들지 않음. DM 프롬프트 모음은 받지 않음 |
 | [PentAGI](https://github.com/vxcontrol/pentagi) (MIT, 별 3.1만, 10/17 갱신) | 기각 | 실재하고 활발하지만 자체 호스팅(Docker Compose + PostgreSQL/pgvector + 선택 Neo4j)과 LLM(유료 API 또는 27B급 로컬 모델)이 필요해 무료·무관리 원칙에 맞지 않는다. nmap, sqlmap, Metasploit 같은 공격 도구를 운영 중인 Vercel, Supabase 주소에 돌리는 것은 우리 몫의 점검 범위를 넘는다. 이번 점검(`docs/security/2026-10-audit.md`)은 RLS를 DB 안에서 역할을 바꿔 직접 시험했고, 주간 감시가 RLS를 계속 본다 |
+
+## 검토한 스크랩 (2026-10-20, 두 번째)
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| "육칠"(AI 6개가 각자 풀고 7번째가 채점해 합침) | 기각(생각만) | 같은 일을 여러 번 돌리는 병렬 에이전트라 토큰이 몇 배로 든다. 우리 세션은 하위 에이전트를 쓰지 않는 규칙이고, 대안 비교가 필요한 곳(새 화면)은 이미 DESIGN.md 0-1 "시안 2~3개를 만들어 비교"로 한다 |
+| "크래시 아웃"(답을 스스로 공격해 검증) | 생각만 채택(이미 하고 있음) | 프롬프트 한 줄보다 실제 검증이 낫다: 테스트, 정확도 표(`accuracy.ts`), 운영 화면 실측, `/security-review`, ponytail 점검, 그리고 이번 #385처럼 실제 데이터로 다시 시험한다. 새 도구 없음 |
+| "아우라 파밍"(AI 티 나는 디자인 금지) | 이미 충족 | DESIGN.md 8장(그라데이션, 글로우, 이모지, 알약 배지 남발, 상자 안 상자 금지)과 `copy-rules.ts`(가운데 점, 개발 용어, '추천' 등)가 같은 일을 코드로 막는다. 허용 스킬 `baseline-ui`, `minimalist-ui`도 같은 방향 |

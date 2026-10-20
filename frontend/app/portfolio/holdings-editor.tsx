@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import SiteHeader from "../components/site-header";
@@ -105,10 +105,10 @@ function AccountHoldingsEditor({
     return () => { active = false; };
   }, [supabaseMode, onboardingState.userId, reload]);
 
-  const changeRows = useCallback((next: SavedHolding[]) => {
+  const changeRows = (next: SavedHolding[]) => {
     setRows(next);
     setStatus("idle");
-  }, []);
+  };
 
   async function submit() {
     if (!loaded || status === "saving") return;
