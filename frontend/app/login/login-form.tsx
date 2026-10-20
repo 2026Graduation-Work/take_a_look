@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import StepNav from "@/app/components/step-nav";
 import Link from "next/link";
 import BrandHeader from "../components/brand-header";
+import Wordmark from "@/components/brand/Wordmark";
 import { SERVICE_TAGLINE } from "@/lib/brand";
 
 type AccountTab = "signin" | "signup";
@@ -76,20 +77,23 @@ export default function LoginForm() {
 
   return (
     <>
-      {/* 로그인 전 헤더는 로고만(다른 화면과 같은 틀). 서비스 이름은 헤더가 보이므로 카드에는 한 줄 소개만 둔다 */}
+      {/* 로그인 전 헤더는 로고만(다른 화면과 같은 틀). 첫 화면이라 카드에도 로고와 서비스 이름을 둔다(10/20 사용자 피드백) */}
       <BrandHeader />
       <main className="grid min-h-[calc(100dvh-3.5rem)] place-items-center bg-page px-4 py-10">
         <section className="surface flex w-full max-w-[400px] flex-col gap-6 px-6 py-9 sm:px-9">
-          {/* 로그인, 회원가입은 바로 아래 탭이 보여 주므로 제목은 스크린리더용으로만(10/20 피드백) */}
-          {emailOpen ? (
-            <h1 className="sr-only">{tab === "signin" ? "로그인" : "회원가입"}</h1>
-          ) : (
-            <div className="text-center">
-              <h1 className="sr-only">Take a Look 시작</h1>
-              {/* 첫 화면은 한 줄만(10/20 사용자 피드백: 소개 두 줄은 길다). '살 종목을 골라 주지 않는다'는 설명은 환영 화면이 말한다 */}
-              <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
-            </div>
-          )}
+          <div className="flex flex-col items-center gap-3 text-center">
+            <Wordmark size={36} className="text-2xl" />
+            {/* 로그인, 회원가입은 바로 아래 탭이 보여 주므로 제목은 스크린리더용으로만(10/20 피드백) */}
+            {emailOpen ? (
+              <h1 className="sr-only">{tab === "signin" ? "로그인" : "회원가입"}</h1>
+            ) : (
+              <>
+                <h1 className="sr-only">Take a Look 시작</h1>
+                {/* 첫 화면은 한 줄만(10/20 사용자 피드백: 소개 두 줄은 길다). '살 종목을 골라 주지 않는다'는 설명은 환영 화면이 말한다 */}
+                <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
+              </>
+            )}
+          </div>
 
           {emailOpen ? (
             <form onSubmit={submitAccount} className="flex flex-col gap-4">
