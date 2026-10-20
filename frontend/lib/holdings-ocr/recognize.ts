@@ -58,6 +58,7 @@ type Response = { kind: string; status: "success" | "error"; requestId: number; 
 
 let worker: Worker | null = null;
 let ready: Promise<unknown> | null = null;
+let loaded = false; // 이 탭에서 읽는 도구를 이미 받았는지(화면이 '내려받는 중'을 따로 보인다)
 let nextId = 1;
 const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
@@ -79,6 +80,7 @@ function request(type: string, payload: unknown, transfer: Transferable[] = []):
       worker?.terminate();
       worker = null;
       ready = null;
+      loaded = false;
     };
   }
   const requestId = nextId++;
@@ -88,8 +90,13 @@ function request(type: string, payload: unknown, transfer: Transferable[] = []):
   });
 }
 
-function init(): Promise<unknown> {
-  ready ??= request("init", INIT).catch((error: unknown) => {
+export const toolLoaded = () => loaded;
+
+export function init(): Promise<unknown> {
+  ready ??= request("init", INIT).then((value) => {
+    loaded = true;
+    return value;
+  }, (error: unknown) => {
     ready = null; // 받기에 실패하면 다음 시도에서 다시 받는다
     throw error;
   });
