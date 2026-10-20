@@ -432,7 +432,11 @@ function Welcome({ onStart }: { onStart: () => void }) {
         ))}
       </ol>
       <p className="-mt-2 m-0 text-sm text-body">맞고 틀린 답은 없어요. 요즘의 나와 가까운 쪽을 고르면 돼요.</p>
-      <StepNav nextLabel="시작하기" onNext={onStart} />
+      {/* 보조 버튼 하나: 서비스 흐름이 궁금하면 이용 안내(새 탭, 설문 진행은 그대로) */}
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/guide" target="_blank" className="btn-secondary min-w-[112px]">이용 안내</Link>
+        <button type="button" onClick={onStart} className="btn-primary min-w-[112px]">시작하기</button>
+      </div>
     </section>
   );
 }

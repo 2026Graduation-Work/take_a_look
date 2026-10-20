@@ -7,7 +7,6 @@ import { ResultView } from "../survey/survey-flow";
 import SiteHeader from "../components/site-header";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import DeleteAccountButton from "../components/delete-account-button";
-import SignOutButton from "../components/sign-out-button";
 import { useOnboarding } from "../components/onboarding-provider";
 import { getDashboardData } from "@/lib/queries";
 import { summaryFromProfilingOutput } from "@/lib/profiling-rules";
@@ -50,16 +49,16 @@ export default function ProfileView() {
             </Link>
           </section>
         )}
-        {/* 헤더 계정 메뉴 "계정 관리"가 여기로 온다. 계정 삭제는 로그인 계정만(데모에서는 DeleteAccountButton이 숨김). */}
+        {/* 헤더 계정 메뉴 "계정 설정"이 여기로 온다. 로그아웃은 계정 메뉴 한 곳(같은 목적지의 길은 하나).
+            계정 삭제는 로그인 계정만(데모에서는 DeleteAccountButton이 숨김). */}
         <section id="account" aria-labelledby="account-title" className="surface flex scroll-mt-40 flex-col items-start gap-4 px-6 py-7 sm:scroll-mt-20 sm:px-10">
           <h2 id="account-title" className="m-0 text-lg font-semibold text-ink">
-            계정
+            계정 설정
           </h2>
           <div className="flex flex-col gap-1">
             {account.displayName && <p className="m-0 text-sm font-semibold text-ink">{account.displayName}</p>}
             <p className="m-0 text-sm text-body">{account.email ?? "데모 계정이라 이 브라우저에만 저장돼요."}</p>
           </div>
-          <SignOutButton className="btn-text" label="로그아웃" />
           <DeleteAccountButton />
         </section>
       </div>

@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import StepNav from "@/app/components/step-nav";
+import Link from "next/link";
 import Wordmark from "@/components/brand/Wordmark";
 import { SERVICE_TAGLINE } from "@/lib/brand";
 
@@ -192,6 +193,10 @@ export default function LoginForm() {
             <Messages notice={notice} error={error} />
           </div>
         )}
+        {/* 처음 온 사람을 위한 길 하나(강제 튜토리얼 대신 스스로 여는 안내) */}
+        <p className="m-0 text-center text-xs text-muted">
+          처음이라면 <Link href="/guide" className="text-brand hover:underline">이용 안내</Link>
+        </p>
       </section>
     </main>
   );
