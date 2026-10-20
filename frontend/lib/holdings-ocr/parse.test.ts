@@ -5,7 +5,7 @@ import { mergeResults, parseHoldings, type StockRef } from "./parse.ts";
 
 // 시험 화면(tests/fixtures/holdings-ocr, 가짜 수치)을 실제 인식 모듈로 읽은 고정값으로 해석 규칙만 검사한다. CI는 모델을 받지 않는다.
 const DIR = new URL("../../tests/fixtures/holdings-ocr/", import.meta.url);
-type Answer = { form: string; holdout?: boolean; holdings: (StockRef & { quantity: number; avgBuyPrice: number; avgSource: "computed" | "label" })[]; unsupported: string[] };
+type Answer = { form: string; holdout?: boolean; widths: number[]; holdings: (StockRef & { quantity: number; avgBuyPrice: number; avgSource: "computed" | "label" })[]; unsupported: string[] };
 const answers: Record<string, Answer> = JSON.parse(readFileSync(new URL("answers.json", DIR), "utf8"));
 const ocr = (id: string) => JSON.parse(readFileSync(new URL(`ocr/${id}.json`, DIR), "utf8"));
 
@@ -21,7 +21,7 @@ const MASTER: StockRef[] = [
   { code: "000880", name: "한화" },
 ];
 
-for (const id of Object.keys(answers)) for (const width of [390, 1280]) {
+for (const id of Object.keys(answers)) for (const width of answers[id].widths) {
   test(`${id}-${width}: 종목, 수량, 평균 매입가와 다루지 않는 종목`, () => {
     const result = parseHoldings(ocr(`${id}-${width}`), MASTER);
     const expected = answers[id];
@@ -29,8 +29,11 @@ for (const id of Object.keys(answers)) for (const width of [390, 1280]) {
       result.holdings.map(({ code, quantity, avgBuyPrice, avgComputed }) => ({ code, quantity, avgBuyPrice, avgComputed })),
       expected.holdings.map(({ code, quantity, avgBuyPrice, avgSource }) => ({ code, quantity, avgBuyPrice, avgComputed: avgSource === "computed" })),
     );
-    const plain = (names: string[]) => names.map((name) => name.replace(/\s+/g, "")).sort(); // 띄어쓰기는 인식이 빼먹기도 한다
-    assert.deepEqual(plain(result.unsupported), plain(expected.unsupported));
+    // 띄어쓰기는 인식이 빼먹기도 하고, 폰 앱은 긴 이름을 말줄임으로 자른다(앞 4자 이상 맞으면 같은 이름)
+    const plain = (name: string) => name.replace(/\s+/g, "");
+    const same = (got: string, name: string) => plain(got) === plain(name) || (plain(got).length >= 4 && plain(name).startsWith(plain(got)));
+    assert.equal(result.unsupported.length, expected.unsupported.length);
+    for (const name of expected.unsupported) assert.ok(result.unsupported.some((got) => same(got, name)), name);
   });
 }
 

@@ -141,22 +141,46 @@ const HOLDOUT = [
   { id: "C-dark-v2", html: (r) => formC(r, { dark: true }), rows: [S.meritz, S.korzinc, S.kia, ETF2[1], S.shinhan], avgSource: "label" },
 ];
 
+// 실제 폰 캡처 조건(2026-10-20 실패 신고): 아이폰 1179×2556, 위 상태 표시줄, 아래 탭 바, 원형 로고, 다크 모드.
+// P-A 밝은 표형인데 보유가 전부 ETF, P-B 어두운 목록형에 국내 주식 1종목 + ETF 여러 개 + 해외 지수 줄 + 소수점 해외 주식
+const ETF3 = [
+  { name: "KODEX 코스닥150", qty: 12, avg: 13250, price: 14080 }, { name: "TIGER 미국나스닥100", qty: 3, avg: 128400, price: 139250 },
+  { name: "KODEX 방산TOP10", qty: 20, avg: 21800, price: 24660 }, { name: "RISE 200", qty: 6, avg: 38900, price: 41150 },
+  { name: "TIGER 200헬스케어", qty: 15, avg: 9870, price: 9425 },
+];
+function phone(inner, { dark = false } = {}) {
+  const bg = dark ? "#000" : "#fff", ink = dark ? "#fff" : "#000", bar = dark ? "#1c1c1e" : "#f8f8f8", muted = dark ? "#8e8e93" : "#8e8e93";
+  return `<style>html,body{height:100%}body{display:flex;flex-direction:column;background:${bg}}
+  .status{height:54px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:14px 32px 0;font:600 17px -apple-system,sans-serif;color:${ink}}
+  .content{flex:1;overflow:hidden}.tabs{height:84px;flex:none;display:flex;justify-content:space-around;padding-top:10px;background:${bar};font-size:11px;color:${muted}}
+  .tabs div{display:flex;flex-direction:column;align-items:center;gap:4px}.tabs i{width:24px;height:24px;border-radius:6px;background:${muted}}</style>
+  <div class="status"><span>9:41</span><span>●●● ▮</span></div><div class="content">${inner}</div>
+  <div class="tabs"><div><i></i>홈</div><div><i></i>관심</div><div><i></i>발견</div><div><i></i>내 자산</div><div><i></i>전체</div></div>`;
+}
+const PHONE = [
+  { id: "P-A-etf", html: (r) => phone(formA(r)), rows: ETF3.slice(0, 5), avgSource: "computed" },
+  { id: "P-B-dark", html: (r) => phone(formB(r), { dark: true }), rows: [S.samsung, ETF3[0], ETF3[2], ETF3[4], ETF3[1]], avgSource: "computed" },
+];
+
 const answers = {};
 const browser = await chromium.launch();
-for (const screen of [...SCREENS, ...HOLDOUT]) {
+for (const screen of [...SCREENS, ...HOLDOUT, ...PHONE]) {
   FONT = screen.id.endsWith("-v2") ? `"NanumSquare",sans-serif` : `"Noto Sans KR","Malgun Gothic",sans-serif`;
   const html = `<!doctype html><meta charset="utf-8">${screen.html(screen.rows)}`;
-  for (const [width, scale] of [[390, 3], [1280, 1]]) {
-    const page = await browser.newPage({ viewport: { width, height: 400 }, deviceScaleFactor: scale });
+  const isPhone = screen.id.startsWith("P-");
+  // 폰 화면은 393×852 @3 = 1179×2556 한 장(스크롤 없이 화면 그대로), 나머지는 390 @3, 1280 @1 전체 길이
+  for (const [width, scale] of isPhone ? [[393, 3]] : [[390, 3], [1280, 1]]) {
+    const page = await browser.newPage({ viewport: { width, height: isPhone ? 852 : 400 }, deviceScaleFactor: scale });
     await page.setContent(html);
-    await page.screenshot({ path: new URL(`${screen.id}-${width}.png`, OUT).pathname, fullPage: true });
+    await page.screenshot({ path: new URL(`${screen.id}-${width}.png`, OUT).pathname, fullPage: !isPhone });
     await page.close();
   }
   answers[screen.id] = {
-    form: screen.id[0],
+    form: isPhone ? screen.id.slice(0, 3) : screen.id[0],
+    widths: isPhone ? [393] : [390, 1280],
     holdout: screen.id.endsWith("-v2"),
     holdings: screen.rows.filter((row) => row.code).map(({ code, name, qty, avg }) => ({ code, name, quantity: qty, avgBuyPrice: avg, avgSource: screen.avgSource })),
-    unsupported: [...screen.rows.filter((row) => !row.code).map(({ name }) => name), ...(screen.id.startsWith("B") ? [FOREIGN.name] : [])],
+    unsupported: [...screen.rows.filter((row) => !row.code).map(({ name }) => name), ...(/^(P-)?B/.test(screen.id) ? [FOREIGN.name] : [])],
   };
 }
 await browser.close();
