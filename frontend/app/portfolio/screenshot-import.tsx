@@ -11,9 +11,10 @@ import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type 
 import { isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
-type Phase = "idle" | "downloading" | "reading" | "review" | "unsupported" | "empty" | "failed";
+type Phase = "idle" | "downloading" | "reading" | "review" | "unsupported" | "empty" | "blurry" | "toolFailed" | "failed";
 
 const PAGE = 1000; // Supabase 한 번에 돌려주는 최대 행 수
+const FEW_LINES = 3; // 읽은 글줄이 이보다 적으면 종목이 없는 화면이 아니라 글자를 못 읽은 것으로 본다
 
 // 종목 마스터 전체(이름 대조용). 연결이 없거나 실패하면 화면이 가진 후보 목록으로 대신한다.
 let masterCache: Promise<StockRef[]> | null = null;
@@ -85,7 +86,12 @@ export default function ScreenshotImport({
       // 처음 한 번은 읽는 도구(약 25MB)를 받는다. 받는 양을 알 수 없어 단계만 보인다
       if (!toolLoaded()) {
         setPhase("downloading");
-        await init();
+        try {
+          await init();
+        } catch {
+          setPhase("toolFailed");
+          return;
+        }
       }
       setPhase("reading");
       setProgress({ done: 0, total: files.length });
@@ -102,8 +108,9 @@ export default function ScreenshotImport({
       setRows(merged.holdings.map(toRow));
       setUnsupported(merged.unsupported);
       setReadText(merged.holdings.length ? [] : text);
-      // 코스피 종목이 하나라도 있으면 그것만 확인 표로, 다루지 않는 종목만 읽혔으면 그 이름을, 둘 다 없을 때만 '못 찾음'
-      setPhase(merged.holdings.length ? "review" : merged.unsupported.length ? "unsupported" : "empty");
+      // 코스피 종목이 하나라도 있으면 그것만 확인 표로, 다루지 않는 종목만 읽혔으면 그 이름을, 둘 다 없으면
+      // 글자를 거의 못 읽었는지(흐린 캡처) 글자는 읽었는데 종목이 없는지(다른 화면)를 나눠 말한다
+      setPhase(merged.holdings.length ? "review" : merged.unsupported.length ? "unsupported" : text.length < FEW_LINES ? "blurry" : "empty");
     } catch {
       setPhase("failed");
     }
@@ -185,7 +192,12 @@ export default function ScreenshotImport({
             종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.
           </p>
         )}
-        {(phase === "empty" || phase === "unsupported") && readText.length > 0 && (
+        {phase === "blurry" && (
+          <p role="alert" className="m-0 text-sm text-body">
+            글자를 거의 읽지 못했어요. 글자가 또렷하게 보이는 캡처로 다시 올리거나 직접 입력해 주세요.
+          </p>
+        )}
+        {(phase === "empty" || phase === "unsupported" || phase === "blurry") && readText.length > 0 && (
           <details className="disclosure">
             <summary>읽은 글자 보기</summary>
             <p className="m-0 mt-2 text-xs text-muted">이 기기에서 읽은 글자예요. 저장하거나 보내지 않아요.</p>
@@ -194,9 +206,14 @@ export default function ScreenshotImport({
             </ul>
           </details>
         )}
+        {phase === "toolFailed" && (
+          <p role="alert" className="m-0 text-sm text-danger">
+            읽는 도구를 불러오지 못했어요. 새로고침한 뒤 다시 올리거나 직접 입력해 주세요.
+          </p>
+        )}
         {phase === "failed" && (
           <p role="alert" className="m-0 text-sm text-danger">
-            사진을 읽지 못했어요. 인터넷 연결을 확인하고 다시 올리거나 직접 입력해 주세요.
+            이 사진은 읽지 못했어요. 다른 캡처로 다시 올리거나 직접 입력해 주세요.
           </p>
         )}
         {notice && phase === "idle" && <p role="status" className="m-0 text-sm text-body">{notice}</p>}

@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // Playwright 실행 결과물(gitignore)
     "playwright-report/**",
     "test-results/**",
+    // 빌드 때 받는 글자 읽기 도구(scripts/fetch-ocr-assets.mjs, gitignore)
+    "public/ocr/**",
   ]),
 ]);
 
