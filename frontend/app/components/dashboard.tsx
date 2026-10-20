@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import Segmented from "./segmented";
-import MarketDetail from "./market-detail";
 import DisclaimerFooter from "./disclaimer-footer";
 import { useOnboarding } from "./onboarding-provider";
 import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
@@ -65,10 +64,16 @@ function chooseHorizon(next: SignalHorizon) {
   horizonListeners.forEach((listener) => listener());
 }
 
-function SectionHead({ title }: { title: string }) {
+// 섹션 제목 줄: 제목 + 오른쪽 컨트롤(그것이 바꾸는 내용의 제목 줄, DESIGN.md '읽는 순서') + 아래 13px 한 줄.
+// 두 열의 제목 줄 높이를 같게(min-h-11) 두어 같은 높이에서 시작한다
+function SectionHead({ title, note, control }: { title: string; note?: string; control?: ReactNode }) {
   return (
-    <div className="flex min-h-11 items-center px-1">
-      <h2 className="text-xl font-semibold">{title}</h2>
+    <div className="flex flex-col gap-1 px-1">
+      <div className="flex min-h-11 items-center justify-between gap-3">
+        <h2 className="text-xl font-semibold">{title}</h2>
+        {control}
+      </div>
+      {note && <p className="m-0 truncate text-2xs text-muted">{note}</p>}
     </div>
   );
 }
@@ -281,50 +286,37 @@ export default function Dashboard(initialData: DashboardData) {
           <DashboardLoading />
         ) : (
           <>
-            {/* 성향 한 문장: 유형 이름 + 성향 + 놓치기 쉬운 것. 상자 없는 한 줄 + › (화면 규칙 v2) */}
-            <Link
-              href="/profile"
-              aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
-              className="flex min-h-11 items-center gap-3 px-1 text-sm text-ink hover:text-ink hover:no-underline"
-            >
-              <span className="min-w-0 flex-1">
-                <span className="mr-2 font-semibold">{activeProfile.profileTypeLabel}</span>
-                {activeProfile.personaLabel}
-                {activeProfile.blindSpot && ` ${activeProfile.blindSpot}`}
-              </span>
-              <span aria-hidden className="flex-none text-muted">›</span>
-            </Link>
-
-            {/* 요약(큰 글씨)과 같은 줄 오른쪽에 기간 전환. 1024px 미만은 요약 아래. 요약·맵·목록·달라진 근거가 모두 이 기간을 따른다 */}
-            <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1 lg:flex-row lg:items-end lg:justify-between lg:gap-6">
-              <div className="flex flex-col gap-2">
-                {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
-                {staleLabel(summaryAsOf) && <span className="text-2xs text-muted tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
-                <h1 id="today-summary" className="text-3xl font-semibold">
-                  {summary}
-                </h1>
-              </div>
-              <div className="flex flex-col gap-2 lg:items-end">
-                {/* 1주, 4주 오름차순(기본은 4주). 1주 설명은 ⓘ를 눌러야 열려 컨트롤 위치가 바뀌지 않는다(10/20 사용자 피드백) */}
-                <div className="flex flex-none items-center gap-2 text-sm">
-                  <span className="text-body">앞으로</span>
-                  <Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />
-                  <MarketDetail
-                    title="신호 기간 설명"
-                    className="flex-none"
-                    label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">신호 기간 설명 보기</span></>}
-                  >
-                    <p className="m-0">4주 신호는 앞으로 약 20거래일, 1주 신호는 약 5거래일을 봐요. {SHORT_HORIZON_NOTE}</p>
-                  </MarketDetail>
-                </div>
-              </div>
+            {/* 읽는 순서(DESIGN.md): 결론(요약) → 나에게 해당하는 것(성향 줄, 내 포트폴리오) → 둘러볼 것(신호가 강한 종목) */}
+            <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1">
+              {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
+              {staleLabel(summaryAsOf) && <span className="text-2xs text-muted tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
+              <h1 id="today-summary" className="text-3xl font-semibold">
+                {summary}
+              </h1>
+              {/* 성향 한 줄: 유형(굵게) + 놓치기 쉬운 것. 누르면 내 투자 성향 */}
+              <Link
+                href="/profile"
+                aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
+                className="flex min-h-11 items-center gap-2 text-base text-muted hover:text-body hover:no-underline"
+              >
+                <span className="min-w-0">
+                  <span className="mr-2 font-semibold text-body">{activeProfile.profileTypeLabel}</span>
+                  {activeProfile.blindSpot ?? activeProfile.personaLabel}
+                </span>
+                <span aria-hidden className="flex-none">›</span>
+              </Link>
             </section>
 
             {/* 2단(1024px 이상 8:4): 왼쪽 내 것, 오른쪽 시장 전체. 1단에서는 왼쪽 → 오른쪽 순서 */}
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-6">
               <section aria-label="내 포트폴리오" className="flex flex-col gap-6 lg:col-span-8">
                 <div className="flex flex-col gap-2">
-                  <SectionHead title="내 포트폴리오" />
+                  {/* 기간 전환은 그것이 바꾸는 내용(맵, 요약, 목록)의 제목 줄에. 1주, 4주 오름차순(기본 4주) */}
+                  <SectionHead
+                    title="내 포트폴리오"
+                    note={HORIZON_NOTE[horizon]}
+                    control={<Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />}
+                  />
                   <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
                 </div>
                 {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
@@ -358,7 +350,7 @@ export default function Dashboard(initialData: DashboardData) {
               </section>
 
               <section aria-label="신호가 강한 종목" className="flex flex-col gap-2 lg:col-span-4">
-                <SectionHead title="신호가 강한 종목" />
+                <SectionHead title="신호가 강한 종목" note={`${horizon === 20 ? "4주" : "1주"} 기준`} />
                 {strong === undefined ? (
                   <div className="surface h-[330px] animate-pulse" aria-label="오늘 신호 불러오는 중" />
                 ) : !keyword && strongSignals.length === 0 ? (

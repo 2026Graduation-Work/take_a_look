@@ -40,6 +40,17 @@
 
 출처: [1] [Carbon — Dashboards](https://v10.carbondesignsystem.com/data-visualization/dashboards), [DataCamp — Dashboard design tutorial](https://www.datacamp.com/tutorial/dashboard-design-tutorial) · [2] [MIT 6.813 — Layout](https://web.mit.edu/6.813/www/sp17/classes/14-layout/), [Blake Crosley — The Five Spacing Decisions](https://blakecrosley.com/ja/blog/five-spacing-decisions) · [3] [Alberta DS — Hide and show many sections](https://v2.design.alberta.ca/examples/hide-and-show-many-sections-of-information), [Webflow — Progressive disclosure](https://origin.webflow.com/blog/the-art-of-progressive-disclosure-in-web-design) · [4] [Cieden — Spacing best practices](https://cieden.com/book/sub-atomic/spacing/spacing-best-practices) · [5] [Carbon — Tooltip](https://www.carbondesignsystem.com/components/tooltip/usage), [Guidewire Jutro — Tooltip](https://docs.guidewire.com/jutro/documentation/10.3/tooltip)
 
+### 읽는 순서 (2026-10-20, 지도교수 피드백 "어떤 순서로 봐야 할지 모르겠다")
+
+| 규칙 | 적용 |
+|---|---|
+| 화면은 **결론 → 나에게 해당하는 것 → 둘러볼 것** 순서 | 대시보드: 요약 문장 → 성향 한 줄 → 내 포트폴리오 → 어제와 달라진 근거 → 신호가 강한 종목 |
+| 2단(1024px 이상)은 **왼쪽이 '내 것', 오른쪽이 '둘러보기'**. 1단은 왼쪽 → 오른쪽 순서 그대로 | 두 열의 제목 줄은 같은 높이(44px)에서 시작한다 |
+| **컨트롤은 그것이 바꾸는 내용의 제목 줄**에 둔다. 설명은 ⓘ 대신 제목 아래 13px 한 줄을 늘 둔다(바꿔도 아래 내용이 흔들리지 않게 한 줄 고정) | 대시보드 기간 전환은 '내 포트폴리오' 제목 오른쪽, 오른쪽 목록 제목 아래 'N주 기준' |
+| **행동 버튼은 읽는 흐름의 끝**(그 블록 아래)에 둔다 | 저장, 다시 진단, 목록에 넣기 |
+
+- 예외: 종목 상세의 관심 종목, 메모 버튼과 보유 정보는 헤더 쪽에 둔다(10/20 사용자 결정, #376).
+
 ### 용어 설명 단계 (2026-10-20, #372)
 
 숫자 하나는 네 단계로 읽힌다: **결론 한 문장 → 근거 숫자와 비교 기준 → 용어 정의(ⓘ) → 계산 근거(접기)**.
