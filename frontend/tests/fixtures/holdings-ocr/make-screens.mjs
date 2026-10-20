@@ -143,10 +143,11 @@ const HOLDOUT = [
 
 // 실제 폰 캡처 조건(2026-10-20 실패 신고): 아이폰 1179×2556, 위 상태 표시줄, 아래 탭 바, 원형 로고, 다크 모드.
 // P-A 밝은 표형인데 보유가 전부 ETF, P-B 어두운 목록형에 국내 주식 1종목 + ETF 여러 개 + 해외 지수 줄 + 소수점 해외 주식
+// 종목명과 수치는 지어낸 것이다. 신고한 실제 캡처의 종목과 겹치지 않게 골랐다(사용자 개인정보, AGENTS.md)
 const ETF3 = [
-  { name: "KODEX 코스닥150", qty: 12, avg: 13250, price: 14080 }, { name: "TIGER 미국나스닥100", qty: 3, avg: 128400, price: 139250 },
-  { name: "KODEX 방산TOP10", qty: 20, avg: 21800, price: 24660 }, { name: "RISE 200", qty: 6, avg: 38900, price: 41150 },
-  { name: "TIGER 200헬스케어", qty: 15, avg: 9870, price: 9425 },
+  { name: "SOL 조선TOP3플러스", qty: 12, avg: 13250, price: 14080 }, { name: "ACE 미국배당다우존스", qty: 3, avg: 128400, price: 139250 },
+  { name: "KODEX 은행", qty: 20, avg: 21800, price: 24660 }, { name: "HANARO 원자력iSelect", qty: 6, avg: 38900, price: 41150 },
+  { name: "TIGER 차이나전기차SOLACTIVE", qty: 15, avg: 9870, price: 9425 },
 ];
 function phone(inner, { dark = false } = {}) {
   const bg = dark ? "#000" : "#fff", ink = dark ? "#fff" : "#000", bar = dark ? "#1c1c1e" : "#f8f8f8", muted = dark ? "#8e8e93" : "#8e8e93";
@@ -159,7 +160,7 @@ function phone(inner, { dark = false } = {}) {
 }
 const PHONE = [
   { id: "P-A-etf", html: (r) => phone(formA(r)), rows: ETF3.slice(0, 5), avgSource: "computed" },
-  { id: "P-B-dark", html: (r) => phone(formB(r), { dark: true }), rows: [S.samsung, ETF3[0], ETF3[2], ETF3[4], ETF3[1]], avgSource: "computed" },
+  { id: "P-B-dark", html: (r) => phone(formB(r), { dark: true }), rows: [S.kb, ETF3[0], ETF3[2], ETF3[4], ETF3[1]], avgSource: "computed" },
 ];
 
 const answers = {};

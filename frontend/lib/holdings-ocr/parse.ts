@@ -182,7 +182,9 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
   const unsupported: string[] = [];
   anchors.forEach((anchor, index) => {
     if (!anchor.ref) {
-      if (!unsupported.includes(anchor.label)) unsupported.push(anchor.label);
+      // 앱이 긴 이름을 자른 말줄임(…, ..., 마지막 점 하나로 읽히기도 함)은 떼고 보인다
+      const label = anchor.label.replace(/\s*[.…]+$/, "");
+      if (!unsupported.includes(label)) unsupported.push(label);
       return;
     }
     // 규칙 2: 이 이름부터 다음 이름 전까지
@@ -216,7 +218,9 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
       cells.slice(0, column.keys.length).forEach((cell, i) => set(column.keys[i], parseAmount(cell.compact)!, cell.score));
     }
     if (fraction) {
-      if (!unsupported.includes(anchor.label)) unsupported.push(anchor.label);
+      // 앱이 긴 이름을 자른 말줄임(…, ..., 마지막 점 하나로 읽히기도 함)은 떼고 보인다
+      const label = anchor.label.replace(/\s*[.…]+$/, "");
+      if (!unsupported.includes(label)) unsupported.push(label);
       return;
     }
     const check: CheckField[] = anchor.fuzzy || anchor.lines.some((line) => line.score < LOW_SCORE) ? ["name"] : [];

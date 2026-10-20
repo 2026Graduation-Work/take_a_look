@@ -578,11 +578,11 @@
     "holdout": false,
     "holdings": [],
     "unsupported": [
-      "KODEX 코스닥150",
-      "TIGER 미국나스닥100",
-      "KODEX 방산TOP10",
-      "RISE 200",
-      "TIGER 200헬스케어"
+      "SOL 조선TOP3플러스",
+      "ACE 미국배당다우존스",
+      "KODEX 은행",
+      "HANARO 원자력iSelect",
+      "TIGER 차이나전기차SOLACTIVE"
     ]
   },
   "P-B-dark": {
@@ -593,18 +593,18 @@
     "holdout": false,
     "holdings": [
       {
-        "code": "005930",
-        "name": "삼성전자",
-        "quantity": 37,
-        "avgBuyPrice": 71200,
+        "code": "105560",
+        "name": "KB금융",
+        "quantity": 21,
+        "avgBuyPrice": 78400,
         "avgSource": "computed"
       }
     ],
     "unsupported": [
-      "KODEX 코스닥150",
-      "KODEX 방산TOP10",
-      "TIGER 200헬스케어",
-      "TIGER 미국나스닥100",
+      "SOL 조선TOP3플러스",
+      "KODEX 은행",
+      "TIGER 차이나전기차SOLACTIVE",
+      "ACE 미국배당다우존스",
       "애플"
     ]
   }

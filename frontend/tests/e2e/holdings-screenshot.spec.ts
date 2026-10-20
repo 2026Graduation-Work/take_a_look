@@ -70,9 +70,9 @@ test("스크린샷: ETF만 읽히면 다루지 않는 종목이라고 이름과 
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/P-A-etf-393.png`);
   const alert = page.getByRole("alert").filter({ hasText: "아직 다루지 않아요" });
   await expect(alert).toContainText("읽은 5개 종목은 ETF나 해외 주식이라 Take a Look이 아직 다루지 않아요.");
-  await expect(alert).toContainText("TIGER 미국나스닥100");
+  await expect(alert).toContainText("KODEX 은행");
   const raw = page.locator("details", { hasText: "읽은 글자 보기" });
   await expect(raw).not.toHaveAttribute("open", "");
   await raw.locator("summary").click();
-  await expect(raw.getByText("KODEX 코스", { exact: true })).toBeVisible(); // 표형은 긴 이름이 두 줄로 나뉘어 읽힌다
+  await expect(raw.getByText("SOL 조선TO", { exact: true })).toBeVisible(); // 표형은 긴 이름이 두 줄로 나뉘어 읽힌다
 });

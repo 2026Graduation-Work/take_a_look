@@ -30,7 +30,7 @@ for (const [id, expected] of Object.entries(answers)) for (const width of expect
   row.unsupportedTotal += expected.unsupported.length;
   const plain = (name: string) => name.replace(/\s+/g, ""); // 인식이 띄어쓰기를 빼먹는 것은 틀린 것으로 세지 않는다
   // 앱이 긴 이름을 말줄임(…)으로 자른 것은 앞부분이 맞으면 맞은 것으로 센다
-  const same = (got: string, name: string) => { const cut = plain(got).replace(/(\.{2,}|…)$/, ""); return cut === plain(name) || (cut.length >= 4 && plain(name).startsWith(cut)); };
+  const same = (got: string, name: string) => { const cut = plain(got); return cut === plain(name) || (cut.length >= 4 && plain(name).startsWith(cut)); };
   row.unsupported += expected.unsupported.filter((name) => result.unsupported.some((got) => same(got, name))).length;
   table.set(key, row);
 }
