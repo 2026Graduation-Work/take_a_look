@@ -10,60 +10,28 @@ interface SiteHeaderProps {
   marketStatus: MarketStatus;
   query?: string;
   onQueryChange?: (value: string) => void;
-  activePage?: "dashboard" | "performance" | "portfolio";
-  sectionLabel?: string;
 }
 
-const NAV_ITEMS = [
-  { href: "/", label: "대시보드", page: "dashboard" },
-  { href: "/portfolio", label: "보유 종목", page: "portfolio" },
-] as const;
-
-export default function SiteHeader({
-  query,
-  onQueryChange,
-  profile,
-  marketStatus,
-  activePage = "dashboard",
-  sectionLabel,
-}: SiteHeaderProps) {
+// 헤더: 로고(누르면 대시보드) + 이용 안내 + 검색 + 이름 ▾. 화면 이동 탭(대시보드, 보유 종목)은 두지 않는다(10/20 메뉴 정리).
+// 보유 종목, 내 투자 성향, 계정 설정은 이름 메뉴에 있다. 390에서는 '이용 안내'도 이름 메뉴 맨 위로 간다
+export default function SiteHeader({ query, onQueryChange, profile, marketStatus }: SiteHeaderProps) {
   return (
     <>
       <header className="glass-bar sticky top-0 z-50">
         <div className="mx-auto box-border flex min-h-14 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2 sm:h-14 sm:flex-nowrap sm:px-6 sm:py-0 lg:px-8">
-          <Link href="/" className="flex min-h-11 flex-none items-center text-lg hover:no-underline">
+          <Link href="/" aria-label="대시보드" className="flex min-h-11 flex-none items-center text-lg hover:no-underline">
             <Wordmark size={26} />
           </Link>
-
-          <nav aria-label="주요 화면" className="hidden flex-none items-center gap-4 self-stretch sm:flex">
-            {NAV_ITEMS.map((item) => {
-              const active = item.page === activePage;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`relative inline-flex h-full items-center text-xs font-medium hover:no-underline ${
-                    active ? "text-ink" : "text-muted hover:text-ink"
-                  }`}
-                >
-                  {item.label}
-                  {active && (
-                    <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-brand-accent" aria-hidden />
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
+          <Link href="/guide" className="hidden min-h-11 flex-none items-center text-xs font-medium text-muted hover:text-ink hover:no-underline sm:flex">
+            이용 안내
+          </Link>
 
           {onQueryChange ? (
             <div className="order-last flex min-w-0 basis-full items-center sm:order-none sm:flex-1 sm:basis-auto sm:justify-end">
               <StockSearch query={query ?? ""} onQueryChange={onQueryChange} />
             </div>
           ) : (
-            <div className="hidden min-w-0 flex-1 truncate text-xs font-normal text-muted sm:block">
-              {sectionLabel}
-            </div>
+            <div className="hidden flex-1 sm:block" />
           )}
 
           <AccountControls profile={profile} />
@@ -71,28 +39,6 @@ export default function SiteHeader({
       </header>
       {/* 시장 바는 고정 영역 밖: 줄바꿈으로 높아져도(390·200% 확대) 스크롤하면 사라져 화면을 가리지 않는다(#305 후속) */}
       <MarketStatusBar status={marketStatus} />
-
-      {/* 모바일: 엄지가 닿는 아래쪽에 떠 있는 유리 탭 막대. 현재 화면은 흰 렌즈 + 초록 글자 */}
-      <nav
-        aria-label="주요 화면"
-        className="tab-bar glass fixed inset-x-0 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 mx-auto flex w-fit gap-1 rounded-full p-1 sm:hidden"
-      >
-        {NAV_ITEMS.map((item) => {
-          const active = item.page === activePage;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={`inline-flex h-11 items-center rounded-full px-4 text-xs font-medium transition-colors duration-150 ease-out hover:no-underline ${
-                active ? "bg-ink/[0.07] font-semibold text-brand" : "text-body active:bg-ink/[0.04]"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
     </>
   );
 }

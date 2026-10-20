@@ -36,8 +36,9 @@ test("로그인: 브라우저 저장본 없이 DB 보유를 읽고 저장 실패
   await page.evaluate(() => localStorage.removeItem("takealook.holdings.v1"));
   await page.reload();
   await expect(page.getByLabel("삼성전자우 수량", { exact: true })).toHaveValue("8");
-  await page.goto("/profile");
-  await page.getByRole("region", { name: "계정" }).getByRole("button", { name: "로그아웃" }).click();
+  // 로그아웃은 계정 메뉴 한 곳(10/20 메뉴 정리)
+  await page.locator("summary[aria-label$='계정 메뉴']").click();
+  await page.locator("header").getByRole("button", { name: "로그아웃" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByRole("button", { name: "이메일로 시작" }).click();
   await page.getByLabel("이메일").fill("holdings@example.com");

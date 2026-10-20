@@ -102,7 +102,7 @@ export default function PerformanceDashboard({
 
   return (
     <div className="min-h-screen w-full">
-      <SiteHeader profile={profile} marketStatus={marketStatus} activePage="performance" />
+      <SiteHeader profile={profile} marketStatus={marketStatus} />
 
       {/* 머리말·표·정의가 모두 같은 폭(왼쪽·오른쪽 끝이 맞게, 10/18 사용자 피드백) */}
       <main className="page pb-12 pt-6">

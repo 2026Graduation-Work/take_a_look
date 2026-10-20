@@ -137,7 +137,7 @@ function AccountHoldingsEditor({
 
   return (
     <div className="w-full">
-      <SiteHeader profile={profile} marketStatus={marketStatus} activePage="portfolio" />
+      <SiteHeader profile={profile} marketStatus={marketStatus} />
 
       {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2). 설문 보유 단계와 같은 입력(HoldingsForm) */}
       <main className="page pb-12 pt-6">

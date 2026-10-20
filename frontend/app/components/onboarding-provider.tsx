@@ -135,6 +135,7 @@ function onboardingDestination(
 ): string | null {
   if (status === "loading" || status === "error") return null;
   if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
+  if (pathname === "/guide") return null; // 이용 안내는 로그인 없이 연다
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";
