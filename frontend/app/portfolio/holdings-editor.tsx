@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import SiteHeader from "../components/site-header";
 import { WatchlistEditor } from "../components/stock-marks";
 import { useOnboarding } from "../components/onboarding-provider";
-import { useStockOptions } from "./use-stock-options";
-import GainText from "../components/gain-text";
+import HoldingsForm, { HOLDINGS_INTRO } from "./holdings-form";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
-import { mergeImported, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
-import ScreenshotImport from "./screenshot-import";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -31,14 +28,6 @@ interface HoldingsEditorProps {
   demoHoldings: PortfolioHolding[];
 }
 
-type Draft = { code: string; name: string; quantity: string; avgBuyPrice: string };
-
-const EMPTY_DRAFT: Draft = { code: "", name: "", quantity: "", avgBuyPrice: "" };
-
-// 비워 두면 null(모름). 평균 매입가만 선택 입력이다.
-function formatWon(value: number): string {
-  return value.toLocaleString("ko-KR");
-}
 
 export default function HoldingsEditor(props: HoldingsEditorProps) {
   const { state } = useOnboarding();
@@ -92,13 +81,12 @@ function AccountHoldingsEditor({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [error, setError] = useState(""); // 종목 추가 시트 안 오류
   const [saveError, setSaveError] = useState(""); // 저장 오류
   const [loaded, setLoaded] = useState(!supabaseMode);
   const [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0);
+  const [formVersion, setFormVersion] = useState(0); // 되돌리기: 입력 중 글자까지 새로
   useEffect(() => {
     let active = true;
     const request = supabaseMode
@@ -116,68 +104,11 @@ function AccountHoldingsEditor({
     });
     return () => { active = false; };
   }, [supabaseMode, onboardingState.userId, reload]);
-  // 줄 안 수정칸에 친 글자 그대로("1.5"). 새 종목 입력칸처럼 점을 보여 주고 저장할 때 막는다(페르소나 워크스루 2026-10)
-  const [texts, setTexts] = useState<Record<string, string>>({});
-  const sheetRef = useRef<HTMLDialogElement>(null);
 
-  function openSheet() {
-    setError("");
-    sheetRef.current?.showModal();
-  }
-
-  const { options, match } = useStockOptions(draft.name, supabaseMode, catalog);
-
-  function addRow() {
-    setError("");
-    const code = match?.code ?? draft.code.trim();
-    const name = match?.name ?? draft.name.trim();
-    const candidate: SavedHolding = {
-      code,
-      name,
-      quantity: parseWholeNumber(draft.quantity) ?? Number.NaN,
-      avgBuyPrice: parseWholeNumber(draft.avgBuyPrice),
-    };
-
-    if (!match) {
-      setError("목록에 있는 종목을 골라 주세요. 종목명을 입력하면 후보가 나와요.");
-      return;
-    }
-    if (rows.some((row) => row.code === candidate.code)) {
-      setError(`${name}은(는) 이미 목록에 있어요. 아래에서 수량을 고쳐 주세요.`);
-      return;
-    }
-    if (!isValidHolding(candidate)) {
-      setError("수량은 1 이상의 정수로, 평균 매입가는 비워 두거나 0 이상의 정수로 입력해 주세요.");
-      return;
-    }
-
-    setRows((current) => [...current, candidate]);
-    setDraft(EMPTY_DRAFT);
+  const changeRows = useCallback((next: SavedHolding[]) => {
+    setRows(next);
     setStatus("idle");
-    sheetRef.current?.close();
-  }
-
-  // 스크린샷에서 읽은 목록: 이미 있는 종목은 새 값으로 바꾼다(그 줄의 입력 중 글자도 지운다). 저장은 저장 버튼이 한다
-  function importRows(imported: SavedHolding[]): string[] {
-    const merged = mergeImported(rows, imported);
-    setRows(merged.rows);
-    setTexts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !imported.some(({ code }) => key.startsWith(`${code}:`)))));
-    setStatus("idle");
-    return merged.replaced;
-  }
-
-  function updateRow(code: string, patch: Partial<SavedHolding>) {
-    setRows((current) =>
-      current.map((row) => (row.code === code ? { ...row, ...patch } : row)),
-    );
-    setStatus("idle");
-  }
-
-  function removeRow(code: string) {
-    setRows((current) => current.filter((row) => row.code !== code));
-    setTexts((current) => Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(`${code}:`))));
-    setStatus("idle");
-  }
+  }, []);
 
   async function submit() {
     if (!loaded || status === "saving") return;
@@ -204,27 +135,17 @@ function AccountHoldingsEditor({
     }
   }
 
-  // 합계는 평균 매입가를 입력한 종목만 더한다(모르는 종목은 현재가 기준이라 섞지 않는다)
-  const total = rows.reduce((sum, row) => sum + (row.quantity * (row.avgBuyPrice ?? 0) || 0), 0);
-
-  const field =
-    "h-11 w-full rounded-md bg-field px-4 text-sm tabular-nums text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30";
-
   return (
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} activePage="portfolio" />
 
-      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2) */}
+      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2). 설문 보유 단계와 같은 입력(HoldingsForm) */}
       <main className="page pb-12 pt-6">
       <div className="page-narrow flex flex-col gap-6">
         <div className="flex flex-col gap-1 px-1">
           <h1 className="text-3xl font-semibold">보유 종목</h1>
-          <p className="m-0 text-sm text-body">
-            직접 입력한 수량으로 대시보드의 보유 종목 맵을 만들어요. 증권사 계좌와 연결하지 않아요.
-          </p>
+          <p className="m-0 text-sm text-body">{HOLDINGS_INTRO}</p>
         </div>
-
-        {loaded && <ScreenshotImport catalog={catalog} onAdd={importRows} />}
 
         {!loaded ? (
           <div className="surface flex flex-col gap-4 px-6 py-8">
@@ -233,78 +154,8 @@ function AccountHoldingsEditor({
               <button type="button" className="btn-secondary self-end" onClick={() => { setLoadError(""); setReload((value) => value + 1); }}>다시 불러오기</button>
             </> : <p role="status" className="m-0 text-sm text-body">저장된 보유 종목을 불러오는 중이에요.</p>}
           </div>
-        ) : rows.length === 0 ? (
-          <div className="surface flex flex-col items-center gap-4 px-6 py-12 text-center">
-            <p className="m-0 text-sm text-body">아직 등록한 종목이 없어요.</p>
-            <button type="button" onClick={openSheet} className="btn-primary">
-              종목 추가
-            </button>
-          </div>
         ) : (
-          <section aria-label="등록한 종목" className="flex flex-col gap-2">
-            {/* 왼쪽 한 줄: 매입금액 합계, 평균 매입가가 빈 종목이 있으면 그 안내(행마다 반복하지 않는다, 10/20 피드백).
-                종목 수는 목록이 보여 주므로 쓰지 않는다. 평단을 하나도 모르면 "합계 0원"이 되므로 합계를 숨긴다(#278) */}
-            <div className="flex items-baseline justify-between gap-4 px-1">
-              <p className="m-0 flex flex-col text-xs text-muted tabular-nums">
-                {rows.some(({ avgBuyPrice }) => avgBuyPrice !== null) && <span>매입금액 합계 {formatWon(total)}원</span>}
-                {rows.some(({ avgBuyPrice }) => !avgBuyPrice) && <span>평균 매입가를 넣으면 산 가격보다 몇 % 오르거나 내렸는지 보여요.</span>}
-              </p>
-              <button type="button" onClick={openSheet} className="btn-text flex-none text-xs">
-                종목 추가
-              </button>
-            </div>
-            {/* 눌러서 들어가는 목록이 아니라 편집 행이라 선 없이 간격으로 나눈다(화면 규칙 v2) */}
-            <ul className="surface m-0 flex list-none flex-col gap-2 p-0 py-2">
-              {rows.map((row) => (
-                <li key={row.code} className="grid grid-cols-2 items-center gap-3 px-5 py-4 sm:grid-cols-[1.4fr_1fr_1fr_auto]">
-                  <div className="col-span-2 flex flex-wrap items-baseline gap-x-2 sm:col-span-1">
-                    <span className="text-base font-medium">{row.name}</span>
-                    <span className="text-xs text-muted tabular-nums">{row.code}</span>
-                    <span className="basis-full">
-                      <GainText avgBuyPrice={row.avgBuyPrice} close={closes.get(row.code)?.close} />
-                    </span>
-                  </div>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-2xs text-muted">수량(주)</span>
-                    <input
-                      inputMode="numeric"
-                      aria-label={`${row.name} 수량`}
-                      value={texts[`${row.code}:quantity`] ?? (row.quantity > 0 ? String(row.quantity) : "")}
-                      onChange={(event) => {
-                        const text = numberDraft(event.target.value, QUANTITY_DIGITS);
-                        setTexts((current) => ({ ...current, [`${row.code}:quantity`]: text }));
-                        updateRow(row.code, { quantity: parseWholeNumber(text) ?? 0 });
-                      }}
-                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-2xs text-muted">평균 매입가(원)</span>
-                    <input
-                      inputMode="numeric"
-                      aria-label={`${row.name} 평균 매입가`}
-                      value={texts[`${row.code}:price`] ?? (row.avgBuyPrice === null ? "" : String(row.avgBuyPrice))}
-                      placeholder="모름, 현재가 기준"
-                      onChange={(event) => {
-                        const text = numberDraft(event.target.value, PRICE_DIGITS);
-                        setTexts((current) => ({ ...current, [`${row.code}:price`]: text }));
-                        updateRow(row.code, { avgBuyPrice: parseWholeNumber(text) });
-                      }}
-                      className="h-11 w-full rounded-sm bg-field px-3 text-sm tabular-nums outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeRow(row.code)}
-                    aria-label={`${row.name} 삭제`}
-                    className="btn-remove col-span-2 justify-self-start sm:col-span-1 sm:justify-self-end"
-                  >
-                    삭제
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+          <HoldingsForm key={formVersion} rows={rows} onRowsChange={changeRows} catalog={catalog} supabaseMode={supabaseMode} closes={closes} />
         )}
 
         {saveError && (
@@ -313,16 +164,17 @@ function AccountHoldingsEditor({
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-end gap-3 px-1">
+        {/* 저장: 목록 아래, PC 오른쪽, 390 전체 폭. 저장하지 않은 변경은 버튼 옆 13px */}
+        <div className="flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           {dirty ? (
-            <span className="mr-auto flex items-center gap-2 text-xs text-body">
-              저장하지 않은 변경이 있어요.
-              <button type="button" onClick={() => { setRows(baseline); setTexts({}); }} className="btn-text min-h-11 text-xs">
+            <span className="flex items-center gap-2 text-xs text-body sm:mr-auto">
+              저장하지 않은 변경이 있어요
+              <button type="button" onClick={() => { setRows(baseline); setFormVersion((value) => value + 1); }} className="btn-text min-h-11 text-xs">
                 되돌리기
               </button>
             </span>
           ) : (
-            <span className="mr-auto text-xs text-muted">
+            <span className="text-xs text-muted sm:mr-auto">
               {supabaseMode ? "내 계정에 저장돼요." : "데모 계정이라 이 브라우저에만 저장돼요."}
             </span>
           )}
@@ -331,7 +183,7 @@ function AccountHoldingsEditor({
               저장했어요. <Link href="/">대시보드에서 보기</Link>
             </span>
           )}
-          <button type="button" onClick={submit} disabled={!loaded || status === "saving"} className="btn-primary">
+          <button type="button" onClick={submit} disabled={!loaded || status === "saving"} className="btn-primary w-full sm:w-auto">
             {status === "saving" ? "저장 중…" : "저장"}
           </button>
         </div>
@@ -339,79 +191,6 @@ function AccountHoldingsEditor({
         <WatchlistEditor />
       </div>
       </main>
-
-      {/* 종목 추가 시트 — 네이티브 dialog라 포커스 가두기·Esc 닫기를 브라우저가 맡는다 */}
-      <dialog
-        ref={sheetRef}
-        aria-labelledby="add-sheet-title"
-        className="m-auto w-[min(440px,calc(100vw-32px))] rounded-xl bg-white p-0 text-ink shadow-modal backdrop:bg-black/30"
-      >
-        <form
-          method="dialog"
-          onSubmit={(event) => {
-            event.preventDefault();
-            addRow();
-          }}
-          className="flex flex-col gap-4 p-6"
-        >
-          <h2 id="add-sheet-title" className="text-lg font-semibold">
-            종목 추가
-          </h2>
-          <label className="flex flex-col gap-2">
-            <span className="text-xs text-muted">종목명 또는 코드</span>
-            <input
-              list="stock-catalog"
-              value={draft.name}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              placeholder="삼성전자"
-              autoFocus
-              className={field}
-            />
-            <datalist id="stock-catalog">
-              {options.map((item) => (
-                <option key={item.code} value={item.name}>
-                  {item.code}
-                </option>
-              ))}
-            </datalist>
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-2">
-              <span className="text-xs text-muted">수량(주)</span>
-              <input
-                inputMode="numeric"
-                value={draft.quantity}
-                onChange={(event) => setDraft({ ...draft, quantity: numberDraft(event.target.value, QUANTITY_DIGITS) })}
-                placeholder="10"
-                className={field}
-              />
-            </label>
-            <label className="flex flex-col gap-2">
-              <span className="text-xs text-muted">평균 매입가(원, 선택)</span>
-              <input
-                inputMode="numeric"
-                value={draft.avgBuyPrice}
-                onChange={(event) => setDraft({ ...draft, avgBuyPrice: numberDraft(event.target.value, PRICE_DIGITS) })}
-                placeholder="모르면 비워 두세요"
-                className={field}
-              />
-            </label>
-          </div>
-          {error && (
-            <p role="alert" className="m-0 text-sm text-danger">
-              {error}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" onClick={() => sheetRef.current?.close()} className="btn-secondary">
-              취소
-            </button>
-            <button type="submit" className="btn-primary">
-              추가
-            </button>
-          </div>
-        </form>
-      </dialog>
 
       <DisclaimerFooter fixed={false} />
     </div>

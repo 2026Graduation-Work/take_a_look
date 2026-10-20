@@ -115,9 +115,10 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
     await page.getByRole("button", { name: `${name} 삭제` }).click();
   }
   await page.getByLabel("종목 검색").fill("삼성전자");
-  await page.getByLabel("수량(주)").fill("10");
-  await page.getByRole("button", { name: "종목 넣기" }).click();
-  await expect(page.getByText("평균 매입가 모름(현재가 기준)")).toBeVisible();
+  await page.getByLabel("종목 검색").press("Enter");
+  await expect(page.getByLabel("삼성전자 수량")).toBeFocused();
+  await page.getByLabel("삼성전자 수량").fill("10");
+  await expect(page.getByRole("heading", { name: "넣은 종목 1개" })).toBeVisible();
   await page.getByRole("button", { name: "저장하고 시작" }).click();
 
   // 대시보드: 두 결과(성향 + 보유 종목)를 합쳐 보여 준다
@@ -186,7 +187,7 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   expect(browserErrors).toEqual([]);
 });
 
-test("new user: 보유 종목 '아직 없어요' -> 대시보드 빈 상태", async ({ page }) => {
+test("new user: 보유 종목을 모두 지우고 '보유 없이 시작' -> 대시보드 빈 상태", async ({ page }) => {
   const browserErrors = collectBrowserErrors(page);
   await startDemo(page);
   await page.getByRole("button", { name: "시작하기" }).click();
@@ -196,9 +197,11 @@ test("new user: 보유 종목 '아직 없어요' -> 대시보드 빈 상태", as
   await page.getByRole("button", { name: /데모 응답/ }).click();
   await page.getByRole("button", { name: "완료" }).click();
   await page.getByRole("button", { name: "다음", exact: true }).click();
-  // 데모는 예시 보유 종목 편집 화면부터 열린다 → 이전으로 "있나요?" 질문에 가서 "아직 없어요"
-  await page.getByRole("button", { name: "이전" }).click();
-  await page.getByRole("button", { name: "아직 없어요" }).click();
+  // 데모는 예시 보유 종목이 채워져 열린다 → 모두 삭제하면 '보유 없이 시작'
+  for (const name of ["삼성전자", "카카오", "셀트리온", "현대차"]) {
+    await page.getByRole("button", { name: `${name} 삭제` }).click();
+  }
+  await page.getByRole("button", { name: "보유 없이 시작" }).click();
 
   await expect(page).toHaveURL("/");
   // 스텁 게시 배치: 삼성전자(하락) + SPAC 1종목(상승). 데모 응답은 SPAC 회피를 골라 1개만 남는다
@@ -343,11 +346,9 @@ test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, �
   await expect(page.getByText("마무리 3/3")).toBeVisible();
   await page.getByRole("button", { name: "완료" }).click();
   await next.click();
-  // 데모는 예시 보유 종목이 채워진 편집 화면부터 → 이전: "있나요?" 질문 → 이전: 결과
+  // 보유 종목 단계(예시가 채워진 입력 화면) → 이전: 결과
   await expect(page.getByRole("heading", { name: "지금 가진 주식이 있나요?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "저장하고 시작" })).toBeVisible();
-  await back.click();
-  await expect(page.getByRole("button", { name: "아직 없어요" })).toBeVisible();
   await back.click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveAttribute("data-bit-type", /.+/);
   expect(browserErrors).toEqual([]);

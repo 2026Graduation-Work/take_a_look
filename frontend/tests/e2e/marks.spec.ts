@@ -158,10 +158,8 @@ test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async 
   await page.getByRole("button", { name: /^저장/ }).first().click();
   await expect(page.getByText("카카오의 수량을 1 이상으로 적어 주세요.", { exact: false })).toBeVisible();
 
-  await page.getByRole("button", { name: "종목 추가" }).first().click();
-  const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("수량(주)").pressSequentially("10abc");
-  await expect(sheet.getByLabel("수량(주)")).toHaveValue("10");
+  await quantity.pressSequentially("10abc");
+  await expect(quantity).toHaveValue("10");
 
   // 검색 목록은 종목 마스터(stocks 전체)에서 고른다. e2e 스텁은 코드 조회만 답하므로 여기서 목록을 준다
   await page.route(/\/rest\/v1\/stocks\?.*is_active/, (route) =>
