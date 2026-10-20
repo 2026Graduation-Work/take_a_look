@@ -59,3 +59,20 @@ test("스크린샷: 종목을 못 찾으면 다시 올리거나 직접 입력하
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
   await expect(page.getByRole("alert").filter({ hasText: "종목을 찾지 못했어요" })).toHaveText("종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.");
 });
+
+test("스크린샷: ETF만 읽히면 다루지 않는 종목이라고 이름과 함께 알리고, 읽은 글자를 접어서 보여 준다", async ({ page, context }) => {
+  const etfLines: typeof lines = JSON.parse(readFileSync(`${FIXTURE}/ocr/P-A-etf-393.json`, "utf8"));
+  const items = JSON.stringify(etfLines.map(({ text, score, x0, y0, x1, y1 }) => ({ text, score, poly: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] })));
+  await context.route(/cdn\.jsdelivr\.net\/npm\/@paddleocr/, (route) =>
+    route.fulfill({ contentType: "text/javascript", body: fakeWorker.replace(/const items = .*;\n/, `const items = ${items};\n`) }));
+  await finishDemo(page);
+  await page.goto("/portfolio");
+  await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/P-A-etf-393.png`);
+  const alert = page.getByRole("alert").filter({ hasText: "아직 다루지 않아요" });
+  await expect(alert).toContainText("읽은 5개 종목은 ETF나 해외 주식이라 Take a Look이 아직 다루지 않아요.");
+  await expect(alert).toContainText("TIGER 미국나스닥100");
+  const raw = page.locator("details", { hasText: "읽은 글자 보기" });
+  await expect(raw).not.toHaveAttribute("open", "");
+  await raw.locator("summary").click();
+  await expect(raw.getByText("KODEX 코스", { exact: true })).toBeVisible(); // 표형은 긴 이름이 두 줄로 나뉘어 읽힌다
+});

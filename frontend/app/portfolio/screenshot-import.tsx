@@ -11,7 +11,7 @@ import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type 
 import { isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
-type Phase = "idle" | "downloading" | "reading" | "review" | "empty" | "failed";
+type Phase = "idle" | "downloading" | "reading" | "review" | "unsupported" | "empty" | "failed";
 
 const PAGE = 1000; // Supabase 한 번에 돌려주는 최대 행 수
 
@@ -69,6 +69,8 @@ export default function ScreenshotImport({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
+  // 실패했을 때만 '읽은 글자 보기'로 보여 줄 인식 글자. 이 화면 상태에만 두고 저장, 전송, 로그하지 않는다
+  const [readText, setReadText] = useState<string[]>([]);
 
   async function read(files: File[]) {
     if (!files.length) return;
@@ -84,14 +86,19 @@ export default function ScreenshotImport({
       setProgress({ done: 0, total: files.length });
       const master = await loadMaster(catalog);
       const results = [];
+      const text: string[] = [];
       for (const file of files) {
-        results.push(parseHoldings(await recognize(file), master));
+        const lines = await recognize(file);
+        text.push(...lines.map((line) => line.text));
+        results.push(parseHoldings(lines, master));
         setProgress({ done: results.length, total: files.length });
       }
       const merged = mergeResults(results);
       setRows(merged.holdings.map(toRow));
       setUnsupported(merged.unsupported);
-      setPhase(merged.holdings.length ? "review" : "empty");
+      setReadText(merged.holdings.length ? [] : text);
+      // 코스피 종목이 하나라도 있으면 그것만 확인 표로, 다루지 않는 종목만 읽혔으면 그 이름을, 둘 다 없을 때만 '못 찾음'
+      setPhase(merged.holdings.length ? "review" : merged.unsupported.length ? "unsupported" : "empty");
     } catch {
       setPhase("failed");
     }
@@ -161,10 +168,27 @@ export default function ScreenshotImport({
             사진을 읽고 있어요{progress.total > 1 && ` (${progress.done}/${progress.total})`}
           </p>
         )}
+        {phase === "unsupported" && (
+          <div role="alert" className="flex flex-col gap-1">
+            <p className="m-0 text-sm text-body">
+              읽은 {unsupported.length}개 종목은 ETF나 해외 주식이라 Take a Look이 아직 다루지 않아요.
+            </p>
+            <p className="m-0 text-xs text-muted">{unsupported.join(", ")}</p>
+          </div>
+        )}
         {phase === "empty" && (
           <p role="alert" className="m-0 text-sm text-body">
             종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.
           </p>
+        )}
+        {(phase === "empty" || phase === "unsupported") && readText.length > 0 && (
+          <details className="disclosure">
+            <summary>읽은 글자 보기</summary>
+            <p className="m-0 mt-2 text-xs text-muted">이 기기에서 읽은 글자예요. 저장하거나 보내지 않아요.</p>
+            <ul className="m-0 mt-2 flex list-none flex-wrap gap-x-3 gap-y-1 p-0 text-xs text-body">
+              {readText.map((line, index) => <li key={index}>{line}</li>)}
+            </ul>
+          </details>
         )}
         {phase === "failed" && (
           <p role="alert" className="m-0 text-sm text-danger">

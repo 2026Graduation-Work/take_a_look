@@ -1,6 +1,10 @@
 {
   "A-light": {
     "form": "A",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -45,6 +49,10 @@
   },
   "A-dark": {
     "form": "A",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -82,6 +90,10 @@
   },
   "B-dark": {
     "form": "B",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -128,6 +140,10 @@
   },
   "B-light": {
     "form": "B",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -165,6 +181,10 @@
   },
   "C-light": {
     "form": "C",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -223,6 +243,10 @@
   },
   "C-dark": {
     "form": "C",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": false,
     "holdings": [
       {
@@ -265,6 +289,10 @@
   },
   "A-light-v2": {
     "form": "A",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -309,6 +337,10 @@
   },
   "A-dark-v2": {
     "form": "A",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -346,6 +378,10 @@
   },
   "B-dark-v2": {
     "form": "B",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -391,6 +427,10 @@
   },
   "B-light-v2": {
     "form": "B",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -422,6 +462,10 @@
   },
   "C-light-v2": {
     "form": "C",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -487,6 +531,10 @@
   },
   "C-dark-v2": {
     "form": "C",
+    "widths": [
+      390,
+      1280
+    ],
     "holdout": true,
     "holdings": [
       {
@@ -520,6 +568,44 @@
     ],
     "unsupported": [
       "ACE 미국나스닥100"
+    ]
+  },
+  "P-A-etf": {
+    "form": "P-A",
+    "widths": [
+      393
+    ],
+    "holdout": false,
+    "holdings": [],
+    "unsupported": [
+      "KODEX 코스닥150",
+      "TIGER 미국나스닥100",
+      "KODEX 방산TOP10",
+      "RISE 200",
+      "TIGER 200헬스케어"
+    ]
+  },
+  "P-B-dark": {
+    "form": "P-B",
+    "widths": [
+      393
+    ],
+    "holdout": false,
+    "holdings": [
+      {
+        "code": "005930",
+        "name": "삼성전자",
+        "quantity": 37,
+        "avgBuyPrice": 71200,
+        "avgSource": "computed"
+      }
+    ],
+    "unsupported": [
+      "KODEX 코스닥150",
+      "KODEX 방산TOP10",
+      "TIGER 200헬스케어",
+      "TIGER 미국나스닥100",
+      "애플"
     ]
   }
 }

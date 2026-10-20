@@ -8,7 +8,7 @@ const OCR_CDN = "https://cdn.jsdelivr.net";
 const OCR_MODELS = "https://paddle-model-ecology.bj.bcebos.com";
 const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const dev = process.env.NODE_ENV !== "production";
-const OCR_PAGES = ["/portfolio", "/survey"];
+const OCR_PAGES = ["/portfolio", "/survey", "/dev-ocr"]; // /dev-ocr는 개발 시험 화면(운영은 아래 rewrite로 404)
 
 function csp(ocr: boolean) {
   return [
