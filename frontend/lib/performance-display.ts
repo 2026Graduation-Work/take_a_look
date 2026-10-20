@@ -50,14 +50,6 @@ export const METRICS: MetricDefinition[] = [
     description: AUC_DEFINITION,
   },
   {
-    key: "hit_rate",
-    deltaKey: "delta_B_minus_A_hit_rate",
-    label: "상승 여부 일치율",
-    direction: "higher",
-    format: "decimal6",
-    description: "상승 점수가 0.5 이상이면 '상승'으로 보고, 실제로 상승이었는지 맞은 비율이에요.",
-  },
-  {
     key: "calibration_brier",
     deltaKey: "delta_B_minus_A_calibration_brier",
     label: "Brier",
