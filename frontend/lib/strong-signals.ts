@@ -54,7 +54,8 @@ export async function loadStrongSignals(
     .select("stock_code,name:payload->>stock_name,as_of:payload->>data_asof,status:payload->inference->>status,scores:payload->inference->scores,volume:payload->prices->history->-1->>volume")
     .eq("horizon", horizon);
   if (error) return null;
-  const ranked = rankSignals((data ?? []) as SnapshotRow[]);
+  // 음수 인덱스(->-1)는 PostgREST가 받지만 supabase-js 타입 추론이 못 읽어 unknown을 거친다
+  const ranked = rankSignals((data ?? []) as unknown as SnapshotRow[]);
   const shortlist = [...ranked.filter(({ direction }) => direction === "up").slice(0, SHORTLIST),
     ...ranked.filter(({ direction }) => direction === "down").slice(0, SHORTLIST)];
   if (!shortlist.length) return { up: [], down: [], excluded: [] };
