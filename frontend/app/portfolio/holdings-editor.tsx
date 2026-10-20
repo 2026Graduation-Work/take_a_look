@@ -242,20 +242,17 @@ function AccountHoldingsEditor({
           </div>
         ) : (
           <section aria-label="등록한 종목" className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between px-1">
-              <span className="flex gap-x-3 text-2xs text-muted tabular-nums">
-                <span>{rows.length}종목</span>
-                {/* 평단을 하나도 모르면 "합계 0원"이 되므로 숨긴다(#278 점검) */}
+            {/* 왼쪽 한 줄: 매입금액 합계, 평균 매입가가 빈 종목이 있으면 그 안내(행마다 반복하지 않는다, 10/20 피드백).
+                종목 수는 목록이 보여 주므로 쓰지 않는다. 평단을 하나도 모르면 "합계 0원"이 되므로 합계를 숨긴다(#278) */}
+            <div className="flex items-baseline justify-between gap-4 px-1">
+              <p className="m-0 flex flex-col text-xs text-muted tabular-nums">
                 {rows.some(({ avgBuyPrice }) => avgBuyPrice !== null) && <span>매입금액 합계 {formatWon(total)}원</span>}
-              </span>
-              <button type="button" onClick={openSheet} className="btn-text text-xs">
+                {rows.some(({ avgBuyPrice }) => !avgBuyPrice) && <span>평균 매입가를 넣으면 산 가격보다 몇 % 오르거나 내렸는지 보여요.</span>}
+              </p>
+              <button type="button" onClick={openSheet} className="btn-text flex-none text-xs">
                 종목 추가
               </button>
             </div>
-            {/* 평균 매입가가 빈 종목이 있을 때만 한 번. 행마다 반복하지 않는다(10/20 피드백) */}
-            {rows.some(({ avgBuyPrice }) => !avgBuyPrice) && (
-              <p className="m-0 px-1 text-xs text-muted">평균 매입가를 넣으면 지금 가격이 산 가격보다 몇 % 오르거나 내렸는지(평단 대비) 종목 이름 아래에 보여요.</p>
-            )}
             {/* 눌러서 들어가는 목록이 아니라 편집 행이라 선 없이 간격으로 나눈다(화면 규칙 v2) */}
             <ul className="surface m-0 flex list-none flex-col gap-2 p-0 py-2">
               {rows.map((row) => (
