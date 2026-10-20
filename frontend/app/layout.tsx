@@ -11,7 +11,7 @@ const pretendard = localFont({
   variable: "--font-pretendard",
 });
 
-// 아이폰 홈 인디케이터 영역(safe-area)까지 그려야 하단 탭 막대가 env(safe-area-inset-bottom)로 비켜 선다.
+// viewportFit cover는 하단 탭 막대(지금은 없음) 때 넣은 설정이다. 지금 env(safe-area-inset-*)를 쓰는 곳은 없다.
 // theme-color = 페이지 바탕(--color-page). 모바일 브라우저 주소창 색이 화면과 이어진다(Vercel Web Interface Guidelines)
 export const viewport: Viewport = { viewportFit: "cover", themeColor: "#f5f5f7" };
 
