@@ -6,12 +6,12 @@
 
 import { useRef, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
-import { recognize } from "@/lib/holdings-ocr/recognize";
+import { init, recognize, toolLoaded } from "@/lib/holdings-ocr/recognize";
 import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type StockRef } from "@/lib/holdings-ocr/parse";
 import { isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
-type Phase = "idle" | "reading" | "review" | "empty" | "failed";
+type Phase = "idle" | "downloading" | "reading" | "review" | "empty" | "failed";
 
 const PAGE = 1000; // Supabase 한 번에 돌려주는 최대 행 수
 
@@ -68,16 +68,26 @@ export default function ScreenshotImport({
   const [unsupported, setUnsupported] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
 
   async function read(files: File[]) {
     if (!files.length) return;
-    setPhase("reading");
     setError("");
     setNotice("");
     try {
+      // 처음 한 번은 읽는 도구(약 25MB)를 받는다. 받는 양을 알 수 없어 단계만 보인다
+      if (!toolLoaded()) {
+        setPhase("downloading");
+        await init();
+      }
+      setPhase("reading");
+      setProgress({ done: 0, total: files.length });
       const master = await loadMaster(catalog);
       const results = [];
-      for (const file of files) results.push(parseHoldings(await recognize(file), master));
+      for (const file of files) {
+        results.push(parseHoldings(await recognize(file), master));
+        setProgress({ done: results.length, total: files.length });
+      }
       const merged = mergeResults(results);
       setRows(merged.holdings.map(toRow));
       setUnsupported(merged.unsupported);
@@ -118,7 +128,7 @@ export default function ScreenshotImport({
   return (
     <section aria-label="스크린샷으로 불러오기" className="flex flex-col gap-2">
       <div className="flex flex-col gap-1">
-        <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading"} className="btn-secondary self-start">
+        <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading" || phase === "downloading"} className="btn-secondary self-start">
           스크린샷으로 불러오기
         </button>
         <input
@@ -136,10 +146,22 @@ export default function ScreenshotImport({
         <p className="m-0 text-xs text-muted">
           증권 앱의 보유 종목 화면을 캡처해 올리면 종목과 수량을 채워 드려요. 사진은 이 기기 안에서만 읽고 어디에도 보내지 않아요.
         </p>
+        {/* 2026-10-20 실측: 처음 받는 양 24.9MB, 집 인터넷에서 50초~2분 */}
+        <p className="m-0 text-xs text-muted">처음 한 번은 읽는 도구를 내려받느라 1분쯤 걸려요(약 25MB).</p>
       </div>
 
       <div aria-live="polite" className="flex flex-col gap-2">
-        {phase === "reading" && <p role="status" className="m-0 text-sm text-body">사진을 읽고 있어요</p>}
+        {phase === "downloading" && (
+          <div role="status" className="flex flex-col gap-2">
+            <p className="m-0 text-sm text-body">읽는 도구를 내려받고 있어요. 다음부터는 바로 읽어요.</p>
+            <progress aria-label="읽는 도구 내려받기" className="h-1 w-full max-w-xs accent-brand-accent" />
+          </div>
+        )}
+        {phase === "reading" && (
+          <p role="status" className="m-0 text-sm text-body tabular-nums">
+            사진을 읽고 있어요{progress.total > 1 && ` (${progress.done}/${progress.total})`}
+          </p>
+        )}
         {phase === "empty" && (
           <p role="alert" className="m-0 text-sm text-body">
             종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.
