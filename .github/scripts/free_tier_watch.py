@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from datetime import date, datetime, timedelta, timezone
 from urllib.request import Request, urlopen
 
@@ -19,6 +20,8 @@ TITLE = "[ops] 무료 한도 경고"
 SITE_URL = "https://takealook-skku.vercel.app"  # Vercel 연동이 덮어쓴 적 있음(docs/auth-setup.md 3-3)
 SITE_URL_TITLE = "[ops] 인증 Site URL 변경됨"
 OWNER = "Choi-Jung-Hyeon"  # 운영 감시 담당
+SECURITY_TITLE = "[ops] 보안 감시 경고"
+SIGNUPS_7D_LIMIT = 50  # 수업 과제 규모에서 주 50건 넘는 가입은 남용 의심(docs/security/2026-10-audit.md)
 
 
 def weekdays_between(start, end):
@@ -42,6 +45,19 @@ def check(usage, newsapi_remaining, today):
         alerts.append(f"차트 게시가 {lag}영업일 밀림(마지막 {as_of})")
     return alerts, {"db_mb": round(db_mb), "storage_mb": round(storage_mb),
                     "newsapi_remaining": newsapi_remaining, "last_published_as_of": as_of}
+
+
+def security_check(usage):
+    """RLS가 꺼진 public 테이블과 가입 수. 값이 없으면(0015 미적용) 그것도 경고다."""
+    alerts = []
+    tables = usage.get("rls_disabled_tables")
+    if tables is None:
+        alerts.append("RLS 검사값이 없음(마이그레이션 0015 확인)")
+    elif tables:
+        alerts.append(f"RLS가 꺼진 public 테이블 {len(tables)}개: {', '.join(tables)}")
+    if (usage.get("signups_7d") or 0) > SIGNUPS_7D_LIMIT:
+        alerts.append(f"최근 7일 가입 {usage['signups_7d']}건 > {SIGNUPS_7D_LIMIT}건")
+    return alerts
 
 
 def post_json(url, body, headers):
@@ -83,17 +99,27 @@ def main():
         remaining = None
     today = datetime.now(timezone(timedelta(hours=9))).date()
     alerts, measured = check(usage, remaining, today)
+    security = security_check(usage)
+    measured.update(signups_24h=usage.get("signups_24h"), signups_7d=usage.get("signups_7d"),
+                    rls_disabled_tables=usage.get("rls_disabled_tables"))
     try:
         current = site_url()
     except Exception as exc:  # 측정 실패도 경고로 남긴다
         current = f"읽기 실패({type(exc).__name__})"
-    print(json.dumps({"event": "free_tier_watch", **measured, "alerts": alerts, "site_url": current}, ensure_ascii=False))
+    print(json.dumps({"event": "free_tier_watch", **measured, "alerts": alerts + security, "site_url": current},
+                     ensure_ascii=False))
+    if os.environ.get("DRY_RUN") == "true":  # 수동 시험: 이슈는 남기지 않고 실패 여부만 본다
+        sys.exit(1 if security else 0)
     if current.rstrip("/") != SITE_URL:
         report(SITE_URL_TITLE, f"{today} 주간 감시\n\n- 인증 Site URL `{current}` ≠ `{SITE_URL}`\n\n"
                "자동으로 되돌리지 않습니다. 확인 후 docs/auth-setup.md 3-3 절차로 되돌려 주세요.")
     if alerts:
         report(TITLE, f"{today} 주간 감시\n\n" + "\n".join(f"- {a}" for a in alerts)
                + f"\n\n측정값: `{json.dumps(measured)}`\n\n기준: docs/ops/free-tier-budget.md")
+    if security:
+        report(SECURITY_TITLE, f"{today} 주간 감시\n\n" + "\n".join(f"- {a}" for a in security)
+               + "\n\n점검 기준: docs/security/2026-10-audit.md")
+        sys.exit(1)  # 작업을 실패로 표시해 Actions 알림 메일도 가게 한다
 
 
 if __name__ == "__main__":
