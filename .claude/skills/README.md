@@ -125,3 +125,11 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | Playwright MCP | 사용 중(10-11 판정 유지) | 플러그인으로 이미 켜져 있다. 다만 MCP 스냅샷은 화면 전체 구조를 매번 돌려줘 토큰이 크다 → 전후 스크린샷·화면 확인은 `@playwright/test` 스크립트를 먼저 쓰고, MCP 도구는 한 번 눌러 보는 정도에만 |
 | [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (GPL-3.0) | 기각 | 로컬 GPU 이미지·영상 생성. 서비스에 생성 이미지가 필요 없고, 모델 파일 관리 부담이 있다. 발표 영상은 HyperFrames(10-06 판정) |
 | [MarkItDown](https://github.com/microsoft/markitdown) (MIT) | 기존 판정 유지 | 10-09 표와 같다. PDF·이미지는 Read로 바로 읽고, docx·xlsx·pptx를 글로 바꿀 일이 생기면 설치 없이 `pipx run markitdown 파일`로 한 번만 |
+
+## 검토한 스크랩 (2026-10-20)
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| "CLAUDE.md 규칙은 부탁이라 어긴다 → 훅으로" (보호 파일 훅, 커밋 전 테스트 훅) | **채택(적용)** | 사실 확인: Claude Code 공식 문서대로 CLAUDE.md는 시스템 프롬프트가 아닌 맥락으로 들어가 엄격한 준수 보장이 없고, PreToolUse 훅은 **종료 코드 2만 막는다**(1은 알림만). 되돌리기 힘든 두 가지만 `.claude/hooks/guard.py`로 옮겼다: ① `.env` 류 수정 차단(`.env.example` 제외) ② `git commit` 전 바뀐 블록의 빠른 검사(프론트 단위 테스트, 파이썬 ruff) 실패 시 차단. pytest 전체와 build는 CI 필수 체크가 막아 훅에 넣지 않았다(커밋마다 느려짐). 스키마는 이미 `ask` 권한으로 묻는다 |
+| "에이전트 말고 스킬(업무별 설명서)" (Anthropic 발표 인용) | 생각만 채택(이미 하고 있음) | 우리 구조가 이미 이 방식이다: AI 하나 + 업무별 설명서(`AGENTS.md` 규칙, `frontend/DESIGN.md` 화면, 허용 목록 스킬 5종, 메모리의 '도구 꺼내 쓰기 표'), 완료 기준(PR 규칙의 필수 체크, 화면 PR 3문항), "틀리면 채팅이 아니라 설명서를 고친다"(피드백마다 DESIGN.md·copy-rules 갱신). 새 스킬은 만들지 않음. DM 프롬프트 모음은 받지 않음 |
+| [PentAGI](https://github.com/vxcontrol/pentagi) (MIT, 별 3.1만, 10/17 갱신) | 기각 | 실재하고 활발하지만 자체 호스팅(Docker Compose + PostgreSQL/pgvector + 선택 Neo4j)과 LLM(유료 API 또는 27B급 로컬 모델)이 필요해 무료·무관리 원칙에 맞지 않는다. nmap, sqlmap, Metasploit 같은 공격 도구를 운영 중인 Vercel, Supabase 주소에 돌리는 것은 우리 몫의 점검 범위를 넘는다. 이번 점검(`docs/security/2026-10-audit.md`)은 RLS를 DB 안에서 역할을 바꿔 직접 시험했고, 주간 감시가 RLS를 계속 본다 |
