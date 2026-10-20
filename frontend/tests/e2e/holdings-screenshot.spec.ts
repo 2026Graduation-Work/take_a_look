@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { finishDemo } from "./demo-steps";
 
 // 스크린샷으로 보유 종목 불러오기: 업로드 → 확인 표 → 수정 → 목록에 넣기 → 저장.
-// CI에서 모델(약 24MB)을 받지 않도록, 글자 인식 워커만 시험 화면의 인식 고정값(tests/fixtures/holdings-ocr/ocr)을
+// CI에서 모델(약 24MB)을 돌리지 않도록, 글자 인식 워커(/ocr/worker-entry)만 시험 화면의 인식 고정값(tests/fixtures/holdings-ocr/ocr)을
 // 돌려주는 가짜 워커로 바꾼다. 해석 규칙과 화면은 실제 코드 그대로다.
 const FIXTURE = "tests/fixtures/holdings-ocr";
 const lines: { text: string; score: number; x0: number; y0: number; x1: number; y1: number }[] =
@@ -20,7 +20,7 @@ self.onmessage = ({ data }) => {
 };`;
 
 test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저장한다", async ({ page, context }) => {
-  await context.route(/cdn\.jsdelivr\.net\/npm\/@paddleocr/, (route) => route.fulfill({ contentType: "text/javascript", body: fakeWorker }));
+  await context.route(/\/ocr\/worker-entry/, (route) => route.fulfill({ contentType: "text/javascript", body: fakeWorker }));
   await page.route(/\/rest\/v1\/stocks\?select=code%2Cname/, (route) => route.fulfill({ json: MASTER }));
   await finishDemo(page);
   await page.goto("/portfolio");
@@ -51,11 +51,37 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   expect(saved.find((row: { code: string }) => row.code === "005380").quantity).toBe(9);
 });
 
-test("스크린샷: 종목을 못 찾으면 다시 올리거나 직접 입력하라고 안내한다", async ({ page, context }) => {
-  await context.route(/cdn\.jsdelivr\.net\/npm\/@paddleocr/, (route) =>
-    route.fulfill({ contentType: "text/javascript", body: fakeWorker.replace(/const items = .*;\n/, "const items = [];\n") }));
+// 화면 CSP는 처음 연 문서 것이 화면 이동 내내 쓰인다. 대시보드에서 메뉴로 들어와도 워커가 막히지 않아야 한다(#393)
+test("스크린샷: 대시보드 → 계정 메뉴 → 보유 종목으로 이동해도 읽는다", async ({ page, context }) => {
+  await context.route(/\/ocr\/worker-entry/, (route) => route.fulfill({ contentType: "text/javascript", body: fakeWorker }));
+  await page.route(/\/rest\/v1\/stocks\?select=code%2Cname/, (route) => route.fulfill({ json: MASTER }));
+  await finishDemo(page);
+  await page.getByLabel(/계정 메뉴/).click();
+  await page.getByRole("link", { name: "보유 종목" }).click();
+  await expect(page).toHaveURL(/\/portfolio$/);
+  await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
+  await expect(page.getByRole("heading", { name: "읽은 내용을 확인해 주세요" })).toBeVisible();
+});
+
+test("스크린샷: 읽는 도구를 못 받으면 새로고침을 안내한다", async ({ page, context }) => {
+  await context.route(/\/ocr\/worker-entry/, (route) => route.abort());
   await finishDemo(page);
   await page.goto("/portfolio");
+  await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
+  await expect(page.getByRole("alert").filter({ hasText: "읽는 도구" })).toHaveText("읽는 도구를 불러오지 못했어요. 새로고침한 뒤 다시 올리거나 직접 입력해 주세요.");
+});
+
+test("스크린샷: 글자를 거의 못 읽으면 또렷한 캡처를, 글자는 읽었는데 종목이 없으면 다른 화면을 안내한다", async ({ page, context }) => {
+  let items = "[]";
+  await context.route(/\/ocr\/worker-entry/, (route) =>
+    route.fulfill({ contentType: "text/javascript", body: fakeWorker.replace(/const items = .*;\n/, `const items = ${items};\n`) }));
+  await finishDemo(page);
+  await page.goto("/portfolio");
+  await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
+  await expect(page.getByRole("alert").filter({ hasText: "글자를" })).toHaveText("글자를 거의 읽지 못했어요. 글자가 또렷하게 보이는 캡처로 다시 올리거나 직접 입력해 주세요.");
+
+  items = JSON.stringify(["계좌 요약", "총 평가금액", "주문 가능 금액", "입출금"].map((text, i) => ({ text, score: 0.99, poly: [[0, i * 40], [200, i * 40], [200, i * 40 + 30], [0, i * 40 + 30]] })));
+  await page.reload(); // 워커를 새로 받게
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
   await expect(page.getByRole("alert").filter({ hasText: "종목을 찾지 못했어요" })).toHaveText("종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.");
 });
@@ -63,7 +89,7 @@ test("스크린샷: 종목을 못 찾으면 다시 올리거나 직접 입력하
 test("스크린샷: ETF만 읽히면 다루지 않는 종목이라고 이름과 함께 알리고, 읽은 글자를 접어서 보여 준다", async ({ page, context }) => {
   const etfLines: typeof lines = JSON.parse(readFileSync(`${FIXTURE}/ocr/P-A-etf-393.json`, "utf8"));
   const items = JSON.stringify(etfLines.map(({ text, score, x0, y0, x1, y1 }) => ({ text, score, poly: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] })));
-  await context.route(/cdn\.jsdelivr\.net\/npm\/@paddleocr/, (route) =>
+  await context.route(/\/ocr\/worker-entry/, (route) =>
     route.fulfill({ contentType: "text/javascript", body: fakeWorker.replace(/const items = .*;\n/, `const items = ${items};\n`) }));
   await finishDemo(page);
   await page.goto("/portfolio");

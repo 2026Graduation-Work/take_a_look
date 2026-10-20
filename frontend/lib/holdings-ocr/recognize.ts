@@ -1,10 +1,11 @@
 // 보유 화면 캡처의 글자 읽기. 사용자 브라우저(웹 워커) 안에서만 돌고 이미지는 어디에도 보내지 않는다.
 // 엔진: PaddleOCR.js 0.4.2(Apache-2.0)의 워커 파일 + PP-OCRv5 검출 + 한국어 인식(korean_PP-OCRv5_mobile_rec).
-// - 워커 파일(OpenCV, ONNX Runtime이 들어 있는 완성본, 약 11MB)은 jsDelivr에서 버전을 고정해 받는다.
-//   패키지를 번들에 넣으면 Turbopack이 워커를 다시 묶다 실패하고, 메인 화면에도 OpenCV 10MB가 실린다.
+// - 워커 파일(OpenCV, ONNX Runtime이 들어 있는 완성본, 약 11MB), wasm, 모델(검출 4.8MB + 한국어 인식 13.5MB)은
+//   빌드 때 고정 판을 sha256으로 확인해 public/ocr/에 둔다(scripts/fetch-ocr-assets.mjs). 우리 사이트에서 주므로
+//   어느 화면에서 들어와도(문서를 새로 열지 않은 화면 이동 포함) 화면 CSP에 막히지 않는다.
+// - 패키지를 번들에 넣으면 Turbopack이 워커를 다시 묶다 실패하고, 메인 화면에도 OpenCV 10MB가 실린다.
 //   그래서 패키지와 같은 통신 규약(worker-transport-request/response)으로 워커에 직접 말을 건다.
-// - 모델(검출 4.8MB + 한국어 인식 13.5MB)은 PaddleX 공식 모델 저장소에서 받는다(CORS 허용, 브라우저가 캐시).
-// 모두 '스크린샷으로 불러오기'를 처음 누를 때만 받는다.
+// 모두 '캡처로 불러오기'를 처음 누를 때만 받는다.
 
 export interface OcrLine {
   text: string;
@@ -15,9 +16,8 @@ export interface OcrLine {
   y1: number;
 }
 
-const SDK = "https://cdn.jsdelivr.net/npm/@paddleocr/paddleocr-js@0.4.2/dist/assets/worker-entry-C9UNuyOJ.js";
-const ORT_WASM = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/"; // 워커 파일에 든 ONNX Runtime과 같은 판
-const MODELS = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/";
+const SDK = "/ocr/worker-entry-C9UNuyOJ.js";
+const ASSETS = "/ocr/"; // wasm, 모델(워커 안에서 같은 출처로 풀린다)
 const DARK_LUMA = 0.45; // 평균 밝기가 이보다 어두우면 뒤집어 읽는다(어두운 화면)
 const MIN_WIDTH = 1000; // 이보다 좁은 캡처는 키워서 읽는다(작은 글자)
 
@@ -42,15 +42,15 @@ const INIT = {
       unsupportedFeatures: [],
       modelSelection: { textDetectionModelName: "PP-OCRv5_mobile_det", textRecognitionModelName: "korean_PP-OCRv5_mobile_rec" },
       assets: {
-        det: { url: `${MODELS}PP-OCRv5_mobile_det_onnx_infer.tar` },
-        rec: { url: `${MODELS}korean_PP-OCRv5_mobile_rec_onnx_infer.tar` },
+        det: { url: `${ASSETS}PP-OCRv5_mobile_det_onnx_infer.tar` },
+        rec: { url: `${ASSETS}korean_PP-OCRv5_mobile_rec_onnx_infer.tar` },
       },
       runtimeDefaults: DET,
       pipelineBatchSize: 1,
       textDetectionBatchSize: 1,
       textRecognitionBatchSize: 6,
     },
-    ortOptions: { backend: "wasm", wasmPaths: ORT_WASM, disableWasmProxy: true },
+    ortOptions: { backend: "wasm", wasmPaths: ASSETS, disableWasmProxy: true },
   },
 };
 
@@ -64,9 +64,8 @@ const pending = new Map<number, { resolve: (value: unknown) => void; reject: (er
 
 function request(type: string, payload: unknown, transfer: Transferable[] = []): Promise<unknown> {
   if (!worker) {
-    // 같은 출처의 blob 워커에서 고정 판 워커 파일을 불러온다(다른 출처 파일로 바로 워커를 만들 수 없다)
-    const boot = URL.createObjectURL(new Blob([`import ${JSON.stringify(SDK)};`], { type: "text/javascript" }));
-    worker = new Worker(boot, { type: "module" });
+    // 같은 출처 파일로 바로 만든다. 워커는 /ocr/ 응답의 CSP('unsafe-eval' 허용, next.config.ts)를 받는다
+    worker = new Worker(SDK, { type: "module" });
     worker.onmessage = ({ data }: MessageEvent<Response>) => {
       const job = pending.get(data?.requestId);
       if (data?.kind !== "worker-transport-response" || !job) return;
