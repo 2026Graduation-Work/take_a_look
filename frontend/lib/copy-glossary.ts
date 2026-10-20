@@ -134,6 +134,11 @@ export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as co
 // 대시보드 신호 기간(앞으로 4주 기본, 1주로 바꿔 볼 수 있다 — 지도교수 10/15 "왜 4주?")
 export type SignalHorizon = keyof typeof HORIZON_AHEAD;
 export const SHORT_HORIZON_NOTE = "1주 신호는 짧은 흔들림에 더 크게 반응해요.";
+// 대시보드 '내 포트폴리오' 제목 아래 늘 한 줄(13px). 390에서도 한 줄이 되게 짧게(10/20 읽는 순서 정리)
+export const HORIZON_NOTE: Record<SignalHorizon, string> = {
+  20: "4주 뒤까지의 신호예요.",
+  5: "1주 뒤까지의 신호예요. 짧은 흔들림에 더 민감해요.",
+};
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
