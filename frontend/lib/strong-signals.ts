@@ -24,12 +24,18 @@ export interface SnapshotRow {
   as_of: string;
   status: string | null;
   scores: { down: number; neutral: number; up: number } | null;
+  volume?: number | string | null; // 게시 기준일 거래량(prices.history 마지막 날)
 }
+
+// 후보 제외 규칙(대시보드 목록과 운영 기록 live_record.py가 같은 정의): 게시 상태가 available이 아니거나(매매정지 등)
+// 그날 거래량이 0인 종목. 우선주, 거래대금 하한은 넣지 않는다(#208 팀 결정)
+export const isTradable = (row: Pick<SnapshotRow, "status" | "volume">) =>
+  row.status === "available" && Number(row.volume ?? 1) > 0;
 
 // 확신도 순위(순수 함수). 중립이 1위인 종목은 넣지 않는다.
 export function rankSignals(rows: SnapshotRow[]): StrongSignal[] {
   return rows.flatMap((row) => {
-    if (row.status !== "available" || !row.scores) return [];
+    if (!isTradable(row) || !row.scores) return [];
     const ranked = [["down", row.scores.down], ["flat", row.scores.neutral], ["up", row.scores.up]] as const;
     const [first, second] = [...ranked].sort((left, right) => right[1] - left[1]);
     if (first[0] === "flat") return [];
@@ -45,10 +51,11 @@ export async function loadStrongSignals(
   if (!client) return null;
   const { data, error } = await client
     .from("latest_chart_signal_snapshots")
-    .select("stock_code,name:payload->>stock_name,as_of:payload->>data_asof,status:payload->inference->>status,scores:payload->inference->scores")
+    .select("stock_code,name:payload->>stock_name,as_of:payload->>data_asof,status:payload->inference->>status,scores:payload->inference->scores,volume:payload->prices->history->-1->>volume")
     .eq("horizon", horizon);
   if (error) return null;
-  const ranked = rankSignals((data ?? []) as SnapshotRow[]);
+  // 음수 인덱스(->-1)는 PostgREST가 받지만 supabase-js 타입 추론이 못 읽어 unknown을 거친다
+  const ranked = rankSignals((data ?? []) as unknown as SnapshotRow[]);
   const shortlist = [...ranked.filter(({ direction }) => direction === "up").slice(0, SHORTLIST),
     ...ranked.filter(({ direction }) => direction === "down").slice(0, SHORTLIST)];
   if (!shortlist.length) return { up: [], down: [], excluded: [] };

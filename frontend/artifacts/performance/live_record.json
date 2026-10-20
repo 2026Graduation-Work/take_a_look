@@ -18,9 +18,9 @@
         "all_n": 4417
       },
       "down": {
-        "list_rate": null,
-        "list_n": 0,
-        "list_unscored": 25,
+        "list_rate": 0.48,
+        "list_n": 25,
+        "list_unscored": 0,
         "all_rate": 0.5495,
         "all_n": 4417
       }
