@@ -103,7 +103,6 @@ export default function StockMarks({ code, name }: { code: string; name: string 
           <StepNav onBack={() => setDraft(null)} backLabel="취소" nextType="submit" nextLabel="저장" nextDisabled={!draft.trim()} />
         </form>
       )}
-      <p className="m-0 text-xs text-muted">나만 보는 기록이에요. 여기서 누른 것으로 주문이 나가지 않아요.</p>
       {error && (
         <p role="alert" className="m-0 text-sm text-danger">
           {error}

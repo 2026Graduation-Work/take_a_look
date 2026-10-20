@@ -252,6 +252,10 @@ function AccountHoldingsEditor({
                 종목 추가
               </button>
             </div>
+            {/* 평균 매입가가 빈 종목이 있을 때만 한 번. 행마다 반복하지 않는다(10/20 피드백) */}
+            {rows.some(({ avgBuyPrice }) => !avgBuyPrice) && (
+              <p className="m-0 px-1 text-xs text-muted">평균 매입가를 넣으면 지금 가격이 산 가격보다 몇 % 오르거나 내렸는지(평단 대비) 종목 이름 아래에 보여요.</p>
+            )}
             {/* 눌러서 들어가는 목록이 아니라 편집 행이라 선 없이 간격으로 나눈다(화면 규칙 v2) */}
             <ul className="surface m-0 flex list-none flex-col gap-2 p-0 py-2">
               {rows.map((row) => (

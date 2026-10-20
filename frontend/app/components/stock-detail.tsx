@@ -1,8 +1,8 @@
 "use client";
 
 // 종목 상세 — "이 종목, 지금 뭘 확인하면 되지?"
-// 순서: 헤더 → 한눈에 보기(결론) → 내 보유와 관심 종목, 메모 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
-// 결론을 읽고 나서 내 보유와 행동이 보이게 둔다. 1280에서도 왼쪽 한 흐름이다(#372).
+// 순서: 헤더(가격, 내 보유) → 관심 종목과 메모 → 한눈에 보기 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
+// #372에서 보유와 버튼을 결론 아래로 옮겼다가 사용자 피드백으로 되돌렸다(10/20).
 // 필수 정보는 지우지 않고 "더 알아보기"에 접는다.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -193,18 +193,32 @@ export default function StockDetailView({
                 <span className="text-4xl font-semibold tabular-nums">
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
-                <span className="text-sm font-medium tabular-nums" style={{ color: changeColor }}>
-                  {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
-                  <span className="ml-2 text-2xs font-normal text-muted">
-                    전일 대비{detail.asOf && staleLabel(detail.asOf) && `, ${formatDate(detail.asOf)} 기준`}
+                {/* 전일 대비와 평단 대비를 같은 두 칸(이름, 값)으로 맞춰 오른쪽 끝을 가지런히(#360 리뷰) */}
+                <span className="inline-grid grid-cols-[4rem_7rem] items-baseline gap-x-2 self-start text-xs text-muted sm:self-end">
+                  <span>전일 대비</span>
+                  <span className="text-right text-sm font-semibold tabular-nums" style={{ color: changeColor }}>
+                    {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
                   </span>
                 </span>
+                {detail.asOf && staleLabel(detail.asOf) && (
+                  <span className="text-xs text-muted">{formatDate(detail.asOf)} 기준</span>
+                )}
               </>
             ) : (
               <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
             )}
+            {own && (
+              <p className="m-0 flex flex-wrap items-baseline gap-x-3 self-start text-xs text-muted tabular-nums sm:self-end">
+                <span>보유 {own.quantity.toLocaleString("ko-KR")}주</span>
+                {own.rawAvgBuyPrice
+                  ? <GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} aligned />
+                  : <span>평균 매입가를 <Link href="/portfolio" className="text-brand hover:underline">보유 종목</Link>에 넣으면 평단 대비 수익률이 보여요</span>}
+              </p>
+            )}
           </div>
         </section>
+
+        <StockMarks code={detail.code} name={detail.name} />
 
         {/* 2. 한눈에 보기 */}
         <section aria-labelledby="glance-title" className="surface flex flex-col gap-4 p-6">
@@ -238,22 +252,9 @@ export default function StockDetailView({
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
-          <div className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
-            {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다 */}
-            <span className="max-w-2xl" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</span>
-            <Link href="/performance" className="btn-text">과거 모델 성적표 보기</Link>
-          </div>
+          {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다. 성적표는 맨 아래 면책 문구에서 간다 */}
+          <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요. 앞으로를 예측한 값은 아니에요.</p>
         </section>
-
-        {/* 결론 다음: 내 보유와 관심 종목, 메모 */}
-        <div className="flex flex-col gap-3">
-          {own && (
-            <p className="m-0 px-1 text-sm text-body tabular-nums">
-              보유 <strong className="font-semibold text-ink">{own.quantity.toLocaleString("ko-KR")}주</strong><span className="ml-3" /><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
-            </p>
-          )}
-          <StockMarks code={detail.code} name={detail.name} />
-        </div>
 
         {/* 3. 나에게 맞춘 체크포인트 */}
         <Checkpoints demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
