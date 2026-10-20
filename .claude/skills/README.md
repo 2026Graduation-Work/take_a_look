@@ -141,3 +141,9 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | "육칠"(AI 6개가 각자 풀고 7번째가 채점해 합침) | 기각(생각만) | 같은 일을 여러 번 돌리는 병렬 에이전트라 토큰이 몇 배로 든다. 우리 세션은 하위 에이전트를 쓰지 않는 규칙이고, 대안 비교가 필요한 곳(새 화면)은 이미 DESIGN.md 0-1 "시안 2~3개를 만들어 비교"로 한다 |
 | "크래시 아웃"(답을 스스로 공격해 검증) | 생각만 채택(이미 하고 있음) | 프롬프트 한 줄보다 실제 검증이 낫다: 테스트, 정확도 표(`accuracy.ts`), 운영 화면 실측, `/security-review`, ponytail 점검, 그리고 이번 #385처럼 실제 데이터로 다시 시험한다. 새 도구 없음 |
 | "아우라 파밍"(AI 티 나는 디자인 금지) | 이미 충족 | DESIGN.md 8장(그라데이션, 글로우, 이모지, 알약 배지 남발, 상자 안 상자 금지)과 `copy-rules.ts`(가운데 점, 개발 용어, '추천' 등)가 같은 일을 코드로 막는다. 허용 스킬 `baseline-ui`, `minimalist-ui`도 같은 방향 |
+
+## 검토한 스크랩 (2026-10-20, 세 번째)
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| "깃허브 인기 클로드 스킬 5개"(Superpowers, Anthropic Skills, UI UX Pro Max, Caveman, Taste Skill) | 기존 판정 유지 | 다섯 개 모두 이미 판정했다. Superpowers는 개인 선택(서환 개인 설치, 레포 공용 아님), Anthropic Skills는 `frontend-design`만 SHA 고정 설치하고 문서(docx, xlsx)는 Claude 기본 기능으로 충분, UI UX Pro Max는 기각(스타일 고르는 도구, 우리는 DESIGN.md로 정함), Caveman은 오늘 첫 번째 표에서 기각, Taste Skill은 2종만 설치. "댓글 남기면 DM으로 설치 가이드"는 받지 않는다(원본 레포 SKILL.md만 본다) |
