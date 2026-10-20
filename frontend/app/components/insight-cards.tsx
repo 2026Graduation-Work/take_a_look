@@ -19,7 +19,8 @@ import {
   CHECKPOINT_RULE,
   FEW_ARTICLES,
   FEW_ARTICLES_RULE,
-  FINANCIAL_TERM,
+  TERM_INFO,
+  compareLine,
   PSYCHOLOGY_RULE,
   STYLE_TYPE_RULE,
   STYLE_TYPE_SOURCE,
@@ -68,6 +69,8 @@ import { SourceTable } from "./source-line";
 import MoreList from "./more-list";
 import DotLegend from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
+import TermLabel from "./term-tip";
+import FINANCIAL_MEDIANS from "@/lib/financial-medians.json";
 
 // 극성은 lib/profiling/style-questions.json axes와 같다.
 const AXIS_META: Record<StyleAxisId, { name: string; negative: string; positive: string }> = {
@@ -106,22 +109,22 @@ const TAB_META: Record<TabId, { label: string; question: string; why: string }> 
   market: {
     label: TERM.market,
     question: "요즘 이 종목을 둘러싼 분위기는 어떤가요?",
-    why: "뉴스 분위기와 가격 흔들림은 짧은 기간 가격을 크게 움직이곤 해요. 분위기에 휩쓸린 판단인지 한 번 더 보게 해 줘요.",
+    why: "짧은 기간 가격은 분위기에 크게 흔들려서, 내 판단이 분위기에 휩쓸린 건 아닌지 볼 수 있어요.",
   },
   supply: {
     label: TERM.supply,
     question: "최근 누가 이 종목을 사고팔았나요?",
-    why: "개인, 외국인, 기관 중 누가 이 종목을 사고 팔았는지 실제 거래 기록으로 볼 수 있어요.",
+    why: "누가 사고팔았는지를 하루 거래량과 견줘 보면 움직임이 큰지 작은지 알 수 있어요.",
   },
   financial: {
     label: TERM.financial,
     question: "이 회사는 돈을 잘 벌고 있나요?",
-    why: "가격 움직임과 별개로 회사의 기초 체력을 보는 지표예요. 오래 들고 갈 종목이라면 특히 중요해요.",
+    why: "가격과 별개로 회사의 기초 체력을 코스피 다른 회사들과 견줘 볼 수 있어요.",
   },
   contribution: {
     label: TERM.contribution,
     question: "모델은 무엇을 보고 이 신호를 냈나요?",
-    why: "모델 신호가 한 가지 근거에 쏠려 있는지 확인할 수 있어요. 그 근거가 내 판단과 맞는지 비교해 보세요.",
+    why: "신호가 한 가지 근거에 쏠렸는지 보고, 그 근거가 내 판단과 맞는지 견줘 볼 수 있어요.",
   },
 };
 
@@ -320,10 +323,10 @@ export default function EvidenceTabs({
   return (
     <section aria-labelledby="evidence-title" className="flex flex-col gap-4">
       <div className="flex flex-col gap-1 px-1">
-        <span className="text-2xs text-muted">판단 근거 4가지, 내 성향에 맞춘 순서</span>
         <h2 id="evidence-title" className="text-xl font-semibold">
           무엇을 근거로 판단할까요?
         </h2>
+        <span className="text-2xs text-muted">판단 근거 4가지, 내 성향에 맞춘 순서</span>
       </div>
       <div className="overflow-x-auto [scrollbar-width:none]">
         <div
@@ -360,10 +363,11 @@ export default function EvidenceTabs({
         className="surface flex flex-col gap-4 p-6"
       >
         <h3 className="text-lg font-semibold">{TAB_META[active].question}</h3>
-        {active === "market" && <MarketPanel detail={detail} insights={insights} />}
-        {active === "supply" && <SupplyPanel supply={insights.supply} />}
+        {/* 네 탭 모두 같은 순서: 결론 → 숫자와 비교 기준 → 왜 봐야 하나요? → 계산 근거(접기) */}
+        {active === "market" && <MarketPanel detail={detail} insights={insights} why={TAB_META.market.why} />}
+        {active === "supply" && <SupplyPanel supply={insights.supply} volume={insights.supplyVolume} why={TAB_META.supply.why} />}
         {active === "financial" && (
-          <FinancialPanel financial={insights.financial} />
+          <FinancialPanel financial={insights.financial} why={TAB_META.financial.why} />
         )}
         {active === "contribution" && (
           <ContributionPanel
@@ -371,9 +375,9 @@ export default function EvidenceTabs({
             total={contributionTotal}
             features={modelFeatures}
             reasons={detail.reasons.filter(reason => reason.source === "chart")}
+            why={TAB_META.contribution.why}
           />
         )}
-        {active !== "financial" && <Why>{TAB_META[active].why}</Why>}
       </div>
     </section>
   );
@@ -387,7 +391,7 @@ export function NewsSentimentPanel({ insights, code }: { insights: StockInsights
   return <MarketPanel detail={null} insights={insights} code={code} />;
 }
 
-function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockDetail | null; insights: StockInsights; code?: string }) {
+function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: StockDetail | null; insights: StockInsights; code?: string; why?: string }) {
   const { sentiment, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentTimelineRef = useRef<HTMLDivElement | null>(null);
@@ -440,7 +444,7 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
         </Conclusion>
       ) : risk ? (
         <Conclusion>
-          최근 1년 {TERM.volatility}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요.
+          최근 1년 {TERM_INFO.volatility.label}은 코스피 전 종목 중 상위 {Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}% 수준이에요.
           {risk.asOf && staleLabel(risk.asOf) && <span className="text-xs text-muted tabular-nums"> ({risk.asOf.replaceAll("-", ".")} 기준)</span>}
         </Conclusion>
       ) : !psychology ? (
@@ -517,8 +521,9 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
           <p className="m-0 text-xs font-semibold text-muted">{PRICE_CONTEXT_CAPTION}</p>
           <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Stat
-              label={`${TERM.volatility}(1년, 코스피 상위 ${Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}%)`}
+              label={<TermLabel term="volatility" />}
               value={`${(risk.volatilityAnnual * 100).toFixed(1)}%`}
+              compare={`1년 기준, 코스피 상위 ${Math.max(1, Math.round((1 - risk.volatilityPercentile) * 100))}%예요.`}
             />
             <Stat label="3개월 최고가 대비" value={signedPercent(risk.drawdownFrom3mHigh)} change={risk.drawdownFrom3mHigh * 100} />
             <Stat label="최근 3거래일" value={signedPercent(risk.return3d)} change={risk.return3d * 100} />
@@ -543,6 +548,17 @@ function MarketPanel({ detail, insights, code = detail?.code }: { detail: StockD
         </section>
       ) : null}
       <DisclosureList disclosures={insights.disclosures} />
+      {why && <Why>{why}</Why>}
+      {risk && (
+        <details className="disclosure">
+          <summary>계산 근거</summary>
+          <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
+            <li>{TERM_INFO.volatility.label} = 최근 250거래일 하루 수익률(로그)의 표준편차 × √252, 코스피 전 종목 중 순위</li>
+            <li>3개월 최고가 대비 = 지금 종가 ÷ 최근 60거래일 최고 종가 − 1</li>
+            <li>최근 3거래일 = 지금 종가 ÷ 3거래일 전 종가 − 1</li>
+          </ul>
+        </details>
+      )}
     </>
   );
 }
@@ -575,11 +591,12 @@ function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosur
   );
 }
 
-function Stat({ label, value, change }: { label: string; value: string; change?: number }) {
+function Stat({ label, value, change, compare }: { label: ReactNode; value: string; change?: number; compare?: string }) {
   return (
     <div className="flex flex-col gap-1">
       <dt className="text-2xs text-muted">{label}</dt>
       <dd className="m-0 text-sm font-semibold tabular-nums text-ink">{change === undefined ? value : <ChangeText value={change} precision={1}>{value}</ChangeText>}</dd>
+      {compare && <dd className="m-0 text-2xs text-muted tabular-nums">{compare}</dd>}
     </div>
   );
 }
@@ -689,7 +706,7 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
 }
 
 // 투자자별 20일 순매수 합계를 가운데 0 기준 막대로. 순매수 = 적, 순매도 = 청.
-function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
+function SupplyPanel({ supply, volume, why }: { supply: SupplyDemandDay[] | null; volume: number | null; why: string }) {
   if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>;
   const totals = SUPPLY_SERIES.map((series) => ({
     ...series,
@@ -731,19 +748,32 @@ function SupplyPanel({ supply }: { supply: SupplyDemandDay[] | null }) {
               </div>
               <span className="text-right text-sm font-semibold tabular-nums text-ink">
                 <ChangeText value={total}>{formatShares(total)}</ChangeText>
+                {volume ? (
+                  <span className="block whitespace-nowrap text-2xs font-normal text-muted">
+                    하루 평균 거래량의 {Math.round((Math.abs(total) / volume) * 100).toLocaleString("ko-KR")}%
+                  </span>
+                ) : null}
                 <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                  최근일 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
+                  마지막 날 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                 </span>
               </span>
             </li>
           );
         })}
       </ul>
-      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>
-          {supply[0].date.replaceAll("-", ".")} ~ {supply[supply.length - 1].date.replaceAll("-", ".")}, 순매수 수량(주), 기타법인 제외
-        </span>
+      <div className="text-2xs text-muted">
+        <TermLabel term="net_buy" /> 수량(주), {supply[0].date.replaceAll("-", ".")} ~ {supply[supply.length - 1].date.replaceAll("-", ".")}
       </div>
+      <Why>{why}</Why>
+      <details className="disclosure">
+        <summary>계산 근거</summary>
+        <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
+          <li>순매수 합계 = 최근 {supply.length}영업일 동안 투자자별로 산 주식 수 − 판 주식 수, 기타법인 제외</li>
+          <li>{volume
+            ? `하루 평균 거래량 대비 = |순매수 합계| ÷ 같은 기간 하루 평균 거래량(${formatShares(Math.round(volume)).replace(/^\+/, "")})`
+            : "같은 기간 거래량 기록이 없어 거래량 대비 비율은 빼고 보여 줘요."}</li>
+        </ul>
+      </details>
     </>
   );
 }
@@ -756,7 +786,12 @@ function copula(word: string): string {
 
 const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 
-function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) {
+// 비교 기준: DB에 업종 분류가 없어 코스피 중간값(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
+// 업종 분류가 생기면 같은 업종 10개사 이상일 때 업종 중간값으로 바꾼다(#372).
+const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
+const NOT_COMPUTED: Record<string, string> = { negative_earnings: "적자라 계산하지 않아요." };
+
+function FinancialPanel({ financial, why }: { financial: FinancialSnapshot | null; why: string }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
@@ -770,26 +805,25 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
           <strong className="font-semibold">{oneDecimal(debt)}%</strong> 수준이에요.
         </Conclusion>
       )}
-      <dl className="m-0 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {financial.metrics.map((metric) => (
-          <div key={metric.key} className="flex items-baseline justify-between gap-3">
-            <dt className="text-sm text-body">{FINANCIAL_TERM[metric.key] ?? metric.label}</dt>
-            <dd className="m-0 flex-none text-right text-sm font-semibold tabular-nums text-ink">
-              {metric.value === null ? (
-                <>
-                  확인 불가
-                  {metric.note && <span className="block text-2xs font-normal text-muted">{metric.note}</span>}
-                </>
-              ) : (
-                <>
-                  {oneDecimal(metric.value)}
-                  {metric.unit}
-                </>
-              )}
-            </dd>
-          </div>
-        ))}
+      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+        {financial.metrics.map((metric) => {
+          const median = MEDIANS[metric.key]?.median;
+          return (
+            <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+              <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
+              <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
+                {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
+              </dd>
+              <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
+                {metric.value === null
+                  ? NOT_COMPUTED[metric.note ?? ""] ?? "계산할 자료가 모자라요."
+                  : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
+      <Why>{why}</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
@@ -802,6 +836,9 @@ function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) 
         <p className="m-0 mt-3 text-2xs text-muted">
           재무 {financial.period}{financial.valuationPriceAsOf && `, PER/PBR 주가 ${financial.valuationPriceAsOf.replaceAll("-", ".")} 종가 기준`}
         </p>
+        <p className="m-0 mt-2 text-2xs text-muted tabular-nums">
+          비교 기준은 {FINANCIAL_MEDIANS.basis} {FINANCIAL_MEDIANS.companies}개사의 {FINANCIAL_MEDIANS.fiscal_year}년 사업보고서로 계산한 중간값이에요({FINANCIAL_MEDIANS.as_of.replaceAll("-", ".")} 시가총액 기준). 업종 분류가 없어 업종 대신 코스피 전체와 견줘요.
+        </p>
       </details>
     </>
   );
@@ -813,11 +850,13 @@ function ContributionPanel({
   features,
   total,
   reasons,
+  why,
 }: {
   features?: ChartSnapshot["inference"]["features"];
   space?: ChartSnapshot["inference"]["contribution_space"];
   total?: number;
   reasons: PredictionReason[];
+  why: string;
 }) {
   if (!features?.length) {
     if (!reasons.length) return <Unavailable>이 예측에 연결된 근거 데이터가 없어요.</Unavailable>;
@@ -839,6 +878,7 @@ function ContributionPanel({
             </li>
           ))}
         </ol>
+        <Why>{why}</Why>
       </>
     );
   }
@@ -884,10 +924,12 @@ function ContributionPanel({
         })}
       </ul>
       {hiddenCount > 0 && (
-        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 영향이 더 작아 줄였어요. 계산값 보기에서 모두 볼 수 있어요.</p>
+        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 영향이 더 작아 줄였어요. 계산 근거에서 모두 볼 수 있어요.</p>
       )}
+      <p className="m-0 text-2xs text-muted">{total === undefined && "전체 항목 기준값이 없어 크기 말은 빼고 방향만 보여요. "}{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
+      <Why>{why}</Why>
       <details className="disclosure">
-        <summary>계산값 보기</summary>
+        <summary>계산 근거</summary>
         <div className="flex flex-col gap-2">
         <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-sm">
           {features.map(feature => (
@@ -900,9 +942,6 @@ function ContributionPanel({
         <p className="m-0 text-2xs text-muted">계산값은 {target} 점수를 올리고(+) 내린(−) 정도예요. 결과의 몇 분의 몇이라는 뜻이 아니에요. 계산값의 절댓값이 전체 항목 절댓값 합{total !== undefined && `(이번 ${total.toFixed(4)})`}의 10분의 1 이상이면 &lsquo;크게&rsquo;, 그보다 작으면 &lsquo;조금&rsquo;이라고 써요. 모델 기준값은 제외해요. 막대 길이는 막대로 보인 항목 중 가장 큰 값을 기준으로 비교해요.</p>
         </div>
       </details>
-      <div className="m-0 flex flex-wrap items-center gap-x-3 text-2xs text-muted">
-        <span>{total === undefined && "전체 항목 기준값이 없어 크기 말은 빼고 방향만 보여요. "}{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</span>
-      </div>
     </>
   );
 }

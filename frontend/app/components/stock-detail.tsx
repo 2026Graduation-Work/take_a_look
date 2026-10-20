@@ -1,7 +1,8 @@
 "use client";
 
 // 종목 상세 — "이 종목, 지금 뭘 확인하면 되지?"
-// 순서: 헤더 → 한눈에 보기 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
+// 순서: 헤더 → 한눈에 보기(결론) → 내 보유와 관심 종목, 메모 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
+// 결론을 읽고 나서 내 보유와 행동이 보이게 둔다. 1280에서도 왼쪽 한 흐름이다(#372).
 // 필수 정보는 지우지 않고 "더 알아보기"에 접는다.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -202,15 +203,8 @@ export default function StockDetailView({
             ) : (
               <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
             )}
-            {own && (
-              <span className="text-2xs text-muted tabular-nums">
-                보유 {own.quantity.toLocaleString("ko-KR")}주<span className="ml-3" /><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
-              </span>
-            )}
           </div>
         </section>
-
-        <StockMarks code={detail.code} name={detail.name} />
 
         {/* 2. 한눈에 보기 */}
         <section aria-labelledby="glance-title" className="surface flex flex-col gap-4 p-6">
@@ -250,6 +244,16 @@ export default function StockDetailView({
             <Link href="/performance" className="btn-text">과거 모델 성적표 보기</Link>
           </div>
         </section>
+
+        {/* 결론 다음: 내 보유와 관심 종목, 메모 */}
+        <div className="flex flex-col gap-3">
+          {own && (
+            <p className="m-0 px-1 text-sm text-body tabular-nums">
+              보유 <strong className="font-semibold text-ink">{own.quantity.toLocaleString("ko-KR")}주</strong><span className="ml-3" /><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
+            </p>
+          )}
+          <StockMarks code={detail.code} name={detail.name} />
+        </div>
 
         {/* 3. 나에게 맞춘 체크포인트 */}
         <Checkpoints demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />

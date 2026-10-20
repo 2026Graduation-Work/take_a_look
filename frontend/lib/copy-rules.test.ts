@@ -78,6 +78,8 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     "강한 하방",
     "데이터를 불러오지 못했습니다.",
     "함께 반영합니다.",
+    "코스피보다 저평가된 편",
+    "PER이 낮아 싸요",
   ]) {
     assert.ok(caught(text), text);
   }
@@ -108,4 +110,15 @@ test("쉬운 말 사전의 설명 문장은 마침표로 끝난다", () => {
   const bad = strings.filter((text) => /요$/.test(text) && !LABELS.has(text));
   assert.deepEqual(bad, []);
   assert.ok(strings.includes(glossary.SHORT_HORIZON_NOTE) && glossary.SHORT_HORIZON_NOTE.endsWith("요."));
+});
+
+// DESIGN.md '용어 설명 단계': 모든 용어에 쉬운 이름, 정의 한 문장, 읽는 법이 있다. 라벨 괄호에는 약어만
+test("용어 사전의 모든 용어에 쉬운 이름, 정의, 읽는 법이 있다", () => {
+  for (const [key, term] of Object.entries(glossary.TERM_INFO)) {
+    assert.ok(term.label && !/\((?![A-Z]+\))/.test(term.label), `${key} 라벨 괄호는 약어만: ${term.label}`);
+    assert.match(term.define, /^[^.]+요\.$/, `${key} 정의는 한 문장`);
+    assert.match(term.read, /요\.$/, `${key} 읽는 법`);
+  }
+  assert.equal(glossary.compareLine(27.9, 11.23, "코스피", "배"), "코스피 중간값 11.2배보다 높아요.");
+  assert.equal(glossary.compareLine(11.5, 11.23, "코스피", "배"), "코스피 중간값 11.2배와 비슷해요.");
 });

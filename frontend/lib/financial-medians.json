@@ -1,0 +1,32 @@
+{
+  "basis": "코스피",
+  "fiscal_year": 2025,
+  "as_of": "2026-10-20",
+  "companies": 825,
+  "metrics": {
+    "per": {
+      "median": 11.23,
+      "count": 619
+    },
+    "pbr": {
+      "median": 0.53,
+      "count": 822
+    },
+    "roe": {
+      "median": 4.4,
+      "count": 820
+    },
+    "operating_margin": {
+      "median": 3.81,
+      "count": 776
+    },
+    "debt_ratio": {
+      "median": 96.28,
+      "count": 822
+    },
+    "revenue_growth": {
+      "median": 2.88,
+      "count": 791
+    }
+  }
+}

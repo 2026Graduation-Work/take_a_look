@@ -24,6 +24,7 @@
 | 선 | **눌러서 들어가는 목록의 행 사이에만**. 나머지는 간격으로 나눈다 | "선 대신 여백으로 묶는다", 선은 표·편집 영역처럼 경계가 꼭 필요한 곳의 마지막 수단 [2] |
 | 상자 | 카드 단위로만. 카드 안 회색 상자·칩 상자 금지(값은 글자로) | 상자 안 상자가 41곳(상세)까지 쌓여 시선이 갈 곳을 잃었다 |
 | 펼치기 | 기본은 다 보여 준다. 항목이 많을 때만 처음 3개 + "더 보기(N)". 뉴스·공시 등 목록은 같은 방식. **펼침 안 펼침 금지** | 숨긴 내용은 덜 보인다 — 중요한 건 숨기지 않는다. 아코디언은 일부만 필요한 긴 내용에만 맞다 [3] |
+| 펼치기 예외 | **계산 근거는 블록마다 맨 아래 접기 하나, 이름은 '계산 근거'.** 접기 안에 또 접기는 두지 않는다. 결론, 근거 숫자와 비교 기준, 용어 정의(ⓘ)는 늘 펼쳐 둔다(2026-10-20, #372) | 계산식과 원자료는 일부 사람만 필요한 긴 내용이라 접기에 맞다 [3]. 이름과 자리가 같으면 어디서나 같은 곳을 찾는다 |
 | ⓘ | 용어 정의(두 문장 이하)만, **누르면 열림**(키보드 Enter·Esc). "자세히" 글자 버튼은 모두 ⓘ로. 짧고 꼭 필요한 설명은 본문에 바로 | 정의 툴팁은 클릭·포커스로 열어야 키보드·터치 사용자도 쓴다. 꼭 필요한 정보를 툴팁에만 두지 않는다 [5] |
 | 구분 기호 | **가운데 점(·) 금지**. 간격 또는 쉼표 | 사용자 피드백(AI 느낌). `copy-rules.ts`로 막는다 |
 | 탐색 | 같은 목적지로 가는 길은 하나(상단 메뉴). "대시보드로 돌아가기"·"편집" 같은 중복 링크는 빈 상태 안내 버튼일 때만 | 같은 곳으로 가는 길이 여럿이면 고를 것만 늘어난다(힉의 법칙, `ux-scrap-guidelines`) |
@@ -38,6 +39,21 @@
 **v2로 바뀐 옛 항목**: 2장 타이포(18·20·14px 단계 → 4단계로 합침), 2-2 "카드 안 요소 간격 16px"(→ 블록 안 8), 2-3 "모델 검증 전은 신호가 처음 나오는 곳에 한 번"(→ 표시 안 함), 보유 히트맵 범례의 검증 상태 표시(→ 삭제).
 
 출처: [1] [Carbon — Dashboards](https://v10.carbondesignsystem.com/data-visualization/dashboards), [DataCamp — Dashboard design tutorial](https://www.datacamp.com/tutorial/dashboard-design-tutorial) · [2] [MIT 6.813 — Layout](https://web.mit.edu/6.813/www/sp17/classes/14-layout/), [Blake Crosley — The Five Spacing Decisions](https://blakecrosley.com/ja/blog/five-spacing-decisions) · [3] [Alberta DS — Hide and show many sections](https://v2.design.alberta.ca/examples/hide-and-show-many-sections-of-information), [Webflow — Progressive disclosure](https://origin.webflow.com/blog/the-art-of-progressive-disclosure-in-web-design) · [4] [Cieden — Spacing best practices](https://cieden.com/book/sub-atomic/spacing/spacing-best-practices) · [5] [Carbon — Tooltip](https://www.carbondesignsystem.com/components/tooltip/usage), [Guidewire Jutro — Tooltip](https://docs.guidewire.com/jutro/documentation/10.3/tooltip)
+
+### 용어 설명 단계 (2026-10-20, #372)
+
+숫자 하나는 네 단계로 읽힌다: **결론 한 문장 → 근거 숫자와 비교 기준 → 용어 정의(ⓘ) → 계산 근거(접기)**.
+
+| 자리 | 규칙 | 예 |
+|---|---|---|
+| 라벨 | 쉬운 이름 + 약어 괄호. 라벨 안에 긴 괄호 설명을 쓰지 않는다 | 이익 대비 주가(PER), 순자산 대비 주가(PBR), 자기자본 수익률(ROE), 영업이익률, 부채비율, 매출 증가율 |
+| 값 아래 13px | 비교 기준 한 줄. **높아요, 낮아요, 비슷해요**까지만 쓴다. 저평가, 고평가, 싸다, 비싸다는 판정이라 쓰지 않는다(`copy-rules.ts`가 막는다) | "코스피 중간값 11.2배보다 높아요." 계산할 수 없으면 "적자라 계산하지 않아요." |
+| ⓘ | 정의 한 문장 + 읽는 법 한 문장. 약어와 전문 용어에만 단다. 매출, 영업이익처럼 일상어에 가까운 말은 ⓘ 없이 | "주가가 회사 1년 이익의 몇 배인지예요. 업종마다 보통 수준이 달라…" |
+| 계산 근거 | 블록 맨 아래 '계산 근거' 접기 하나(위 펼치기 예외) | 식, 원자료, 비교 기준을 만든 방법 |
+
+- 용어 문장은 `lib/copy-glossary.ts`의 `TERM_INFO` 한 곳에 모으고, 화면은 `TermLabel`(`app/components/term-tip.tsx`)로 그린다. 모든 용어에 쉬운 이름, 정의, 읽는 법이 있는지 `copy-rules.test.ts`가 검사한다.
+- 재무 비교 기준: DB에 업종 분류가 있고 같은 업종이 10개사 이상이면 업종 중간값, 아니면 코스피 중간값. 어느 기준인지 글자로 적는다. 중간값은 배치(`backend/analysis/text/value_pipeline/kospi_medians.py` → `lib/financial-medians.json`)로 미리 계산하고 화면에서 계산하지 않는다. 지금은 업종 분류가 없어 코스피 중간값이다.
+- 판단 근거 네 탭은 같은 모양이다: 질문형 제목 → 결론 → 숫자와 비교 기준 → "왜 봐야 하나요?" 한 줄(무엇과 견줘 볼지) → 계산 근거.
 
 ---
 
