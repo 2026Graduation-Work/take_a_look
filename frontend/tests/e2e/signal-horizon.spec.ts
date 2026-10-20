@@ -23,16 +23,17 @@ test("앞으로 4주 | 1주 전환: 목록·문구가 바뀌고 이 기기에 �
   await expect(group.getByRole("tab", { name: "4주" })).toHaveAttribute("aria-selected", "true");
   await expect(strong.locator('[data-stock-row="005930"]')).toContainText("상승");
   await expect(tile).toHaveAccessibleName(/앞으로 4주 상승 신호/);
-  // 기간 설명은 '내 포트폴리오' 제목 아래 늘 한 줄, 오른쪽 목록 제목 아래는 'N주 기준'(10/20 읽는 순서)
-  await expect(page.getByText("4주 뒤까지의 신호예요.")).toBeVisible();
-  await expect(strong.getByText("4주 기준")).toBeVisible();
+  // 4주는 설명 없음, 1주만 전환 왼쪽에 한 줄. 오른쪽 목록 제목 아래 'N주 기준'은 없다(10/20)
+  await expect(page.getByText("짧은 흔들림에 더 민감해요.")).toHaveCount(0);
+  await expect(strong.getByText(/주 기준/)).toHaveCount(0);
+  const below = await tile.boundingBox();
   // 예시 보유 4종목 중 카카오(예시 값)만 하락 → 1주로 바꾸면 삼성전자도 하락
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("카카오에 하락 신호가 있어요.");
 
   await group.getByRole("tab", { name: "1주" }).click();
   await expect(group.getByRole("tab", { name: "1주" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("1주 뒤까지의 신호예요. 짧은 흔들림에 더 민감해요.")).toBeVisible();
-  await expect(strong.getByText("1주 기준")).toBeVisible();
+  await expect(page.getByText("짧은 흔들림에 더 민감해요.")).toBeVisible();
+  expect((await tile.boundingBox())?.y).toBe(below?.y); // 설명이 생겨도 아래 내용이 내려가지 않는다
   await expect(strong.locator('[data-stock-row="005930"]')).toContainText("하락");
   await expect(tile).toHaveAccessibleName(/앞으로 1주 하락 신호/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^(삼성전자, 카카오|카카오, 삼성전자)에 하락 신호가 있어요\.$/);
