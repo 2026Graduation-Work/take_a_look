@@ -69,6 +69,13 @@ jobs:
       - name: Unit tests (node --test)
         run: pnpm test:unit
 
+      - name: Cache OCR assets
+        # prebuild가 받는 글자 읽기 도구(약 55MB). 스크립트(주소, 해시)가 바뀌면 키가 바뀐다
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: frontend/public/ocr
+          key: ocr-assets-${{ hashFiles('frontend/scripts/fetch-ocr-assets.mjs') }}
+
       - name: Build (next build)
         run: pnpm build
 

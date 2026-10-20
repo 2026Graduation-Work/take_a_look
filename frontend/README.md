@@ -37,6 +37,8 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
+처음 `pnpm dev` 때 글자 읽기 도구 약 55MB를 내려받습니다(이 레포 Release `ocr-assets-v1`, 받지 못하면 경고만 남기고 시작).
+
 브라우저에서 [http://localhost:3000](http://localhost:3000)을 엽니다. 실제 공개 DB의 시험 결과를
 보려면 `.env.example`을 참고해 `.env.local`에 Supabase URL과 anon 키를 설정합니다.
 환경 변수가 없으면 데모 데이터로 동작합니다. `.env.local`은 Git에 포함되지 않습니다.
