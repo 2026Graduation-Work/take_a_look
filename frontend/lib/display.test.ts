@@ -26,6 +26,7 @@ test("모델 근거 크기 말: 전체 합의 10분의 1 기준, 합이 없으�
   assert.equal(contributionWord(0, "하락", 1), "하락 신호를 바꾸지 않음");
 });
 
+
 test("증감 표시의 방향은 표시 자릿수에 맞추고 반올림된 0에는 부호를 붙이지 않는다", () => {
   for (const value of [0, -0, 0.04, -0.04]) {
     assert.equal(formatSignedPercent(value), "0.0%");

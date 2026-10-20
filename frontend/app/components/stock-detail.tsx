@@ -192,22 +192,19 @@ export default function StockDetailView({
                 <span className="text-4xl font-semibold tabular-nums">
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
-                <span className="inline-grid grid-cols-[4rem_7rem] items-baseline gap-x-2 self-end text-xs text-muted">
-                  <span>전일 대비</span>
-                  <span className="text-right text-sm font-semibold tabular-nums" style={{ color: changeColor }}>
-                    {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
+                <span className="text-sm font-medium tabular-nums" style={{ color: changeColor }}>
+                  {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
+                  <span className="ml-2 text-2xs font-normal text-muted">
+                    전일 대비{detail.asOf && staleLabel(detail.asOf) && `, ${formatDate(detail.asOf)} 기준`}
                   </span>
                 </span>
-                {detail.asOf && staleLabel(detail.asOf) && (
-                  <span className="text-xs text-muted">{formatDate(detail.asOf)} 기준</span>
-                )}
               </>
             ) : (
               <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
             )}
             {own && (
-              <span className="flex items-baseline gap-3 self-end text-2xs text-muted tabular-nums">
-                <span>보유 {own.quantity.toLocaleString("ko-KR")}주</span><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} aligned />
+              <span className="text-2xs text-muted tabular-nums">
+                보유 {own.quantity.toLocaleString("ko-KR")}주<span className="ml-3" /><GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} />
               </span>
             )}
           </div>
