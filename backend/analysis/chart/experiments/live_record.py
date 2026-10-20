@@ -4,7 +4,8 @@
 (train_src.labels.barrier_labels: 종가 ± σ배 기준선 중 먼저 닿은 쪽, 동시에 닿으면 하락).
 
 - 목록: 그날 '신호가 강한 종목' 규칙(frontend/lib/strong-signals.ts rankSignals, 회피 항목 없음)
-  1위 − 2위 점수 차 순, 중립 1위 제외, 방향별 상위 5개
+  1위 − 2위 점수 차 순, 중립 1위 제외, 방향별 상위 5개. 후보 제외는 isTradable과 같은 정의:
+  그날 거래량 0(또는 그날 시세 없음)인 종목. 기록(log)에는 게시 상태가 없어 거래량으로 본다
 - 비교: 같은 날 점수가 있는 전체 종목
 - 지표: 상승 목록 중 기간 안에 상승 기준선에 먼저 닿은 비율 vs 전체 종목 같은 비율. 하락도 같은 방식
 - 표본 수(날짜, 종목)를 함께 남기고, 라벨이 확정된 날이 20거래일 미만이면 sufficient=false
@@ -81,7 +82,8 @@ def score(log: pd.DataFrame, labels: pd.DataFrame) -> dict:
     for as_of, posted in merged.groupby("as_of", sort=True):
         if len(posted) < MIN_UNIVERSE:  # 9/21 화면 시험 게시(1종목)처럼 전 종목 게시가 아닌 날
             continue
-        lists = strong_lists(posted)
+        # 거래정지 등 그날 거래가 없는 종목은 목록 후보에서 뺀다(대시보드 isTradable과 같은 정의, #378)
+        lists = strong_lists(posted[posted.volume > 0] if "volume" in posted else posted)
         day = posted.dropna(subset=["label"])
         if day.empty:
             continue
@@ -119,6 +121,8 @@ def main() -> None:
     record = {"source": "chart_prediction_log(게시 배치) + chart_prices", "rule": "strong-signals rankSignals, 방향별 상위 5",
               "label": "barrier_labels(σ 상승 1.5배, 하락 1.2배, 먼저 닿은 쪽)", "min_days": MIN_DAYS,
               "log_days": int(log.as_of.nunique()), "horizons": {}}
+    traded = prices.rename(columns={"trade_date": "as_of"})[["stock_code", "as_of", "volume"]]
+    log = log.merge(traded, on=["stock_code", "as_of"], how="left").fillna({"volume": 0})
     for horizon in (5, 20):
         part = log[log.horizon == horizon]
         record["horizons"][str(horizon)] = score(part, labels_for(prices, horizon))

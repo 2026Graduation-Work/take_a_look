@@ -14,3 +14,12 @@ def test_lists_follow_dashboard_rule_and_rates_use_labelled_rows(monkeypatch):
     assert out["days"] == 1 and not out["sufficient"]
     assert out["up"] == {"list_rate": 0.5, "list_n": 2, "list_unscored": 0, "all_rate": round(2 / 3, 4), "all_n": 3}
     assert out["down"]["list_rate"] == 0.0
+
+
+def test_halted_stocks_are_not_list_candidates(monkeypatch):
+    monkeypatch.setattr(live, "MIN_UNIVERSE", 1)
+    day = pd.DataFrame({"stock_code": ["H", "T"], "as_of": "2026-10-01", "prob_down": [0.9, 0.7],
+                        "prob_neutral": [0.05, 0.2], "prob_up": [0.05, 0.1], "volume": [0.0, 1200.0]})
+    labels = pd.DataFrame({"stock_code": ["H", "T"], "as_of": "2026-10-01", "label": [None, -1.0]})
+    out = score(day, labels)
+    assert out["down"]["list_n"] == 1 and out["down"]["list_unscored"] == 0 and out["down"]["list_rate"] == 1.0

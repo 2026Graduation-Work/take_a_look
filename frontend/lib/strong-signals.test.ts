@@ -16,3 +16,12 @@ test("확신도(1위 − 2위 점수) 내림차순, 중립 1위·추론 불가�
   assert.deepEqual(ranked.map(({ code, direction }) => [code, direction]), [["B", "down"], ["A", "up"], ["E", "down"]]);
   assert.ok(Math.abs(ranked[0].confidence - 0.5) < 1e-12);
 });
+
+test("그날 거래량이 0인 종목(거래정지)은 목록 후보에서 뺀다, 거래량 값이 없으면 상태만 본다", () => {
+  const ranked = rankSignals([
+    { ...row("H", 0.9, 0.05, 0.05), volume: "0.0" },
+    { ...row("T", 0.7, 0.2, 0.1), volume: "1200" },
+    row("N", 0.6, 0.3, 0.1),
+  ]);
+  assert.deepEqual(ranked.map(({ code }) => code), ["T", "N"]);
+});
