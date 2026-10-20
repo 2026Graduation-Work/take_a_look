@@ -135,15 +135,15 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByText("적극 축적형", { exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page, 390, 844);
 
-  // 헤더: 로고 + 이용 안내 + 검색 + 이름(유형 이름 없음). 화면 이동 탭은 없다. 이름을 누르면 계정 메뉴(10/20 메뉴 정리)
+  // 헤더: 로고 + 검색 + 이름(유형 이름 없음). 화면 이동 탭은 없다. 이름을 누르면 계정 메뉴(10/20 메뉴 정리)
   await page.setViewportSize({ width: 1024, height: 900 });
   const header = page.locator("header");
   await expect(header.getByRole("navigation", { name: "주요 화면" })).toHaveCount(0);
-  await expect(header.getByRole("link", { name: "이용 안내" })).toBeVisible();
+  await expect(header.getByRole("link", { name: "이용 안내" })).toBeHidden();
   await expect(header.getByText("적극 축적형")).toHaveCount(0);
   const accountMenu = header.locator("summary", { hasText: "김민지" });
   await accountMenu.click();
-  for (const name of ["보유 종목", "내 투자 성향", "계정 설정"]) await expect(header.getByRole("link", { name, exact: true })).toBeVisible();
+  await expect(header.locator("details :is(a, button):visible")).toHaveText(["보유 종목", "내 투자 성향", "이용 안내", "계정 설정", "로그아웃"]);
   await expect(header.getByRole("link", { name: "내 성향 다시 진단" })).toHaveCount(0);
   await expect(header.getByRole("button", { name: "로그아웃" })).toBeVisible();
   await accountMenu.click();
