@@ -37,11 +37,10 @@ import {
   BIT_TYPES,
   classifyBit,
   presetStyleAxes,
-  type BitResult,
   type BitType,
   type CardId,
 } from "@/lib/profiling/bit";
-import { SCREEN_GUIDE_NOTICE, checkpointItems, selectNudges } from "@/lib/profiling/nudges";
+import { checkpointItems, selectNudges } from "@/lib/profiling/nudges";
 import {
   combinedProvenance,
   aggregateSentimentPeriods,
@@ -1091,14 +1090,5 @@ export function SourceList({ detail, insights }: { detail: StockDetail; insights
         </p>
       )}
     </SourceTable>
-  );
-}
-
-export function ScreenGuideBanner({ bit }: { bit: BitResult | null }) {
-  if (!bit || !SCREEN_GUIDE_NOTICE.appliesTo.includes(bit.type)) return null;
-  return (
-    <aside role="note" className="px-1 text-xs text-muted">
-      {SCREEN_GUIDE_NOTICE.text}
-    </aside>
   );
 }

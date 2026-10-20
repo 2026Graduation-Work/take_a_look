@@ -1,10 +1,10 @@
-// 편향 넛지 11종과 화면 안내 1종. 순수 함수, 외부 의존성 없음.
+// 편향 넛지 11종. 순수 함수, 외부 의존성 없음.
 // 문구는 2026-09-22 쉬운 말·해요체로 다듬었다(팀 승인). 판정 조건·근거 축은 그대로다.
 // 형식 규칙: 사실 + 사실 병렬. 인과 주장·추종 유도·매수/매도 권유 금지.
 
 import { SENTIMENT_SHIFT_P90 } from "../providers/sentiment-fixture.ts";
 import type { RiskGrade, StyleAxisId } from "../types";
-import type { BitResult, BitType } from "./bit";
+import type { BitResult } from "./bit";
 
 export type NudgeId =
   | "N01" | "N02" | "N03" | "N04" | "N05" | "N06"
@@ -168,12 +168,6 @@ export function checkpointItems(nudges: FiredNudge[], riskNote: string | null): 
   if (riskNote && !nudges.some(({ id }) => id === "N11")) items.push({ key: "risk", text: riskNote });
   return items.slice(0, MAX_VISIBLE_NUDGES);
 }
-
-// 넛지가 아니라 화면 하단 안내 배너(기존 N12). BIT 스펙트럼 수동 쪽 두 유형에만 보인다.
-export const SCREEN_GUIDE_NOTICE: { appliesTo: readonly BitType[]; text: string } = {
-  appliesTo: ["PRESERVER", "FOLLOWER"],
-  text: "이 화면의 지표 중 처음 보시는 것이 있을 수 있어요. 각 근거 아래 '왜 봐야 하나요?'에 보는 이유를 적어 두었어요.",
-};
 
 function rank(id: NudgeId) {
   const index = PRIORITY.indexOf(id);
