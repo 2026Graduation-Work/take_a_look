@@ -11,7 +11,6 @@ import DisclaimerFooter from "./disclaimer-footer";
 import EvidenceTabs, {
   CalculationBasis,
   Checkpoints,
-  ScreenGuideBanner,
   SourceList,
   useDemoStyleAxes,
 } from "./insight-cards";
@@ -348,7 +347,6 @@ export default function StockDetailView({
           </div>
         </details>
 
-        <ScreenGuideBanner bit={demo.bit} />
       </div>
       </main>
 

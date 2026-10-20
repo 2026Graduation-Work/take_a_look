@@ -6,7 +6,6 @@ import { investorStyleAxes } from "../mock-data.ts";
 import { BIAS_PROFILE_AXES, CARD_ORDER, classifyBit, type BitType } from "./bit.ts";
 import {
   NUDGES,
-  SCREEN_GUIDE_NOTICE,
   selectNudges,
   type NudgeMarket,
 } from "./nudges.ts";
@@ -125,17 +124,12 @@ test("confidence 0.5 미만이면 유형과 함께 lowConfidence", () => {
   assert.equal(result.lowConfidence, true);
 });
 
-test("넛지 11종(N12는 화면 안내로 분리), id 중복 없음, 권유 표현 없음", () => {
+test("넛지 11종, id 중복 없음, 권유 표현 없음", () => {
   const nudgeIds = NUDGES.map(({ id }) => id);
   assert.equal(new Set(nudgeIds).size, 11);
-  assert.ok(!(nudgeIds as string[]).includes("N12"));
-  for (const text of [...NUDGES.map((rule) => (typeof rule.text === "function" ? rule.text(ALL_MARKET) : rule.text)), SCREEN_GUIDE_NOTICE.text]) {
+  for (const text of NUDGES.map((rule) => (typeof rule.text === "function" ? rule.text(ALL_MARKET) : rule.text))) {
     assert.doesNotMatch(text, /사세요|파세요|매수하|매도하|권장|추천/);
   }
-});
-
-test("화면 안내(기존 N12)는 PRESERVER·FOLLOWER에만", () => {
-  assert.deepEqual(SCREEN_GUIDE_NOTICE.appliesTo, ["PRESERVER", "FOLLOWER"]);
 });
 
 test("임계는 경계 포함: >= +0.3, <= -0.3", () => {
