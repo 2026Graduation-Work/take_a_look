@@ -1,6 +1,6 @@
 # Supabase ERD
 
-`supabase/migrations/` 0001~0014 기준(모두 프로덕션 적용 완료, 2026-10-07 `migration list` 확인). 아래 그림은 사용자·예측 테이블(0001~0004), 0005 이후 테이블은 그림 다음 표에 있다. 스키마가 바뀌면 이 문서와 `frontend/lib/types.ts`를 함께 고친다.
+`supabase/migrations/` 0001~0015 기준(0014까지 2026-10-07 `migration list` 확인, 0015는 2026-10-20 적용). 아래 그림은 사용자·예측 테이블(0001~0004), 0005 이후 테이블은 그림 다음 표에 있다. 스키마가 바뀌면 이 문서와 `frontend/lib/types.ts`를 함께 고친다.
 
 > 0004(2026-09-22): `portfolio_holdings.avg_buy_price` nullable. 비어 있으면 화면은 기준일 종가 × 수량으로 비중을 세고 "현재가 기준"으로 표시한다. RLS 정책은 그대로(3개).
 > 8축은 별도 컬럼 없이 `profile_payload.style_axes`에 저장하므로 0003 없이도 앱은 동작한다(8축만 null).
@@ -174,6 +174,7 @@ erDiagram
 | 0012 | `financial_snapshots.report_code` | 정기보고서 종류(1분기·반기·3분기·사업) | ✅ | — |
 | 0013 | `supply_demand` | 종목·거래일·개인·외국인(`foreign_investor`)·기관 순매수(주) | ✅ | 60영업일 |
 | 0014 | `stocks.volatility_annual`·`volatility_percentile`·`risk_as_of` | 1년 변동성·코스피 내 백분위·기준일 | ✅ | — |
+| 0015 | 함수 `budget_usage()` 확장, 뷰 권한 | RLS 꺼진 public 테이블, 24시간·7일 가입 수. 최신 신호 뷰는 SELECT만 | 서비스 롤만 | — |
 
 - `stocks`는 차트 서빙 universe(코스피 전 종목 + 에코프로비엠)로 매일 insert·update된다(`stock_master.py`, 삭제 없음). 위험 표시 규칙은 [stock-master-rules.md](stock-master-rules.md).
 - 0007 스냅샷 가드 트리거는 staging 배치의 스냅샷만 지우게 한다. 보존 정리는 `prune_chart_batches`가 한 트랜잭션 안에서 staging으로 돌린 뒤 스냅샷 → 배치 순서로 지운다.
