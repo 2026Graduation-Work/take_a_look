@@ -17,7 +17,7 @@ import {
   subscribeToAuthChanges,
   type OnboardingState,
 } from "@/lib/auth";
-import Wordmark from "@/components/brand/Wordmark";
+import BrandHeader from "./brand-header";
 import { isChartPreview } from "@/lib/chart-preview-config";
 import { storageBlocked } from "@/lib/storage-keys";
 
@@ -144,21 +144,17 @@ function onboardingDestination(
   return null;
 }
 
-function BrandMark() {
-  return (
-    <Wordmark size={32} className="text-xl" />
-  );
-}
-
 function OnboardingLoading() {
   return (
-    <main className="grid min-h-screen place-items-center bg-page px-5">
-      <div className="flex flex-col items-center gap-5" aria-live="polite">
-        <BrandMark />
-        <span className="size-6 animate-spin rounded-full border-2 border-track border-t-brand-accent" />
-        <span className="text-sm font-semibold text-muted">로그인 상태 확인 중</span>
-      </div>
-    </main>
+    <>
+      <BrandHeader />
+      <main className="grid min-h-[calc(100dvh-3.5rem)] place-items-center bg-page px-5">
+        <div className="flex flex-col items-center gap-5" aria-live="polite">
+          <span className="size-6 animate-spin rounded-full border-2 border-track border-t-brand-accent" />
+          <span className="text-sm font-semibold text-muted">로그인 상태 확인 중</span>
+        </div>
+      </main>
+    </>
   );
 }
 
@@ -175,21 +171,23 @@ function OnboardingError({
   onRetry: () => void;
 }) {
   return (
-    <main className="grid min-h-screen place-items-center bg-page px-5">
-      <section className="w-full max-w-[460px] surface p-7">
-        <BrandMark />
-        <h1 className="mt-8 text-xl font-semibold text-ink">{title}</h1>
-        <p role="alert" className="mt-2 text-sm text-muted">
-          {message}
-        </p>
-        <button
-          type="button"
-          onClick={onRetry}
-          className="btn-primary mt-6 w-full"
-        >
-          다시 시도
-        </button>
-      </section>
-    </main>
+    <>
+      <BrandHeader />
+      <main className="grid min-h-[calc(100dvh-3.5rem)] place-items-center bg-page px-5">
+        <section className="w-full max-w-[460px] surface p-7">
+          <h1 className="text-xl font-semibold text-ink">{title}</h1>
+          <p role="alert" className="mt-2 text-sm text-muted">
+            {message}
+          </p>
+          <button
+            type="button"
+            onClick={onRetry}
+            className="btn-primary mt-6 w-full"
+          >
+            다시 시도
+          </button>
+        </section>
+      </main>
+    </>
   );
 }

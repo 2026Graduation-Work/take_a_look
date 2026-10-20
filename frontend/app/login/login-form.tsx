@@ -10,7 +10,7 @@ import {
 import { isSupabaseConfigured } from "@/lib/supabase";
 import StepNav from "@/app/components/step-nav";
 import Link from "next/link";
-import Wordmark from "@/components/brand/Wordmark";
+import BrandHeader from "../components/brand-header";
 import { SERVICE_TAGLINE } from "@/lib/brand";
 
 type AccountTab = "signin" | "signup";
@@ -75,130 +75,135 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center bg-page px-4 py-10">
-      <section className="surface flex w-full max-w-[400px] flex-col gap-6 px-6 py-9 sm:px-9">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <Wordmark size={36} className="text-2xl" />
+    <>
+      {/* 로그인 전 헤더는 로고만(다른 화면과 같은 틀). 서비스 이름은 헤더가 보이므로 카드에는 한 줄 소개만 둔다 */}
+      <BrandHeader />
+      <main className="grid min-h-[calc(100dvh-3.5rem)] place-items-center bg-page px-4 py-10">
+        <section className="surface flex w-full max-w-[400px] flex-col gap-6 px-6 py-9 sm:px-9">
+          {/* 로그인, 회원가입은 바로 아래 탭이 보여 주므로 제목은 스크린리더용으로만(10/20 피드백) */}
           {emailOpen ? (
-            <h1 className="text-3xl font-semibold">{tab === "signin" ? "로그인" : "회원가입"}</h1>
+            <h1 className="sr-only">{tab === "signin" ? "로그인" : "회원가입"}</h1>
           ) : (
-            <>
+            <div className="text-center">
               <h1 className="sr-only">Take a Look 시작</h1>
               {/* 첫 화면은 한 줄만(10/20 사용자 피드백: 소개 두 줄은 길다). '살 종목을 골라 주지 않는다'는 설명은 환영 화면이 말한다 */}
               <p className="m-0 text-sm text-body">{SERVICE_TAGLINE}</p>
-            </>
+            </div>
           )}
-        </div>
 
-        {emailOpen ? (
-          <form onSubmit={submitAccount} className="flex flex-col gap-4">
-            <div role="tablist" aria-label="계정" className="segmented grid grid-cols-2">
-              {(
-                [
-                  ["signin", "로그인"],
-                  ["signup", "회원가입"],
-                ] as const
-              ).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === id}
-                  onClick={() => {
-                    setTab(id);
-                    setError("");
-                    setNotice("");
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {tab === "signup" && (
+          {emailOpen ? (
+            <form onSubmit={submitAccount} className="flex flex-col gap-4">
+              <div role="tablist" aria-label="계정" className="segmented grid grid-cols-2">
+                {(
+                  [
+                    ["signin", "로그인"],
+                    ["signup", "회원가입"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    onClick={() => {
+                      setTab(id);
+                      setError("");
+                      setNotice("");
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {tab === "signup" && (
+                <label className="flex flex-col gap-2 text-xs text-muted">
+                  이름
+                  <input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="화면 오른쪽 위에 보일 이름"
+                    autoComplete="name"
+                    maxLength={20}
+                    required
+                    autoFocus
+                    className={field}
+                  />
+                </label>
+              )}
               <label className="flex flex-col gap-2 text-xs text-muted">
-                이름
+                이메일
                 <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="화면 오른쪽 위에 보일 이름"
-                  autoComplete="name"
-                  maxLength={20}
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="name@example.com"
+                  autoComplete="email"
                   required
-                  autoFocus
+                  autoFocus={tab === "signin"}
                   className={field}
                 />
               </label>
-            )}
-            <label className="flex flex-col gap-2 text-xs text-muted">
-              이메일
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                autoComplete="email"
-                required
-                autoFocus={tab === "signin"}
-                className={field}
+              <div className="flex flex-col gap-2">
+                <label className="flex flex-col gap-2 text-xs text-muted">
+                  비밀번호
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete={tab === "signup" ? "new-password" : "current-password"}
+                    minLength={tab === "signup" ? 8 : undefined}
+                    aria-describedby={tab === "signup" ? "password-help" : undefined}
+                    required
+                    className={field}
+                  />
+                </label>
+                {/* 규칙은 칠 때 사라지는 placeholder 대신 항상 보이는 도움말로(이름표와 따로 읽히게 label 밖) */}
+                {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요.</p>}
+              </div>
+              {tab === "signup" && (
+                <p className="m-0 text-2xs text-muted">
+                  가입하면 이메일과 이름, 성향 진단 결과, 보유 종목과 관심 종목, 판단 메모를 서울 리전 서버에 저장해요. 내 계정으로만
+                  읽고 쓸 수 있고, 판단 근거를 보여 주는 데에만 써요.
+                </p>
+              )}
+              <Messages notice={notice} error={error} />
+              <StepNav
+                className="pt-2"
+                onBack={back}
+                backLabel="뒤로"
+                backDisabled={submitting}
+                nextType="submit"
+                nextLabel={submitting ? "처리 중" : tab === "signin" ? "로그인" : "가입하고 시작"}
+                nextDisabled={submitting}
               />
-            </label>
-            <div className="flex flex-col gap-2">
-              <label className="flex flex-col gap-2 text-xs text-muted">
-                비밀번호
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  autoComplete={tab === "signup" ? "new-password" : "current-password"}
-                  minLength={tab === "signup" ? 8 : undefined}
-                  aria-describedby={tab === "signup" ? "password-help" : undefined}
-                  required
-                  className={field}
-                />
-              </label>
-              {/* 규칙은 칠 때 사라지는 placeholder 대신 항상 보이는 도움말로(이름표와 따로 읽히게 label 밖) */}
-              {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요.</p>}
-            </div>
-            {tab === "signup" && (
-              <p className="m-0 text-2xs text-muted">
-                가입하면 이메일과 이름, 성향 진단 결과, 보유 종목과 관심 종목, 판단 메모를 서울 리전 서버에 저장해요. 내 계정으로만
-                읽고 쓸 수 있고, 판단 근거를 보여 주는 데에만 써요.
-              </p>
-            )}
-            <Messages notice={notice} error={error} />
-            <StepNav
-              className="pt-2"
-              onBack={back}
-              backLabel="뒤로"
-              backDisabled={submitting}
-              nextType="submit"
-              nextLabel={submitting ? "처리 중" : tab === "signin" ? "로그인" : "가입하고 시작"}
-              nextDisabled={submitting}
-            />
-          </form>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {accountAvailable ? (
-              <button type="button" onClick={() => setEmailOpen(true)} className="btn-primary w-full">
-                이메일로 시작
+            </form>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {accountAvailable ? (
+                <button type="button" onClick={() => setEmailOpen(true)} className="btn-primary w-full">
+                  이메일로 시작
+                </button>
+              ) : (
+                <p className="m-0 rounded-md bg-field px-4 py-3 text-xs text-muted">
+                  이 배포에는 계정 기능이 아직 연결되지 않았어요. 데모로 모든 화면을 둘러볼 수 있어요.
+                </p>
+              )}
+              <button type="button" onClick={startDemo} disabled={submitting} className="btn-secondary w-full">
+                데모로 둘러보기
               </button>
-            ) : (
-              <p className="m-0 rounded-md bg-field px-4 py-3 text-xs text-muted">
-                이 배포에는 계정 기능이 아직 연결되지 않았어요. 데모로 모든 화면을 둘러볼 수 있어요.
-              </p>
-            )}
-            <button type="button" onClick={startDemo} disabled={submitting} className="btn-secondary w-full">
-              데모로 둘러보기
-            </button>
-            <Messages notice={notice} error={error} />
-          </div>
-        )}
-        {/* 처음 온 사람을 위한 길 하나(강제 튜토리얼 대신 스스로 여는 안내) */}
-        <p className="m-0 text-center text-xs text-muted">
-          처음이라면 <Link href="/guide" className="text-brand hover:underline">이용 안내</Link>
-        </p>
-      </section>
-    </main>
+              <Messages notice={notice} error={error} />
+            </div>
+          )}
+          {/* 처음 온 사람을 위한 길 하나(강제 튜토리얼 대신 스스로 여는 안내). 회원가입 탭에서만 둔다(10/20 피드백):
+              데모는 누르면 바로 서비스 소개 화면이 나오고, 로그인하는 사람은 처음이 아니다 */}
+          {emailOpen && tab === "signup" && (
+            <p className="m-0 text-center text-xs text-muted">
+              처음이라면 <Link href="/guide" className="text-brand hover:underline">이용 안내</Link>
+            </p>
+          )}
+        </section>
+      </main>
+    </>
   );
 }
 

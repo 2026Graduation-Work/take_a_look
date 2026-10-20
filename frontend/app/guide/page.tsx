@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import Wordmark from "@/components/brand/Wordmark";
+import BrandHeader from "../components/brand-header";
+import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { TERM_INFO } from "@/lib/copy-glossary";
@@ -53,14 +54,9 @@ export default function GuidePage() {
   const terms = Object.values(TERM_INFO).sort((a, b) => a.label.localeCompare(b.label, "ko"));
   return (
     <div className="w-full">
-      <header className="glass-bar sticky top-0 z-50">
-        <div className="mx-auto box-border flex h-14 w-full max-w-[1200px] items-center gap-5 px-4 sm:px-6 lg:px-8">
-          <Link href="/" aria-label="대시보드" className="flex min-h-11 flex-none items-center hover:no-underline">
-            <Wordmark size={26} />
-          </Link>
-          <span className="text-xs font-medium text-ink">이용 안내</span>
-        </div>
-      </header>
+      <BrandHeader>
+        <GuideAccount />
+      </BrandHeader>
 
       <main className="page pb-12 pt-8">
         <article className="page-wide flex flex-col gap-12">

@@ -31,9 +31,9 @@ import LabelRows from "../components/label-rows";
 import type { ProfilingOutput, RiskFlag, StyleAxes, StyleAxisId } from "@/lib/types";
 import { useOnboarding } from "../components/onboarding-provider";
 import SignOutButton from "../components/sign-out-button";
+import BrandHeader from "../components/brand-header";
 import HoldingsStep from "./holdings-step";
 import StepNav from "../components/step-nav";
-import Wordmark from "@/components/brand/Wordmark";
 import LogoMark from "@/components/brand/LogoMark";
 import { SERVICE_NAME, SERVICE_PROMISE_DETAIL } from "@/lib/brand";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
@@ -323,38 +323,33 @@ export default function SurveyFlow() {
 
   return (
     <div className="min-h-dvh bg-page">
-      <header className="sticky top-0 z-50 glass-bar">
-        {/* 로고 위치를 다른 페이지 헤더와 같게(화면 규칙 v2 정렬) */}
-        <div className="page flex min-h-14 items-center gap-3">
-          <Link href="/" className="flex min-h-11 flex-none items-center whitespace-nowrap text-lg hover:no-underline">
-            <Wordmark size={26} compact />
-          </Link>
-          {firstRun ? (
-            <ol aria-label="시작 단계" className="m-0 flex list-none items-center gap-2 p-0 text-xs sm:gap-3">
-              {["성향", "보유 종목", "시작"].map((label, index) => (
-                <li
-                  key={label}
-                  aria-current={index + 1 === step ? "step" : undefined}
-                  className={`whitespace-nowrap ${index + 1 === step ? "font-medium text-ink" : "text-muted"}`}
-                >
-                  {index + 1} {label}
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <span className="text-sm font-medium text-body">투자 성향 진단</span>
+      {/* 단계 표시는 390에서 로고 줄 아래로 내려간다(로고 줄 높이는 다른 화면과 같게) */}
+      <BrandHeader>
+        {firstRun ? (
+          <ol aria-label="시작 단계" className="order-last m-0 flex basis-full list-none items-center gap-2 p-0 text-xs sm:order-none sm:basis-auto sm:gap-3">
+            {["성향", "보유 종목", "시작"].map((label, index) => (
+              <li
+                key={label}
+                aria-current={index + 1 === step ? "step" : undefined}
+                className={`whitespace-nowrap ${index + 1 === step ? "font-medium text-ink" : "text-muted"}`}
+              >
+                {index + 1} {label}
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <span className="order-last basis-full text-sm font-medium text-body sm:order-none sm:basis-auto">투자 성향 진단</span>
+        )}
+        <div className="ml-auto flex items-center gap-3">
+          {stage === "survey" && demo && (
+            <button type="button" onClick={() => update(demoDraft(draft.mode))} className="btn-text whitespace-nowrap text-xs">
+              <span className="sm:hidden">데모 응답</span>
+              <span className="hidden sm:inline">데모 응답 불러오기</span>
+            </button>
           )}
-          <div className="ml-auto flex items-center gap-3">
-            {stage === "survey" && demo && (
-              <button type="button" onClick={() => update(demoDraft(draft.mode))} className="btn-text whitespace-nowrap text-xs">
-                <span className="sm:hidden">데모 응답</span>
-                <span className="hidden sm:inline">데모 응답 불러오기</span>
-              </button>
-            )}
-            <SignOutButton />
-          </div>
+          <SignOutButton />
         </div>
-      </header>
+      </BrandHeader>
 
       <main ref={mainRef} className="page pb-12 pt-6">
       <div className="page-narrow flex flex-col">
