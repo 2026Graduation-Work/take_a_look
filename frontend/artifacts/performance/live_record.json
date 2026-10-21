@@ -1,5 +1,7 @@
 {
   "source": "chart_prediction_log(게시 배치) + chart_prices",
+  "evaluation_status": "invalid_label_definition",
+  "invalid_reason": "입력 피처용 1.5σ/1.2σ로 계산한 과거 기록입니다. 평가 pack의 H5/H20 학습 라벨로 재계산하기 전에는 성적에 사용하지 않습니다.",
   "rule": "strong-signals rankSignals, 방향별 상위 5",
   "label": "barrier_labels(σ 상승 1.5배, 하락 1.2배, 먼저 닿은 쪽)",
   "min_days": 20,
