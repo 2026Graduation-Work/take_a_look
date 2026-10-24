@@ -15,7 +15,17 @@ const STOCKS = {
   "247540": { name: "에코프로비엠", market: "KOSDAQ", risk_grade: 1, risk_flags: [] },
 };
 
-createServer((request, response) => {
+let basisFixture = false;
+createServer(async (request, response) => {
+  // 계산 근거 E2E 전용 합성 데이터. 테스트가 끝나면 바로 해제한다.
+  if (request.method === "POST" && request.url === "/__test/basis-fixture") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    basisFixture = JSON.parse(body).enabled === true;
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end("{}");
+    return;
+  }
   const rest = request.url?.startsWith("/rest/v1/");
   const headers = {
     "Content-Type": "application/json",
@@ -32,6 +42,19 @@ createServer((request, response) => {
   const chart = request.url?.startsWith("/rest/v1/latest_chart_signal_snapshots?");
   const url = new URL(request.url || "/", "http://localhost");
   const sentiment = sentimentHistoryFixture(url);
+  const basisChart = basisFixture && chart && url.searchParams.get("select")?.includes("history:payload")
+    ? (() => {
+        const payload = chartRows.find(row => row.stock_code === "005930" && row.horizon === 20).payload;
+        return { as_of: payload.data_asof, history: payload.prices.history };
+      })()
+    : null;
+  const basisSupply = basisFixture && url.pathname === "/rest/v1/supply_demand" ? [
+    { trade_date: "2026-09-21", retail: 10, foreign_investor: -5, institution: -5 },
+  ] : null;
+  const basisMaster = basisFixture && url.pathname === "/rest/v1/stocks" && url.searchParams.get("code") === "eq.005930" ? [{
+    code: "005930", name: "삼성전자", market: "KOSPI", risk_grade: 3, risk_flags: [],
+    volatility_annual: 0.2, volatility_percentile: 0.5, risk_as_of: "2026-09-21",
+  }] : null;
   // 상세 화면 서버 렌더가 종목 마스터에서 찾는 종목(데모 예시 밖)
   const stock = url.pathname === "/rest/v1/stocks" && STOCKS[url.searchParams.get("code")?.replace("eq.", "") ?? ""];
   // 대시보드 "오늘 신호가 강한 종목"(lib/strong-signals.ts): 별칭 select는 평평한 행, 종목 마스터는 code=in.(...)
@@ -42,5 +65,5 @@ createServer((request, response) => {
     scores: { down: 0.1, neutral: 0.2, up: 0.7 }, why: null }); // SPAC 회피를 고른 사용자에게는 "직접 고른 제외 항목"으로
   const codes = url.pathname === "/rest/v1/stocks" && url.searchParams.get("code")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
   const master = codes && codes.map(code => ({ code, market: "KOSPI", risk_grade: 3, risk_flags: [], ...STOCKS[code] }));
-  response.end(rest && request.method === "GET" ? JSON.stringify(sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
+  response.end(rest && request.method === "GET" ? JSON.stringify(basisChart ?? basisSupply ?? basisMaster ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
 }).listen(54321, "127.0.0.1");
