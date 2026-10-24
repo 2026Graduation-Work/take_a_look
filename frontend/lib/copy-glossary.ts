@@ -1,6 +1,9 @@
 // 쉬운 말 사전. 화면 문구는 여기서 가져다 쓰고, 개발 용어를 화면에 직접 쓰지 않는다.
 // 금지어 검사는 copy-rules.ts. 개발 용어는 "계산 근거" 영역에서만 쓴다.
 
+import { HOLDING_GAIN } from "./profiling/nudges.ts";
+import type { FiredNudge, NudgeMarket } from "./profiling/nudges.ts";
+
 import type { HorizonAgreement, HorizonDirection, RiskGrade } from "./types";
 
 export type HorizonKey = "h5" | "h10" | "h20";
@@ -101,6 +104,8 @@ export function riskLevel(grade: RiskGrade): { word: RiskLevel; filled: number }
 // ── 계산 근거(종목 상세 "더 알아보기") 쉬운 말. 한 줄 = 무엇을 · 어떤 자료로 · 어떻게 계산했나 · 이번 값 ──
 // 계산 정의: lib/profiling/bit.ts(유형), lib/profiling/nudges.ts(체크포인트), backend market_psychology.py(가격 흐름 분위기)
 
+export const STYLE_TYPE_BASIS = "보유 기간, 손실을 견디는 정도, 종목을 모아 담는 성향을 종합하면";
+
 // 유형 점수 = (보유 기간 답 + (손실 감내 답 + 집중 답) ÷ 2) ÷ 2, -1~+1을 4구간으로 나눈다
 export const STYLE_TYPE_RULE =
   "'얼마나 자주 사고파는지' 답과 '손실을 견디고 몇 종목에 모으는지' 답을 평균한 -1~+1 점수를 -0.5, 0, +0.5에서 네 유형으로 나눴어요.";
@@ -113,11 +118,11 @@ export const BIAS_MODE_WORD = {
 
 // 가격 흐름 분위기 = (20거래일 수익 ÷ 그동안의 흔들림, 60거래일 평균 매입가 대비 지금 가격의 위치)의 평균
 export const PSYCHOLOGY_RULE =
-  "최근 20거래일 수익을 그동안의 흔들림으로 나눈 값과, 최근 60거래일 동안 사람들이 평균적으로 산 가격 대비 지금 가격의 위치를 평균했어요.";
+  "20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 현재가를 함께 봐요.";
 
 // 뉴스 분위기: 하루 기사가 이보다 적은 날은 툴팁과 계산 근거에 주의 안내
 export const FEW_ARTICLES = 3;
-export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 한두 기사의 말투가 그날 점수를 크게 움직일 수 있어요. 이 값은 참고만 해 주세요.`;
+export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 뉴스 점수가 쉽게 흔들릴 수 있어요.`;
 
 // 모델 신호 방향의 화면 이름. 사전 참가자·지도교수 모두 '상방·하방'을 헷갈려 B안으로 바꿨다(10/15 면담·E2).
 // 화면의 신호 방향 단어는 모두 여기서 가져온다. 내부 값(up/flat/down)과 DB는 그대로.
@@ -138,7 +143,7 @@ export const SHORT_HORIZON_NOTE = "짧은 흔들림에 더 민감해요.";
 
 export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
-export const STYLE_TYPE_SOURCE = "행동재무학의 투자자 유형 연구(Pompian)에서 착안해 설문으로 가늠한 분류예요.";
+export const STYLE_TYPE_SOURCE = "분류 참고: Pompian의 행동재무학 연구";
 
 // 공시 유형(docs/disclosure-kinds.md) → 화면 이름. 풀이(ⓘ) 없이 이름만으로 이해되게 쓴다(화면 규칙 v2)
 export const DISCLOSURE_KIND: Record<string, { label: string }> = {
@@ -168,3 +173,33 @@ export const CONTEXTUAL_LIVE_NEWS_CODES = new Set(["005930", "005380", "035720",
 export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업과 시장 뉴스를 함께 반영해요.";
 // 뉴스 감성과 별도로 계산하는 가격 지표 안내.
 export const PRICE_CONTEXT_CAPTION = "뉴스 분위기와 함께 보는 주가 흐름";
+
+// 제공된 합산 점수만 설명하고 개별 가격 지표의 방향은 추측하지 않는다.
+export function psychologyReason(axis: number, word: string): string {
+  const score = `${axis > 0 ? "+" : ""}${axis.toFixed(2)}`;
+  return `20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 가격을 합친 점수가 ${score}으로 ‘${word}’ 구간이에요.`;
+}
+
+// 선택된 체크포인트의 실제 발화 조건만 설명한다. 조건·정렬·점수는 바꾸지 않는다.
+export function checkpointReason(nudge: FiredNudge, market: NudgeMarket): string {
+  const percent = (value: number) => `${Math.abs(value * 100).toFixed(1)}%`;
+  switch (nudge.id) {
+    case "N01": return `다른 사람의 판단을 따르는 쪽으로 답했고, 개인이 ${market.retailNetBuyStreakDays}거래일 연속 순매수해 표시했어요.`;
+    case "N02": return "다른 사람의 판단을 따르는 쪽으로 답했고, 개인은 순매수, 외국인은 순매도여서 표시했어요.";
+    case "N03": return `다른 사람의 판단을 따르는 쪽으로 답했고, 최근 5거래일 중 ${market.institutionNetBuyDaysOf5}일 기관이 순매수해 표시했어요.`;
+    case "N04": return "하락할 때 정리하는 쪽으로 답했고, 이 종목의 가격 흔들림이 시장 상위 10% 안이라 표시했어요.";
+    case "N05": {
+      const gain = market.holdingGain;
+      const fact = gain !== null && Math.abs(gain) >= HOLDING_GAIN
+        ? `현재가가 평균 매입가보다 ${percent(gain)} ${gain < 0 ? "낮아" : "높아"}`
+        : `현재가가 최근 3개월 최고가보다 ${percent(market.drawdownFrom3mHigh)} 낮아`;
+      return `하락할 때 정리하는 쪽으로 답했고, ${fact} 표시했어요.`;
+    }
+    case "N06": return `결정을 서두르는 쪽으로 답했고, 최근 3거래일 수익률이 +${percent(market.return3d)}여서 표시했어요.`;
+    case "N07": return `결정을 서두르는 쪽으로 답했고, ${market.sentimentDayLabel} 뉴스 점수가 직전 수집일과 크게 달라져 표시했어요.`;
+    case "N08": return "소수 종목에 모아 담는 쪽으로 답했고, 보유 종목 중 이 종목의 비중이 가장 커 표시했어요.";
+    case "N09": return "설문에서 보유 기간이 짧은 쪽으로 답해 표시했어요.";
+    case "N10": return "설문에서 정해 둔 매매 기준보다 상황에 따라 판단하는 쪽으로 답해 표시했어요.";
+    case "N11": return "원금 보전을 중시하는 쪽으로 답했고, 이 종목의 위험도가 높은 편이라 표시했어요.";
+  }
+}

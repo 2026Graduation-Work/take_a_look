@@ -15,15 +15,13 @@ import {
   YAxis,
 } from "recharts";
 import {
-  BIAS_MODE_WORD,
-  CHECKPOINT_RULE,
   FEW_ARTICLES,
-  FEW_ARTICLES_RULE,
   TERM_INFO,
   compareLine,
-  PSYCHOLOGY_RULE,
-  STYLE_TYPE_RULE,
+  psychologyReason,
+  checkpointReason,
   STYLE_TYPE_SOURCE,
+  STYLE_TYPE_BASIS,
   TERM,
   CONTEXTUAL_LIVE_NEWS_CODES,
   LIVE_NEWS_SCOPE,
@@ -674,7 +672,7 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             name={TERM.sentiment}
             stroke={CHART.priceLine}
             strokeWidth={2}
-            // 기사 적은 날은 속 빈 점으로 구분(풀이는 툴팁·FEW_ARTICLES_RULE)
+            // 기사 적은 날은 속 빈 점으로 구분(풀이는 툴팁)
             dot={({ cx, cy, payload }) =>
               payload.articleCount < FEW_ARTICLES && typeof payload.score === "number" ? (
                 <circle data-sentiment-few="true" cx={cx} cy={cy} r={3} fill="var(--color-surface)" stroke={CHART.priceLine} strokeWidth={1.5} />
@@ -962,49 +960,68 @@ export function CalculationBasis({
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
   if (!bit || !styleAxes) {
-    return <p className="m-0 text-sm text-muted">성향 진단 결과가 없어 기본 순서로 보여 줘요.</p>;
+    return <div className="flex flex-col gap-2"><h3 id="more-basis" className="m-0 text-base font-semibold">계산 근거</h3><p className="m-0 text-sm text-muted">성향 진단 결과가 없어 기본 순서로 보여 줘요.</p></div>;
   }
   const tabs = evidenceTabOrder(bit);
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-2">
-          <span className="text-2xs text-muted">판단 근거 탭 순서, {BIT_LABEL[bit.type]}이 먼저 보면 좋은 것부터</span>
-          <ol className="m-0 flex list-none flex-wrap items-center gap-x-2 gap-y-1 p-0 text-sm text-ink">
+      <div className="grid items-start gap-6 md:grid-cols-2 md:gap-x-12">
+        <aside className="flex min-w-0 flex-col gap-2 rounded-md bg-track p-5" aria-label="내 투자 유형">
+          <h4 className="m-0 text-base font-semibold">내 투자 유형</h4>
+          <p className="m-0 text-sm font-semibold text-ink">{BIT_LABEL[bit.type]}</p>
+          <Scale value={bit.composite} label="투자 유형 점수" onCallout
+            zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
+          <p className="m-0 text-2xs text-body">{STYLE_TYPE_BASIS} {BIT_LABEL[bit.type]}에 가까워요.</p>
+          {bit.lowConfidence && <p className="m-0 text-2xs text-muted">답이 서로 엇갈려 유형을 참고로만 봐 주세요.</p>}
+          <p className="m-0 text-2xs text-muted">{STYLE_TYPE_SOURCE}</p>
+        </aside>
+        <div className="flex min-w-0 flex-col gap-6 md:py-5">
+          <h3 id="more-basis" className="m-0 text-base font-semibold">내 성향에 맞춘 읽는 순서</h3>
+          <ol aria-label="내 성향에 맞춘 읽는 순서" className="m-0 flex list-none flex-col gap-2 p-0 text-sm text-body">
             {tabs.map((id, index) => (
-              <li key={id} className="flex items-center gap-2">
-                {index > 0 && <span aria-hidden className="text-ghost">›</span>}
+              <li key={id} className="flex items-baseline gap-3">
                 <span className="tabular-nums text-muted">{index + 1}</span>
-                <span className="font-medium">{TAB_META[id].label}</span>
+                <span>{TAB_META[id].label}</span>
               </li>
             ))}
           </ol>
         </div>
-      <div className="grid gap-6 md:grid-cols-2">
-        <BasisTile title="내 투자 유형" value={BIT_LABEL[bit.type]} sub={bit.lowConfidence ? "답이 서로 엇갈려요" : "답이 대체로 한쪽을 가리켜요"}
-          rule={`${STYLE_TYPE_RULE} ${BIAS_MODE_WORD[bit.biasMode]}이에요.`}>
-          <Scale value={bit.composite} zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
-        </BasisTile>
-        <div className="flex flex-col gap-2">
-          <span className="text-2xs text-muted">설문 8가지 답, 가운데가 0(어느 쪽도 아님)</span>
-          {STYLE_AXIS_IDS.map((axisId) => (
-            <Scale key={axisId} value={styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0}
-              left={AXIS_META[axisId].negative} right={AXIS_META[axisId].positive} />
+      </div>
+      <section aria-label="설문 8가지 답" className="flex flex-col gap-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+          <h4 className="m-0 text-sm font-semibold text-ink">설문 8가지 답</h4>
+          <p className="m-0 text-2xs text-muted">가운데 0은 어느 쪽도 아님, 얇은 세로 막대가 점수의 위치예요.</p>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
+          {[STYLE_AXIS_IDS.slice(0, 4), STYLE_AXIS_IDS.slice(4)].map((axes, column) => (
+            <div key={column} className="flex min-w-0 flex-col gap-6">
+              {axes.map((axisId) => {
+                const value = styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0;
+                return (
+                  <div key={axisId} className="flex flex-col gap-2">
+                    <span className="text-sm font-medium text-ink">{AXIS_META[axisId].name}</span>
+                    <Scale value={value} label={AXIS_META[axisId].name}
+                      left={AXIS_META[axisId].negative} right={AXIS_META[axisId].positive} />
+                  </div>
+                );
+              })}
+            </div>
           ))}
         </div>
+      </section>
+      <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
         {insights.psychology && (
-          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} rule={PSYCHOLOGY_RULE}>
+          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} rule={psychologyReason(insights.psychology.axis, insights.psychology.word)}>
             <Scale value={insights.psychology.axis} left="움츠러듦" right="들뜸" />
           </BasisTile>
         )}
         {nudges.map((nudge) => (
-          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`}>
+          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`}
+            rule={market ? checkpointReason(nudge, market) : undefined}>
             <Scale value={nudge.ratio} left={AXIS_META[nudge.axis].negative} right={AXIS_META[nudge.axis].positive} />
           </BasisTile>
         ))}
       </div>
-      {insights.sentiment?.days.length ? <p className="m-0 text-xs text-muted">기사 수가 적은 날: {FEW_ARTICLES_RULE}</p> : null}
-      {nudges.length > 0 && <p className="m-0 text-xs text-muted">확인할 것: {CHECKPOINT_RULE}</p>}
-      <p className="m-0 text-xs text-muted">{STYLE_TYPE_SOURCE}</p>
     </div>
   );
 }
@@ -1025,28 +1042,32 @@ function BasisTile({ title, value, sub, rule, children }: { title: string; value
   );
 }
 
-// -1~+1 위치 막대. 색 없이 점 하나로 위치만 보인다(신호가 아니라 사실). zones가 있으면 같은 폭 구간으로 나눈다.
-function Scale({ value, left, right, zones, current }: { value: number; left?: string; right?: string; zones?: string[]; current?: number }) {
-  const position = `${((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100}%`;
+// -1~+1 중 점수가 해당하는 위치에 얇은 세로 막대 하나만 표시한다.
+function Scale({ value, left, right, label, zones, current, onCallout = false }: {
+  value: number; left?: string; right?: string; label?: string; zones?: string[]; current?: number; onCallout?: boolean;
+}) {
+  const clamped = Math.max(-1, Math.min(1, value));
+  const position = (clamped + 1) * 50;
+  const meaning = zones ? zones[current ?? 0] : clamped === 0 ? "어느 쪽도 아님" : clamped < 0 ? left : right;
   return (
-    <div role="img" aria-label={`-1부터 +1 사이에서 ${signed(value)} 위치`} className="flex flex-col gap-2">
-      <div className="relative h-2 rounded-full bg-track">
-        {!zones && <span className="absolute inset-y-0 left-1/2 w-0.5 bg-field" />}
-        {zones?.slice(1).map((_, index) => (
-          <span key={index} className="absolute inset-y-0 w-0.5 bg-field" style={{ left: `${((index + 1) / zones.length) * 100}%` }} />
-        ))}
-        <span className="absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-field bg-ink" style={{ left: position }} />
+    <div role="meter" aria-label={label ?? `${left}부터 ${right}`} aria-valuemin={-1} aria-valuemax={1}
+      aria-valuenow={clamped} aria-valuetext={`${signed(clamped)}, ${meaning}`}
+      className="flex flex-col gap-2">
+      <div aria-hidden="true" className={`relative my-1 h-2 rounded-full ${onCallout ? "bg-surface" : "bg-track"}`}>
+        {zones ? zones.slice(1).map((_, index) => (
+          <span key={index} className={`absolute inset-y-0 w-0.5 ${onCallout ? "bg-line" : "bg-surface"}`} style={{ left: `${((index + 1) / zones.length) * 100}%` }} />
+        )) : <span className="absolute inset-y-0 left-1/2 w-0.5 bg-surface" />}
+        <span className="absolute -top-1 h-4 w-0.5 -translate-x-1/2 bg-ink"
+          style={{ left: `clamp(1px, ${position}%, calc(100% - 1px))` }} />
       </div>
       {zones ? (
-        <div className="grid text-center text-2xs" style={{ gridTemplateColumns: `repeat(${zones.length}, minmax(0, 1fr))` }}>
-          {zones.map((zone, index) => (
-            <span key={zone} className={index === current ? "font-semibold text-ink" : "text-muted"}>{zone}</span>
-          ))}
+        <div aria-hidden="true" className="grid text-center text-2xs" style={{ gridTemplateColumns: `repeat(${zones.length}, minmax(0, 1fr))` }}>
+          {zones.map((zone, index) => <span key={zone} className={index === current ? "font-semibold text-ink" : "text-muted"}>{zone}</span>)}
         </div>
       ) : (
-        <div className="flex justify-between text-2xs text-muted">
-          <span>-1 {left}</span>
-          <span>+1 {right}</span>
+        <div aria-hidden="true" className="flex justify-between gap-3 text-2xs text-muted">
+          <span>−1 {left}</span>
+          <span className="text-right">+1 {right}</span>
         </div>
       )}
     </div>

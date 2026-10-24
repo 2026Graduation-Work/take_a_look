@@ -44,7 +44,7 @@ const STREAK_DAYS = 5;
 const INSTITUTION_BUY_DAYS = 4;
 const VOLATILITY_TOP_10 = 0.9;
 const DRAWDOWN_LIMIT = -0.15;
-const HOLDING_GAIN = 0.1; // 평단 대비 ±10% 이상이면 N05가 손익 방향으로 말한다
+export const HOLDING_GAIN = 0.1; // 평단 대비 ±10% 이상이면 N05가 손익 방향으로 말한다
 const RALLY_3D = 0.1;
 // 감성 "급변" 임계 = news_corpus 일별 감성 변화량 |Δ|의 p90.
 // 계산: frontend/scripts/build_sentiment_fixture.py. 산출값·표본·감성 백엔드는 sentiment-fixture.ts 헤더에 있다.

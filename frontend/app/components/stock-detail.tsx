@@ -274,9 +274,6 @@ export default function StockDetailView({
           </summary>
           <div className="mt-6 flex flex-col gap-12">
             <section aria-labelledby="more-basis" className="flex flex-col gap-3">
-              <h3 id="more-basis" className="text-base font-semibold">
-                계산 근거
-              </h3>
               <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
             </section>
 
