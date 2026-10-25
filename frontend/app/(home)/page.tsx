@@ -1,4 +1,4 @@
-import Dashboard from "./components/dashboard";
+import Dashboard from "../components/dashboard";
 import { getDashboardData } from "@/lib/queries";
 
 export default function Home() {
