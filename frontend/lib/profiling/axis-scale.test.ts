@@ -15,8 +15,8 @@ test("극 방향: 오른쪽은 축 이름의 '더' 쪽, 화면만 뒤집고 저�
   // 저장 +1 = 단기 매매(style-questions.json) → 보유 기간 막대에서는 왼쪽(짧게)
   assert.equal(turnover.right, "길게");
   assert.equal(stageOf(turnover, 1), 0);
-  assert.equal(stageWord(turnover, stageOf(turnover, 1)), "단기 매매 쪽이 강해요");
-  assert.equal(stageWord(turnover, stageOf(turnover, -0.5)), "장기 보유 쪽");
+  assert.equal(stageWord(turnover, stageOf(turnover, 1)), "아주 단기 매매");
+  assert.equal(stageWord(turnover, stageOf(turnover, -0.5)), "장기 보유");
   assert.equal(stageOf(rule_adherence, 1), 0);
   // 저장 +1 = 손실 감수 쪽 → 오른쪽, 극 이름은 결과가 아니라 행동
   assert.equal(stageOf(loss_tolerance, 1), 4);

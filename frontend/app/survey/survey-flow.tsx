@@ -728,9 +728,9 @@ export function ResultView({
 
       <div className="px-6 py-8 sm:px-10 sm:py-10">
         <div className="grid gap-8 md:grid-cols-3">
-          <StageBar axis={SUMMARY_SCALE.riskTaking} value={summary.ratios.riskTaking} />
-          <StageBar axis={SUMMARY_SCALE.sensitivity} value={summary.ratios.sensitivity} />
-          <StageBar axis={SUMMARY_SCALE.horizon} value={summary.ratios.horizon} />
+          <StageBar axis={SUMMARY_SCALE.riskTaking} value={summary.ratios.riskTaking} stacked />
+          <StageBar axis={SUMMARY_SCALE.sensitivity} value={summary.ratios.sensitivity} stacked />
+          <StageBar axis={SUMMARY_SCALE.horizon} value={summary.ratios.horizon} stacked />
         </div>
 
         {(result.contradictions?.length ?? 0) > 0 && (
