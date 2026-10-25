@@ -32,6 +32,13 @@ function barPath(x: number, y: number, w: number, h: number, r: number) {
   ].join(" ");
 }
 
+// 묶음 칸의 기준을 문장 안에 쓴다: "−5% 아래로 떨어진 경우", "+40% 넘게 오른 경우"
+function tailWord(bin: { tail?: "low" | "high"; from: number; to: number }) {
+  return bin.tail === "low"
+    ? bin.to <= 0 ? "아래로 떨어진 경우" : "아래에 그친 경우"
+    : bin.from >= 0 ? "넘게 오른 경우" : "넘은 경우";
+}
+
 interface ReturnHistogramProps {
   bins: ReturnBin[];
   band: ReturnBand;
@@ -81,8 +88,9 @@ export default function ReturnHistogram({
 
   // x축은 분포의 1~99% 구간. 밖은 양 끝 "이하"·"이상" 칸으로 묶는다.
   const bins = clipReturnBins(rawBins);
-  const xMin = bins[0].from;
-  const xMax = bins[bins.length - 1].to;
+  // 분포가 한쪽으로 치우쳐도 0% 기준선이 늘 보이게 축에 0을 넣는다
+  const xMin = Math.min(bins[0].from, 0);
+  const xMax = Math.max(bins[bins.length - 1].to, 0);
   if (xMax <= xMin) return null;
 
   const maxCount = Math.max(...bins.map((bin) => bin.count));
@@ -114,9 +122,14 @@ export default function ReturnHistogram({
   const keptMax = bins[bins.length - 1].tail ? bins[bins.length - 1].from : xMax;
   const labelledEdges = [];
   for (let tick = Math.ceil(keptMin / xStep) * xStep; tick <= keptMax; tick += xStep) labelledEdges.push(tick);
+  if (!labelledEdges.some((tick) => Math.abs(tick) < 1e-9)) labelledEdges.push(0);
+  // 양 끝 묶음 칸 이름("−22% 아래")은 축 끝에 붙이고, 겹치는 눈금은 뺀다
+  const tails = bins.filter((bin) => bin.tail);
+  const shownEdges = labelledEdges.filter((edge) => Math.abs(edge) < 1e-9 || tails.every((bin) =>
+    bin.tail === "low" ? x(edge) - x(bin.from) > 90 : x(bin.to) - x(edge) > 90));
   const endpoint = (value: number) => <ChangeText value={value} precision={1}>{formatSigned(value)}</ChangeText>;
   const binLabel = (bin: (typeof bins)[number]) =>
-    bin.tail === "low" ? <>{endpoint(bin.to)} 이하</> : bin.tail === "high" ? <>{endpoint(bin.from)} 이상</> : <>{endpoint(bin.from)} ~ {endpoint(bin.to)}</>;
+    bin.tail === "low" ? <>{endpoint(bin.to)} {tailWord(bin)}</> : bin.tail === "high" ? <>{endpoint(bin.from)} {tailWord(bin)}</> : <>{endpoint(bin.from)} ~ {endpoint(bin.to)}</>;
   const maxIndex = bins.findIndex((bin) => bin.count === maxCount);
   const ciPercent = Math.round(band.ciLevel * 100);
 
@@ -181,15 +194,7 @@ export default function ReturnHistogram({
           건수
         </text>
 
-        {/* 0% 기준선 */}
-        <line
-          x1={x(0)}
-          y1={PAD.top - 4}
-          x2={x(0)}
-          y2={baseline}
-          style={{ stroke: "var(--color-edge)" }}
-          strokeWidth={1}
-        />
+        {/* 0% 기준선: 막대 위에 그려 늘 보이게(아래 막대 다음) */}
 
         {/* 막대: 구간 안은 신호 색, 밖은 회색 */}
         {bins.map((bin, i) => {
@@ -208,6 +213,8 @@ export default function ReturnHistogram({
           );
         })}
 
+        <line data-zero-line x1={x(0)} y1={PAD.top - 4} x2={x(0)} y2={baseline} style={{ stroke: "var(--color-ink)" }} strokeWidth={1.5} />
+
         {/* 최빈 구간만 직접 라벨 — 나머지는 호버 툴팁으로 */}
         <text
           x={(x(bins[maxIndex].from) + x(bins[maxIndex].to)) / 2}
@@ -222,28 +229,29 @@ export default function ReturnHistogram({
 
         {/* 베이스라인 + x축 라벨 */}
         <line x1={PAD.left} y1={baseline} x2={VB_W - PAD.right} y2={baseline} style={{ stroke: "var(--color-line)" }} />
-        {labelledEdges.map((edge) => (
+        {shownEdges.map((edge) => (
           <text
             key={edge}
             x={x(edge)}
             y={baseline + 16}
             textAnchor="middle"
             fontSize={11}
-            style={{ fill: "var(--color-muted)" }}
+            fontWeight={Math.abs(edge) < 1e-9 ? 600 : undefined}
+            style={{ fill: Math.abs(edge) < 1e-9 ? "var(--color-ink)" : "var(--color-muted)" }}
           >
-            {formatSigned(edge)}
+            {Math.abs(edge) < 1e-9 ? "0%" : formatSigned(edge)}
           </text>
         ))}
-        {bins.filter((bin) => bin.tail).map((bin) => (
+        {tails.map((bin) => (
           <text
             key={bin.tail}
-            x={(x(bin.from) + x(bin.to)) / 2}
+            x={bin.tail === "low" ? x(bin.from) : x(bin.to)}
             y={baseline + 16}
-            textAnchor="middle"
+            textAnchor={bin.tail === "low" ? "start" : "end"}
             fontSize={11}
             style={{ fill: "var(--color-muted)" }}
           >
-            {bin.tail === "low" ? "이하" : "이상"}
+            {bin.tail === "low" ? `${formatSigned(bin.to)} 아래` : `${formatSigned(bin.from)} 넘음`}
           </text>
         ))}
         <text x={VB_W - PAD.right} y={baseline + 30} textAnchor="end" fontSize={11} style={{ fill: "var(--color-muted)" }}>
@@ -267,7 +275,7 @@ export default function ReturnHistogram({
       {bins.every(bin => Math.abs(bin.to - bin.from - 2) < 1e-8) && (
         <p className="m-0 text-2xs text-muted">
           막대 한 칸은 수익률 2%p 구간이에요. 68% 범위는 별도로 표시해요.
-          {bins.some((bin) => bin.tail) && " 양 끝 칸은 그 바깥을 모두 묶었어요."}
+          {tails.map((bin) => ` ${bin.tail === "low" ? "왼쪽" : "오른쪽"} 끝 칸은 ${formatSigned(bin.tail === "low" ? bin.to : bin.from)} ${tailWord(bin)}를 모두 묶었어요.`).join("")}
         </p>
       )}
 

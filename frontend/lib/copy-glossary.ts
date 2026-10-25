@@ -33,6 +33,12 @@ export function bandSentence(horizon: HorizonKey, ciLevel: number): string {
   return `과거 비슷한 경우, ${HORIZON_LABEL[horizon]} 수익률은 10번 중 ${times}번 이 범위였어요`;
 }
 
+// 과거 비슷한 경우가 언제, 몇 번인지(chart pack distribution의 실제 기간과 표본 수). 비슷함 = 상승 점수 ±0.01, 가격 흔들림 ±5%
+export function similarCasesLine(start: string, end: string, count: number, stocks: number): string {
+  const month = (iso: string) => `${iso.slice(0, 4)}년 ${Number(iso.slice(5, 7))}월`;
+  return `${month(start)}~${month(end)} 중 오늘과 점수가 비슷했던 ${count.toLocaleString("ko-KR")}번(${stocks.toLocaleString("ko-KR")}개 종목)의 결과예요.`;
+}
+
 // 신호 강도 순위(0~1, 1이 최상위) → "오늘 분석한 종목 중 상위 N%"
 export function topPercentLabel(rankPercentile: number): string {
   return `오늘 분석한 종목 중 상위 ${Math.max(1, Math.round((1 - rankPercentile) * 100))}%`;
@@ -75,6 +81,15 @@ export const TERM_INFO = {
   volatility: { label: "가격 흔들림", tip: true,
     define: "하루하루 가격이 오르내린 폭을 1년 기준으로 환산한 변동성이에요.",
     read: "높을수록 짧은 기간에 크게 오르거나 내릴 수 있어요." },
+  model_signal: { label: "모델 신호", tip: true,
+    define: "앞으로 4주 안에 주가가 위 기준선에 먼저 닿을지(상승), 아래 기준선에 닿을지(하락), 둘 다 아닐지(중립) 세 점수를 내고 가장 큰 쪽을 보여 줘요.",
+    read: "따로 정한 문턱값은 없고, 기준선의 원 값은 더 알아보기의 계산 근거에 있어요." },
+  sigma: { label: "평소 흔들림 폭(σ)", tip: true,
+    define: "최근 하루하루 가격이 오르내린 폭의 표준적인 크기예요.",
+    read: "모델 기준선은 이 폭의 몇 배로 정해서, 많이 흔들리는 종목일수록 기준선이 멀어요." },
+  trading_value: { label: "거래대금", tip: true,
+    define: "하루 동안 사고판 주식의 금액을 모두 더한 값이에요.",
+    read: "평소보다 크면 그날 관심이 몰렸다는 뜻이에요." },
   net_buy: { label: "순매수", tip: true,
     define: "산 주식 수에서 판 주식 수를 뺀 값이에요.",
     read: "+면 판 것보다 많이 샀고, −면 많이 팔았어요. 거래량과 견줘 보면 크기를 알 수 있어요." },
@@ -166,6 +181,13 @@ export function typeRule(composite: number): string {
 }
 
 export const AXIS_STAGE_RULE = "설문 답은 축마다 −1~+1 점수예요. −0.6, −0.2, +0.2, +0.6에서 다섯 칸으로 나눠 보여 줘요.";
+
+// 모델 신호 기준선(chart pack inference.barriers = 종가 × (1 ± 배수 × σ)). 원과 배수는 계산 근거에만 쓴다.
+export function barrierRule(close: number, up: number, down: number, sigma: number, horizonWeeks: number): string {
+  const won = (value: number) => `${Math.round(value).toLocaleString("ko-KR")}원`;
+  const times = (price: number) => (Math.abs(price / close - 1) / sigma).toFixed(2).replace(/\.?0+$/, "");
+  return `모델 신호 기준선: 위 ${won(up)}, 아래 ${won(down)}. 오늘 종가 ${won(close)}에서 평소 흔들림 폭(σ, 하루 수익률의 표준편차 ${(sigma * 100).toFixed(1)}%)의 ${times(up)}배 위, ${times(down)}배 아래예요. 앞으로 ${horizonWeeks}주 안에 고가가 위 기준선에 먼저 닿으면 상승, 종가가 아래 기준선에 먼저 닿으면 하락, 둘 다 아니면 중립으로 배운 모델이고, 세 점수 중 가장 큰 쪽을 신호로 보여 줘요.`;
+}
 
 export const PSYCHOLOGY_NOTE = "최근 20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 지금 가격을 함께 봤어요.";
 

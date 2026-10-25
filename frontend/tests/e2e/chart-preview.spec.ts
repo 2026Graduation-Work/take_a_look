@@ -16,7 +16,12 @@ test("public predictions retain the original detail UI and both model directions
     return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
-  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. 과거에 오늘과/);
+  // 과거 비슷한 경우: pack의 실제 기간과 횟수, 범위 끝은 오늘 종가 기준 원
+  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 오늘 종가 기준이에요\.$/);
+  await expect(page.locator('section[aria-labelledby="glance-title"]')).toContainText(/%\s*\(약 [\d,]+원\)/);
+  await page.getByRole("button", { name: "모델 신호 설명 보기" }).click();
+  await expect(page.getByText(/세 점수를 내고 가장 큰 쪽/)).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 4주$/ })).toBeVisible();
   await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
   await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
@@ -38,6 +43,9 @@ test("public predictions retain the original detail UI and both model directions
   }
   await expect(model).not.toContainText(/비율 합 100%|뉴스 분위기|회사 체력|사고판 주체/);
   await page.locator("summary", { hasText: "더 알아보기" }).click();
+  await expect(page.locator("[data-zero-line]")).toHaveCount(1);
+  await expect(page.locator('section[aria-labelledby="more-distribution"]')).not.toContainText(/이하|이상/);
+  await expect(page.locator('section[aria-labelledby="more-basis"]')).toContainText(/모델 신호 기준선: 위 [\d,]+원, 아래 [\d,]+원/);
   const horizons = page.locator('section[aria-labelledby="more-horizons"]');
   await expect(horizons.getByRole("listitem")).toHaveCount(2);
   await expect(horizons.getByRole("listitem").filter({ hasText: "5거래일" })).toContainText("↓ 하락");

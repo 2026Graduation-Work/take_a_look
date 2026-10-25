@@ -116,6 +116,13 @@ export function formatSignedPercent(value: number, precision = 1) {
   return `${displayed > 0 ? "+" : ""}${displayed.toFixed(precision)}%`;
 }
 
+// 오늘 종가에 수익률(%)을 적용한 가격. 유효숫자 3자리로 반올림해 '약'을 붙인다(−5.5% → 약 94,500원).
+export function bandPrice(close: number, percent: number): string {
+  const price = close * (1 + percent / 100);
+  const unit = 10 ** Math.max(0, Math.floor(Math.log10(Math.max(Math.abs(price), 1))) - 2);
+  return `약 ${(Math.round(price / unit) * unit).toLocaleString("ko-KR")}원`;
+}
+
 // 순매수 수량(주). 만 주 단위로 줄여 읽기 쉽게: +5,276,406 → +527.6만 주.
 // 1만 주 미만은 반올림하면 "-0만 주"가 되므로 말로 쓴다(페르소나 워크스루 2026-10).
 export function formatShares(value: number): string {
