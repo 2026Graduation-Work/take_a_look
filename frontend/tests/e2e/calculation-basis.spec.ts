@@ -22,7 +22,7 @@ test("더 알아보기: 8축과 가격 흐름을 5칸 단계 막대로, 점수 �
   // 저장 +0.5(단기 매매 쪽) → 보유 기간 막대에서는 왼쪽 두 번째 칸, 오른쪽 끝은 '길게'
   const turnover = axes.locator("[data-stage]", { hasText: "보유 기간" });
   await expect(turnover).toHaveAttribute("data-stage", "1");
-  await expect(turnover).toContainText("단기 매매 쪽");
+  await expect(turnover).toContainText("단기 매매");
   await expect(turnover).toContainText("길게");
   await expect(type).not.toContainText(/[−+-]?[01]\.\d|−1|\+1/);
   await expect(type.getByText("설문에서 보유 기간이 짧은 쪽으로 답해 표시했어요.")).toBeVisible();

@@ -344,6 +344,7 @@ export default function Dashboard(initialData: DashboardData) {
                               >
                                 {light ? SIGNAL_META[light].label : "오늘 신호 없음"}
                               </span>
+                              <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
                             </Link>
                           </li>
                         );

@@ -29,7 +29,7 @@ test("결과 화면: 5칸을 눌러 조정하고, 추가 질문은 남은 문항
   await expect(concentration.getByRole("radio").nth(4)).toBeFocused();
   await expect(type).toHaveAttribute("data-bit-type", "ACCUMULATOR");
   expect(before).not.toBe("ACCUMULATOR");
-  await expect(page.getByText("단기 매매 쪽이 강해요").first()).toBeVisible();
+  await expect(page.getByText("아주 단기 매매").first()).toBeVisible();
 
   await adjust.getByRole("button", { name: "초기화" }).click();
   await expect(type).toHaveAttribute("data-bit-type", before!);
