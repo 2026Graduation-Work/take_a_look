@@ -106,23 +106,8 @@ export function riskLevel(grade: RiskGrade): { word: RiskLevel; filled: number }
 
 export const STYLE_TYPE_BASIS = "보유 기간, 손실을 견디는 정도, 종목을 모아 담는 성향을 종합하면";
 
-// 유형 점수 = (보유 기간 답 + (손실 감내 답 + 집중 답) ÷ 2) ÷ 2, -1~+1을 4구간으로 나눈다
-export const STYLE_TYPE_RULE =
-  "'얼마나 자주 사고파는지' 답과 '손실을 견디고 몇 종목에 모으는지' 답을 평균한 -1~+1 점수를 -0.5, 0, +0.5에서 네 유형으로 나눴어요.";
-
-// 스펙트럼 양 끝(감정적 편향)과 가운데(인지적 편향)
-export const BIAS_MODE_WORD = {
-  emotional: "양 끝 유형이라 그때그때 기분에 판단이 흔들리기 쉬운 편",
-  cognitive: "가운데 유형이라 이미 알던 정보만 믿고 새 정보를 덜 보기 쉬운 편",
-} as const;
-
-// 가격 흐름 분위기 = (20거래일 수익 ÷ 그동안의 흔들림, 60거래일 평균 매입가 대비 지금 가격의 위치)의 평균
-export const PSYCHOLOGY_RULE =
-  "20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 현재가를 함께 봐요.";
-
 // 뉴스 분위기: 하루 기사가 이보다 적은 날은 툴팁과 계산 근거에 주의 안내
 export const FEW_ARTICLES = 3;
-export const FEW_ARTICLES_RULE = `하루 관련 기사가 ${FEW_ARTICLES}건 미만이면 뉴스 점수가 쉽게 흔들릴 수 있어요.`;
 
 // 모델 신호 방향의 화면 이름. 사전 참가자·지도교수 모두 '상방·하방'을 헷갈려 B안으로 바꿨다(10/15 면담·E2).
 // 화면의 신호 방향 단어는 모두 여기서 가져온다. 내부 값(up/flat/down)과 DB는 그대로.
@@ -140,8 +125,6 @@ export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as co
 export type SignalHorizon = keyof typeof HORIZON_AHEAD;
 // 1주일 때만 기간 전환 왼쪽에 붙는 설명(13px). 4주(기본)는 설명 없음(10/20 사용자 피드백)
 export const SHORT_HORIZON_NOTE = "짧은 흔들림에 더 민감해요.";
-
-export const CHECKPOINT_RULE = "설문 답이 한쪽으로 0.3 넘게 기울고, 지금 이 종목의 시장 조건이 맞을 때만 보여요.";
 
 export const STYLE_TYPE_SOURCE = "분류 참고: Pompian의 행동재무학 연구";
 

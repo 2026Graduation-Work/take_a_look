@@ -965,6 +965,7 @@ export function CalculationBasis({
   const tabs = evidenceTabOrder(bit);
   return (
     <div className="flex flex-col gap-6">
+      <h3 id="more-basis" className="m-0 text-base font-semibold">계산 근거</h3>
       <div className="grid items-start gap-6 md:grid-cols-2 md:gap-x-12">
         <aside className="flex min-w-0 flex-col gap-2 rounded-md bg-track p-5" aria-label="내 투자 유형">
           <h4 className="m-0 text-base font-semibold">내 투자 유형</h4>
@@ -976,7 +977,7 @@ export function CalculationBasis({
           <p className="m-0 text-2xs text-muted">{STYLE_TYPE_SOURCE}</p>
         </aside>
         <div className="flex min-w-0 flex-col gap-6 md:py-5">
-          <h3 id="more-basis" className="m-0 text-base font-semibold">내 성향에 맞춘 읽는 순서</h3>
+          <h4 className="m-0 text-base font-semibold">내 성향에 맞춘 읽는 순서</h4>
           <ol aria-label="내 성향에 맞춘 읽는 순서" className="m-0 flex list-none flex-col gap-2 p-0 text-sm text-body">
             {tabs.map((id, index) => (
               <li key={id} className="flex items-baseline gap-3">
@@ -1027,14 +1028,12 @@ export function CalculationBasis({
 }
 
 // 계산 근거 한 칸: 결론(값) → -1~+1 위치 → 계산식 한 줄. 줄글 대신 위치로 먼저 읽힌다.
-function BasisTile({ title, value, sub, rule, children }: { title: string; value: string; sub?: string; rule?: string; children: ReactNode }) {
+function BasisTile({ title, value, rule, children }: { title: string; value: string; rule?: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-1">
         <span className="text-2xs text-muted">{title}</span>
-        <span className="text-sm font-semibold text-ink">
-          {value}{sub && <span className="font-normal text-muted"> {sub}</span>}
-        </span>
+        <span className="text-sm font-semibold text-ink">{value}</span>
       </div>
       {children}
       {rule && <p className="m-0 text-2xs text-muted">{rule}</p>}
