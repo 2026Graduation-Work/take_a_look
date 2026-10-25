@@ -154,3 +154,29 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | --- | --- | --- |
 | "깃허브 인기 클로드 스킬 5개"(같은 목록 다시) | 기존 판정 유지 | 10/20 세 번째 표와 같은 다섯 개다. 다시 판정하지 않는다 |
 | "별 30만, 스킬 TOP 10은 '멈춰'"(Superpowers, Matt Pocock, Karpathy, Graphify, Ponytail, UI UX Pro Max, Taste, Anthropic, Caveman, Agent Skills) | 9개 기존 판정 유지, Agent Skills 기각 | 9개는 이미 판정했다(Superpowers 개인 선택, Matt Pocock과 Karpathy는 아이디어만, Graphify 기각, Ponytail 사용 중, UI UX Pro Max 기각, Taste 2종 설치, Anthropic은 `frontend-design`만, Caveman 기각). Karpathy 저장소는 `multica-ai/andrej-karpathy-skills`이고 지금도 라이선스가 없어 복사하지 않는다(카파시 본인 저장소가 아니라는 스크랩 말이 맞다). 새로 본 `addyosmani/agent-skills`(MIT, 별 약 10.9만, 스크랩의 별 수와 다름)는 기획부터 배포까지 스킬 24개와 훅, 명령 묶음이다. 우리는 같은 순서를 AGENTS.md PR 규칙, `/code-review`, `/security-review`, ponytail, 완료 기준으로 이미 하고 있어 중복이고, 훅까지 들이면 규칙이 두 벌이 된다 |
+
+## 검토한 스크랩 (2026-10-26)
+
+밀린 스크랩 약 30개. 이미 판정한 것은 표를 가리키고, 새 것과 보안 소식만 적는다.
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| Next.js 보안 권고 3건(10/22, 스크랩 아님, 점검 중 발견) | **적용(#411)** | 보안 소식을 보고 `pnpm audit --prod`를 돌리자 치명 2건(이미지 최적화 RCE, `use cache` RCE), 높음 1건(Server Action DoS)이 나왔다. 우리 코드에 `use cache`와 Server Action은 없지만 권고가 즉시 업그레이드를 요구해 16.3.8 → 16.4.3. 파이썬 런타임 의존성 `pip-audit`은 깨끗 |
+| 주간 보안 패치(PHP, GitLab, NGINX, Node.js Brotli) · LiteLLM 1.107.0 변조 | 확인만 | PHP, GitLab, NGINX는 우리 스택에 없다. Node.js는 Vercel이 같은 주 버전 안에서 패치를 자동 적용하고, CI(`node-version: 22`)는 실행 때 최신 22.x를 받는다. 로컬 개발 PC만 직접 올린다(24.22.1 이상). LiteLLM은 요구 파일, 로컬 환경 어디에도 없다 |
+| [Ponytail 5](https://github.com/DietrichGebert/ponytail) | **적용(전역 플러그인 갱신)** | 4.9.0 → 5.3.2. 이미 쓰는 도구의 새 판이라 판단이 같다. 상태 표시줄 경로도 새 판으로 바꿨다 |
+| 공식 플러그인 TOP 5(frontend-design, superpowers, code-review, context7, code-simplifier) | 설치 안 함 | frontend-design은 같은 원본을 `.claude/skills`에 SHA 고정으로 이미 둠(플러그인까지 깔면 같은 스킬이 두 번 뜬다). code-review는 내장 `/code-review`, code-simplifier는 내장 `/simplify`와 ponytail과 겹친다. superpowers는 개인 선택(10/20 표). context7은 MCP 상시 연결이라 매 대화 토큰이 늘고 Next 문서는 Vercel 플러그인이 이미 준다 |
+| 공식 `claude-security` · `security-guidance` 플러그인, [Cloudflare security-audit-skill](https://github.com/cloudflare/security-audit-skill)(별 4.6만), [Strix](https://github.com/usestrix/strix) | 기각(필요 시 일회성) | security-guidance는 매 턴 diff를 Opus로 다시 검토해 토큰이 계속 든다. claude-security와 Cloudflare 스킬은 여러 에이전트가 사냥, 반증하는 방식이라 한 번에 토큰이 크다(10/06 판정과 같음). Strix는 PentAGI와 같은 이유(도커, LLM 키, 운영 주소 공격). 우리는 운영 경로 PR에 `/security-review`, 10월 점검 문서, 의존성 감사로 충분하다 |
+| [Alibaba Open Code Review](https://github.com/alibaba/open-code-review)(Apache-2.0) | 기각 | LLM 키를 따로 넣는 리뷰 CLI. `/code-review`와 겹친다 |
+| [Fabric](https://github.com/danielmiessler/Fabric)(MIT) · MoneyPrinterV2 · Agent S · google-maps-scraper | 기각 | Fabric은 모델 키가 필요한 프롬프트 모음 CLI. 나머지는 스팸 자동화, PC 원격 조작, 약관 위반 수집이라 쓸 곳이 없다 |
+| [gitingest](https://github.com/coderamp-labs/gitingest)(MIT) | 필요 시 일회성 | 레포를 글 한 덩어리로. 우리는 Claude Code가 레포를 직접 읽어 필요 없다. 웹 채팅에 남의 레포를 통째로 보여 줄 때만 |
+| 셀프호스팅 대안 10개(yt-dlp, Ollama, Whisper, Immich, AppFlowy, Penpot, n8n, Plausible, Cal, Bitwarden) | 기각 | 서버 운영이 필요하거나 우리와 무관. Whisper는 졸업 뒤 음성 입력 후보로만 메모 |
+| [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) · harness2 · Cindy · [Orca](https://github.com/stablyai/orca) · [CLI-Anything](https://github.com/HKUDS/CLI-Anything) · [OmniRoute](https://github.com/cheaper-inference/OmniRoute) | 기각 | 도커와 프록시와 모델 키(Tencent), 벤치 실행 비용(harness2), 하네스 교체나 병렬 에이전트(Cindy, Orca), 쓸 소프트웨어 없음(CLI-Anything), 여러 제공자 키 관리(OmniRoute). 우리 메모리, 스킬 구조로 충분하다 |
+| linkedin-skills · notfair-plugin · vercel-labs writing-guidelines | 기각 | SNS 글, 광고 성과는 용도 없음. [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills)는 라이선스 표기가 없어 복사하지 않는다 |
+| Gemini CLI · Open Design · find-skills · Claude Code Setup | 기각 | Claude Code와 같은 일(Gemini CLI). Open Design은 자기 모델 키가 필요하고, 공식 Claude Design 단독 사이트 종료(12/14)는 사실이지만 우리는 쓰지 않는다. find-skills는 허용 목록 밖 스킬을 끌어온다. Claude Code Setup은 추천만 하는데 이미 다 정해 둠 |
+| Graphify · Impeccable · REA · Agent-Reach · Matt Pocock · Karpathy · Superpowers · HyperFrames · 스킬 TOP 10 | 기존 판정 유지 | 10/06~10/21 표 그대로 |
+| [diagram-design](https://github.com/cathrynlavery/diagram-design)(MIT, 별 6.1만) | 아이디어만 | 보고서 그림 후보지만 노션 계획이 "그림은 직접, 본문 폰트로"다. 구성도는 mermaid(`docs/erd.md` 방식)나 내장 도식 기능으로 충분 |
+| PDF 도구(Stirling-PDF, MinerU, BentoPDF) | 개인 도구로만 | 보고서 PDF 합치기, 줄이기는 설치 없는 BentoPDF(브라우저 안에서 처리, AGPL)로. 레포엔 들이지 않는다 |
+| claude-x-jev 등 9선 · 사진 앱 3개 · 7개 저장소(VoiceStudio, Vibe-Trading 등) · 공식 업무 플러그인(Marketing, Legal 등) · FastAPI · Dessa · DeepInfer · Raon | 기각 | 유료 Jev 계열이거나 실체 불명(DM 미끼), 우리와 무관, 유료 요금제 앱 기능. Vibe-Trading(MIT)은 LLM이 매매 전략을 만드는 도구라 '추천하지 않는다'는 우리 원칙과 반대 |
+| ai-jailbreaks(라이선스 없음, 별 546) | 기각 | 탈옥 프롬프트 모음. 우리 화면에는 사용자 입력을 받는 LLM이 없다 |
+| "공격적으로 질문하는 8가지 기법" | 생각만(이미 하고 있음) | 10/20 '크래시 아웃'과 같다. 프롬프트보다 테스트, 감사, 실측으로 검증한다 |
+| "출시 전 클로드에게 시킬 20가지"(분석, CTA, FAQ, 404, alt, robots, 구조화 데이터, 개인정보 처리방침 등) | 일부 이미 충족, 1건 제안 | robots, sitemap, 페이지별 제목과 설명, OG 썸네일, 맞춤 404(`not-found.tsx`)는 있다. **개인정보 처리방침 페이지가 없다** — 가입과 설문, 보유 종목을 저장하므로 넣을 가치가 크다(내용은 팀 확인 필요, 사용자 결정 대기). 분석 도구, 구조화 데이터, 문의 흐름은 졸업작품 범위 밖 |
