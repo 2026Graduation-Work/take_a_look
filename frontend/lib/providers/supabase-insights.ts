@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { kstDay } from "../display.ts";
+import { PSYCHOLOGY_SCALE, stageIndex, stageWord } from "../profiling/axis-scale.ts";
 import type {
   FinancialMetric,
   FinancialSnapshot,
@@ -579,7 +580,7 @@ export function psychologyAxis(history: Array<{ close: number; volume: number }>
 }
 
 export function moodWord(axis: number): string {
-  return axis >= 0.5 ? "많이 들뜸" : axis >= 0.2 ? "조금 들뜸" : axis > -0.2 ? "차분함" : axis > -0.5 ? "조금 움츠러듦" : "많이 움츠러듦";
+  return stageWord(PSYCHOLOGY_SCALE, stageIndex(axis)); // 더 알아보기 5칸 막대와 같은 구간
 }
 
 export async function loadSupabasePsychology(code: string, client: InsightQueryClient) {

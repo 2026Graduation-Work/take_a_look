@@ -157,10 +157,21 @@ export const LIVE_NEWS_SCOPE = "기업 소식과 관련 산업과 시장 뉴스�
 // 뉴스 감성과 별도로 계산하는 가격 지표 안내.
 export const PRICE_CONTEXT_CAPTION = "뉴스 분위기와 함께 보는 주가 흐름";
 
+// 계산 근거 묶음의 숫자 문장. 화면 본문은 단계 말만 쓰고, 점수는 여기서만 범위와 함께 쓴다(DESIGN.md 화면 숫자 규칙).
+const signedScore = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(2)}`;
+
+// 유형 점수 = (보유 기간 답 + (손실 감내 답 + 집중 답) ÷ 2) ÷ 2 (lib/profiling/bit.ts)
+export function typeRule(composite: number): string {
+  return `투자 유형 점수 ${signedScore(composite)}(범위 −1~+1)를 −0.5, 0, +0.5에서 네 유형으로 나눴어요.`;
+}
+
+export const AXIS_STAGE_RULE = "설문 답은 축마다 −1~+1 점수예요. −0.6, −0.2, +0.2, +0.6에서 다섯 칸으로 나눠 보여 줘요.";
+
+export const PSYCHOLOGY_NOTE = "최근 20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 지금 가격을 함께 봤어요.";
+
 // 제공된 합산 점수만 설명하고 개별 가격 지표의 방향은 추측하지 않는다.
-export function psychologyReason(axis: number, word: string): string {
-  const score = `${axis > 0 ? "+" : ""}${axis.toFixed(2)}`;
-  return `20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 가격을 합친 점수가 ${score}으로 ‘${word}’ 구간이에요.`;
+export function psychologyReason(axis: number): string {
+  return `가격 흐름 분위기 점수 ${signedScore(axis)}(범위 −1 움츠러듦~+1 들뜸). 20거래일 수익과 흔들림, 60거래일 평균 매입가 대비 가격을 합친 값을 같은 다섯 칸으로 나눴어요.`;
 }
 
 // 선택된 체크포인트의 실제 발화 조건만 설명한다. 조건·정렬·점수는 바꾸지 않는다.
