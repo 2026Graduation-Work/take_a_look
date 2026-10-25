@@ -15,6 +15,7 @@
 - `backend/analysis/text/` — 뉴스 감성·재무. 담당: 서환(🟢)
 - `frontend/` — Next.js 대시보드. 담당: 성우(🔵)
   화면 규칙은 `frontend/DESIGN.md`, 값(색·타이포·간격)은 `frontend/app/globals.css`의 `@theme`가 SSOT
+  성향 축의 화면 이름, 극 이름, 방향은 `frontend/lib/profiling/axis-scale.ts` 한 곳(저장 값과 채점은 그대로, 화면만 뒤집는다). 기다림 표시는 `app/components/waiting.tsx` 두 컴포넌트만 쓴다
 - `schema/` — 블록 간 JSON 계약 (SSOT, freeze됨). 변경 시 전원 합의 필수.
 - `supabase/` — 마이그레이션(0001~0015)·시드. 새 마이그레이션은 CLI(`supabase db push`, 사용법 `docs/auth-setup.md`)로 적용하고 `docs/erd.md`·`docs/auth-setup.md` 표를 함께 고친다.
   새 테이블은 같은 마이그레이션에서 RLS 켜기와 필요한 GRANT를 함께 둔다(2026-10-30부터 public 새 테이블은 Data API 역할에 자동으로 열리지 않는다). 화면이 읽는 역할에는 필요한 권한만, 배치는 service_role. 기존 권한 기준선은 `docs/security/2026-10-audit.md`, 예:
