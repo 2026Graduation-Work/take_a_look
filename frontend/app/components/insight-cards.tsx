@@ -20,6 +20,9 @@ import {
   compareLine,
   psychologyReason,
   checkpointReason,
+  typeRule,
+  AXIS_STAGE_RULE,
+  PSYCHOLOGY_NOTE,
   STYLE_TYPE_SOURCE,
   STYLE_TYPE_BASIS,
   TERM,
@@ -39,6 +42,8 @@ import {
   type CardId,
 } from "@/lib/profiling/bit";
 import { checkpointItems, selectNudges } from "@/lib/profiling/nudges";
+import { PSYCHOLOGY_SCALE, STYLE_AXIS_SCALE } from "@/lib/profiling/axis-scale";
+import StageBar from "./stage-bar";
 import {
   combinedProvenance,
   aggregateSentimentPeriods,
@@ -61,25 +66,13 @@ import { CHART } from "@/lib/chart-colors";
 import ChangeText from "./change-text";
 import { changeMeta, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
-import type { DataProvenance, PredictionReason, StockDetail, StyleAxes, StyleAxisId } from "@/lib/types";
+import type { DataProvenance, PredictionReason, StockDetail, StyleAxes } from "@/lib/types";
 import { SourceTable } from "./source-line";
 import MoreList from "./more-list";
 import DotLegend from "./dot-legend";
 import { staleLabel } from "@/lib/market-status";
 import TermLabel from "./term-tip";
 import FINANCIAL_MEDIANS from "@/lib/financial-medians.json";
-
-// 극성은 lib/profiling/style-questions.json axes와 같다.
-const AXIS_META: Record<StyleAxisId, { name: string; negative: string; positive: string }> = {
-  market_participation: { name: "시장과 내 목표", negative: "시장 수익률 참여", positive: "내 목표 우선" },
-  loss_tolerance: { name: "손실 감내", negative: "원금 보전", positive: "수익 기회" },
-  turnover: { name: "보유 기간", negative: "장기 보유", positive: "단기 매매" },
-  concentration: { name: "집중과 분산", negative: "폭넓은 분산", positive: "소수 집중" },
-  rule_adherence: { name: "계획 운용", negative: "사전 규칙 준수", positive: "상황별 재량" },
-  information_reliance: { name: "판단의 근거", negative: "본인 판단", positive: "시장과 타인 추종" },
-  urgency: { name: "기회를 대하는 태도", negative: "여유", positive: "조급함" },
-  drawdown_reaction: { name: "하락에 대한 반응", negative: "하락 시 유지", positive: "하락 시 이탈" },
-};
 
 // 8축 진단 결과가 없을 때의 순서
 const DEFAULT_CARD_ORDER: readonly CardId[] = [
@@ -942,8 +935,8 @@ function ContributionPanel({
   );
 }
 
-// ── 계산 근거 (더 알아보기 안) ────────────────────────────────
-// 한 줄에 무엇을 · 어떤 자료로 · 어떻게 계산했나 · 이번 값을 쉬운 말로 쓴다(copy-glossary.ts).
+// ── 더 알아보기: 내 투자 유형, 가격 흐름 분위기, 계산 근거 ─────────────────
+// 설문 축과 가격 흐름은 5칸 단계 막대(stage-bar.tsx)로 보이고, 점수 숫자는 '계산 근거' 묶음에만 범위와 함께 쓴다.
 
 export function CalculationBasis({
   demo,
@@ -959,116 +952,105 @@ export function CalculationBasis({
   const { bit, styleAxes } = demo;
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
-  if (!bit || !styleAxes) {
-    return <div className="flex flex-col gap-2"><h3 id="more-basis" className="m-0 text-base font-semibold">계산 근거</h3><p className="m-0 text-sm text-muted">성향 진단 결과가 없어 기본 순서로 보여 줘요.</p></div>;
-  }
-  const tabs = evidenceTabOrder(bit);
+  const tabs = bit ? evidenceTabOrder(bit) : null;
   return (
-    <div className="flex flex-col gap-6">
-      <h3 id="more-basis" className="m-0 text-base font-semibold">계산 근거</h3>
-      <div className="grid items-start gap-6 md:grid-cols-2 md:gap-x-12">
-        <aside className="flex min-w-0 flex-col gap-2 rounded-md bg-track p-5" aria-label="내 투자 유형">
-          <h4 className="m-0 text-base font-semibold">내 투자 유형</h4>
-          <p className="m-0 text-sm font-semibold text-ink">{BIT_LABEL[bit.type]}</p>
-          <Scale value={bit.composite} label="투자 유형 점수" onCallout
-            zones={BIT_TYPES.map((type) => BIT_LABEL[type])} current={BIT_TYPES.indexOf(bit.type)} />
-          <p className="m-0 text-2xs text-body">{STYLE_TYPE_BASIS} {BIT_LABEL[bit.type]}에 가까워요.</p>
-          {bit.lowConfidence && <p className="m-0 text-2xs text-muted">답이 서로 엇갈려 유형을 참고로만 봐 주세요.</p>}
-          <p className="m-0 text-2xs text-muted">{STYLE_TYPE_SOURCE}</p>
-        </aside>
-        <div className="flex min-w-0 flex-col gap-6 md:py-5">
-          <h4 className="m-0 text-base font-semibold">내 성향에 맞춘 읽는 순서</h4>
-          <ol aria-label="내 성향에 맞춘 읽는 순서" className="m-0 flex list-none flex-col gap-2 p-0 text-sm text-body">
-            {tabs.map((id, index) => (
-              <li key={id} className="flex items-baseline gap-3">
-                <span className="tabular-nums text-muted">{index + 1}</span>
-                <span>{TAB_META[id].label}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
-      <section aria-label="설문 8가지 답" className="flex flex-col gap-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-          <h4 className="m-0 text-sm font-semibold text-ink">설문 8가지 답</h4>
-          <p className="m-0 text-2xs text-muted">가운데 0은 어느 쪽도 아님, 얇은 세로 막대가 점수의 위치예요.</p>
-        </div>
-        <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
-          {[STYLE_AXIS_IDS.slice(0, 4), STYLE_AXIS_IDS.slice(4)].map((axes, column) => (
-            <div key={column} className="flex min-w-0 flex-col gap-6">
-              {axes.map((axisId) => {
-                const value = styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0;
-                return (
-                  <div key={axisId} className="flex flex-col gap-2">
-                    <span className="text-sm font-medium text-ink">{AXIS_META[axisId].name}</span>
-                    <Scale value={value} label={AXIS_META[axisId].name}
-                      left={AXIS_META[axisId].negative} right={AXIS_META[axisId].positive} />
-                  </div>
-                );
-              })}
+    <>
+      <section aria-labelledby="more-type" className="flex flex-col gap-6">
+        <h3 id="more-type" className="m-0 text-lg font-semibold">내 투자 유형</h3>
+        {!bit || !styleAxes || !tabs ? (
+          <p className="m-0 text-sm text-muted">성향 진단 결과가 없어 기본 순서로 보여 줘요.</p>
+        ) : (
+          <>
+            <div className="grid items-start gap-6 md:grid-cols-2 md:gap-x-12">
+              <div className="flex min-w-0 flex-col gap-2 rounded-md bg-track p-5" aria-label="내 투자 유형">
+                <p className="m-0 text-base font-semibold text-ink">{BIT_LABEL[bit.type]}</p>
+                <TypeZones current={BIT_TYPES.indexOf(bit.type)} />
+                <p className="m-0 text-2xs text-body">{STYLE_TYPE_BASIS} {BIT_LABEL[bit.type]}에 가까워요.</p>
+                {bit.lowConfidence && <p className="m-0 text-2xs text-muted">답이 서로 엇갈려 유형을 참고로만 봐 주세요.</p>}
+                <p className="m-0 text-2xs text-muted">{STYLE_TYPE_SOURCE}</p>
+              </div>
+              <div className="flex min-w-0 flex-col gap-4 md:py-5">
+                <h4 className="m-0 text-base font-semibold">내 성향에 맞춘 읽는 순서</h4>
+                <ol aria-label="내 성향에 맞춘 읽는 순서" className="m-0 flex list-none flex-col gap-2 p-0 text-sm text-body">
+                  {tabs.map((id, index) => (
+                    <li key={id} className="flex items-baseline gap-3">
+                      <span className="tabular-nums text-muted">{index + 1}</span>
+                      <span>{TAB_META[id].label}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             </div>
-          ))}
-        </div>
-      </section>
-      <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
-        {insights.psychology && (
-          <BasisTile title="가격 흐름 분위기" value={insights.psychology.word} rule={psychologyReason(insights.psychology.axis, insights.psychology.word)}>
-            <Scale value={insights.psychology.axis} left="움츠러듦" right="들뜸" />
-          </BasisTile>
+            <section aria-label="설문 8가지 답" className="flex flex-col gap-4">
+              <h4 className="m-0 text-base font-semibold">설문 8가지 답</h4>
+              <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
+                {[STYLE_AXIS_IDS.slice(0, 4), STYLE_AXIS_IDS.slice(4)].map((axes, column) => (
+                  <div key={column} className="flex min-w-0 flex-col gap-6">
+                    {axes.map((axisId) => (
+                      <StageBar key={axisId} axis={STYLE_AXIS_SCALE[axisId]}
+                        value={styleAxes.axes.find(({ axis_id }) => axis_id === axisId)?.ratio ?? 0} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </section>
+            {market && nudges.length > 0 && (
+              <section aria-label="확인할 것이 뜬 이유" className="flex flex-col gap-4">
+                <h4 className="m-0 text-base font-semibold">확인할 것이 뜬 이유</h4>
+                <div className="grid gap-6 md:grid-cols-2 md:gap-x-12">
+                  {nudges.map((nudge) => (
+                    <div key={nudge.id} className="flex flex-col gap-2">
+                      <StageBar axis={STYLE_AXIS_SCALE[nudge.axis]} value={nudge.ratio} />
+                      <p className="m-0 text-2xs text-muted">{checkpointReason(nudge, market)}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
-        {nudges.map((nudge) => (
-          <BasisTile key={nudge.id} title="확인할 것이 뜬 이유" value={`설문 '${AXIS_META[nudge.axis].name}'`}
-            rule={market ? checkpointReason(nudge, market) : undefined}>
-            <Scale value={nudge.ratio} left={AXIS_META[nudge.axis].negative} right={AXIS_META[nudge.axis].positive} />
-          </BasisTile>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// 계산 근거 한 칸: 결론(값) → -1~+1 위치 → 계산식 한 줄. 줄글 대신 위치로 먼저 읽힌다.
-function BasisTile({ title, value, rule, children }: { title: string; value: string; rule?: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-1">
-        <span className="text-2xs text-muted">{title}</span>
-        <span className="text-sm font-semibold text-ink">{value}</span>
-      </div>
-      {children}
-      {rule && <p className="m-0 text-2xs text-muted">{rule}</p>}
-    </div>
-  );
-}
-
-// -1~+1 중 점수가 해당하는 위치에 얇은 세로 막대 하나만 표시한다.
-function Scale({ value, left, right, label, zones, current, onCallout = false }: {
-  value: number; left?: string; right?: string; label?: string; zones?: string[]; current?: number; onCallout?: boolean;
-}) {
-  const clamped = Math.max(-1, Math.min(1, value));
-  const position = (clamped + 1) * 50;
-  const meaning = zones ? zones[current ?? 0] : clamped === 0 ? "어느 쪽도 아님" : clamped < 0 ? left : right;
-  return (
-    <div role="meter" aria-label={label ?? `${left}부터 ${right}`} aria-valuemin={-1} aria-valuemax={1}
-      aria-valuenow={clamped} aria-valuetext={`${signed(clamped)}, ${meaning}`}
-      className="flex flex-col gap-2">
-      <div aria-hidden="true" className={`relative my-1 h-2 rounded-full ${onCallout ? "bg-surface" : "bg-track"}`}>
-        {zones ? zones.slice(1).map((_, index) => (
-          <span key={index} className={`absolute inset-y-0 w-0.5 ${onCallout ? "bg-line" : "bg-surface"}`} style={{ left: `${((index + 1) / zones.length) * 100}%` }} />
-        )) : <span className="absolute inset-y-0 left-1/2 w-0.5 bg-surface" />}
-        <span className="absolute -top-1 h-4 w-0.5 -translate-x-1/2 bg-ink"
-          style={{ left: `clamp(1px, ${position}%, calc(100% - 1px))` }} />
-      </div>
-      {zones ? (
-        <div aria-hidden="true" className="grid text-center text-2xs" style={{ gridTemplateColumns: `repeat(${zones.length}, minmax(0, 1fr))` }}>
-          {zones.map((zone, index) => <span key={zone} className={index === current ? "font-semibold text-ink" : "text-muted"}>{zone}</span>)}
-        </div>
-      ) : (
-        <div aria-hidden="true" className="flex justify-between gap-3 text-2xs text-muted">
-          <span>−1 {left}</span>
-          <span className="text-right">+1 {right}</span>
-        </div>
+      </section>
+      {insights.psychology && (
+        <section aria-labelledby="more-mood" className="flex flex-col gap-4">
+          <h3 id="more-mood" className="m-0 text-lg font-semibold">{PSYCHOLOGY_SCALE.name}</h3>
+          <div className="md:w-1/2 md:pr-6">
+            <StageBar axis={PSYCHOLOGY_SCALE} value={insights.psychology.axis} title="최근 가격 흐름" />
+          </div>
+          <p className="m-0 text-2xs text-muted">{PSYCHOLOGY_NOTE}</p>
+        </section>
       )}
+    </>
+  );
+}
+
+// 더 알아보기의 '계산 근거' 묶음: 단계 막대 뒤의 점수와 나눈 기준을 범위와 함께 쓴다.
+export function BasisNumbers({ demo, insights }: { demo: DemoStyleAxes; insights: StockInsights }) {
+  const rows = [
+    demo.bit && typeRule(demo.bit.composite),
+    demo.styleAxes && AXIS_STAGE_RULE,
+    insights.psychology && psychologyReason(insights.psychology.axis),
+  ].filter((row): row is string => Boolean(row));
+  if (rows.length === 0) return null;
+  return (
+    <section aria-labelledby="more-basis" className="flex flex-col gap-4">
+      <h3 id="more-basis" className="m-0 text-lg font-semibold">계산 근거</h3>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm text-body tabular-nums">
+        {rows.map((row) => <li key={row}>{row}</li>)}
+      </ul>
+    </section>
+  );
+}
+
+// 유형 네 구간 중 내 구간만 진하게. 점수 숫자는 계산 근거에만 둔다.
+function TypeZones({ current }: { current: number }) {
+  return (
+    <div role="img" aria-label={`네 유형 중 ${BIT_LABEL[BIT_TYPES[current]]}`} className="flex flex-col gap-2">
+      <div aria-hidden="true" className="grid grid-cols-4 gap-1">
+        {BIT_TYPES.map((type, index) => <span key={type} className={`h-2 rounded-sm ${index === current ? "bg-brand" : "bg-surface"}`} />)}
+      </div>
+      <div aria-hidden="true" className="grid grid-cols-4 gap-1 text-center text-2xs">
+        {BIT_TYPES.map((type, index) => <span key={type} className={index === current ? "font-semibold text-ink" : "text-muted"}>{BIT_LABEL[type]}</span>)}
+      </div>
     </div>
   );
 }

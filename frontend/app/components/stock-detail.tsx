@@ -9,6 +9,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import EvidenceTabs, {
+  BasisNumbers,
   CalculationBasis,
   Checkpoints,
   SourceList,
@@ -267,18 +268,13 @@ export default function StockDetailView({
         {/* 5. 더 알아보기 */}
         <details className="disclosure surface p-6">
           <summary>
-            <span className="flex flex-col gap-1">
-              <span className="text-lg font-semibold">더 알아보기</span>
-              <span className="text-2xs font-normal text-muted">판단 근거 탭 순서, 수익률 분포, 기간별 비교, 계산 근거, 데이터 출처</span>
-            </span>
+            <span className="text-lg font-semibold">더 알아보기</span>
           </summary>
           <div className="mt-6 flex flex-col gap-12">
-            <section aria-labelledby="more-basis" className="flex flex-col gap-3">
-              <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
-            </section>
+            <CalculationBasis demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} />
 
             <section aria-labelledby="more-distribution" className="flex flex-col gap-3">
-              <h3 id="more-distribution" className="text-base font-semibold">
+              <h3 id="more-distribution" className="text-lg font-semibold">
                 과거 비슷한 신호 {detail.similarCaseCount}건의 실제 수익률
               </h3>
               {realizedReturns.length > 0 ? (
@@ -300,7 +296,7 @@ export default function StockDetailView({
             </section>
 
             <section aria-labelledby="more-horizons" className="flex flex-col gap-3">
-              <h3 id="more-horizons" className="text-base font-semibold">
+              <h3 id="more-horizons" className="text-lg font-semibold">
                 {TERM.horizonAgreement}
               </h3>
               <p className="m-0 text-sm text-body">{preview
@@ -326,7 +322,7 @@ export default function StockDetailView({
 
             {detail.aiAdvice?.trim() && (
               <section aria-labelledby="more-ai" className="flex flex-col gap-2">
-                <h3 id="more-ai" className="text-base font-semibold">
+                <h3 id="more-ai" className="text-lg font-semibold">
                   숫자를 풀어 쓴 설명 <span className="text-2xs font-normal text-muted">AI 작성, 매매 조언 아님</span>
                 </h3>
                 <p className="m-0 text-sm text-body">{detail.aiAdvice}</p>
@@ -334,8 +330,10 @@ export default function StockDetailView({
             )}
 
 
+            <BasisNumbers demo={demo} insights={insights} />
+
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">
-              <h3 id="more-sources" className="text-base font-semibold">
+              <h3 id="more-sources" className="text-lg font-semibold">
                 데이터 출처
               </h3>
               <SourceList detail={detail} insights={insights} />

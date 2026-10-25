@@ -12,14 +12,14 @@ const market: NudgeMarket = {
 };
 const nudge = (id: FiredNudge["id"]): FiredNudge => ({ id, text: "", axis: "turnover", ratio: 0.5 });
 
-test("가격 흐름은 실제 합산 점수와 구간만 설명하고 개별 지표 방향을 추측하지 않는다", () => {
-  const text = psychologyReason(-0.23456, "조금 움츠러듦");
-  assert.match(text, /-0.23/);
-  assert.match(text, /조금 움츠러듦/);
+test("가격 흐름 점수는 계산 근거 문장에서만 범위와 함께 쓰고 개별 지표 방향을 추측하지 않는다", () => {
+  const text = psychologyReason(-0.23456);
+  assert.match(text, /−0\.23/);
+  assert.match(text, /범위 −1/);
   assert.match(text, /20거래일/);
   assert.match(text, /60거래일/);
   assert.doesNotMatch(text, /수익이 낮|현재가가 낮|주가가 하락/);
-  assert.match(psychologyReason(0.73, "많이 들뜸"), /\+0.73/);
+  assert.match(psychologyReason(0.73), /\+0\.73/);
 });
 
 test("설문만으로 뜨는 항목은 종목 조건을 지어내지 않는다", () => {
