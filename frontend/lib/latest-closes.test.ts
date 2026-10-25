@@ -17,13 +17,3 @@ test("loadLatestCloses maps H20 scores to signal light", async () => {
   assert.deepEqual(closes.get("000890"), { close: 1309, asOf: "2026-10-07" });
   assert.equal(closes.has("005380"), false);
 });
-
-test("전일 대비 등락은 가격 기록 마지막 두 날로, 원과 %를 함께 쓴다", async () => {
-  const { dailyChange } = await import("./latest-closes.ts");
-  const { formatWonChange } = await import("./display.ts");
-  const change = dailyChange([{ close: 60_000 }, { close: 66_000 }, { close: 67_200 }])!;
-  assert.equal(formatWonChange(change.won, change.percent), "+1,200원 (+1.8%)");
-  assert.equal(formatWonChange(-500, -0.74), "-500원 (-0.7%)");
-  assert.equal(dailyChange([{ close: 100 }]), null);
-  assert.equal(dailyChange(null), null);
-});

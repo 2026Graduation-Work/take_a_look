@@ -9,7 +9,7 @@ import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { HORIZON_WHY, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { HORIZON_WHY, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
 import MarketDetail from "./market-detail";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
@@ -22,8 +22,7 @@ import { AVOIDED_ASSET_LABELS, summaryFromProfilingOutput } from "@/lib/profilin
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { chartProvenance } from "@/lib/chart-detail";
 import { getSupabaseClient } from "@/lib/supabase";
-import { formatWonChange, SIGNAL_META } from "@/lib/display";
-import ChangeText from "./change-text";
+import { SIGNAL_META } from "@/lib/display";
 import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
 import { holdingAlertsOutside } from "@/lib/recommendation-filter";
@@ -70,13 +69,12 @@ function chooseHorizon(next: SignalHorizon) {
 // 두 열의 제목 줄 높이를 같게(min-h-11) 두어 같은 높이에서 시작한다
 // 제목 줄: 제목 왼쪽, [설명][컨트롤] 오른쪽. 390처럼 한 줄에 안 들어가면 [설명][컨트롤]이 제목 아래 둘째 줄로 가고
 // (컨트롤은 오른쪽), 설명이 없어도 컨트롤이 그 줄 높이를 잡아 아래 내용이 흔들리지 않는다
-function SectionHead({ title, note, control }: { title: string; note?: string; control?: ReactNode }) {
+function SectionHead({ title, control }: { title: string; control?: ReactNode }) {
   return (
     <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
       <h2 className="basis-full text-xl font-semibold sm:basis-auto">{title}</h2>
       {control && (
         <div className="flex min-w-0 flex-1 items-center justify-end gap-3 sm:flex-none">
-          {note && <p className="m-0 mr-auto truncate text-2xs text-muted sm:mr-0">{note}</p>}
           {control}
         </div>
       )}
@@ -231,17 +229,6 @@ export default function Dashboard(initialData: DashboardData) {
     };
   }, [avoidedKey, horizon]);
   const strongSignals = strong ? [...strong.up, ...strong.down] : [];
-  // 신호가 강한 종목의 전일 대비 등락(원, %). 목록에 보이는 종목만 따로 읽는다
-  const strongCodes = strongSignals.map(({ code }) => code).join(",");
-  const [strongCloses, setStrongCloses] = useState<LatestCloses>(new Map());
-  useEffect(() => {
-    if (!strongCodes) return;
-    let active = true;
-    void loadLatestCloses(getSupabaseClient(), strongCodes.split(","), horizon).then((next) => active && setStrongCloses(next));
-    return () => {
-      active = false;
-    };
-  }, [strongCodes, horizon]);
   const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
   const normalized = keyword.toLowerCase();
@@ -331,7 +318,6 @@ export default function Dashboard(initialData: DashboardData) {
                   {/* 기간 전환은 그것이 바꾸는 내용(맵, 요약, 목록)의 제목 줄에. 1주, 4주 오름차순(기본 4주) */}
                   <SectionHead
                     title="내 포트폴리오"
-                    note={horizon === 5 ? SHORT_HORIZON_NOTE : undefined}
                     control={<>
                       <MarketDetail title="1주와 4주" className="inline-flex"
                         label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">1주와 4주 설명 보기</span></>}>
@@ -357,7 +343,6 @@ export default function Dashboard(initialData: DashboardData) {
                             >
                               <span className="min-w-0 truncate text-sm font-medium">{name}</span>
                               <span className="flex-1 text-2xs text-muted tabular-nums">{code}</span>
-                              <DayChange change={closes.get(code)?.change} />
                               <span
                                 className="flex-none text-sm font-semibold"
                                 style={{ color: light ? SIGNAL_META[light].ink : "var(--color-muted)" }}
@@ -393,7 +378,7 @@ export default function Dashboard(initialData: DashboardData) {
                   // 묶음 제목 없이 한 목록(상승 먼저), 줄 오른쪽에 색 단어 하나(화면 규칙 v2)
                   <div className="group-list">
                     {[...visibleStrong.filter(({ direction }) => direction === "up"), ...visibleStrong.filter(({ direction }) => direction === "down")]
-                      .map((signal) => <StrongRow key={signal.code} signal={signal} change={strongCloses.get(signal.code)?.change} />)}
+                      .map((signal) => <StrongRow key={signal.code} signal={signal} />)}
                     {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
                   </div>
                 )}
@@ -461,7 +446,7 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
 }
 
 // 한 줄: 종목명, 코드, 오른쪽 색 단어(상승/하락), 상세로 가는 화살표. 근거는 상세 화면 '모델이 본 이유'에 있다.
-function StrongRow({ signal, change }: { signal: StrongSignal; change?: { won: number; percent: number } }) {
+function StrongRow({ signal }: { signal: StrongSignal }) {
   return (
     <Link
       href={`/stocks/${signal.code}`}
@@ -470,22 +455,11 @@ function StrongRow({ signal, change }: { signal: StrongSignal; change?: { won: n
     >
       <span className="min-w-0 truncate text-sm font-medium">{signal.name}</span>
       <span className="flex-1 text-2xs text-muted tabular-nums">{signal.code}</span>
-      <DayChange change={change} />
       <span className="flex-none text-sm font-semibold" style={{ color: SIGNAL_META[signal.direction === "up" ? "positive" : "negative"].ink }}>
         {SIGNAL_WORD[signal.direction]}
       </span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>
-  );
-}
-
-// 목록 행의 전일 대비 '+1,200원 (+1.8%)'. 색은 증감 방향색(DESIGN.md 2-1), 신호 단어보다 한 단계 약하게(보조 크기)
-function DayChange({ change }: { change?: { won: number; percent: number } }) {
-  if (!change) return null;
-  return (
-    <ChangeText value={change.percent} precision={1} className="flex-none text-xs">
-      <span className="sr-only">전일 대비 </span>{formatWonChange(change.won, change.percent)}
-    </ChangeText>
   );
 }
 
