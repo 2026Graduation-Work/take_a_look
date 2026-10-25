@@ -6,6 +6,10 @@
 // - 패키지를 번들에 넣으면 Turbopack이 워커를 다시 묶다 실패하고, 메인 화면에도 OpenCV 10MB가 실린다.
 //   그래서 패키지와 같은 통신 규약(worker-transport-request/response)으로 워커에 직접 말을 건다.
 // 모두 '캡처로 불러오기'를 처음 누를 때만 받는다.
+// - 파일 경로에 판(/ocr/v1/)을 넣고 1년 immutable 캐시를 건다(next.config.ts). 판을 올리면 v2로 옮긴다.
+//   1단계 % 막대는 같은 주소를 화면 쪽에서 먼저 받아 세고(prefetch), 워커는 그 캐시에서 바로 읽는다.
+
+import { STORAGE_KEYS } from "../storage-keys.ts";
 
 export interface OcrLine {
   text: string;
@@ -16,8 +20,17 @@ export interface OcrLine {
   y1: number;
 }
 
-const SDK = "/ocr/worker-entry-C9UNuyOJ.js";
-const ASSETS = "/ocr/"; // wasm, 모델(워커 안에서 같은 출처로 풀린다)
+const ASSETS = "/ocr/v1/"; // 워커, wasm, 모델(워커 안에서 같은 출처로 풀린다)
+const SDK = `${ASSETS}worker-entry-C9UNuyOJ.js`;
+// 워커가 받는 파일과 크기(scripts/fetch-ocr-assets.mjs와 같은 판). 압축 전송이면 Content-Length가 없어 크기를 여기 둔다
+const FILES: [string, number][] = [
+  ["worker-entry-C9UNuyOJ.js", 11_341_486],
+  ["ort-wasm-simd-threaded.jsep.mjs", 46_595],
+  ["ort-wasm-simd-threaded.jsep.wasm", 25_014_754],
+  ["PP-OCRv5_mobile_det_onnx_infer.tar", 4_843_520],
+  ["korean_PP-OCRv5_mobile_rec_onnx_infer.tar", 13_537_280],
+];
+export const TOOL_BYTES = FILES.reduce((sum, [, size]) => sum + size, 0);
 const DARK_LUMA = 0.45; // 평균 밝기가 이보다 어두우면 뒤집어 읽는다(어두운 화면)
 const MIN_WIDTH = 1000; // 이보다 좁은 캡처는 키워서 읽는다(작은 글자)
 
@@ -89,11 +102,50 @@ function request(type: string, payload: unknown, transfer: Transferable[] = []):
   });
 }
 
-export const toolLoaded = () => loaded;
+// 이 탭에서 이미 받았거나, 이 브라우저 캐시에 받아 둔 적이 있으면 1단계를 건너뛴다
+export function toolCached(): boolean {
+  if (loaded) return true;
+  try {
+    return window.localStorage.getItem(STORAGE_KEYS.ocrAssets) !== null;
+  } catch {
+    return false;
+  }
+}
+
+// 1단계: 워커가 받을 파일을 같은 주소로 먼저 받아 받은 바이트를 센다(내용은 버리고 브라우저 캐시에만 남는다)
+export async function prefetch(onProgress: (received: number) => void, signal: AbortSignal): Promise<void> {
+  let received = 0;
+  await Promise.all(FILES.map(async ([name]) => {
+    const response = await fetch(`${ASSETS}${name}`, { signal });
+    if (!response.ok || !response.body) throw new Error(`${response.status}: ${name}`);
+    const reader = response.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      received += value.byteLength;
+      onProgress(received);
+    }
+  }));
+}
+
+// 취소: 워커를 끝내고 기다리던 요청을 모두 실패로 돌린다. 다음 불러오기는 처음부터 다시 만든다
+export function cancel(): void {
+  worker?.terminate();
+  worker = null;
+  ready = null;
+  loaded = false;
+  for (const job of pending.values()) job.reject(new Error("취소했어요."));
+  pending.clear();
+}
 
 export function init(): Promise<unknown> {
   ready ??= request("init", INIT).then((value) => {
     loaded = true;
+    try {
+      window.localStorage.setItem(STORAGE_KEYS.ocrAssets, new Date().toISOString());
+    } catch {
+      // 저장이 막혀도 이 탭에서는 loaded로 건너뛴다
+    }
     return value;
   }, (error: unknown) => {
     ready = null; // 받기에 실패하면 다음 시도에서 다시 받는다

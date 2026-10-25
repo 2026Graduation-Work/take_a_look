@@ -40,6 +40,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path((?!ocr/).*)", headers: headers(PAGE_CSP) },
       { source: "/ocr/:file*", headers: headers(OCR_CSP) },
+      // 판을 경로에 넣은 글자 읽기 도구(scripts/fetch-ocr-assets.mjs)는 1년 그대로 둔다. 두 번째 불러오기부터 내려받지 않는다
+      { source: "/ocr/v1/:file*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];
   },
   // 개발용 /dev-ocr는 page의 notFound()만으로는 상태가 200으로 나가서(스트리밍) 운영에서는 없는 경로로 돌린다(404)

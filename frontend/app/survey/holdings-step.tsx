@@ -73,9 +73,9 @@ export default function HoldingsStep({
         onBack={onBack}
         backDisabled={saving}
         // 보유가 없는 사람도 그대로 시작할 수 있게(페르소나 워크스루 2026-10 P1 막힘)
-        nextLabel={saving ? "저장 중" : rows.length === 0 ? "보유 없이 시작" : "저장하고 시작"}
+        nextLabel={rows.length === 0 ? "보유 없이 시작" : "저장하고 시작"}
         onNext={() => void finish()}
-        nextDisabled={saving}
+        nextBusy={saving}
       />
     </section>
   );

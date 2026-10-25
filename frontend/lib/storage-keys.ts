@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   stockNotes: "takealook.stock-notes.v1",
   // 대시보드 신호 기간(4주 기본 / 1주). 이 기기에만 기억
   signalHorizon: "takealook.signal-horizon.v1",
+  // 글자 읽기 도구(/ocr/v1/)를 이 브라우저가 한 번 받았는지. 있으면 캡처 불러오기의 1단계(내려받기)를 건너뛴다
+  ocrAssets: "takealook.ocr-assets.v1",
 } as const;
 
 // 2027-02 이후 제거: 옛 키(signallab.*) 이전. 그때쯤이면 옛 키를 가진 브라우저가 남지 않는다.
