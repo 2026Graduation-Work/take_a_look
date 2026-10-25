@@ -20,3 +20,18 @@ test("이용 안내는 로그인 없이 열리고 용어 모음은 용어 파일
   await expect(page.locator("#terms dt")).toHaveText(labels);
   await expect(page.locator("#notes")).toContainText("투자 판단과 책임은 투자자 본인에게 있어요.");
 });
+
+test("개인정보 처리방침은 로그인 없이 열리고, 하단과 가입 화면에서 간다", async ({ page }) => {
+  await page.goto("/privacy");
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole("heading", { level: 1, name: "개인정보 처리방침" })).toBeVisible();
+  for (const text of ["Supabase", "Vercel", "fourmi103@g.skku.edu", "계정 삭제", "어디에도 보내지 않아요"]) {
+    await expect(page.locator("main")).toContainText(text);
+  }
+  await expect(page.locator("footer").getByRole("link", { name: "개인정보 처리방침" })).toBeVisible();
+  // 가입 화면(이메일로 가입 탭)의 저장 안내 끝에 링크
+  await page.goto("/login");
+  await page.getByRole("button", { name: "이메일로 시작" }).click();
+  await page.getByRole("tab", { name: "회원가입" }).click();
+  await expect(page.getByRole("link", { name: "개인정보 처리방침" })).toHaveAttribute("href", "/privacy");
+});

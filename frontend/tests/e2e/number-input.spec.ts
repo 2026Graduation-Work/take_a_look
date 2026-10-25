@@ -30,3 +30,20 @@ test("보유 목록 줄 안 수정칸도 소수점을 보여 주고 저장할 �
   await expect(page.getByText("삼성전자의 수량과 평균 매입가는 정수로 적어 주세요.")).toBeVisible();
   await expect(page.getByText("저장했어요")).toHaveCount(0);
 });
+
+test("수량과 평균 매입가는 입력하는 동안 천 단위 쉼표를 보이고, 저장 값은 숫자 그대로다", async ({ page }) => {
+  await toHoldingsStep(page);
+  const price = page.getByLabel("삼성전자 평균 매입가");
+  await price.fill("");
+  await price.pressSequentially("1234567");
+  await expect(price).toHaveValue("1,234,567");
+  // 붙여넣은 값도 같게
+  await price.fill("71200원");
+  await expect(price).toHaveValue("71,200");
+  await page.getByLabel("삼성전자 수량").fill("12000");
+  await expect(page.getByLabel("삼성전자 수량")).toHaveValue("12,000");
+  await page.getByRole("button", { name: "저장하고 시작" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("takealook.holdings.v1")!));
+  expect(saved.find((row: { code: string }) => row.code === "005930")).toMatchObject({ quantity: 12000, avgBuyPrice: 71200 });
+});

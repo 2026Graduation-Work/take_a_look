@@ -140,6 +140,10 @@ export const HORIZON_AHEAD = { 5: "앞으로 1주", 20: "앞으로 4주" } as co
 export type SignalHorizon = keyof typeof HORIZON_AHEAD;
 // 1주일 때만 기간 전환 왼쪽에 붙는 설명(13px). 4주(기본)는 설명 없음(10/20 사용자 피드백)
 export const SHORT_HORIZON_NOTE = "짧은 흔들림에 더 민감해요.";
+// 왜 1주와 4주인가(지인 재테스트 10/21). 근거는 AGENTS.md '성향별 2모델'(stable ↔ H20, aggressive ↔ H5)과
+// docs/research/psychology-ab-2019-2025(H5, H20을 같은 방식으로 평가). 길이 자체를 고른 실험 문서는 아직 없어 그 말은 쓰지 않는다
+export const HORIZON_WHY = "1주 모델은 짧게 사고파는 성향, 4주 모델은 오래 들고 가는 성향에 맞춰 따로 학습했어요. 기본은 4주이고, 1주로 바꾸면 화면 전체가 같은 기간을 따라요.";
+export const HORIZON_GUIDE = "모델은 두 개예요. 1주(5거래일) 모델은 짧게 사고파는 성향, 4주(20거래일) 모델은 오래 들고 가는 성향에 맞춰 따로 학습했어요. 두 모델 모두 2019~2025년 연도별 비교 실험에서 같은 방식으로 평가했고, 결과는 모델 성적표에 있어요.";
 
 export const STYLE_TYPE_SOURCE = "분류 참고: Pompian의 행동재무학 연구";
 

@@ -31,7 +31,7 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   const review = page.getByRole("list", { name: "읽은 보유 종목" });
   await expect(review.getByRole("listitem")).toHaveCount(5);
   await expect(review.getByLabel("두산에너빌리티 수량")).toHaveValue("120");
-  await expect(review.getByLabel("두산에너빌리티 평균 매입가")).toHaveValue("19870");
+  await expect(review.getByLabel("두산에너빌리티 평균 매입가")).toHaveValue("19,870");
   await expect(review.getByText("계산한 값").first()).toBeVisible();
   await expect(page.getByText(/다루지 않는 종목\(ETF, 해외 주식 등\): .*KODEX 200/)).toBeVisible();
   // 저장 전에는 아무것도 저장하지 않는다
@@ -42,7 +42,7 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   await expect(page.getByRole("status").filter({ hasText: "5종목을 목록에 넣었어요" })).toContainText("새 값으로 바꿨어요");
   expect(await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"))).toBe(before);
   await expect(page.getByLabel("현대차 수량", { exact: true })).toHaveValue("9");
-  await expect(page.getByLabel("두산에너빌리티 평균 매입가", { exact: true })).toHaveValue("19870");
+  await expect(page.getByLabel("두산에너빌리티 평균 매입가", { exact: true })).toHaveValue("19,870");
 
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "저장했어요" })).toBeVisible();

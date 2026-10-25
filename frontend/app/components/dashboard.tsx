@@ -9,7 +9,8 @@ import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { HORIZON_WHY, SHORT_HORIZON_NOTE, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import MarketDetail from "./market-detail";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
@@ -21,7 +22,8 @@ import { AVOIDED_ASSET_LABELS, summaryFromProfilingOutput } from "@/lib/profilin
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { chartProvenance } from "@/lib/chart-detail";
 import { getSupabaseClient } from "@/lib/supabase";
-import { SIGNAL_META } from "@/lib/display";
+import { formatWonChange, SIGNAL_META } from "@/lib/display";
+import ChangeText from "./change-text";
 import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
 import { holdingAlertsOutside } from "@/lib/recommendation-filter";
@@ -229,6 +231,17 @@ export default function Dashboard(initialData: DashboardData) {
     };
   }, [avoidedKey, horizon]);
   const strongSignals = strong ? [...strong.up, ...strong.down] : [];
+  // 신호가 강한 종목의 전일 대비 등락(원, %). 목록에 보이는 종목만 따로 읽는다
+  const strongCodes = strongSignals.map(({ code }) => code).join(",");
+  const [strongCloses, setStrongCloses] = useState<LatestCloses>(new Map());
+  useEffect(() => {
+    if (!strongCodes) return;
+    let active = true;
+    void loadLatestCloses(getSupabaseClient(), strongCodes.split(","), horizon).then((next) => active && setStrongCloses(next));
+    return () => {
+      active = false;
+    };
+  }, [strongCodes, horizon]);
   const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
   const normalized = keyword.toLowerCase();
@@ -319,7 +332,13 @@ export default function Dashboard(initialData: DashboardData) {
                   <SectionHead
                     title="내 포트폴리오"
                     note={horizon === 5 ? SHORT_HORIZON_NOTE : undefined}
-                    control={<Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />}
+                    control={<>
+                      <MarketDetail title="1주와 4주" className="inline-flex"
+                        label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">1주와 4주 설명 보기</span></>}>
+                        <p className="m-0">{HORIZON_WHY}</p>
+                      </MarketDetail>
+                      <Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />
+                    </>}
                   />
                   <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
                 </div>
@@ -338,6 +357,7 @@ export default function Dashboard(initialData: DashboardData) {
                             >
                               <span className="min-w-0 truncate text-sm font-medium">{name}</span>
                               <span className="flex-1 text-2xs text-muted tabular-nums">{code}</span>
+                              <DayChange change={closes.get(code)?.change} />
                               <span
                                 className="flex-none text-sm font-semibold"
                                 style={{ color: light ? SIGNAL_META[light].ink : "var(--color-muted)" }}
@@ -373,7 +393,7 @@ export default function Dashboard(initialData: DashboardData) {
                   // 묶음 제목 없이 한 목록(상승 먼저), 줄 오른쪽에 색 단어 하나(화면 규칙 v2)
                   <div className="group-list">
                     {[...visibleStrong.filter(({ direction }) => direction === "up"), ...visibleStrong.filter(({ direction }) => direction === "down")]
-                      .map((signal) => <StrongRow key={signal.code} signal={signal} />)}
+                      .map((signal) => <StrongRow key={signal.code} signal={signal} change={strongCloses.get(signal.code)?.change} />)}
                     {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
                   </div>
                 )}
@@ -441,7 +461,7 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
 }
 
 // 한 줄: 종목명, 코드, 오른쪽 색 단어(상승/하락), 상세로 가는 화살표. 근거는 상세 화면 '모델이 본 이유'에 있다.
-function StrongRow({ signal }: { signal: StrongSignal }) {
+function StrongRow({ signal, change }: { signal: StrongSignal; change?: { won: number; percent: number } }) {
   return (
     <Link
       href={`/stocks/${signal.code}`}
@@ -450,11 +470,22 @@ function StrongRow({ signal }: { signal: StrongSignal }) {
     >
       <span className="min-w-0 truncate text-sm font-medium">{signal.name}</span>
       <span className="flex-1 text-2xs text-muted tabular-nums">{signal.code}</span>
+      <DayChange change={change} />
       <span className="flex-none text-sm font-semibold" style={{ color: SIGNAL_META[signal.direction === "up" ? "positive" : "negative"].ink }}>
         {SIGNAL_WORD[signal.direction]}
       </span>
       <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
     </Link>
+  );
+}
+
+// 목록 행의 전일 대비 '+1,200원 (+1.8%)'. 색은 증감 방향색(DESIGN.md 2-1), 신호 단어보다 한 단계 약하게(보조 크기)
+function DayChange({ change }: { change?: { won: number; percent: number } }) {
+  if (!change) return null;
+  return (
+    <ChangeText value={change.percent} precision={1} className="flex-none text-xs">
+      <span className="sr-only">전일 대비 </span>{formatWonChange(change.won, change.percent)}
+    </ChangeText>
   );
 }
 

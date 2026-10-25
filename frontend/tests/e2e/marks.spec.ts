@@ -151,9 +151,9 @@ test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async 
   const price = page.getByLabel("카카오 평균 매입가");
   await price.fill("");
   await price.pressSequentially("1".repeat(25));
-  await expect(price).toHaveValue("1".repeat(12));
+  await expect(price).toHaveValue("111,111,111,111");
   await price.pressSequentially("9");
-  await expect(price).toHaveValue("1".repeat(12));
+  await expect(price).toHaveValue("111,111,111,111");
   await quantity.fill("");
   await page.getByRole("button", { name: /^저장/ }).first().click();
   await expect(page.getByText("카카오의 수량을 1 이상으로 적어 주세요.", { exact: false })).toBeVisible();

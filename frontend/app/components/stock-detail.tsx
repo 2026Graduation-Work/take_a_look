@@ -40,7 +40,7 @@ import {
   topPercentLabel,
   SIGNAL_WORD,
 } from "@/lib/copy-glossary";
-import { bandPrice, changeMeta, formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
+import { bandPrice, changeMeta, formatSignedPercent, formatWonChange, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
@@ -140,6 +140,8 @@ export default function StockDetailView({
     typeof detail.changePercent === "number" &&
     Number.isFinite(detail.changePercent);
   const changePercent = detail.changePercent ?? 0;
+  // 전일 대비 원: 가격 기록 마지막 두 날(등락률과 같은 기록). 기록이 없으면 %만
+  const changeWon = priceHistory.length >= 2 ? priceHistory[priceHistory.length - 1] - priceHistory[priceHistory.length - 2] : null;
   const { color: changeColor, arrow: changeArrow } = changeMeta(changePercent, 1);
   const safeMaxRiskTier =
     Number.isInteger(maxRiskTier) && maxRiskTier >= 1 && maxRiskTier <= 5 ? maxRiskTier : 4;
@@ -199,10 +201,10 @@ export default function StockDetailView({
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
                 {/* 전일 대비와 평단 대비를 같은 두 칸(이름, 값)으로 맞춰 오른쪽 끝을 가지런히(#360 리뷰) */}
-                <span className="inline-grid grid-cols-[4rem_7rem] items-baseline gap-x-2 self-start text-xs text-muted sm:self-end">
+                <span className="inline-grid grid-cols-[4rem_auto] items-baseline gap-x-2 self-start text-xs text-muted sm:self-end">
                   <span>전일 대비</span>
-                  <span className="text-right text-sm font-semibold tabular-nums" style={{ color: changeColor }}>
-                    {changeArrow && `${changeArrow} `}{formatSignedPercent(changePercent)}
+                  <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums" style={{ color: changeColor }}>
+                    {changeArrow && `${changeArrow} `}{changeWon === null ? formatSignedPercent(changePercent) : formatWonChange(changeWon, changePercent)}
                   </span>
                 </span>
                 {detail.asOf && staleLabel(detail.asOf) && (

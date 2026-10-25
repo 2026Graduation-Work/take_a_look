@@ -116,6 +116,12 @@ export function formatSignedPercent(value: number, precision = 1) {
   return `${displayed > 0 ? "+" : ""}${displayed.toFixed(precision)}%`;
 }
 
+// 전일 대비 등락을 원과 %로 함께: "+1,200원 (+1.8%)". 원은 반올림, 0원이면 부호 없음
+export function formatWonChange(won: number, percent: number): string {
+  const rounded = Math.round(won);
+  return `${rounded > 0 ? "+" : rounded < 0 ? "-" : ""}${Math.abs(rounded).toLocaleString("ko-KR")}원 (${formatSignedPercent(percent)})`;
+}
+
 // 오늘 종가에 수익률(%)을 적용한 가격. 유효숫자 3자리로 반올림해 '약'을 붙인다(−5.5% → 약 94,500원).
 export function bandPrice(close: number, percent: number): string {
   const price = close * (1 + percent / 100);

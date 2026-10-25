@@ -9,7 +9,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { cancel, init, prefetch, recognize, TOOL_BYTES, toolCached, type OcrLine } from "@/lib/holdings-ocr/recognize";
 import { ProgressBar, Spinner } from "../components/waiting";
 import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type StockRef } from "@/lib/holdings-ocr/parse";
-import { isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
+import { groupDigits, isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
 // 기다리는 세 단계: preparing(1/3 읽는 도구 준비) → reading(2/3 글자 찾기) → matching(3/3 종목 맞춰 보기)
@@ -45,8 +45,8 @@ async function loadMaster(fallback: StockRef[]): Promise<StockRef[]> {
 
 const toRow = (holding: ParsedHolding): Row => ({
   ...holding,
-  quantityText: holding.quantity === null ? "" : String(holding.quantity),
-  priceText: holding.avgBuyPrice === null ? "" : String(holding.avgBuyPrice),
+  quantityText: holding.quantity === null ? "" : groupDigits(String(holding.quantity)),
+  priceText: holding.avgBuyPrice === null ? "" : groupDigits(String(holding.avgBuyPrice)),
 });
 
 function CheckMark({ show }: { show: boolean }) {
