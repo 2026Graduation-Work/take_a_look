@@ -617,9 +617,10 @@ function QuestionPage({
           className="mt-auto pt-8"
           onBack={onBack}
           backDisabled={draft.page === 0 || submitting}
-          nextLabel={submitting ? "계산 중" : last ? "완료" : "다음"}
+          nextLabel={last ? "완료" : "다음"}
           onNext={onNext}
-          nextDisabled={!answered || submitting}
+          nextDisabled={!answered}
+          nextBusy={submitting}
         />
       </div>
     </section>
@@ -802,9 +803,9 @@ export function ResultView({
             onBack={onBack}
             backLabel={readOnly ? "뒤로" : "이전"}
             backDisabled={submitting}
-            nextLabel={submitting ? "저장 중" : nextLabel}
+            nextLabel={nextLabel}
             onNext={() => onConfirm(changed ? adjusted : {})}
-            nextDisabled={submitting}
+            nextBusy={submitting}
           />
         </div>
       </div>

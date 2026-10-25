@@ -177,8 +177,8 @@ export default function LoginForm() {
                 backLabel="뒤로"
                 backDisabled={submitting}
                 nextType="submit"
-                nextLabel={submitting ? "처리 중" : tab === "signin" ? "로그인" : "가입하고 시작"}
-                nextDisabled={submitting}
+                nextLabel={tab === "signin" ? "로그인" : "가입하고 시작"}
+                nextBusy={submitting}
               />
             </form>
           ) : (

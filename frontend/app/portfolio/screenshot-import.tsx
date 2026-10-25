@@ -4,17 +4,21 @@
 // 사진은 이 기기 안(웹 워커)에서만 읽고 어디에도 보내지 않는다. 읽은 값은 사용자가 확인하고 고친 뒤
 // '목록에 넣기'를 눌러야 편집 목록에 들어가고, 저장은 기존 저장 버튼이 한다.
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
-import { init, recognize, toolLoaded } from "@/lib/holdings-ocr/recognize";
+import { cancel, init, prefetch, recognize, TOOL_BYTES, toolCached, type OcrLine } from "@/lib/holdings-ocr/recognize";
+import { ProgressBar, Spinner } from "../components/waiting";
 import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type StockRef } from "@/lib/holdings-ocr/parse";
 import { isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
-type Phase = "idle" | "downloading" | "reading" | "review" | "unsupported" | "empty" | "blurry" | "toolFailed" | "failed";
+// 기다리는 세 단계: preparing(1/3 읽는 도구 준비) → reading(2/3 글자 찾기) → matching(3/3 종목 맞춰 보기)
+type Phase = "idle" | "preparing" | "reading" | "matching" | "review" | "unsupported" | "empty" | "blurry" | "toolFailed" | "failed";
 
 const PAGE = 1000; // Supabase 한 번에 돌려주는 최대 행 수
-const FEW_LINES = 3; // 읽은 글줄이 이보다 적으면 종목이 없는 화면이 아니라 글자를 못 읽은 것으로 본다
+const FEW_LINES = 3;
+const SLOW_MS = 10_000; // 이보다 오래 걸리면 '조금 더 걸리고 있어요'와 취소(NN/g 기다림 기준)
+const TOOL_MB = Math.round(TOOL_BYTES / 1e6); // 읽은 글줄이 이보다 적으면 종목이 없는 화면이 아니라 글자를 못 읽은 것으로 본다
 
 // 종목 마스터 전체(이름 대조용). 연결이 없거나 실패하면 화면이 가진 후보 목록으로 대신한다.
 let masterCache: Promise<StockRef[]> | null = null;
@@ -77,44 +81,80 @@ export default function ScreenshotImport({
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   // 실패했을 때만 '읽은 글자 보기'로 보여 줄 인식 글자. 이 화면 상태에만 두고 저장, 전송, 로그하지 않는다
   const [readText, setReadText] = useState<string[]>([]);
+  const [download, setDownload] = useState({ received: 0, started: 0, now: 0 });
+  const [slow, setSlow] = useState(false);
+  // 지금 불러오기 차례. 취소하면 올려서, 늦게 끝난 앞 차례 결과를 버린다
+  const job = useRef(0);
+  const abort = useRef<AbortController | null>(null);
+  const busy = phase === "preparing" || phase === "reading" || phase === "matching";
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setTimeout(() => setSlow(true), SLOW_MS);
+    return () => clearTimeout(timer);
+  }, [busy]);
+
+  function stop() {
+    job.current += 1;
+    abort.current?.abort();
+    cancel();
+    setSlow(false);
+    setPhase("idle");
+    setNotice("불러오기를 취소했어요. 아래에서 직접 입력할 수 있어요.");
+  }
 
   async function read(files: File[]) {
     if (!files.length) return;
+    const mine = ++job.current;
+    const current = () => mine === job.current;
     setError("");
     setNotice("");
+    setSlow(false);
     try {
-      // 처음 한 번은 읽는 도구(약 25MB)를 받는다. 받는 양을 알 수 없어 단계만 보인다
-      if (!toolLoaded()) {
-        setPhase("downloading");
+      // 처음 한 번은 읽는 도구를 받는다. 받은 바이트로 %와 남은 시간을 보인다. 두 번째부터는 캐시에서 바로
+      if (!toolCached()) {
+        setPhase("preparing");
+        const started = Date.now();
+        setDownload({ received: 0, started, now: started });
+        abort.current = new AbortController();
         try {
+          await prefetch((received) => setDownload({ received, started, now: Date.now() }), abort.current.signal);
           await init();
         } catch {
-          setPhase("toolFailed");
+          if (current()) setPhase("toolFailed");
           return;
         }
       }
+      if (!current()) return;
       setPhase("reading");
       setProgress({ done: 0, total: files.length });
-      const master = await loadMaster(catalog);
-      const results = [];
-      const text: string[] = [];
+      const scans: OcrLine[][] = [];
       for (const file of files) {
-        const lines = await recognize(file);
-        text.push(...lines.map((line) => line.text));
-        results.push(parseHoldings(lines, master));
-        setProgress({ done: results.length, total: files.length });
+        scans.push(await recognize(file));
+        if (!current()) return;
+        setProgress({ done: scans.length, total: files.length });
       }
+      setPhase("matching");
+      const master = await loadMaster(catalog);
+      if (!current()) return;
+      const results = scans.map((lines) => parseHoldings(lines, master));
+      const text = scans.flat().map((line) => line.text);
       const merged = mergeResults(results);
       setRows(merged.holdings.map(toRow));
       setUnsupported(merged.unsupported);
       setReadText(merged.holdings.length ? [] : text);
       // 코스피 종목이 하나라도 있으면 그것만 확인 표로, 다루지 않는 종목만 읽혔으면 그 이름을, 둘 다 없으면
       // 글자를 거의 못 읽었는지(흐린 캡처) 글자는 읽었는데 종목이 없는지(다른 화면)를 나눠 말한다
+      setSlow(false);
       setPhase(merged.holdings.length ? "review" : merged.unsupported.length ? "unsupported" : text.length < FEW_LINES ? "blurry" : "empty");
     } catch {
-      setPhase("failed");
+      if (current()) setPhase("failed");
     }
   }
+
+  const elapsed = (download.now - download.started) / 1000;
+  const remaining = download.received > 0 && elapsed >= 1
+    ? Math.max(1, Math.round(((TOOL_BYTES - download.received) * elapsed) / download.received))
+    : null;
 
   function edit(code: string, field: "quantity" | "avgBuyPrice", text: string) {
     setRows((current) =>
@@ -149,7 +189,7 @@ export default function ScreenshotImport({
       {/* 검색칸 + 오른쪽 '캡처로 불러오기'. 390에서는 검색 아래 줄 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         {leading && <div className="min-w-0 flex-1">{leading}</div>}
-        <button type="button" onClick={() => input.current?.click()} disabled={phase === "reading" || phase === "downloading"} className="btn-secondary flex-none self-start sm:self-auto">
+        <button type="button" onClick={() => input.current?.click()} disabled={busy} className="btn-secondary flex-none self-start sm:self-auto">
           캡처로 불러오기
         </button>
         <input
@@ -168,16 +208,17 @@ export default function ScreenshotImport({
       {children}
 
       <div aria-live="polite" className="flex flex-col gap-2">
-        {phase === "downloading" && (
-          <div role="status" className="flex flex-col gap-2">
-            <p className="m-0 text-sm text-body">읽는 도구를 내려받고 있어요. 다음부터는 바로 읽어요.</p>
-            <progress aria-label="읽는 도구 내려받기" className="h-1 w-full max-w-xs accent-brand-accent" />
-          </div>
+        {phase === "preparing" && (
+          <ProgressBar value={download.received / TOOL_BYTES} label={`1/3 읽는 도구 준비(처음 한 번, 약 ${TOOL_MB}MB)`}
+            detail={remaining !== null ? `약 ${remaining}초 남음` : "다음부터는 바로 읽어요."} />
         )}
-        {phase === "reading" && (
-          <p role="status" className="m-0 text-sm text-body tabular-nums">
-            사진을 읽고 있어요{progress.total > 1 && ` (${progress.done}/${progress.total})`}
-          </p>
+        {phase === "reading" && <Spinner label={<span className="tabular-nums">2/3 사진에서 글자 찾기{progress.total > 1 && ` (${progress.done}/${progress.total})`}</span>} />}
+        {phase === "matching" && <Spinner label="3/3 종목 맞춰 보기" />}
+        {busy && slow && (
+          <div className="flex flex-wrap items-center gap-x-3">
+            <p className="m-0 text-sm text-body">조금 더 걸리고 있어요.</p>
+            <button type="button" onClick={stop} className="btn-text min-h-11 text-sm">취소</button>
+          </div>
         )}
         {phase === "unsupported" && (
           <div role="alert" className="flex flex-col gap-1">

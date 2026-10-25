@@ -1,5 +1,6 @@
 "use client";
 
+import { BusyLabel } from "@/app/components/waiting";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "../components/disclaimer-footer";
@@ -183,8 +184,8 @@ function AccountHoldingsEditor({
               저장했어요. <Link href="/">대시보드에서 보기</Link>
             </span>
           )}
-          <button type="button" onClick={submit} disabled={!loaded || status === "saving"} className="btn-primary w-full sm:w-auto">
-            {status === "saving" ? "저장 중…" : "저장"}
+          <button type="button" onClick={submit} disabled={!loaded || status === "saving"} aria-busy={status === "saving" || undefined} className="btn-primary w-full sm:w-auto">
+            <BusyLabel busy={status === "saving"}>저장</BusyLabel>
           </button>
         </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { BusyLabel } from "@/app/components/waiting";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { deleteAccount } from "@/lib/auth";
@@ -37,7 +38,7 @@ export default function DeleteAccountButton() {
         disabled={submitting}
         className="btn-remove"
       >
-        {submitting ? "삭제 중" : "계정 삭제"}
+        <BusyLabel busy={submitting}>계정 삭제</BusyLabel>
       </ConfirmButton>
       {error && <p role="alert" className="m-0 text-xs text-ink">{error}</p>}
     </div>

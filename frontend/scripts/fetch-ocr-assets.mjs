@@ -10,7 +10,8 @@ import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
 // 모델 저장소(중국)는 첫 연결이 느려 Node 기본값(250ms 안에 IPv4가 안 붙으면 IPv6로 넘김)으로는 끊긴다
 setDefaultAutoSelectFamilyAttemptTimeout(10_000);
 
-const DIR = new URL("../public/ocr/", import.meta.url);
+// 판(v1)을 경로에 넣어 1년 immutable 캐시를 건다(next.config.ts). 파일이나 해시를 바꾸면 v2로 옮기고 recognize.ts도 같이
+const DIR = new URL("../public/ocr/v1/", import.meta.url);
 const MIRROR = "https://github.com/2026Graduation-Work/take_a_look/releases/download/ocr-assets-v1/";
 const NPM = "https://cdn.jsdelivr.net/npm/";
 const MODELS = "https://paddle-model-ecology.bj.bcebos.com/paddlex/official_inference_model/paddle3.0.0/";
