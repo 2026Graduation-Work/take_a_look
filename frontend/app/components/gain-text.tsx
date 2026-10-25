@@ -1,4 +1,4 @@
-import { changeMeta, signedPercent } from "@/lib/display";
+import { changeMeta, formatWonChange, signedPercent } from "@/lib/display";
 import { gainRatio } from "@/lib/holdings-rules";
 
 // 평단 대비 평가손익(#255). 숫자만 굵게, 상승 빨강·하락 파랑. 매수·매도 문구 없음.
@@ -18,7 +18,8 @@ export default function GainText({ avgBuyPrice, close, aligned = false }: {
       <span>평단 대비</span>{!aligned && " "}
       <span className={aligned ? "whitespace-nowrap text-right text-sm" : undefined} style={{ color }}>
         {arrow && `${arrow} `}
-        <strong className="font-semibold">{signedPercent(ratio)}</strong>
+        {/* 종목 상세 머리는 전일 대비와 같은 형식(1주당 원과 %, 10/26 사용자 피드백) */}
+        <strong className="font-semibold">{aligned && close ? formatWonChange(close - avgBuyPrice, ratio * 100) : signedPercent(ratio)}</strong>
       </span>
     </span>
   );
