@@ -38,6 +38,7 @@ interface PriceHistoryChartProps {
   signal: SignalMeta;
   asOfLabel: string; // 예: 07.07
   horizonLabel: string; // 예: 2주 뒤
+  avgBuyPrice?: number; // 보유 종목의 평균 매입가: 지난 가격 영역에 가로 실선 하나(미래 쪽에는 그리지 않는다)
 }
 
 export default function PriceHistoryChart({
@@ -46,6 +47,7 @@ export default function PriceHistoryChart({
   signal,
   asOfLabel,
   horizonLabel,
+  avgBuyPrice,
 }: PriceHistoryChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -61,8 +63,9 @@ export default function PriceHistoryChart({
   const last = prices[prices.length - 1];
   const bandHighPrice = band ? last * (1 + band.high / 100) : last;
   const bandLowPrice = band ? last * (1 + band.low / 100) : last;
-  const rawMin = Math.min(...prices, bandLowPrice);
-  const rawMax = Math.max(...prices, bandHighPrice);
+  const avg = avgBuyPrice && Number.isFinite(avgBuyPrice) && avgBuyPrice > 0 ? avgBuyPrice : null;
+  const rawMin = Math.min(...prices, bandLowPrice, avg ?? Infinity);
+  const rawMax = Math.max(...prices, bandHighPrice, avg ?? -Infinity);
   const rawRange = rawMax - rawMin;
   const padValue = rawRange > 0 ? rawRange * 0.08 : Math.max(Math.abs(rawMax) * 0.01, 1);
   const vMin = rawMin - padValue;
@@ -129,6 +132,15 @@ export default function PriceHistoryChart({
         <text x={X1} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }} textAnchor="end">
           오늘 ({asOfLabel})
         </text>
+
+        {avg !== null && (
+          <g data-avg-buy-price>
+            <line x1={X0} y1={y(avg)} x2={X1} y2={y(avg)} style={{ stroke: CHART.ghost }} strokeWidth={1.5} />
+            <text x={X0 + 4} y={y(avg) + (y(avg) - PAD.top < 16 ? 14 : -6)} fontSize={11} style={{ fill: "var(--color-body)" }}>
+              평균 매입가 {Math.round(avg).toLocaleString("ko-KR")}원
+            </text>
+          </g>
+        )}
 
         {/* 실제 주가 실선 */}
         <polyline

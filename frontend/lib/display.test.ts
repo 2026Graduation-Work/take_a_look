@@ -42,3 +42,19 @@ test("증감 표시의 방향은 표시 자릿수에 맞추고 반올림된 0에
   // 수급처럼 '1만 주 미만'을 말로 표시하는 값은 작은 수량도 실제 방향을 유지한다.
   assert.equal(changeMeta(-1).arrow, "▼");
 });
+
+test("범위 끝 원 표시: 오늘 종가 × (1 + %), 유효숫자 3자리", async () => {
+  const { bandPrice } = await import("./display.ts");
+  assert.equal(bandPrice(100_000, -5.5), "약 94,500원");
+  assert.equal(bandPrice(9_950, 40), "약 13,900원");
+  assert.equal(bandPrice(812, 3.2), "약 838원");
+});
+
+test("기준선과 과거 사례 문장은 pack 값만 쓴다", async () => {
+  const { barrierRule, similarCasesLine } = await import("./copy-glossary.ts");
+  const text = barrierRule(100_000, 107_500, 94_000, 0.02, 4);
+  assert.match(text, /위 107,500원, 아래 94,000원/);
+  assert.match(text, /3\.75배 위, 3배 아래/);
+  assert.match(text, /4주 안에/);
+  assert.equal(similarCasesLine("2019-01-02", "2025-08-29", 7189, 512), "2019년 1월~2025년 8월 중 오늘과 점수가 비슷했던 7,189번(512개 종목)의 결과예요.");
+});

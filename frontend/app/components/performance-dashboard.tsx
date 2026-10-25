@@ -178,10 +178,10 @@ export default function PerformanceDashboard({
                 <tr className="text-xs text-muted">
                   <th className="px-4 py-3 text-left font-medium">지표</th>
                   <th className="px-3 py-3 text-right font-medium">
-                    A<span className="block text-2xs font-normal">피처 {a?.feature_count ?? "-"}개</span>
+                    A<span className="block text-2xs font-normal">지표 {a?.feature_count ?? "-"}개</span>
                   </th>
                   <th className="px-3 py-3 text-right font-medium">
-                    B<span className="block text-2xs font-normal">피처 {b?.feature_count ?? "-"}개</span>
+                    B<span className="block text-2xs font-normal">지표 {b?.feature_count ?? "-"}개</span>
                   </th>
                   <th className="px-4 py-3 text-right font-medium">B − A</th>
                 </tr>
@@ -242,7 +242,7 @@ export default function PerformanceDashboard({
             실험 설계
           </h2>
           <Definitions items={data.experiment ? [...DESIGN.filter(([term]) => term !== "고변동일"),
-            ["고변동일", plain(data.experiment.volatile_definition)], ["모의 투자 규칙", "상승 점수 0.65 이상인 종목을 하루 최대 5개, 다음 날 시가에 사고팔아요. 사고팔 때마다 비용 0.105%를 빼요."],
+            ["고변동일", plain(data.experiment.volatile_definition)], ["모의 투자 규칙", "상승 점수(0~1) 0.65 이상인 종목을 하루 최대 5개, 다음 날 시가에 사고팔아요. 사고팔 때마다 비용 0.105%를 빼요."],
             ["집계", plain(data.experiment.backtest_scope)], ["한계", plain(data.experiment.limitations)], ["출처", plain(data.experiment.source)]] : DESIGN} />
         </section>
 

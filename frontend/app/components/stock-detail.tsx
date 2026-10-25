@@ -16,6 +16,8 @@ import EvidenceTabs, {
   useDemoStyleAxes,
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
+import MarketDetail from "./market-detail";
+import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale";
 import GainText from "./gain-text";
 import ChangeText from "./change-text";
 import { costBasis, parseSavedHoldings } from "@/lib/holdings-rules";
@@ -28,15 +30,17 @@ import SiteHeader from "./site-header";
 import {
   AGREEMENT_ANSWER,
   bandSentence,
+  similarCasesLine,
   DIRECTION_WORD,
   HORIZON_AHEAD,
   HORIZON_LABEL,
   riskLevel,
   TERM,
+  TERM_INFO,
   topPercentLabel,
   SIGNAL_WORD,
 } from "@/lib/copy-glossary";
-import { changeMeta, formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
+import { bandPrice, changeMeta, formatSignedPercent, HORIZON_META, RISK_FLAG_LABEL, SIGNAL_META } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import type { HoldingWeight, StockInsights } from "@/lib/providers";
@@ -125,6 +129,7 @@ export default function StockDetailView({
         label: direction ? SIGNAL_WORD[direction] : "미제공" }
     : SIGNAL_META[detail.signalLight];
   const hasBand = !preview || Boolean(chart?.distribution.histogram.central_68);
+  const similar = chart?.distribution.status === "available" && chart.distribution.period_start && chart.distribution.period_end ? chart.distribution : null;
   const horizon = detail.returnHorizon ?? "h10";
   const ciPercent = Math.round(detail.returnBand.ciLevel * 100);
   const priceHistory = detail.priceHistory ?? [];
@@ -141,7 +146,7 @@ export default function StockDetailView({
   // 성향에서 나온 허용 범위(소프트 틸트)보다 위험한 종목이면 체크포인트에 한 줄 더한다. 종목을 거르지 않는다.
   const riskNote =
     detail.riskGrade < safeMaxRiskTier
-      ? `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요. 설문에서 답한 위험 감수 정도(${profile.riskTolerance})보다 가격이 크게 흔들릴 수 있어요.`
+      ? `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요. 설문에서 답한 위험 감수(${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))})보다 가격이 크게 흔들릴 수 있어요.`
       : null;
   // #170: 공개 모델은 1주·4주 둘. 하락 시 이탈 쪽으로 답한 성향(체크포인트와 같은 0.3 기준)은 단기 흔들림보다 4주를 먼저 본다.
   const drawdownFirst = (demo.styleAxes?.axes.find(({ axis_id }) => axis_id === "drawdown_reaction")?.ratio ?? 0) > 0.3;
@@ -223,18 +228,27 @@ export default function StockDetailView({
         {/* 2. 한눈에 보기 */}
         <section aria-labelledby="glance-title" className="surface flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
+            <div className="flex items-start">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
               {preview && direction && <span className="ml-3 text-xs font-normal text-muted">{HORIZON_AHEAD[20]}</span>}
               {!preview && <span className="block text-xs font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
+            {/* '상승' 기준(ⓘ). 제목 밖에 두어 제목 이름이 바뀌지 않게 */}
+            <MarketDetail title="모델 신호 설명" className="inline-flex"
+              label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">모델 신호 설명 보기</span></>}>
+              <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
+            </MarketDetail>
+            </div>
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
               <strong className="font-semibold tabular-nums text-ink">
                 {hasBand ? <>
                   <ChangeText value={detail.returnBand.low} precision={1}>{formatSignedPercent(detail.returnBand.low)}</ChangeText>
+                  {hasCurrentPrice && <span className="font-normal text-body"> ({bandPrice(detail.currentPrice!, detail.returnBand.low)})</span>}
                   {" ~ "}
                   <ChangeText value={detail.returnBand.high} precision={1}>{formatSignedPercent(detail.returnBand.high)}</ChangeText>
+                  {hasCurrentPrice && <span className="font-normal text-body"> ({bandPrice(detail.currentPrice!, detail.returnBand.high)})</span>}
                 </> : "미제공"}
               </strong>
             </p>
@@ -246,6 +260,7 @@ export default function StockDetailView({
               signal={signal}
               asOfLabel={formatDate(detail.asOf).slice(5)}
               horizonLabel={HORIZON_LABEL[horizon]}
+              avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
             />
           ) : (
             <p className="m-0 text-xs text-muted">
@@ -253,7 +268,9 @@ export default function StockDetailView({
             </p>
           )}
           {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다. 성적표는 맨 아래 면책 문구에서 간다 */}
-          <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}과거에 오늘과 비슷했던 경우, {HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.</p>
+          <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}{similar
+            ? similarCasesLine(similar.period_start!, similar.period_end!, similar.sample_count, similar.stock_count)
+            : `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}{hasBand && hasCurrentPrice && " 원은 오늘 종가 기준이에요."}</p>
         </section>
 
         {/* 3. 나에게 맞춘 체크포인트 */}
@@ -330,7 +347,7 @@ export default function StockDetailView({
             )}
 
 
-            <BasisNumbers demo={demo} insights={insights} />
+            <BasisNumbers demo={demo} insights={insights} chart={chart} />
 
             <section aria-labelledby="more-sources" className="flex flex-col gap-3">
               <h3 id="more-sources" className="text-lg font-semibold">

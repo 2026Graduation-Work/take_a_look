@@ -115,7 +115,7 @@ test("쉬운 말 사전의 설명 문장은 마침표로 끝난다", () => {
 // DESIGN.md '용어 설명 단계': 모든 용어에 쉬운 이름, 정의 한 문장, 읽는 법이 있다. 라벨 괄호에는 약어만
 test("용어 사전의 모든 용어에 쉬운 이름, 정의, 읽는 법이 있다", () => {
   for (const [key, term] of Object.entries(glossary.TERM_INFO)) {
-    assert.ok(term.label && !/\((?![A-Z]+\))/.test(term.label), `${key} 라벨 괄호는 약어만: ${term.label}`);
+    assert.ok(term.label && !/\((?![A-Zσ]+\))/.test(term.label), `${key} 라벨 괄호는 약어만: ${term.label}`);
     assert.match(term.define, /^[^.]+요\.$/, `${key} 정의는 한 문장`);
     assert.match(term.read, /요\.$/, `${key} 읽는 법`);
   }

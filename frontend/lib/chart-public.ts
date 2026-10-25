@@ -19,6 +19,10 @@ export interface ChartSnapshot {
     reason: string | null;
     contribution_space: "class_0_raw_margin" | "class_1_raw_margin" | "class_2_raw_margin";
     scores: { down: number; neutral: number; up: number } | null;
+    // 계약에는 있고 parse가 검사하지 않는 값. 계산 근거 문장에만 쓰고, 값이 이상하면 문장을 빼고 보인다.
+    close?: number;
+    sigma?: number | null;
+    barriers?: { up: number; down: number } | null;
     // Archived v2 snapshots may omit the whole-feature denominator.
     contribution_abs_sum?: number;
     features: { name: string; label_ko: string; meaning_ko: string; value: number | null; contribution: number }[];

@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import {
   Line,
   LineChart,
-  ReferenceLine,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,6 +21,7 @@ import {
   psychologyReason,
   checkpointReason,
   typeRule,
+  barrierRule,
   AXIS_STAGE_RULE,
   PSYCHOLOGY_NOTE,
   STYLE_TYPE_SOURCE,
@@ -135,6 +136,9 @@ const SENTIMENT_POINT_PX = 28; // 점 하나의 가로 폭. 날짜 글자는 겹
 function moodColor(score: number): string {
   return score >= 0.1 ? "var(--color-up)" : score <= -0.1 ? "var(--color-down)" : "var(--color-ink)";
 }
+
+// 차트 SVG용 같은 판정 색(lib/chart-colors.ts 이유)
+const moodChartColor = (score: number) => (score >= 0.1 ? CHART.up : score <= -0.1 ? CHART.down : CHART.muted);
 
 function moodWord(score: number): string {
   if (score >= 0.3) return "긍정적인 편";
@@ -632,32 +636,32 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             interval="preserveStartEnd"
             minTickGap={24}
           />
+          {/* 세로축은 판정 구간 이름(moodColor와 같은 ±0.1 경계). 점수 숫자는 툴팁에만 */}
           <YAxis
             domain={[-1, 1]}
-            ticks={[-1, 0, 1]}
-            tickFormatter={(value) => (value > 0 ? "긍정" : value < 0 ? "부정" : "0")}
+            ticks={[-0.55, 0, 0.55]}
+            tickFormatter={(value) => (value > 0 ? "긍정" : value < 0 ? "부정" : "중립")}
             tick={{ fill: CHART.muted, fontSize: 12 }}
             axisLine={false}
             tickLine={false}
             width={36}
             orientation="right"
           />
-          <ReferenceLine y={0} stroke={CHART.line} />
+          <ReferenceArea y1={-0.1} y2={0.1} fill={CHART.track} fillOpacity={1} />
           <Tooltip
             trigger="click"
             active={tip ? undefined : false}
             contentStyle={TOOLTIP_STYLE}
             formatter={(value, _name, item) => {
               const count = (item.payload as SentimentDay).articleCount;
+              const text = `${moodWord(Number(value))} (점수 ${signed(Number(value))}, 범위 −1~+1)`;
               return count < FEW_ARTICLES ? (
                 <>
-                  {signed(Number(value))}
+                  {text}
                   <br />
                   기사 {count}건이라 참고만
                 </>
-              ) : (
-                signed(Number(value))
-              );
+              ) : text;
             }}
           />
           <Line
@@ -665,11 +669,13 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             name={TERM.sentiment}
             stroke={CHART.priceLine}
             strokeWidth={2}
-            // 기사 적은 날은 속 빈 점으로 구분(풀이는 툴팁)
+            // 점마다 그날 판정 색(긍정 적, 부정 청, 중립 회색). 기사 적은 날은 속 빈 점(풀이는 툴팁)
             dot={({ cx, cy, payload }) =>
-              payload.articleCount < FEW_ARTICLES && typeof payload.score === "number" ? (
-                <circle data-sentiment-few="true" cx={cx} cy={cy} r={3} fill="var(--color-surface)" stroke={CHART.priceLine} strokeWidth={1.5} />
-              ) : <g />
+              typeof payload.score !== "number" ? <g key={payload.label} /> : payload.articleCount < FEW_ARTICLES ? (
+                <circle key={payload.label} data-sentiment-few="true" cx={cx} cy={cy} r={3} fill={CHART.page} stroke={moodChartColor(payload.score)} strokeWidth={1.5} />
+              ) : (
+                <circle key={payload.label} data-sentiment-mood={moodWord(payload.score)} cx={cx} cy={cy} r={3} fill={moodChartColor(payload.score)} stroke="none" />
+              )
             }
             activeDot={false}
             isAnimationActive={false}
@@ -1024,8 +1030,12 @@ export function CalculationBasis({
 }
 
 // 더 알아보기의 '계산 근거' 묶음: 단계 막대 뒤의 점수와 나눈 기준을 범위와 함께 쓴다.
-export function BasisNumbers({ demo, insights }: { demo: DemoStyleAxes; insights: StockInsights }) {
+export function BasisNumbers({ demo, insights, chart }: { demo: DemoStyleAxes; insights: StockInsights; chart?: ChartSnapshot }) {
+  const { close, sigma, barriers } = chart?.inference ?? {};
+  const barrier = close && sigma && barriers && [close, sigma, barriers.up, barriers.down].every((v) => Number.isFinite(v) && v > 0)
+    ? barrierRule(close, barriers.up, barriers.down, sigma, chart!.horizon / 5) : null;
   const rows = [
+    barrier,
     demo.bit && typeRule(demo.bit.composite),
     demo.styleAxes && AXIS_STAGE_RULE,
     insights.psychology && psychologyReason(insights.psychology.axis),
