@@ -11,11 +11,16 @@ import {
   AVOIDED_ASSET_DESCRIPTIONS,
   AVOIDED_ASSET_LABELS,
   EXPERIENCE_CHOICES,
+  STYLE_AXIS_IDS,
   threeAxisSummary,
   type ExperienceChoice,
   type SurveyAnswers,
 } from "@/lib/profiling-rules";
 import { BIT_LABEL, BIT_SUMMARY, classifyBit } from "@/lib/profiling/bit";
+import { STYLE_AXIS_SCALE, SUMMARY_SCALE, storedForStage } from "@/lib/profiling/axis-scale";
+import { AXIS_STAGE_RULE } from "@/lib/copy-glossary";
+import StageBar from "../components/stage-bar";
+import MarketDetail from "../components/market-detail";
 import {
   answersFromPattern,
   AXES,
@@ -72,6 +77,16 @@ function buildPages(mode: SurveyMode): Page[] {
 
 const PAGES: Record<SurveyMode, Page[]> = { short: buildPages("short"), quick: buildPages("quick") };
 
+// 16문항 뒤 '추가 질문': 24문항 중 아직 답하지 않은 문항만 묻는다(이미 답한 것은 그대로 합쳐 채점).
+const unansweredIds = (style: Record<string, number>) =>
+  PAGES.quick.flatMap((page) => (page.kind === "style" && style[page.question.id] === undefined ? [page.question.id] : []));
+
+function pagesFor(draft: Pick<Draft, "mode" | "extra">): Page[] {
+  if (!draft.extra?.length) return PAGES[draft.mode];
+  const extra = PAGES.quick.filter((page) => page.kind === "style" && draft.extra!.includes(page.question.id));
+  return extra.map((page, index) => ({ ...page, number: index + 1, total: extra.length }));
+}
+
 interface Draft {
   mode: SurveyMode;
   page: number;
@@ -79,6 +94,7 @@ interface Draft {
   experience: ExperienceChoice | "";
   avoided: RiskFlag[];
   freeText: string;
+  extra?: string[]; // 추가 질문 단계에서 물을 문항 id
 }
 
 const EMPTY_DRAFT: Draft = { mode: "short", page: 0, style: {}, experience: "", avoided: [], freeText: "" };
@@ -103,6 +119,7 @@ function demoDraft(mode: SurveyMode): Draft {
     experience: "6m_2y",
     avoided: ["spac", "managed_stock"],
     freeText: "남들 다 버는데 나만 뒤처지는 것 같아서 조급해요. 그래도 마이너스 나면 잠을 못 자요.",
+    extra: undefined,
   };
 }
 
@@ -125,7 +142,7 @@ function readDraft(key: string = DRAFT_KEY): Draft | null {
     if (!parsed || typeof parsed !== "object") return null;
     const draft = { ...EMPTY_DRAFT, ...(parsed as Partial<Draft>) };
     if (draft.mode !== "short" && draft.mode !== "quick") draft.mode = "short";
-    draft.page = Math.min(Math.max(0, Math.trunc(draft.page) || 0), PAGES[draft.mode].length - 1);
+    draft.page = Math.min(Math.max(0, Math.trunc(draft.page) || 0), pagesFor(draft).length - 1);
     return draft;
   } catch {
     return null;
@@ -207,7 +224,7 @@ export default function SurveyFlow() {
       const [savedStage, savedPage] = saved.split(":");
       setStage(savedStage as Stage);
       setDraft((current) => {
-        const merged = { ...current, page: Math.min(Math.max(0, Number(savedPage) || 0), PAGES[current.mode].length - 1) };
+        const merged = { ...current, page: Math.min(Math.max(0, Number(savedPage) || 0), pagesFor(current).length - 1) };
         writeDraft(merged);
         return merged;
       });
@@ -224,7 +241,7 @@ export default function SurveyFlow() {
     });
   }
 
-  const pages = PAGES[draft.mode];
+  const pages = pagesFor(draft);
   const page = pages[draft.page];
   const last = draft.page === pages.length - 1;
 
@@ -290,7 +307,7 @@ export default function SurveyFlow() {
     void run(async () => {
       const profile = Object.keys(adjusted).length ? await requestProfile(payload(adjusted)) : result!;
       await saveProfile(profile, onboardingState.mode);
-      writeDraft({ ...draft, page: 0 }, ANSWERS_KEY);
+      writeDraft({ ...draft, page: 0, extra: undefined }, ANSWERS_KEY);
       writeDraft(null);
       setResult(profile);
       if (firstRun) setStage("holdings");
@@ -298,13 +315,10 @@ export default function SurveyFlow() {
     });
   }
 
-  // 16문항 → 24문항: 이미 답한 문항은 그대로 두고 남은 문항부터 이어서 답한다.
+  // 16문항 → 24문항: 이미 답한 문항은 다시 묻지 않고 남은 문항만 이어서 답한다.
+  const extraIds = unansweredIds(draft.style);
   function moreAccurate() {
-    const quickPages = PAGES.quick;
-    const firstOpen = quickPages.findIndex(
-      (candidate) => candidate.kind === "style" && draft.style[candidate.question.id] === undefined,
-    );
-    update({ mode: "quick", page: Math.max(0, firstOpen) });
+    update({ mode: "quick", page: 0, extra: extraIds });
     setResult(null);
     setStage("survey");
   }
@@ -379,7 +393,7 @@ export default function SurveyFlow() {
             submitting={submitting}
             error={error}
             nextLabel={firstRun ? "다음" : "저장"}
-            canBeMoreAccurate={draft.mode === "short"}
+            extraCount={draft.mode === "short" ? extraIds.length : 0}
             onConfirm={confirm}
             onMoreAccurate={moreAccurate}
             onBack={() => stepBack(`survey:${draft.page}`, () => setStage("survey"))}
@@ -461,7 +475,7 @@ function QuestionPage({
   onNext: () => void;
   onRestart: () => void;
 }) {
-  const total = PAGES[draft.mode].length;
+  const total = pagesFor(draft).length;
   // 고른 뒤 "다음"을 눌러야 넘어간다(#278: 고친 답을 확인할 기회). 답한 문항에서만 켜진다.
   const answered =
     page.kind === "style"
@@ -472,7 +486,7 @@ function QuestionPage({
   const progress = ((draft.page + 1) / total) * 100;
   const label =
     page.kind === "style"
-      ? `질문 ${page.number}/${page.total}`
+      ? `${draft.extra?.length ? "추가 질문" : "질문"} ${page.number}/${page.total}`
       : `마무리 ${["experience", "avoided", "freeText"].indexOf(page.kind) + 1}/3`;
 
   return (
@@ -650,38 +664,8 @@ function ChoiceRow({
   );
 }
 
-function AxisGauge({
-  label,
-  value,
-  caption,
-  left,
-  right,
-}: {
-  label: string;
-  value: number;
-  caption: string;
-  left: string;
-  right: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex items-baseline gap-2">
-        <span className="text-sm font-medium text-ink">{label}</span>
-        <span className="ml-auto text-xl font-semibold tabular-nums text-ink">{value}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded bg-track">
-        <div className="h-full rounded bg-brand-accent" style={{ width: `${value}%` }} />
-      </div>
-      <span className="flex justify-between text-2xs text-muted">
-        <span>0 {left}</span>
-        <span>100 {right}</span>
-      </span>
-      <span className="text-xs text-muted">{caption}</span>
-    </div>
-  );
-}
-
-const HORIZON_LABEL = { short: "단기", mid: "중기", long: "장기" } as const;
+// 유형 이름 옆 ⓘ(두 문장 이하)
+const TYPE_NOTE = "투자 습관으로 나눈 유형이라 증권사 투자자 등급과 달라요. 종목 화면에서 무엇부터 보여 줄지 정하는 데만 쓰고, 볼 수 있는 종목을 줄이지는 않아요.";
 
 // 설문 결과. readOnly는 저장된 결과를 다시 보는 화면(/profile): 조정·24문항 없이 뒤로 / 다시 진단만.
 export function ResultView({
@@ -689,7 +673,7 @@ export function ResultView({
   submitting = false,
   error = "",
   nextLabel,
-  canBeMoreAccurate = false,
+  extraCount = 0,
   onConfirm,
   onMoreAccurate,
   onBack,
@@ -699,7 +683,7 @@ export function ResultView({
   submitting?: boolean;
   error?: string;
   nextLabel: string;
-  canBeMoreAccurate?: boolean;
+  extraCount?: number; // 남은 추가 질문 수(0이면 버튼 없음)
   onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>) => void;
   onMoreAccurate?: () => void;
   onBack: () => void;
@@ -720,48 +704,32 @@ export function ResultView({
       {/* 선 대신 간격으로 나눈다(화면 규칙 v2) */}
       <div className="px-6 pt-7 sm:px-10">
         <span className="text-xs font-semibold text-brand">{readOnly ? "내 투자 성향" : "진단 결과"}</span>
-        <h1 data-bit-type={bit.lowConfidence ? "low_confidence" : bit.type} className="mt-2 text-3xl font-semibold text-ink sm:text-3xl">
-          {bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type]}
-        </h1>
+        <div className="mt-2 flex items-center">
+          <h1 data-bit-type={bit.lowConfidence ? "low_confidence" : bit.type} className="m-0 text-3xl font-semibold text-ink">
+            {bit.lowConfidence ? "유형 확인 중" : BIT_LABEL[bit.type]}
+          </h1>
+          <MarketDetail title="유형 설명" className="inline-flex"
+            label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">유형 설명 보기</span></>}>
+            <p className="m-0">{TYPE_NOTE}</p>
+          </MarketDetail>
+        </div>
         <p className="mt-1 text-base font-normal text-body">
           {bit.lowConfidence
             ? "몇몇 질문의 답이 서로 엇갈려 유형을 단정하지 않았어요. 다시 답하거나 아래에서 직접 조정할 수 있어요."
             : BIT_SUMMARY[bit.type]}
         </p>
-        <p className="mt-3 text-xs text-muted">
-          투자 습관을 기준으로 나눈 유형이에요. 증권사의 투자자 등급과는 달라요. 종목 화면에서 무엇부터
-          보여 줄지 정하는 데만 쓰고, 볼 수 있는 종목을 줄이지는 않아요.
-        </p>
-        {canBeMoreAccurate && (
-          <button type="button" onClick={onMoreAccurate} className="btn-text mt-2 text-xs">
-            더 정확하게 진단하기(24문항)
+        {extraCount > 0 && (
+          <button type="button" onClick={onMoreAccurate} className="btn-text mt-2 text-sm">
+            추가 질문 {extraCount}개
           </button>
         )}
       </div>
 
       <div className="px-6 py-8 sm:px-10 sm:py-10">
         <div className="grid gap-8 md:grid-cols-3">
-          <AxisGauge
-            label="위험 감수"
-            value={summary.riskTaking}
-            caption="손실을 견디는 정도와 소수 종목 집중 선호를 합친 값"
-            left="원금 보전"
-            right="수익 기회"
-          />
-          <AxisGauge
-            label="흔들림 민감도"
-            value={summary.sensitivity}
-            caption="조급함, 하락 때 정리하는 마음, 주변 의견 따르기를 합친 값"
-            left="차분함"
-            right="흔들림 큼"
-          />
-          <AxisGauge
-            label="투자 기간"
-            value={summary.horizonScore}
-            caption={`${HORIZON_LABEL[summary.horizon]} 보유 성향, 보유 기간과 회전 문항 기준`}
-            left="장기 보유"
-            right="단기 매매"
-          />
+          <StageBar axis={SUMMARY_SCALE.riskTaking} value={summary.ratios.riskTaking} />
+          <StageBar axis={SUMMARY_SCALE.sensitivity} value={summary.ratios.sensitivity} />
+          <StageBar axis={SUMMARY_SCALE.horizon} value={summary.ratios.horizon} />
         </div>
 
         {(result.contradictions?.length ?? 0) > 0 && (
@@ -784,45 +752,34 @@ export function ResultView({
           ]}
         />
 
-        {adjusting && (
-          <div id="style-axes-adjust" className="mt-12 flex flex-col gap-2">
-            <p className="m-0 text-sm text-body">
-              결과가 나와 다르다고 느껴지는 축만 옮겨 주세요. 유형과 위의 요약이 바로 다시 계산돼요.
-            </p>
-            <div className="grid grid-cols-1 gap-x-8 gap-y-3 md:grid-cols-2">
-              {AXES.map((axis) => {
-                const ratio = styleAxes.axes.find(({ axis_id }) => axis_id === axis.id)!.ratio;
-                return (
-                  <label key={axis.id} className="flex flex-col gap-1 text-xs">
-                    <span className="flex items-center gap-2">
-                      <strong className="text-ink">{axis.section}</strong>
-                      {/* 날것의 점수(+0.35) 대신 어느 쪽으로 얼마나 기울었는지 말로 */}
-                      <span className="ml-auto font-medium text-ink">
-                        {leanWord(ratio, axis.negative_label, axis.positive_label)}
-                      </span>
-                    </span>
-                    <input
-                      type="range"
-                      min={-1}
-                      max={1}
-                      step={0.05}
-                      value={ratio}
-                      aria-label={axis.section}
-                      onChange={(event) =>
-                        setAdjusted((current) => ({ ...current, [axis.id]: Number(event.target.value) }))
-                      }
-                      className="accent-brand"
-                    />
-                    <span className="flex justify-between text-2xs text-muted">
-                      <span>{axis.negative_label}</span>
-                      <span>{axis.positive_label}</span>
-                    </span>
-                  </label>
-                );
-              })}
+        {/* 조정: 축마다 5칸 중 하나를 누른다(방향키로도). 누른 칸의 가운데 값(−1, −0.5, 0, 0.5, 1)을 저장한다 */}
+        {!readOnly && (adjusting ? (
+          <section id="style-axes-adjust" aria-labelledby="adjust-title" className="mt-12 flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-4">
+              <h2 id="adjust-title" className="m-0 text-lg font-semibold">직접 조정하기</h2>
+              <button type="button" onClick={() => setAdjusting(false)} aria-expanded="true" aria-controls="style-axes-adjust" className="btn-text text-sm">
+                접기
+              </button>
             </div>
-          </div>
-        )}
+            <div className="flex items-baseline justify-between gap-4">
+              <p className="m-0 text-sm text-body">유형과 위의 요약이 바로 다시 계산돼요.</p>
+              <button type="button" onClick={() => setAdjusted({})} disabled={!changed || submitting} className="btn-text whitespace-nowrap text-sm disabled:text-ghost">
+                초기화
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-x-12 gap-y-6 md:grid-cols-2">
+              {STYLE_AXIS_IDS.map((id) => (
+                <StageBar key={id} axis={STYLE_AXIS_SCALE[id]}
+                  value={styleAxes.axes.find(({ axis_id }) => axis_id === id)!.ratio}
+                  onPick={(stage) => setAdjusted((current) => ({ ...current, [id]: storedForStage(STYLE_AXIS_SCALE[id], stage) }))} />
+              ))}
+            </div>
+          </section>
+        ) : (
+          <button type="button" onClick={() => setAdjusting(true)} aria-expanded="false" aria-controls="style-axes-adjust" className="btn-text mt-12 text-sm">
+            직접 조정하기
+          </button>
+        ))}
 
         {error && (
           <p role="alert" className="mt-4 text-sm font-semibold text-danger">
@@ -830,28 +787,17 @@ export function ResultView({
           </p>
         )}
 
-        <div className="mt-12 flex flex-col gap-6">
-          {!readOnly && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            {adjusting ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setAdjusted({});
-                  setAdjusting(false);
-                }}
-                disabled={submitting}
-                className="btn-text text-sm"
-              >
-                조정 취소
-              </button>
-            ) : (
-              <button type="button" onClick={() => setAdjusting(true)} aria-controls="style-axes-adjust" className="btn-text text-sm">
-                결과가 나와 다르면 직접 조정하기
-              </button>
-            )}
-          </div>
-          )}
+        <details className="disclosure mt-12">
+          <summary>어떻게 나온 결과인가요?</summary>
+          <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 text-sm text-body">
+            <li>위험 감수: 손실을 견디는 정도와 몇 종목에 모아 담는지를 합쳤어요.</li>
+            <li>흔들림 민감도: 서두름, 하락 때 파는 마음, 주변 분위기 따르기를 합쳤어요.</li>
+            <li>투자 기간: 보유 기간 문항으로 봤어요.</li>
+            <li>{AXIS_STAGE_RULE}</li>
+          </ul>
+        </details>
+
+        <div className="mt-12">
           <StepNav
             onBack={onBack}
             backLabel={readOnly ? "뒤로" : "이전"}
@@ -864,10 +810,4 @@ export function ResultView({
       </div>
     </section>
   );
-}
-
-// -1~+1 → "가운데" / "장기 보유 쪽으로 조금" / "단기 매매 쪽으로 많이"
-function leanWord(ratio: number, negative: string, positive: string): string {
-  if (Math.abs(ratio) < 0.1) return "가운데";
-  return `${ratio < 0 ? negative : positive} 쪽으로 ${Math.abs(ratio) < 0.5 ? "조금" : "많이"}`;
 }
