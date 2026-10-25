@@ -89,6 +89,7 @@ export interface ThreeAxisSummary {
   sensitivity: number; // 0 흔들림 적음 ~ 100 흔들림 큼
   horizonScore: number; // 0 장기 보유 ~ 100 단기 매매
   horizon: "short" | "mid" | "long";
+  ratios: { riskTaking: number; sensitivity: number; horizon: number }; // 같은 값의 −1~1(화면 5칸 막대용, horizon +1 = 단기)
 }
 
 const toScore = (ratio: number) => Math.round(((ratio + 1) / 2) * 100);
@@ -100,14 +101,18 @@ function horizonForScore(horizonScore: number): ThreeAxisSummary["horizon"] {
 
 export function threeAxisSummary(styleAxes: StyleAxes): ThreeAxisSummary {
   const ratio = (id: StyleAxisId) => styleAxes.axes.find(({ axis_id }) => axis_id === id)!.ratio;
-  const horizonScore = toScore(ratio("turnover"));
+  const ratios = {
+    riskTaking: mean([ratio("loss_tolerance"), ratio("concentration")]),
+    sensitivity: mean([ratio("urgency"), ratio("drawdown_reaction"), ratio("information_reliance")]),
+    horizon: ratio("turnover"),
+  };
+  const horizonScore = toScore(ratios.horizon);
   return {
-    riskTaking: toScore(mean([ratio("loss_tolerance"), ratio("concentration")])),
-    sensitivity: toScore(
-      mean([ratio("urgency"), ratio("drawdown_reaction"), ratio("information_reliance")]),
-    ),
+    riskTaking: toScore(ratios.riskTaking),
+    sensitivity: toScore(ratios.sensitivity),
     horizonScore,
     horizon: horizonForScore(horizonScore),
+    ratios,
   };
 }
 

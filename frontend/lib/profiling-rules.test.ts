@@ -67,12 +67,10 @@ test("결과 확인 단계의 조정값이 축 ratio와 v1.0 필드에 반영되
 
 test("성향 카드 3축은 8축 묶음 요약이고, 유형명은 BIT만 쓴다", () => {
   // 김민지: loss -0.3, concentration -0.4 → -0.35 → 33 / urgency 0.44, drawdown 0.3, info 0.16 → 0.3 → 65
-  assert.deepEqual(threeAxisSummary(investorStyleAxes), {
-    riskTaking: 33,
-    sensitivity: 65,
-    horizonScore: 38,
-    horizon: "mid",
-  });
+  const { ratios, ...scores } = threeAxisSummary(investorStyleAxes);
+  assert.deepEqual(scores, { riskTaking: 33, sensitivity: 65, horizonScore: 38, horizon: "mid" });
+  // 화면 5칸 막대는 반올림 전 −1~1 값을 쓴다(점수 60에 걸친 0.205가 가운데 칸으로 내려가지 않게)
+  assert.ok(Math.abs(ratios.riskTaking + 0.35) < 1e-9 && Math.abs(ratios.sensitivity - 0.3) < 1e-9 && ratios.horizon === -0.25);
   assert.equal(investorProfile.profileTypeLabel, "추종형");
   assert.equal(investorProfile.riskTolerance, 33);
 
