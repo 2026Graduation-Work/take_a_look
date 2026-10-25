@@ -58,7 +58,10 @@ test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 
   assert.equal(digitsOnly("１２", 9), "12");
   assert.equal(numberDraft("1.5", 9), "1.5"); // 보여 주고 넣을 때 막는다
   assert.ok(Number.isNaN(parseWholeNumber(numberDraft("1.5", 9))));
-  assert.equal(numberDraft("2,500주", 9), "2500");
+  assert.equal(numberDraft("2,500주", 9), "2,500");
+  assert.equal(numberDraft("1234567", 9), "1,234,567");
+  assert.equal(numberDraft("1234567.5", 9), "1,234,567.5");
+  assert.equal(parseWholeNumber(numberDraft("71200", 12)), 71200); // 저장 값은 숫자 그대로
   assert.equal(numberDraft("１２", 9), "12");
   assert.equal(digitsOnly("", 9), ""); // 지워도 NaN이 아니라 빈칸
   assert.equal(digitsOnly("12345678901234567890123", 12), "123456789012"); // 1e+22 대신 자릿수에서 멈춤

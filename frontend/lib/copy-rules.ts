@@ -4,6 +4,7 @@
 export interface CopyRule {
   pattern: RegExp;
   reason: string;
+  allowIn?: readonly string[]; // 이 규칙을 지키지 않아도 되는 파일(법으로 이름을 밝혀야 하는 곳)
 }
 
 export const FORBIDDEN_COPY: readonly CopyRule[] = [
@@ -27,7 +28,8 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /·/, reason: "화면 규칙 v2: 가운데 점 금지(AI 느낌) → 간격 또는 쉼표" },
   { pattern: /니다[.?!]/, reason: "문장 끝은 해요체(DESIGN.md 0장, 10/20) → '~해요.' '~없어요.'" },
   { pattern: /신뢰구간/, reason: "개발 용어 → '10번 중 N번 이 범위'" },
-  { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다" },
+  // 처리방침은 개인정보 보호법상 처리를 맡기는 곳(수탁자)의 이름을 밝혀야 해서 예외
+  { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다", allowIn: ["app/privacy/page.tsx"] },
   // 화면에 값과 함께 쓴 경우만 잡는다(코드 식별자 bit.composite는 통과)
   { pattern: /composite\s*[+\-\d{=]/, reason: "개발 용어 → '유형 점수'" },
   { pattern: /psych_[a-z]/, reason: "개발 변수명 → '가격 흐름 분위기'" },

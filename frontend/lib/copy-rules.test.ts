@@ -38,7 +38,8 @@ test("사용자 노출 문구에 금지 표현이 없다", () => {
     const raw = readFileSync(path.join(ROOT, file), "utf8");
     const lines = stripComments(raw).split("\n");
     lines.forEach((line, index) => {
-      for (const { pattern, reason } of FORBIDDEN_COPY) {
+      for (const { pattern, reason, allowIn } of FORBIDDEN_COPY) {
+        if (allowIn?.includes(file)) continue;
         if (pattern.test(line)) hits.push(`${file}:${index + 1} ${reason} — ${line.trim()}`);
       }
     });

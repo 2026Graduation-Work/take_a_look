@@ -17,10 +17,15 @@ export function digitsOnly(value: string, maxDigits: number): string {
 
 // 새 종목 입력칸용: 점(소수)을 지우지 않고 보여 준다. 한 글자씩 "1" "." "5"를 쳐도 15가 되지 않고,
 // 넣을 때 parseWholeNumber가 NaN으로 막아 "정수로 적어 주세요" 안내가 뜬다(페르소나 워크스루 2026-10).
+// 입력하는 동안 천 단위 쉼표를 붙여 자릿수를 보이게 한다(10/21 사용 기록). 저장 값은 parseWholeNumber가 쉼표를 뺀 숫자.
+// shortcut: 가운데 숫자를 고치면 쉼표가 늘거나 줄어 커서가 끝으로 간다, 불편하다는 말이 나오면 커서 위치를 보정한다
 export function numberDraft(value: string, maxDigits: number): string {
   const [whole, ...fraction] = value.normalize("NFKC").replace(/[^\d.]/g, "").split(".");
-  return whole.slice(0, maxDigits) + (fraction.length ? "." + fraction.join("") : "");
+  return groupDigits(whole.slice(0, maxDigits)) + (fraction.length ? "." + fraction.join("") : "");
 }
+
+// "1234567" → "1,234,567"(앞자리 0도 그대로 둔다)
+export const groupDigits = (digits: string) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 // 숫자만 있는 문자열 → 정수, 빈칸 → null, 그 밖(문자 섞임) → NaN. parseInt처럼 앞 숫자만 읽지 않는다.
 export function parseWholeNumber(value: string): number | null {

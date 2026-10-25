@@ -4,7 +4,7 @@ import BrandHeader from "../components/brand-header";
 import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
-import { TERM_INFO } from "@/lib/copy-glossary";
+import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
 
 // 이용 안내(로그인 없이 열림, 지도교수 피드백 "처음 사용자에게 취지와 흐름 안내"). 위에서 아래 한 줄기, 맨 위 목차.
 // 강제 튜토리얼, 코치마크는 두지 않는다(NN/g 모바일 튜토리얼 연구: 성공률을 높이지 않고 앱을 더 어렵게 느끼게 함).
@@ -39,6 +39,7 @@ const ROUTINE = [
 
 const SCREENS: [string, string][] = [
   ["대시보드", "맨 위 문장이 결론이에요. 왼쪽은 내 포트폴리오와 어제와 달라진 근거, 오른쪽은 신호가 강한 종목이에요. 1주와 4주를 바꾸면 화면 전체가 같은 기간을 따라요."],
+  ["1주와 4주", HORIZON_GUIDE],
   ["종목 상세 네 탭", "시장 분위기, 누가 사고팔았나, 모델이 본 이유, 재무 상태를 각각 질문 하나로 답해요. 탭마다 결론 문장, 비교 기준이 붙은 숫자, 왜 봐야 하는지 한 줄, 계산 근거 순서로 읽으면 돼요. 탭 순서는 내 성향에 맞춰 바뀌어요."],
   ["모델 성적표", "모델이 과거에 상승 종목을 얼마나 위로 세웠는지(AUC)와 모의 투자 결과를 보여 줘요. 화면 맨 아래 면책 문구의 링크에서 열려요."],
 ];

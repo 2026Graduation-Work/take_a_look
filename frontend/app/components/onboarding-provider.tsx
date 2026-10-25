@@ -116,7 +116,7 @@ function DemoAccountBanner() {
       className="bg-track px-4 py-2 text-center text-xs font-medium text-body"
     >
       데모 계정
-      <span className="font-normal">, 예시 데이터로 둘러보는 중이에요. 설문 결과는 이 브라우저에만 저장돼요.</span>
+      <span className="font-normal">, 예시 데이터로 둘러보는 중이에요. 설문 결과, 보유 종목, 관심 종목과 메모는 이 브라우저에만 저장돼요.</span>
     </div>
   );
 }
@@ -135,7 +135,7 @@ function onboardingDestination(
 ): string | null {
   if (status === "loading" || status === "error") return null;
   if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
-  if (pathname === "/guide") return null; // 이용 안내는 로그인 없이 연다
+  if (pathname === "/guide" || pathname === "/privacy") return null; // 이용 안내, 처리방침은 로그인 없이 연다
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";

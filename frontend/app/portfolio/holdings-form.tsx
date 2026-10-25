@@ -8,7 +8,7 @@ import { useState } from "react";
 import GainText from "../components/gain-text";
 import ScreenshotImport from "./screenshot-import";
 import { useStockOptions, type StockOption } from "./use-stock-options";
-import { mergeImported, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
+import { groupDigits, mergeImported, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS } from "@/lib/holdings-rules";
 import type { SavedHolding } from "@/lib/save-holdings";
 
 const field =
@@ -51,7 +51,7 @@ export default function HoldingsForm({
 
   const numberInput = (row: SavedHolding, kind: "quantity" | "price") => {
     const key = `${row.code}:${kind}`;
-    const value = kind === "quantity" ? (row.quantity > 0 ? String(row.quantity) : "") : row.avgBuyPrice === null ? "" : String(row.avgBuyPrice);
+    const value = kind === "quantity" ? (row.quantity > 0 ? groupDigits(String(row.quantity)) : "") : row.avgBuyPrice === null ? "" : groupDigits(String(row.avgBuyPrice));
     return (
       <input
         id={kind === "quantity" ? qtyId(row.code) : undefined}
