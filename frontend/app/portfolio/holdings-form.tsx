@@ -62,7 +62,7 @@ export default function HoldingsForm({
         onChange={(event) => {
           const text = numberDraft(event.target.value, kind === "quantity" ? QUANTITY_DIGITS : PRICE_DIGITS);
           setTexts((current) => ({ ...current, [key]: text }));
-          update(row.code, kind === "quantity" ? { quantity: parseWholeNumber(text) ?? 0 } : { avgBuyPrice: parseWholeNumber(text) });
+          update(row.code, kind === "quantity" ? { quantity: parseWholeNumber(text, QUANTITY_DIGITS) ?? 0 } : { avgBuyPrice: parseWholeNumber(text, PRICE_DIGITS) });
         }}
         className={field}
       />

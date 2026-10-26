@@ -9,7 +9,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { cancel, init, prefetch, recognize, TOOL_BYTES, toolCached, type OcrLine } from "@/lib/holdings-ocr/recognize";
 import { ProgressBar, Spinner } from "../components/waiting";
 import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type StockRef } from "@/lib/holdings-ocr/parse";
-import { groupDigits, isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
+import { groupDigits, holdingInputError, isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
 // 기다리는 세 단계: preparing(1/3 읽는 도구 준비) → reading(2/3 글자 찾기) → matching(3/3 종목 맞춰 보기)
@@ -162,8 +162,8 @@ export default function ScreenshotImport({
         if (row.code !== code) return row;
         const check = row.check.filter((item: CheckField) => item !== field); // 고친 칸은 확인한 것으로 본다
         return field === "quantity"
-          ? { ...row, check, quantityText: text, quantity: parseWholeNumber(text) }
-          : { ...row, check, priceText: text, avgBuyPrice: parseWholeNumber(text), avgComputed: false };
+          ? { ...row, check, quantityText: text, quantity: parseWholeNumber(text, QUANTITY_DIGITS) }
+          : { ...row, check, priceText: text, avgBuyPrice: parseWholeNumber(text, PRICE_DIGITS), avgComputed: false };
       }),
     );
   }
@@ -172,7 +172,7 @@ export default function ScreenshotImport({
     const holdings: SavedHolding[] = rows.map(({ code, name, quantity, avgBuyPrice }) => ({ code, name, quantity: quantity ?? Number.NaN, avgBuyPrice }));
     const invalid = holdings.find((holding) => !isValidHolding(holding));
     if (invalid) {
-      setError(`${invalid.name}의 수량은 1 이상의 정수로, 평균 매입가는 비워 두거나 정수로 적어 주세요.`);
+      setError(holdingInputError(invalid));
       return;
     }
     const replaced = onAdd(holdings);

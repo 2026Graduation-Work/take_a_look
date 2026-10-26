@@ -37,7 +37,18 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   // 저장 전에는 아무것도 저장하지 않는다
   const before = await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"));
 
+  await review.getByLabel("현대차 수량").fill("-1");
+  await expect(review.getByLabel("현대차 수량")).toHaveValue("-1");
+  await page.getByRole("button", { name: "목록에 넣기" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "현대차의 수량은" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"))).toBe(before);
   await review.getByLabel("현대차 수량").fill("9");
+  await review.getByLabel("두산에너빌리티 평균 매입가").fill("-100");
+  await expect(review.getByLabel("두산에너빌리티 평균 매입가")).toHaveValue("-100");
+  await page.getByRole("button", { name: "목록에 넣기" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "두산에너빌리티의 평균 매입가는" })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"))).toBe(before);
+  await review.getByLabel("두산에너빌리티 평균 매입가").fill("19870");
   await page.getByRole("button", { name: "목록에 넣기" }).click();
   await expect(page.getByRole("status").filter({ hasText: "5종목을 목록에 넣었어요" })).toContainText("새 값으로 바꿨어요");
   expect(await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"))).toBe(before);

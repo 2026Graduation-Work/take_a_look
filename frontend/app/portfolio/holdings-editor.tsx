@@ -10,6 +10,7 @@ import { useOnboarding } from "../components/onboarding-provider";
 import HoldingsForm, { HOLDINGS_INTRO } from "./holdings-form";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
+import { holdingInputError } from "@/lib/holdings-rules";
 import {
   getSavedHoldingsSnapshot,
   getServerHoldingsSnapshot,
@@ -122,7 +123,7 @@ function AccountHoldingsEditor({
     }
     const invalid = rows.find((row) => !isValidHolding(row));
     if (invalid) {
-      setSaveError(`${invalid.name}의 수량과 평균 매입가는 정수로 적어 주세요.`);
+      setSaveError(holdingInputError(invalid));
       return;
     }
     setStatus("saving");
