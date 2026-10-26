@@ -1,0 +1,142 @@
+- alert: Take a Look
+- note: 데모 계정, 예시 데이터로 둘러보는 중이에요. 설문 결과, 보유 종목, 관심 종목과 메모는 이 브라우저에만 저장돼요.
+- banner:
+  - link "대시보드":
+    - /url: /
+    - generic: Take a Look
+  - searchbox "종목 검색"
+  - generic "김민지 계정 메뉴":
+    - text: 김민지
+    - generic: ▾
+- region "시장 브리핑":
+  - generic: KOSPI
+  - generic: 5,550.30
+  - generic: ▲ +0.30%
+  - generic: KOSDAQ
+  - generic: "751.69"
+  - generic: ▼ -1.62%
+  - generic: KOSPI 200
+  - generic: "862.77"
+  - generic: ▲ +0.55%
+  - button "시장 흔들림 보통 거래 낮음 설명 보기":
+    - text: 시장 흔들림
+    - strong: 보통
+    - generic: 거래
+    - strong: 낮음
+    - generic: ⓘ
+    - generic: 설명 보기
+- region "보유 종목 중 3종목에 하락 신호가 있어요.":
+  - heading "보유 종목 중 3종목에 하락 신호가 있어요." [level=1]
+  - 'link "내 투자 성향: 독립 분석형. 결과 보기"':
+    - /url: /profile
+    - generic: 독립 분석형내 생각과 다른 근거를 가볍게 넘기기 쉬워요.
+    - generic: ›
+- region "내 포트폴리오":
+  - heading "내 포트폴리오" [level=2]
+  - button "1주와 4주 설명 보기":
+    - generic: ⓘ
+    - generic: 1주와 4주 설명 보기
+  - tablist "신호 기간":
+    - tab "1주" [selected]
+    - tab "4주"
+  - list "보유 종목별 오늘 모델 신호":
+    - listitem "삼성전자, 12주, 평가금액 256만원, 비중 53%, 앞으로 1주 하락 신호":
+      - generic: 삼성전자
+      - generic: 256만원 (53%)
+    - listitem "현대차, 5주, 평가금액 147만원, 비중 30%, 앞으로 1주 하락 신호":
+      - generic: 현대차
+      - generic: 147만원 (30%)
+    - listitem "셀트리온, 3주, 평가금액 58만원, 비중 12%, 앞으로 1주 상승 신호":
+      - generic: 셀트리온
+      - generic: 58만원 (12%)
+    - listitem "카카오, 8주, 평가금액 24만원, 비중 5%, 앞으로 1주 하락 신호":
+      - generic: 카카오
+  - paragraph:
+    - generic: 상승
+    - generic: 중립
+    - generic: 하락
+    - generic: 평가금액 (비중)
+  - region "어제와 달라진 근거":
+    - heading "어제와 달라진 근거" [level=3]
+    - list:
+      - 'link "삼성전자 1주 신호 하락으로, 기관 순매수로, 새 공시: 임원ㆍ주요주주특정증권등소유상황보고서(대주주 지분 변동)"':
+        - /url: /stocks/005930
+        - generic: 삼성전자
+        - generic: "1주 신호 하락으로, 기관 순매수로, 새 공시: 임원ㆍ주요주주특정증권등소유상황보고서(대주주 지분 변동)"
+      - link "현대차 1주 신호 하락으로, 외국인 순매도로, 뉴스 분위기 부정으로":
+        - /url: /stocks/005380
+        - generic: 현대차
+        - generic: 1주 신호 하락으로, 외국인 순매도로, 뉴스 분위기 부정으로
+      - 'link "SK하이닉스 새 공시 2건: 풍문또는보도에대한해명(미확정)(거래소 질문에 답변), 외국인 순매도로, 기관 순매수로"':
+        - /url: /stocks/000660
+        - generic: SK하이닉스
+        - generic: "새 공시 2건: 풍문또는보도에대한해명(미확정)(거래소 질문에 답변), 외국인 순매도로, 기관 순매수로"
+  - region "관심 종목":
+    - heading "관심 종목" [level=3]
+    - list:
+      - link "SK하이닉스 000660 상승":
+        - /url: /stocks/000660
+        - generic: SK하이닉스
+        - generic: "000660"
+        - generic: 상승
+- region "신호가 강한 종목":
+  - heading "신호가 강한 종목" [level=2]
+  - link "동방 004140 상승":
+    - /url: /stocks/004140
+    - generic: 동방
+    - generic: "004140"
+    - generic: 상승
+  - link "현대지에프홀딩스 005440 상승":
+    - /url: /stocks/005440
+    - generic: 현대지에프홀딩스
+    - generic: "005440"
+    - generic: 상승
+  - link "한국제지 027970 상승":
+    - /url: /stocks/027970
+    - generic: 한국제지
+    - generic: "027970"
+    - generic: 상승
+  - link "케이비아이동국실업 001620 상승":
+    - /url: /stocks/001620
+    - generic: 케이비아이동국실업
+    - generic: "001620"
+    - generic: 상승
+  - link "대상홀딩스 084690 상승":
+    - /url: /stocks/084690
+    - generic: 대상홀딩스
+    - generic: "084690"
+    - generic: 상승
+  - link "스카이라이프 053210 하락":
+    - /url: /stocks/053210
+    - generic: 스카이라이프
+    - generic: "053210"
+    - generic: 하락
+  - link "아이마켓코리아 122900 하락":
+    - /url: /stocks/122900
+    - generic: 아이마켓코리아
+    - generic: "122900"
+    - generic: 하락
+  - link "신라교역 004970 하락":
+    - /url: /stocks/004970
+    - generic: 신라교역
+    - generic: "004970"
+    - generic: 하락
+  - link "LX홀딩스 383800 하락":
+    - /url: /stocks/383800
+    - generic: LX홀딩스
+    - generic: "383800"
+    - generic: 하락
+  - link "SB성보 003080 하락":
+    - /url: /stocks/003080
+    - generic: SB성보
+    - generic: "003080"
+    - generic: 하락
+  - generic "직접 고른 제외 항목 6개":
+    - text: 직접 고른 제외 항목
+    - generic: 6개
+- contentinfo:
+  - text: Take a Look은 투자 자문이 아니며, 제공되는 신호는 과거 데이터 기반의 통계적 참고 정보로 틀릴 수 있어요. 투자 판단과 책임은 투자자 본인에게 있어요.
+  - link "모델 성적표":
+    - /url: /performance
+  - link "개인정보 처리방침":
+    - /url: /privacy
