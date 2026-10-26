@@ -139,8 +139,8 @@ test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예
   await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
 });
 
-// #278 QA: 숫자 칸에 NaN·지수 표기·"10abc"가 들어가지 않고, 검색은 Esc 뒤 다시 입력하면 목록이 다시 열린다
-test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async ({ page }) => {
+// #278 QA, #426: 잘못된 숫자는 보존하고 저장을 막는다. 검색은 Esc 뒤 다시 입력하면 목록이 다시 열린다.
+test("QA #278: 보유 수량과 평단 입력 및 검색 Esc 뒤 재입력", async ({ page }) => {
   await demoReady(page);
   await page.goto("/portfolio");
   const quantity = page.getByLabel("카카오 수량");
@@ -151,15 +151,19 @@ test("QA #278: 보유 수량·평단 입력과 검색 Esc 뒤 재입력", async 
   const price = page.getByLabel("카카오 평균 매입가");
   await price.fill("");
   await price.pressSequentially("1".repeat(25));
-  await expect(price).toHaveValue("111,111,111,111");
+  await expect.poll(async () => (await price.inputValue()).replaceAll(",", "")).toBe("1".repeat(25));
   await price.pressSequentially("9");
-  await expect(price).toHaveValue("111,111,111,111");
+  await expect.poll(async () => (await price.inputValue()).replaceAll(",", "")).toBe("1".repeat(25) + "9");
+  await page.getByRole("button", { name: /^저장/ }).first().click();
+  await expect(page.getByRole("alert").filter({ hasText: "카카오의 평균 매입가는" })).toBeVisible();
   await quantity.fill("");
   await page.getByRole("button", { name: /^저장/ }).first().click();
   await expect(page.getByText("카카오의 수량을 1 이상으로 적어 주세요.", { exact: false })).toBeVisible();
 
   await quantity.pressSequentially("10abc");
-  await expect(quantity).toHaveValue("10");
+  await expect(quantity).toHaveValue("10abc");
+  await page.getByRole("button", { name: /^저장/ }).first().click();
+  await expect(page.getByRole("alert").filter({ hasText: "카카오의 수량은" })).toBeVisible();
 
   // 검색 목록은 종목 마스터(stocks 전체)에서 고른다. e2e 스텁은 코드 조회만 답하므로 여기서 목록을 준다
   await page.route(/\/rest\/v1\/stocks\?.*is_active/, (route) =>
