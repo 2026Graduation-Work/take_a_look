@@ -1,46 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { KNOWN_STOCKS } from "@/lib/mock-data";
-import { getSupabaseClient } from "@/lib/supabase";
-
-type StockOption = { code: string; name: string };
-
-// 종목 마스터(code·name, 약 950행)를 처음 검색할 때 한 번만 받아 브라우저에서 거른다. 입력마다 조회하지 않는다.
-// ponytail: PostgREST 한 번에 최대 1000행. 종목 마스터가 1000행을 넘으면 range로 나눠 받는다.
-let master: Promise<StockOption[]> | null = null;
-function loadMaster(): Promise<StockOption[]> {
-  master ??= (async () => {
-    const client = getSupabaseClient();
-    if (!client) return KNOWN_STOCKS;
-    const { data, error } = await client.from("stocks").select("code,name").eq("is_active", true).order("code");
-    if (error) {
-      master = null;
-      return KNOWN_STOCKS;
-    }
-    return data as StockOption[];
-  })();
-  return master;
-}
+import { useState } from "react";
+import { useStockSearch } from "./use-stock-search";
 
 export default function StockSearch({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
-  const [stocks, setStocks] = useState<StockOption[]>([]);
+  const { matches, loaded } = useStockSearch(query);
   const [open, setOpen] = useState(false);
   const keyword = query.trim().toLowerCase();
-
-  useEffect(() => {
-    if (!keyword) return;
-    let active = true;
-    void loadMaster().then((list) => active && setStocks(list));
-    return () => {
-      active = false;
-    };
-  }, [keyword]);
-
-  const matches = keyword
-    ? stocks.filter(({ code, name }) => name.toLowerCase().includes(keyword) || code.startsWith(keyword)).slice(0, 6)
-    : [];
 
   return (
     <div
@@ -77,7 +44,7 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
           ))}
         </ul>
       )}
-      {open && keyword && stocks.length > 0 && matches.length === 0 && (
+      {open && keyword && loaded && matches.length === 0 && (
         <p role="status" className="glass absolute inset-x-0 top-12 z-50 m-0 rounded-md bg-white/90 px-4 py-3 text-sm text-body">
           찾는 종목이 없어요. 현재는 코스피 종목만 제공해요.
         </p>
