@@ -1,0 +1,1700 @@
+[
+  {
+    "stock_code": "005930",
+    "horizon": 5,
+    "batch_id": "18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48",
+    "payload": {
+      "contract": "chart_signal_detail_v2",
+      "stock_code": "005930",
+      "stock_name": "삼성전자",
+      "data_asof": "2026-09-21",
+      "horizon": 5,
+      "profile": "aggressive",
+      "pack_id": "hold2022_2024_wf2019_2025_v1",
+      "release_id": "hold2022_2024_wf2019_2025_v1:h5",
+      "batch_id": "18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48",
+      "inference": {
+        "status": "available",
+        "reason": null,
+        "scores": {
+          "down": 0.7,
+          "neutral": 0.2,
+          "up": 0.1
+        },
+        "score_event": "class_2_upper_barrier_first",
+        "close": 275000,
+        "sigma": 0.026923350113757072,
+        "barriers": {
+          "up": 287956.8622422456,
+          "down": 263894.11807807523
+        },
+        "contribution_space": "class_0_raw_margin",
+        "features": [
+          {
+            "name": "std_20",
+            "label_ko": "20일 종가 변동 폭",
+            "meaning_ko": "20거래일 기간 종가 표준편차 / 현재 종가",
+            "value": 0.03,
+            "contribution": 0.12
+          },
+          {
+            "name": "rsqr_20",
+            "label_ko": "20일 가격 추세 적합도",
+            "meaning_ko": "20거래일 기간 선형 추세가 종가 변동을 설명하는 비율",
+            "value": 0.65,
+            "contribution": -0.1
+          },
+          {
+            "name": "cord_20",
+            "label_ko": "20일 변화율 상관",
+            "meaning_ko": "20거래일 기간 종가 변화율과 거래량 변화율의 상관",
+            "value": 0.2,
+            "contribution": 0.06
+          },
+          {
+            "name": "ksft_2",
+            "label_ko": "종가의 상대 위치",
+            "meaning_ko": "고가·저가 폭으로 나눈 종가의 중간 이탈",
+            "value": 0.9999999999991304,
+            "contribution": -0.04
+          },
+          {
+            "name": "max_5",
+            "label_ko": "5일 최고가 비율",
+            "meaning_ko": "5거래일 기간 최고가 / 현재 종가",
+            "value": 0.9999999999999636,
+            "contribution": 0.02
+          }
+        ],
+        "contribution_abs_sum": 1
+      },
+      "distribution": {
+        "status": "available",
+        "reason": null,
+        "policy_id": "multi_stock_up_sigma_001_005_v1",
+        "current": {
+          "up": 0.30910196993973466,
+          "sigma": 0.026923350113757072
+        },
+        "tolerances": {
+          "up_absolute": 0.01,
+          "sigma_relative": 0.05
+        },
+        "sample_count": 11285,
+        "stock_count": 816,
+        "period_start": "2019-01-07",
+        "period_end": "2025-12-30",
+        "observed_through": "2026-01-08",
+        "by_fold": {
+          "0": 1198,
+          "1": 1936,
+          "2": 2041,
+          "3": 1804,
+          "4": 1331,
+          "5": 1411,
+          "6": 1564
+        },
+        "histogram": {
+          "bins": [
+            {
+              "left": -44,
+              "right": -42,
+              "count": 1
+            },
+            {
+              "left": -42,
+              "right": -40,
+              "count": 0
+            },
+            {
+              "left": -40,
+              "right": -38,
+              "count": 0
+            },
+            {
+              "left": -38,
+              "right": -36,
+              "count": 0
+            },
+            {
+              "left": -36,
+              "right": -34,
+              "count": 0
+            },
+            {
+              "left": -34,
+              "right": -32,
+              "count": 2
+            },
+            {
+              "left": -32,
+              "right": -30,
+              "count": 0
+            },
+            {
+              "left": -30,
+              "right": -28,
+              "count": 7
+            },
+            {
+              "left": -28,
+              "right": -26,
+              "count": 5
+            },
+            {
+              "left": -26,
+              "right": -24,
+              "count": 3
+            },
+            {
+              "left": -24,
+              "right": -22,
+              "count": 11
+            },
+            {
+              "left": -22,
+              "right": -20,
+              "count": 10
+            },
+            {
+              "left": -20,
+              "right": -18,
+              "count": 15
+            },
+            {
+              "left": -18,
+              "right": -16,
+              "count": 28
+            },
+            {
+              "left": -16,
+              "right": -14,
+              "count": 50
+            },
+            {
+              "left": -14,
+              "right": -12,
+              "count": 85
+            },
+            {
+              "left": -12,
+              "right": -10,
+              "count": 171
+            },
+            {
+              "left": -10,
+              "right": -8,
+              "count": 308
+            },
+            {
+              "left": -8,
+              "right": -6,
+              "count": 644
+            },
+            {
+              "left": -6,
+              "right": -4,
+              "count": 1051
+            },
+            {
+              "left": -4,
+              "right": -2,
+              "count": 1535
+            },
+            {
+              "left": -2,
+              "right": 0,
+              "count": 1764
+            },
+            {
+              "left": 0,
+              "right": 2,
+              "count": 1854
+            },
+            {
+              "left": 2,
+              "right": 4,
+              "count": 1381
+            },
+            {
+              "left": 4,
+              "right": 6,
+              "count": 839
+            },
+            {
+              "left": 6,
+              "right": 8,
+              "count": 509
+            },
+            {
+              "left": 8,
+              "right": 10,
+              "count": 329
+            },
+            {
+              "left": 10,
+              "right": 12,
+              "count": 219
+            },
+            {
+              "left": 12,
+              "right": 14,
+              "count": 128
+            },
+            {
+              "left": 14,
+              "right": 16,
+              "count": 76
+            },
+            {
+              "left": 16,
+              "right": 18,
+              "count": 61
+            },
+            {
+              "left": 18,
+              "right": 20,
+              "count": 43
+            },
+            {
+              "left": 20,
+              "right": 22,
+              "count": 29
+            },
+            {
+              "left": 22,
+              "right": 24,
+              "count": 29
+            },
+            {
+              "left": 24,
+              "right": 26,
+              "count": 20
+            },
+            {
+              "left": 26,
+              "right": 28,
+              "count": 16
+            },
+            {
+              "left": 28,
+              "right": 30,
+              "count": 9
+            },
+            {
+              "left": 30,
+              "right": 32,
+              "count": 7
+            },
+            {
+              "left": 32,
+              "right": 34,
+              "count": 7
+            },
+            {
+              "left": 34,
+              "right": 36,
+              "count": 4
+            },
+            {
+              "left": 36,
+              "right": 38,
+              "count": 9
+            },
+            {
+              "left": 38,
+              "right": 40,
+              "count": 3
+            },
+            {
+              "left": 40,
+              "right": 42,
+              "count": 4
+            },
+            {
+              "left": 42,
+              "right": 44,
+              "count": 5
+            },
+            {
+              "left": 44,
+              "right": 46,
+              "count": 5
+            },
+            {
+              "left": 46,
+              "right": 48,
+              "count": 1
+            },
+            {
+              "left": 48,
+              "right": 50,
+              "count": 0
+            },
+            {
+              "left": 50,
+              "right": 52,
+              "count": 0
+            },
+            {
+              "left": 52,
+              "right": 54,
+              "count": 0
+            },
+            {
+              "left": 54,
+              "right": 56,
+              "count": 0
+            },
+            {
+              "left": 56,
+              "right": 58,
+              "count": 0
+            },
+            {
+              "left": 58,
+              "right": 60,
+              "count": 0
+            },
+            {
+              "left": 60,
+              "right": 62,
+              "count": 1
+            },
+            {
+              "left": 62,
+              "right": 64,
+              "count": 0
+            },
+            {
+              "left": 64,
+              "right": 66,
+              "count": 2
+            },
+            {
+              "left": 66,
+              "right": 68,
+              "count": 0
+            },
+            {
+              "left": 68,
+              "right": 70,
+              "count": 1
+            },
+            {
+              "left": 70,
+              "right": 72,
+              "count": 0
+            },
+            {
+              "left": 72,
+              "right": 74,
+              "count": 0
+            },
+            {
+              "left": 74,
+              "right": 76,
+              "count": 0
+            },
+            {
+              "left": 76,
+              "right": 78,
+              "count": 1
+            },
+            {
+              "left": 78,
+              "right": 80,
+              "count": 0
+            },
+            {
+              "left": 80,
+              "right": 82,
+              "count": 1
+            },
+            {
+              "left": 82,
+              "right": 84,
+              "count": 1
+            },
+            {
+              "left": 84,
+              "right": 86,
+              "count": 0
+            },
+            {
+              "left": 86,
+              "right": 88,
+              "count": 0
+            },
+            {
+              "left": 88,
+              "right": 90,
+              "count": 1
+            }
+          ],
+          "central_68": {
+            "low": -5.014157576817421,
+            "high": 5.209177520501687
+          }
+        }
+      },
+      "prices": {
+        "basis": "adjusted_close",
+        "source": "KRX adjusted daily OHLCV",
+        "history": [
+          {
+            "date": "2026-06-26",
+            "close": 339500,
+            "volume": 39735951
+          },
+          {
+            "date": "2026-06-29",
+            "close": 323000,
+            "volume": 35436521
+          },
+          {
+            "date": "2026-06-30",
+            "close": 334000,
+            "volume": 29237216
+          },
+          {
+            "date": "2026-07-01",
+            "close": 314500,
+            "volume": 24968382
+          },
+          {
+            "date": "2026-07-02",
+            "close": 286000,
+            "volume": 38905074
+          },
+          {
+            "date": "2026-07-03",
+            "close": 309500,
+            "volume": 31520538
+          },
+          {
+            "date": "2026-07-06",
+            "close": 318000,
+            "volume": 23872879
+          },
+          {
+            "date": "2026-07-07",
+            "close": 296000,
+            "volume": 32421032
+          },
+          {
+            "date": "2026-07-08",
+            "close": 277500,
+            "volume": 33525758
+          },
+          {
+            "date": "2026-07-09",
+            "close": 278000,
+            "volume": 29703616
+          },
+          {
+            "date": "2026-07-10",
+            "close": 285000,
+            "volume": 20088811
+          },
+          {
+            "date": "2026-07-13",
+            "close": 254500,
+            "volume": 31882652
+          },
+          {
+            "date": "2026-07-14",
+            "close": 263000,
+            "volume": 40086496
+          },
+          {
+            "date": "2026-07-15",
+            "close": 279500,
+            "volume": 24873414
+          },
+          {
+            "date": "2026-07-16",
+            "close": 255000,
+            "volume": 27001478
+          },
+          {
+            "date": "2026-07-20",
+            "close": 244000,
+            "volume": 26804038
+          },
+          {
+            "date": "2026-07-21",
+            "close": 259000,
+            "volume": 20386896
+          },
+          {
+            "date": "2026-07-22",
+            "close": 260500,
+            "volume": 22292003
+          },
+          {
+            "date": "2026-07-23",
+            "close": 270000,
+            "volume": 16011816
+          },
+          {
+            "date": "2026-07-24",
+            "close": 249500,
+            "volume": 26175580
+          },
+          {
+            "date": "2026-07-27",
+            "close": 254000,
+            "volume": 23296044
+          },
+          {
+            "date": "2026-07-28",
+            "close": 220000,
+            "volume": 41639623
+          },
+          {
+            "date": "2026-07-29",
+            "close": 208500,
+            "volume": 65555523
+          },
+          {
+            "date": "2026-07-30",
+            "close": 207000,
+            "volume": 46694193
+          },
+          {
+            "date": "2026-07-31",
+            "close": 262500,
+            "volume": 58478873
+          },
+          {
+            "date": "2026-08-03",
+            "close": 239500,
+            "volume": 27825493
+          },
+          {
+            "date": "2026-08-04",
+            "close": 240000,
+            "volume": 29433821
+          },
+          {
+            "date": "2026-08-05",
+            "close": 246000,
+            "volume": 22577128
+          },
+          {
+            "date": "2026-08-06",
+            "close": 230500,
+            "volume": 26101823
+          },
+          {
+            "date": "2026-08-07",
+            "close": 231000,
+            "volume": 20546010
+          },
+          {
+            "date": "2026-08-10",
+            "close": 230000,
+            "volume": 16327805
+          },
+          {
+            "date": "2026-08-11",
+            "close": 239500,
+            "volume": 23310969
+          },
+          {
+            "date": "2026-08-12",
+            "close": 255500,
+            "volume": 27102479
+          },
+          {
+            "date": "2026-08-13",
+            "close": 268000,
+            "volume": 35530867
+          },
+          {
+            "date": "2026-08-14",
+            "close": 274500,
+            "volume": 21669476
+          },
+          {
+            "date": "2026-08-18",
+            "close": 268500,
+            "volume": 24464621
+          },
+          {
+            "date": "2026-08-19",
+            "close": 247500,
+            "volume": 22788552
+          },
+          {
+            "date": "2026-08-20",
+            "close": 271000,
+            "volume": 26095919
+          },
+          {
+            "date": "2026-08-21",
+            "close": 281500,
+            "volume": 27746471
+          },
+          {
+            "date": "2026-08-24",
+            "close": 257000,
+            "volume": 32451940
+          },
+          {
+            "date": "2026-08-25",
+            "close": 257000,
+            "volume": 21617407
+          },
+          {
+            "date": "2026-08-26",
+            "close": 261500,
+            "volume": 19532523
+          },
+          {
+            "date": "2026-08-27",
+            "close": 266000,
+            "volume": 16829395
+          },
+          {
+            "date": "2026-08-28",
+            "close": 257000,
+            "volume": 15106746
+          },
+          {
+            "date": "2026-08-31",
+            "close": 260000,
+            "volume": 18270969
+          },
+          {
+            "date": "2026-09-01",
+            "close": 261000,
+            "volume": 15319615
+          },
+          {
+            "date": "2026-09-02",
+            "close": 250500,
+            "volume": 15176841
+          },
+          {
+            "date": "2026-09-03",
+            "close": 250000,
+            "volume": 13756022
+          },
+          {
+            "date": "2026-09-04",
+            "close": 255500,
+            "volume": 14031862
+          },
+          {
+            "date": "2026-09-07",
+            "close": 270000,
+            "volume": 18314016
+          },
+          {
+            "date": "2026-09-08",
+            "close": 269500,
+            "volume": 22716517
+          },
+          {
+            "date": "2026-09-09",
+            "close": 269500,
+            "volume": 16370962
+          },
+          {
+            "date": "2026-09-10",
+            "close": 269000,
+            "volume": 22517075
+          },
+          {
+            "date": "2026-09-11",
+            "close": 259500,
+            "volume": 13939111
+          },
+          {
+            "date": "2026-09-14",
+            "close": 248500,
+            "volume": 17776098
+          },
+          {
+            "date": "2026-09-15",
+            "close": 250500,
+            "volume": 11435506
+          },
+          {
+            "date": "2026-09-16",
+            "close": 253500,
+            "volume": 11757106
+          },
+          {
+            "date": "2026-09-17",
+            "close": 256000,
+            "volume": 11827514
+          },
+          {
+            "date": "2026-09-18",
+            "close": 260000,
+            "volume": 17489615
+          },
+          {
+            "date": "2026-09-21",
+            "close": 275000,
+            "volume": 22261519
+          }
+        ]
+      },
+      "sources": {
+        "model_sha256": "1960c3b3c9744fddbb98dac8053bbe31cd6ac67e7bf2aecf29d19e0d75e7c569",
+        "features_sha256": "648dbbe31b1486e6e5ea1eee836ae54657713f010a19173de7e2959e83be24bc",
+        "prices_sha256": "20965d9b629b86ae0dc7a8ff15aca06f26c8c2c7d223602d80d494c16abbc919",
+        "cases_sha256": "b2fc7dc1440ff1ea1a7301238dce347cde04a3f74059fe15efd557b7151bf1ae",
+        "config_sha256": "e4b4579a583f2cdf2b3560a3f55cc772000ff1b14e1eb36658115fc04b6c130a"
+      }
+    }
+  },
+  {
+    "stock_code": "005930",
+    "horizon": 20,
+    "batch_id": "18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48",
+    "payload": {
+      "contract": "chart_signal_detail_v2",
+      "stock_code": "005930",
+      "stock_name": "삼성전자",
+      "data_asof": "2026-09-21",
+      "horizon": 20,
+      "profile": "stable",
+      "pack_id": "hold2022_2024_wf2019_2025_v1",
+      "release_id": "hold2022_2024_wf2019_2025_v1:h20",
+      "batch_id": "18e7a9f66fa63d4b6e0439c9189828e26f4496c128d17e79755d6711e0f3dc48",
+      "inference": {
+        "status": "available",
+        "reason": null,
+        "scores": {
+          "down": 0.7,
+          "neutral": 0.2,
+          "up": 0.1
+        },
+        "score_event": "class_2_upper_barrier_first",
+        "close": 275000,
+        "sigma": 0.026923350113757072,
+        "barriers": {
+          "up": 302764.70480481203,
+          "down": 252788.23615615044
+        },
+        "contribution_space": "class_0_raw_margin",
+        "features": [
+          {
+            "name": "std_20",
+            "label_ko": "20일 종가 변동 폭",
+            "meaning_ko": "20거래일 기간 종가 표준편차 / 현재 종가",
+            "value": 0.03,
+            "contribution": 0.12
+          },
+          {
+            "name": "rsqr_20",
+            "label_ko": "20일 가격 추세 적합도",
+            "meaning_ko": "20거래일 기간 선형 추세가 종가 변동을 설명하는 비율",
+            "value": 0.65,
+            "contribution": -0.1
+          },
+          {
+            "name": "cord_20",
+            "label_ko": "20일 변화율 상관",
+            "meaning_ko": "20거래일 기간 종가 변화율과 거래량 변화율의 상관",
+            "value": 0.2,
+            "contribution": 0.06
+          },
+          {
+            "name": "cord_30",
+            "label_ko": "30일 변화율 상관",
+            "meaning_ko": "30거래일 기간 종가 변화율과 거래량 변화율의 상관",
+            "value": 0.2538553713020168,
+            "contribution": -0.04
+          },
+          {
+            "name": "vstd_20",
+            "label_ko": "20일 거래량 변동 폭",
+            "meaning_ko": "20거래일 기간 거래량 표준편차 / 현재 거래량",
+            "value": 0.16163590306395892,
+            "contribution": 0.02
+          }
+        ],
+        "contribution_abs_sum": 1
+      },
+      "distribution": {
+        "status": "available",
+        "reason": null,
+        "policy_id": "multi_stock_up_sigma_001_005_v1",
+        "current": {
+          "up": 0.262625790916083,
+          "sigma": 0.026923350113757072
+        },
+        "tolerances": {
+          "up_absolute": 0.01,
+          "sigma_relative": 0.05
+        },
+        "sample_count": 7189,
+        "stock_count": 794,
+        "period_start": "2019-01-07",
+        "period_end": "2025-12-30",
+        "observed_through": "2026-01-29",
+        "by_fold": {
+          "0": 802,
+          "1": 1173,
+          "2": 1354,
+          "3": 1119,
+          "4": 917,
+          "5": 875,
+          "6": 949
+        },
+        "histogram": {
+          "bins": [
+            {
+              "left": -62,
+              "right": -60,
+              "count": 1
+            },
+            {
+              "left": -60,
+              "right": -58,
+              "count": 0
+            },
+            {
+              "left": -58,
+              "right": -56,
+              "count": 2
+            },
+            {
+              "left": -56,
+              "right": -54,
+              "count": 1
+            },
+            {
+              "left": -54,
+              "right": -52,
+              "count": 1
+            },
+            {
+              "left": -52,
+              "right": -50,
+              "count": 3
+            },
+            {
+              "left": -50,
+              "right": -48,
+              "count": 3
+            },
+            {
+              "left": -48,
+              "right": -46,
+              "count": 1
+            },
+            {
+              "left": -46,
+              "right": -44,
+              "count": 1
+            },
+            {
+              "left": -44,
+              "right": -42,
+              "count": 1
+            },
+            {
+              "left": -42,
+              "right": -40,
+              "count": 6
+            },
+            {
+              "left": -40,
+              "right": -38,
+              "count": 7
+            },
+            {
+              "left": -38,
+              "right": -36,
+              "count": 7
+            },
+            {
+              "left": -36,
+              "right": -34,
+              "count": 8
+            },
+            {
+              "left": -34,
+              "right": -32,
+              "count": 10
+            },
+            {
+              "left": -32,
+              "right": -30,
+              "count": 16
+            },
+            {
+              "left": -30,
+              "right": -28,
+              "count": 17
+            },
+            {
+              "left": -28,
+              "right": -26,
+              "count": 17
+            },
+            {
+              "left": -26,
+              "right": -24,
+              "count": 25
+            },
+            {
+              "left": -24,
+              "right": -22,
+              "count": 39
+            },
+            {
+              "left": -22,
+              "right": -20,
+              "count": 52
+            },
+            {
+              "left": -20,
+              "right": -18,
+              "count": 77
+            },
+            {
+              "left": -18,
+              "right": -16,
+              "count": 102
+            },
+            {
+              "left": -16,
+              "right": -14,
+              "count": 153
+            },
+            {
+              "left": -14,
+              "right": -12,
+              "count": 215
+            },
+            {
+              "left": -12,
+              "right": -10,
+              "count": 300
+            },
+            {
+              "left": -10,
+              "right": -8,
+              "count": 420
+            },
+            {
+              "left": -8,
+              "right": -6,
+              "count": 457
+            },
+            {
+              "left": -6,
+              "right": -4,
+              "count": 551
+            },
+            {
+              "left": -4,
+              "right": -2,
+              "count": 577
+            },
+            {
+              "left": -2,
+              "right": 0,
+              "count": 551
+            },
+            {
+              "left": 0,
+              "right": 2,
+              "count": 609
+            },
+            {
+              "left": 2,
+              "right": 4,
+              "count": 497
+            },
+            {
+              "left": 4,
+              "right": 6,
+              "count": 481
+            },
+            {
+              "left": 6,
+              "right": 8,
+              "count": 406
+            },
+            {
+              "left": 8,
+              "right": 10,
+              "count": 327
+            },
+            {
+              "left": 10,
+              "right": 12,
+              "count": 276
+            },
+            {
+              "left": 12,
+              "right": 14,
+              "count": 187
+            },
+            {
+              "left": 14,
+              "right": 16,
+              "count": 139
+            },
+            {
+              "left": 16,
+              "right": 18,
+              "count": 121
+            },
+            {
+              "left": 18,
+              "right": 20,
+              "count": 90
+            },
+            {
+              "left": 20,
+              "right": 22,
+              "count": 76
+            },
+            {
+              "left": 22,
+              "right": 24,
+              "count": 67
+            },
+            {
+              "left": 24,
+              "right": 26,
+              "count": 47
+            },
+            {
+              "left": 26,
+              "right": 28,
+              "count": 26
+            },
+            {
+              "left": 28,
+              "right": 30,
+              "count": 35
+            },
+            {
+              "left": 30,
+              "right": 32,
+              "count": 28
+            },
+            {
+              "left": 32,
+              "right": 34,
+              "count": 15
+            },
+            {
+              "left": 34,
+              "right": 36,
+              "count": 21
+            },
+            {
+              "left": 36,
+              "right": 38,
+              "count": 17
+            },
+            {
+              "left": 38,
+              "right": 40,
+              "count": 14
+            },
+            {
+              "left": 40,
+              "right": 42,
+              "count": 7
+            },
+            {
+              "left": 42,
+              "right": 44,
+              "count": 7
+            },
+            {
+              "left": 44,
+              "right": 46,
+              "count": 6
+            },
+            {
+              "left": 46,
+              "right": 48,
+              "count": 6
+            },
+            {
+              "left": 48,
+              "right": 50,
+              "count": 6
+            },
+            {
+              "left": 50,
+              "right": 52,
+              "count": 1
+            },
+            {
+              "left": 52,
+              "right": 54,
+              "count": 8
+            },
+            {
+              "left": 54,
+              "right": 56,
+              "count": 9
+            },
+            {
+              "left": 56,
+              "right": 58,
+              "count": 2
+            },
+            {
+              "left": 58,
+              "right": 60,
+              "count": 2
+            },
+            {
+              "left": 60,
+              "right": 62,
+              "count": 4
+            },
+            {
+              "left": 62,
+              "right": 64,
+              "count": 3
+            },
+            {
+              "left": 64,
+              "right": 66,
+              "count": 3
+            },
+            {
+              "left": 66,
+              "right": 68,
+              "count": 0
+            },
+            {
+              "left": 68,
+              "right": 70,
+              "count": 2
+            },
+            {
+              "left": 70,
+              "right": 72,
+              "count": 2
+            },
+            {
+              "left": 72,
+              "right": 74,
+              "count": 1
+            },
+            {
+              "left": 74,
+              "right": 76,
+              "count": 3
+            },
+            {
+              "left": 76,
+              "right": 78,
+              "count": 3
+            },
+            {
+              "left": 78,
+              "right": 80,
+              "count": 0
+            },
+            {
+              "left": 80,
+              "right": 82,
+              "count": 1
+            },
+            {
+              "left": 82,
+              "right": 84,
+              "count": 2
+            },
+            {
+              "left": 84,
+              "right": 86,
+              "count": 0
+            },
+            {
+              "left": 86,
+              "right": 88,
+              "count": 1
+            },
+            {
+              "left": 88,
+              "right": 90,
+              "count": 1
+            },
+            {
+              "left": 90,
+              "right": 92,
+              "count": 1
+            },
+            {
+              "left": 92,
+              "right": 94,
+              "count": 0
+            },
+            {
+              "left": 94,
+              "right": 96,
+              "count": 2
+            },
+            {
+              "left": 96,
+              "right": 98,
+              "count": 1
+            },
+            {
+              "left": 98,
+              "right": 100,
+              "count": 0
+            },
+            {
+              "left": 100,
+              "right": 102,
+              "count": 2
+            },
+            {
+              "left": 102,
+              "right": 104,
+              "count": 0
+            },
+            {
+              "left": 104,
+              "right": 106,
+              "count": 0
+            },
+            {
+              "left": 106,
+              "right": 108,
+              "count": 2
+            },
+            {
+              "left": 108,
+              "right": 110,
+              "count": 0
+            },
+            {
+              "left": 110,
+              "right": 112,
+              "count": 0
+            },
+            {
+              "left": 112,
+              "right": 114,
+              "count": 0
+            },
+            {
+              "left": 114,
+              "right": 116,
+              "count": 0
+            },
+            {
+              "left": 116,
+              "right": 118,
+              "count": 0
+            },
+            {
+              "left": 118,
+              "right": 120,
+              "count": 0
+            },
+            {
+              "left": 120,
+              "right": 122,
+              "count": 0
+            },
+            {
+              "left": 122,
+              "right": 124,
+              "count": 0
+            },
+            {
+              "left": 124,
+              "right": 126,
+              "count": 0
+            },
+            {
+              "left": 126,
+              "right": 128,
+              "count": 0
+            },
+            {
+              "left": 128,
+              "right": 130,
+              "count": 0
+            },
+            {
+              "left": 130,
+              "right": 132,
+              "count": 0
+            },
+            {
+              "left": 132,
+              "right": 134,
+              "count": 0
+            },
+            {
+              "left": 134,
+              "right": 136,
+              "count": 0
+            },
+            {
+              "left": 136,
+              "right": 138,
+              "count": 0
+            },
+            {
+              "left": 138,
+              "right": 140,
+              "count": 0
+            },
+            {
+              "left": 140,
+              "right": 142,
+              "count": 0
+            },
+            {
+              "left": 142,
+              "right": 144,
+              "count": 0
+            },
+            {
+              "left": 144,
+              "right": 146,
+              "count": 0
+            },
+            {
+              "left": 146,
+              "right": 148,
+              "count": 1
+            }
+          ],
+          "central_68": {
+            "low": -9.544406837324605,
+            "high": 10.622515202616377
+          }
+        }
+      },
+      "prices": {
+        "basis": "adjusted_close",
+        "source": "KRX adjusted daily OHLCV",
+        "history": [
+          {
+            "date": "2026-06-26",
+            "close": 339500,
+            "volume": 39735951
+          },
+          {
+            "date": "2026-06-29",
+            "close": 323000,
+            "volume": 35436521
+          },
+          {
+            "date": "2026-06-30",
+            "close": 334000,
+            "volume": 29237216
+          },
+          {
+            "date": "2026-07-01",
+            "close": 314500,
+            "volume": 24968382
+          },
+          {
+            "date": "2026-07-02",
+            "close": 286000,
+            "volume": 38905074
+          },
+          {
+            "date": "2026-07-03",
+            "close": 309500,
+            "volume": 31520538
+          },
+          {
+            "date": "2026-07-06",
+            "close": 318000,
+            "volume": 23872879
+          },
+          {
+            "date": "2026-07-07",
+            "close": 296000,
+            "volume": 32421032
+          },
+          {
+            "date": "2026-07-08",
+            "close": 277500,
+            "volume": 33525758
+          },
+          {
+            "date": "2026-07-09",
+            "close": 278000,
+            "volume": 29703616
+          },
+          {
+            "date": "2026-07-10",
+            "close": 285000,
+            "volume": 20088811
+          },
+          {
+            "date": "2026-07-13",
+            "close": 254500,
+            "volume": 31882652
+          },
+          {
+            "date": "2026-07-14",
+            "close": 263000,
+            "volume": 40086496
+          },
+          {
+            "date": "2026-07-15",
+            "close": 279500,
+            "volume": 24873414
+          },
+          {
+            "date": "2026-07-16",
+            "close": 255000,
+            "volume": 27001478
+          },
+          {
+            "date": "2026-07-20",
+            "close": 244000,
+            "volume": 26804038
+          },
+          {
+            "date": "2026-07-21",
+            "close": 259000,
+            "volume": 20386896
+          },
+          {
+            "date": "2026-07-22",
+            "close": 260500,
+            "volume": 22292003
+          },
+          {
+            "date": "2026-07-23",
+            "close": 270000,
+            "volume": 16011816
+          },
+          {
+            "date": "2026-07-24",
+            "close": 249500,
+            "volume": 26175580
+          },
+          {
+            "date": "2026-07-27",
+            "close": 254000,
+            "volume": 23296044
+          },
+          {
+            "date": "2026-07-28",
+            "close": 220000,
+            "volume": 41639623
+          },
+          {
+            "date": "2026-07-29",
+            "close": 208500,
+            "volume": 65555523
+          },
+          {
+            "date": "2026-07-30",
+            "close": 207000,
+            "volume": 46694193
+          },
+          {
+            "date": "2026-07-31",
+            "close": 262500,
+            "volume": 58478873
+          },
+          {
+            "date": "2026-08-03",
+            "close": 239500,
+            "volume": 27825493
+          },
+          {
+            "date": "2026-08-04",
+            "close": 240000,
+            "volume": 29433821
+          },
+          {
+            "date": "2026-08-05",
+            "close": 246000,
+            "volume": 22577128
+          },
+          {
+            "date": "2026-08-06",
+            "close": 230500,
+            "volume": 26101823
+          },
+          {
+            "date": "2026-08-07",
+            "close": 231000,
+            "volume": 20546010
+          },
+          {
+            "date": "2026-08-10",
+            "close": 230000,
+            "volume": 16327805
+          },
+          {
+            "date": "2026-08-11",
+            "close": 239500,
+            "volume": 23310969
+          },
+          {
+            "date": "2026-08-12",
+            "close": 255500,
+            "volume": 27102479
+          },
+          {
+            "date": "2026-08-13",
+            "close": 268000,
+            "volume": 35530867
+          },
+          {
+            "date": "2026-08-14",
+            "close": 274500,
+            "volume": 21669476
+          },
+          {
+            "date": "2026-08-18",
+            "close": 268500,
+            "volume": 24464621
+          },
+          {
+            "date": "2026-08-19",
+            "close": 247500,
+            "volume": 22788552
+          },
+          {
+            "date": "2026-08-20",
+            "close": 271000,
+            "volume": 26095919
+          },
+          {
+            "date": "2026-08-21",
+            "close": 281500,
+            "volume": 27746471
+          },
+          {
+            "date": "2026-08-24",
+            "close": 257000,
+            "volume": 32451940
+          },
+          {
+            "date": "2026-08-25",
+            "close": 257000,
+            "volume": 21617407
+          },
+          {
+            "date": "2026-08-26",
+            "close": 261500,
+            "volume": 19532523
+          },
+          {
+            "date": "2026-08-27",
+            "close": 266000,
+            "volume": 16829395
+          },
+          {
+            "date": "2026-08-28",
+            "close": 257000,
+            "volume": 15106746
+          },
+          {
+            "date": "2026-08-31",
+            "close": 260000,
+            "volume": 18270969
+          },
+          {
+            "date": "2026-09-01",
+            "close": 261000,
+            "volume": 15319615
+          },
+          {
+            "date": "2026-09-02",
+            "close": 250500,
+            "volume": 15176841
+          },
+          {
+            "date": "2026-09-03",
+            "close": 250000,
+            "volume": 13756022
+          },
+          {
+            "date": "2026-09-04",
+            "close": 255500,
+            "volume": 14031862
+          },
+          {
+            "date": "2026-09-07",
+            "close": 270000,
+            "volume": 18314016
+          },
+          {
+            "date": "2026-09-08",
+            "close": 269500,
+            "volume": 22716517
+          },
+          {
+            "date": "2026-09-09",
+            "close": 269500,
+            "volume": 16370962
+          },
+          {
+            "date": "2026-09-10",
+            "close": 269000,
+            "volume": 22517075
+          },
+          {
+            "date": "2026-09-11",
+            "close": 259500,
+            "volume": 13939111
+          },
+          {
+            "date": "2026-09-14",
+            "close": 248500,
+            "volume": 17776098
+          },
+          {
+            "date": "2026-09-15",
+            "close": 250500,
+            "volume": 11435506
+          },
+          {
+            "date": "2026-09-16",
+            "close": 253500,
+            "volume": 11757106
+          },
+          {
+            "date": "2026-09-17",
+            "close": 256000,
+            "volume": 11827514
+          },
+          {
+            "date": "2026-09-18",
+            "close": 260000,
+            "volume": 17489615
+          },
+          {
+            "date": "2026-09-21",
+            "close": 275000,
+            "volume": 22261519
+          }
+        ]
+      },
+      "sources": {
+        "model_sha256": "7af116af08ce6d4ea8148097b3834a680c92432e9d84d6ac30318b9e354928f7",
+        "features_sha256": "648dbbe31b1486e6e5ea1eee836ae54657713f010a19173de7e2959e83be24bc",
+        "prices_sha256": "20965d9b629b86ae0dc7a8ff15aca06f26c8c2c7d223602d80d494c16abbc919",
+        "cases_sha256": "5fef1c46789ae66fbc1c9e15a587dcc2fd3da912b4b854f80f6648c0c1be2a1d",
+        "config_sha256": "e4b4579a583f2cdf2b3560a3f55cc772000ff1b14e1eb36658115fc04b6c130a"
+      }
+    }
+  }
+]

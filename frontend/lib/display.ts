@@ -137,15 +137,21 @@ export function formatShares(value: number): string {
   return `${value > 0 ? "+" : "-"}${(Math.abs(value) / 10_000).toLocaleString("ko-KR", { maximumFractionDigits: 1 })}만 주`;
 }
 
-// 모델 근거의 크기 말(규칙 코드). 기여값은 선택한 분류 점수를 올리고 내린 정도라 "결과의 몇 %"로 쓰지 않는다.
-// 크기 = |기여값| ÷ 전체 피처 |기여값| 합(payload.inference.contribution_abs_sum). 0.1 이상 "크게", 미만 "조금".
-// 기준: 운영 배치(2026-10-13, 913종목 H20)에서 1위 항목의 중앙값이 약 0.13, 2~3위 항목은 대부분 0.1 미만.
-// 합이 없으면(옛 스냅샷) 크기를 알 수 없어 방향만 쓴다.
-export const CONTRIBUTION_LARGE = 0.1;
-// target은 기여값이 가리키는 분류. "하락 신호를 높임"이 가격 상승으로 읽히지 않게 늘 붙인다.
+// 대상 클래스의 전체 피처 절댓값 합을 분모로 쓴다. 기준값은 서버에서 제외한다.
+export function contributionShare(contribution: number, total?: number): number | undefined {
+  if (!Number.isFinite(contribution) || total === undefined || !Number.isFinite(total) || total <= 0 || Math.abs(contribution) > total + 1e-8) return undefined;
+  return Math.min(1, Math.abs(contribution) / total);
+}
+
 export function contributionWord(contribution: number, target: SignalWord, total?: number): string {
-  if (contribution === 0) return `${target} 신호를 바꾸지 않음`;
-  const verb = contribution > 0 ? "높임" : "낮춤";
-  if (!total) return `${target} 신호를 ${verb}`;
-  return `${target} 신호를 ${Math.abs(contribution) / total >= CONTRIBUTION_LARGE ? "크게" : "조금"} ${verb}`;
+  const direction = contribution === 0 ? `${target} 점수를 바꾸지 않았어요.` : `${target} 점수를 ${contribution > 0 ? "높였어요" : "낮췄어요"}.`;
+  const share = contributionShare(contribution, total);
+  if (share === undefined) return direction;
+  const percent = share * 100;
+  return `${direction} 영향 비중 ${percent > 0 && percent < 0.1 ? "0.1% 미만" : `${percent.toFixed(1)}%`}`;
+}
+
+export function contributionValue(value: number): string {
+  if (value === 0) return "0";
+  return `${value > 0 ? "+" : ""}${Math.abs(value) < 0.00005 ? value.toExponential(3) : value.toFixed(4)}`;
 }

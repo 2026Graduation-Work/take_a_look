@@ -1,5 +1,7 @@
 "use client";
 
+import { featureDescription } from "@/lib/featureLabels";
+
 // 종목 상세의 성향 기반 영역: 나에게 맞춘 체크포인트 · 판단 근거 4탭 · 계산 근거.
 // 성향은 소프트 틸트다. 탭 순서와 체크포인트에만 쓰고 종목을 거르지 않는다.
 // 연구 질문 ② "성향 기반 표시"는 탭 순서(data-card-order)로 보존한다.
@@ -65,7 +67,7 @@ import {
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
 import ChangeText from "./change-text";
-import { changeMeta, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
+import { changeMeta, contributionShare, contributionValue, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -879,10 +881,10 @@ function ContributionPanel({
   }
   const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
-  // 쉽게 보이기: 상위 3개만 막대로, 나머지는 "그 밖의 N개" 한 줄. 크기는 말로(contributionWord), 숫자는 계산값 보기에만
+  // 본문은 상위 3개만 표시하되 비중의 분모는 서버가 보낸 전체 피처 합을 유지한다.
   const shown = features.slice(0, 3);
   const hiddenCount = features.length - shown.length;
-  const max = Math.max(...shown.map(f => Math.abs(f.contribution))) || 1;
+
   return (
     <>
       <Conclusion>
@@ -890,51 +892,56 @@ function ContributionPanel({
         <strong className="font-semibold" style={{ color: target === SIGNAL_WORD.down ? "var(--color-down)" : target === SIGNAL_WORD.up ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
         </strong>{" "}
-        점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
+        점수에 영향을 준 주요 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
+      <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요. 전체 항목을 표시하지 않아 영향 비중의 합은 100%가 아닐 수 있어요.</p>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
+          const share = contributionShare(feature.contribution, total);
           const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
-              <div className="flex items-baseline gap-2">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
-                <span className="ml-auto flex-none text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
+                <span className="text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
               </div>
-              <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
+              {share !== undefined && <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
                 <span className="absolute inset-y-[-3px] left-1/2 w-px bg-line" />
                 <span
                   className="absolute inset-y-0 rounded-full"
                   style={{
                     [up ? "left" : "right"]: "50%",
-                    width: `${(Math.abs(feature.contribution) / max) * 50}%`,
+                    width: `${share * 50}%`,
                     backgroundColor: color,
                   }}
                 />
-              </div>
-              <span className="text-xs text-muted">{feature.meaning_ko}, 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
+              </div>}
+              <span className="text-xs text-muted">{featureDescription(feature.name)}</span>
             </li>
           );
         })}
       </ul>
       {hiddenCount > 0 && (
-        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 영향이 더 작아 줄였어요. 계산 근거에서 모두 볼 수 있어요.</p>
+        <p className="m-0 text-xs text-muted">제공된 다른 {hiddenCount}개 항목은 계산 근거에서 볼 수 있어요.</p>
       )}
-      <p className="m-0 text-2xs text-muted">{total === undefined && "전체 항목 기준값이 없어 크기 말은 빼고 방향만 보여요. "}{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
+      <p className="m-0 text-xs text-muted">{!total ? "전체 항목의 영향 크기 합이 없거나 0이라 영향 비중과 막대는 표시하지 않아요. " : "막대는 가운데에서 왼쪽으로 점수를 낮추고, 오른쪽으로 높인 영향을 나타내요. 각 방향의 끝은 영향 비중 100%예요. "}영향 비중은 이번 {target} 점수를 높이거나 낮춘 각 항목의 크기를 합쳐 비교한 값이에요. 모델 기준값은 제외하며, 예측 확률이나 수익률이 아니에요.</p>
       <Why>{why}</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <div className="flex flex-col gap-2">
-        <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-sm">
+        <p className="m-0 text-xs text-muted">이번에 제공된 주요 항목 {features.length}개예요. 전체 모델 입력 목록은 아니에요.</p>
+        <dl className="m-0 flex flex-col gap-4 text-sm">
           {features.map(feature => (
-            <div key={feature.name} className="contents">
-              <dt>{feature.label_ko}</dt>
-              <dd className="m-0 tabular-nums">{signed(feature.contribution, 4)}</dd>
+            <div key={feature.name} className="flex flex-col gap-1">
+              <dt className="font-medium">{feature.label_ko}</dt>
+              <dd className="m-0 text-xs text-muted">계산 방법: {feature.meaning_ko}</dd>
+              <dd className="m-0 break-words tabular-nums">모델에 넣은 값: {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumSignificantDigits: 8 })}</dd>
+              <dd className="m-0 tabular-nums">{target} 점수에 미친 영향: {contributionValue(feature.contribution)}</dd>
             </div>
           ))}
         </dl>
-        <p className="m-0 text-2xs text-muted">계산값은 {target} 점수를 올리고(+) 내린(−) 정도예요. 결과의 몇 분의 몇이라는 뜻이 아니에요. 계산값의 절댓값이 전체 항목 절댓값 합{total !== undefined && `(이번 ${total.toFixed(4)})`}의 10분의 1 이상이면 &lsquo;크게&rsquo;, 그보다 작으면 &lsquo;조금&rsquo;이라고 써요. 모델 기준값은 제외해요. 막대 길이는 막대로 보인 항목 중 가장 큰 값을 기준으로 비교해요.</p>
+        <p className="m-0 text-xs text-muted">점수에 미친 영향은 모델 내부 점수를 높인 값(+)과 낮춘 값(−)이에요. 정해진 최솟값과 최댓값은 없어요. 영향 비중은 각 값의 절댓값을 전체 피처 절댓값 합{total !== undefined && `(${total.toPrecision(6)})`}으로 나눠 계산해요. 화면에 보이지 않는 항목도 분모에 포함하고 모델 기준값은 제외해요.</p>
         </div>
       </details>
     </>

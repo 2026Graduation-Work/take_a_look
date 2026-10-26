@@ -37,7 +37,7 @@ test("public predictions retain the original detail UI and both model directions
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText(contributionWord(feature.contribution, "상승")); // 미리보기 표본은 class_2(상승). 전체 합이 없으면 크기 말 없이 방향만
+      await expect(row).toContainText(contributionWord(feature.contribution, "상승")); // 미리보기 표본은 class_2(상승). 전체 합이 없으면 방향만
     }
     await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
   }
@@ -77,18 +77,19 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
   const features = wholeModel.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features;
-  // 상위 3개를 막대로, 크기는 말로(전체 합의 10분의 1 기준), 나머지는 "그 밖의 N개" 한 줄
+  // 비중은 전체 피처 합 기준으로 표시하고, 나머지 제공 항목은 계산 근거로 이동한다.
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
     await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상승", 1));
   }
   await expect(model).not.toContainText("기여도");
-  if (features.length > visible.length) await expect(model).toContainText(`그 밖의 ${features.length - visible.length}개 항목`);
+  if (features.length > visible.length) await expect(model).toContainText(`제공된 다른 ${features.length - visible.length}개 항목`);
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
-  await expect(model.locator("dd").first()).toHaveText(features[0].contribution.toFixed(4));
-  await expect(model).toContainText("10분의 1 이상이면");
+  await expect(model.locator("dd").filter({ hasText: "점수에 미친 영향:" }).first()).toContainText(features[0].contribution.toFixed(4));
+  await expect(model).toContainText("화면에 보이지 않는 항목도 분모에 포함");
+  await expect(model.locator("[data-model-feature]")).not.toContainText(["관측값", "크게", "조금"]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -174,8 +175,8 @@ for (const [space, target, scores, color] of [
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText(`모델의 ${target} 점수`);
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
-    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 신호를 크게 높임`);
-    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 신호를 크게 낮춤`);
+    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 점수를 높였어요. 영향 비중 12.0%`);
+    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 점수를 낮췄어요. 영향 비중 10.0%`);
     // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
     expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
     expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
@@ -183,3 +184,51 @@ for (const [space, target, scores, color] of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
+
+for (const total of [undefined, 0]) {
+  test(`missing or zero denominator (${total}) never invents a share or bar`, async ({ page }) => {
+    const selected = structuredClone(rows);
+    for (const row of selected) {
+      row.payload.inference.contribution_abs_sum = total;
+      if (total === 0) for (const feature of row.payload.inference.features) feature.contribution = 0;
+    }
+    await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
+    await page.goto("/stocks/005930");
+    await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+    const panel = page.getByRole("tabpanel");
+    await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
+    await expect(panel.locator("[data-model-feature] [aria-hidden]")).toHaveCount(0);
+    await expect(panel.locator("[data-model-feature]").first()).not.toContainText("영향 비중");
+    if (total === 0) await expect(panel.locator("[data-model-feature]").first()).toContainText("바꾸지 않았어요");
+  });
+}
+
+test("fixed bar scale uses the entire denominator and small values survive in calculation basis", async ({ page }) => {
+  const selected = structuredClone(rows);
+  for (const row of selected) {
+    row.payload.inference.contribution_abs_sum = 1;
+    row.payload.inference.features[0].contribution = .12;
+    row.payload.inference.features[1].contribution = -.12;
+    row.payload.inference.features[2].contribution = -1.2e-7;
+    row.payload.inference.features[2].value = null;
+  }
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
+  await page.goto("/stocks/005930");
+  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+  const panel = page.getByRole("tabpanel");
+  const items = panel.locator("[data-model-feature]");
+  for (const index of [0, 1]) {
+    await expect(items.nth(index)).toContainText("영향 비중 12.0%");
+    expect(await items.nth(index).locator("span[style]").getAttribute("style")).toContain("width: 6%");
+  }
+  await expect(items.nth(2)).toContainText("영향 비중 0.1% 미만");
+  await expect(items).not.toContainText(["관측값", "관측값", "관측값"]);
+  await panel.getByText("계산 근거", { exact: true }).click();
+  await expect(panel).toContainText("-1.200e-7");
+  await expect(panel).toContainText("모델에 넣은 값: 미제공");
+  await expect(panel).toContainText("전체 모델 입력 목록은 아니에요");
+  for (const width of [320, 390, 1200]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+});
