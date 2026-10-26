@@ -57,7 +57,7 @@ test("스크린샷: 대시보드 → 계정 메뉴 → 보유 종목으로 이�
   await page.route(/\/rest\/v1\/stocks\?select=code%2Cname/, (route) => route.fulfill({ json: MASTER }));
   await finishDemo(page);
   await page.getByLabel(/계정 메뉴/).click();
-  await page.getByRole("link", { name: "보유 종목" }).click();
+  await page.getByRole("link", { name: "보유 종목", exact: true }).click();
   await expect(page).toHaveURL(/\/portfolio$/);
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
   await expect(page.getByRole("heading", { name: "읽은 내용을 확인해 주세요" })).toBeVisible();
