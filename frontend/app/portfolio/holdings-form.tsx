@@ -4,7 +4,8 @@
 // 위에서 아래로: 종목 넣기(검색 + 캡처로 불러오기) → 평균 매입가 설명 한 번 → 캡처 결과 확인 → '넣은 종목 N개' 목록.
 // 검색에서 종목을 고르면 바로 목록 맨 위에 행이 생기고 수량 칸으로 간다. 저장 형식(SavedHolding)은 그대로다.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { loadStockCatalog } from "@/lib/stock-catalog";
 import GainText from "../components/gain-text";
 import ScreenshotImport from "./screenshot-import";
 import { useStockOptions, type StockOption } from "./use-stock-options";
@@ -20,7 +21,6 @@ export default function HoldingsForm({
   rows,
   onRowsChange,
   catalog,
-  supabaseMode,
   closes,
 }: {
   rows: SavedHolding[];
@@ -32,16 +32,33 @@ export default function HoldingsForm({
   const [keyword, setKeyword] = useState("");
   // 줄 안 수정칸에 친 글자 그대로("1.5"). 점을 보여 주고 저장할 때 막는다(페르소나 워크스루 2026-10)
   const [texts, setTexts] = useState<Record<string, string>>({});
-  const { options } = useStockOptions(keyword, supabaseMode, catalog);
+  const { options } = useStockOptions(keyword, catalog);
+  const [searchError, setSearchError] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  const selectionVersion = useRef(0);
+  const currentRows = useRef(rows);
+  useEffect(() => { currentRows.current = rows; }, [rows]);
 
   // 후보 목록에서 고르거나 Enter를 누르면 바로 맨 위에 행을 만들고 수량 칸으로 간다. 이미 있으면 그 행 수량 칸으로.
   // 키보드로 치는 중에는 넣지 않는다('LG'를 치다 'LG'가 바로 들어가지 않게)
-  function pick(value: string) {
-    const found = options.find((item) => item.name === value.trim() || item.code === value.trim());
-    if (!found) return;
-    if (!rows.some(({ code }) => code === found.code)) onRowsChange([{ ...found, quantity: 0, avgBuyPrice: null }, ...rows]);
-    setKeyword("");
-    setTimeout(() => document.getElementById(qtyId(found.code))?.focus()); // 새 행이 그려진 뒤
+  async function pick(value: string) {
+    if (!value.trim()) return;
+    const version = ++selectionVersion.current;
+    setSelecting(true);
+    setSearchError("");
+    try {
+      const list = options.some((item) => item.name === value.trim() || item.code === value.trim()) ? options : await loadStockCatalog();
+      if (version !== selectionVersion.current) return;
+      const found = list.find((item) => item.name === value.trim() || item.code === value.trim());
+      if (!found) { setSearchError("찾는 종목이 없어요. 종목명이나 코드를 확인하고 후보에서 골라 주세요."); return; }
+      if (!currentRows.current.some(({ code }) => code === found.code)) onRowsChange([{ ...found, quantity: 0, avgBuyPrice: null }, ...currentRows.current]);
+      setKeyword("");
+      setTimeout(() => document.getElementById(qtyId(found.code))?.focus());
+    } catch (cause) {
+      if (version === selectionVersion.current) setSearchError(cause instanceof Error ? cause.message : "종목 목록을 불러오지 못했어요. 다시 검색해 주세요.");
+    } finally {
+      if (version === selectionVersion.current) setSelecting(false);
+    }
   }
 
   const update = (code: string, patch: Partial<SavedHolding>) =>
@@ -86,15 +103,18 @@ export default function HoldingsForm({
               list="holding-stock-catalog"
               value={keyword}
               onChange={(event) => {
+                selectionVersion.current += 1;
+                setSelecting(false);
+                setSearchError("");
                 setKeyword(event.target.value);
                 // 후보 목록에서 고르면 inputType이 없거나 insertReplacementText다(키보드 입력과 구분)
                 const type = (event.nativeEvent as InputEvent).inputType;
-                if (!type || type === "insertReplacementText") pick(event.target.value);
+                if ((!type || type === "insertReplacementText") && options.some((item) => item.name === event.target.value || item.code === event.target.value)) void pick(event.target.value);
               }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter") return;
                 event.preventDefault();
-                pick(keyword);
+                void pick(keyword);
               }}
               placeholder="종목명 또는 코드"
               // 페이지 바탕 위라 흰 면(카드 안 입력칸은 회색 field)
@@ -107,6 +127,8 @@ export default function HoldingsForm({
                 </option>
               ))}
             </datalist>
+            {selecting && <span role="status" className="text-xs text-muted">종목 목록을 불러오는 중이에요.</span>}
+            {searchError && <span role="alert" className="text-xs text-danger">{searchError}</span>}
           </label>
         }
       >

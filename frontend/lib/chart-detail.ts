@@ -1,7 +1,7 @@
 import { chartChange, type ChartSnapshot } from "./chart-public.ts";
 import type { DataProvenance, HorizonDirection, ReturnBin, StockDetail } from "./types.ts";
 
-export const chartProvenance = (asOf?: string): DataProvenance => ({ kind: "real", source: "LGBM 20거래일", asOf });
+export const chartProvenance = (asOf?: string, horizon: 5 | 20 = 20): DataProvenance => ({ kind: "real", source: `LGBM ${horizon}거래일`, asOf });
 
 export function chartDirection(chart: ChartSnapshot | undefined): HorizonDirection | null {
   return inferenceDirection(chart?.inference);
@@ -18,18 +18,19 @@ export function inferenceDirection(
 }
 
 // Keep the existing view model; replace only fields present in the serving output.
-export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefined): StockDetail {
+export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefined, requestedHorizon: 5 | 20 = 20): StockDetail {
   const band = chart?.distribution.histogram.central_68;
+  const horizon = chart?.horizon ?? requestedHorizon;
   return {
     ...detail,
     currentPrice: chart?.prices.history.at(-1)?.close,
     changePercent: chart ? chartChange(chart) ?? undefined : undefined,
     asOf: chart?.data_asof ?? "",
-    returnHorizon: "h20",
+    returnHorizon: horizon === 5 ? "h5" : "h20",
     priceHistory: chart?.prices.history.map(p => p.close) ?? [],
     priceDates: chart?.prices.history.map(p => p.date) ?? [],
     priceProvenance: { kind: "real", source: chart?.prices.source.replace("KRX adjusted daily OHLCV", "KRX 수정종가") ?? "KRX", asOf: chart?.data_asof },
-    provenance: chartProvenance(chart?.data_asof),
+    provenance: chartProvenance(chart?.data_asof, horizon),
     returnBand: { low: band?.low ?? 0, high: band?.high ?? 0, ciLevel: .68 },
     realizedReturns: chart?.distribution.histogram.bins.map(b => ({ from: b.left, to: b.right, count: b.count })) ?? [],
     similarCaseCount: chart?.distribution.sample_count ?? 0,

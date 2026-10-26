@@ -9,9 +9,9 @@ import PortfolioHeatmap from "./portfolio-heatmap";
 import SiteHeader from "./site-header";
 import { useMarketStatus } from "./market-status-bar";
 import { staleLabel } from "@/lib/market-status";
-import { HORIZON_WHY, SIGNAL_WORD, type SignalHorizon } from "@/lib/copy-glossary";
+import { HORIZON_WHY, SIGNAL_WORD } from "@/lib/copy-glossary";
 import MarketDetail from "./market-detail";
-import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { useSignalHorizon } from "@/lib/use-signal-horizon";
 import StockRow from "./stock-card";
 import { useStockMarks } from "./stock-marks";
 import {
@@ -21,7 +21,7 @@ import {
 import { AVOIDED_ASSET_LABELS, summaryFromProfilingOutput } from "@/lib/profiling-rules";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { chartProvenance } from "@/lib/chart-detail";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
 import { SIGNAL_META } from "@/lib/display";
 import { dashboardSummary } from "@/lib/dashboard-summary";
 import { costBasis } from "@/lib/holdings-rules";
@@ -41,29 +41,6 @@ import {
   parseSavedProfile,
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
-
-// 신호 기간 선택. 저장소를 못 쓰는 브라우저(사생활 보호 창 등)에서도 이 화면 안에서는 바뀌게 메모리 값을 먼저 본다
-let chosenHorizon: SignalHorizon | null = null;
-const horizonListeners = new Set<() => void>();
-function subscribeHorizon(listener: () => void) {
-  horizonListeners.add(listener);
-  return () => void horizonListeners.delete(listener);
-}
-function readHorizon(): SignalHorizon {
-  if (chosenHorizon) return chosenHorizon;
-  try {
-    return localStorage.getItem(STORAGE_KEYS.signalHorizon) === "5" ? 5 : 20;
-  } catch {
-    return 20;
-  }
-}
-function chooseHorizon(next: SignalHorizon) {
-  chosenHorizon = next;
-  try {
-    localStorage.setItem(STORAGE_KEYS.signalHorizon, String(next));
-  } catch {}
-  horizonListeners.forEach((listener) => listener());
-}
 
 // 섹션 제목 줄: 제목 + 오른쪽 컨트롤(그것이 바꾸는 내용의 제목 줄, DESIGN.md '읽는 순서') + 아래 13px 한 줄.
 // 두 열의 제목 줄 높이를 같게(min-h-11) 두어 같은 높이에서 시작한다
@@ -155,26 +132,34 @@ export default function Dashboard(initialData: DashboardData) {
   );
   const savedHoldings = parseSavedHoldings(savedHoldingsSnapshot);
   // 보유·관심 종목의 최신 종가·신호(최신 게시 차트). 오늘 목록 종목도 같은 요청으로 읽어 출처 줄에 기준일을 붙인다.
-  const savedCodes = [...(savedHoldings ?? []), ...watchlist, ...stocks].map(({ code }) => code).join(",");
+  const savedCodes = [...(savedHoldings ?? holdings), ...watchlist, ...stocks].map(({ code }) => code).join(",");
   // 신호 기간: 기본 4주, 1주로 바꿔 볼 수 있다. 선택은 이 기기에만 기억(서버 렌더는 4주)
-  const horizon = useSyncExternalStore(subscribeHorizon, readHorizon, () => 20 as SignalHorizon);
-  const [closes, setCloses] = useState<LatestCloses>(new Map());
+  const [horizon, chooseHorizon] = useSignalHorizon();
+  const publicData = isSupabaseConfigured();
+  const closeKey = JSON.stringify([savedCodes, horizon, onboardingState.mode, onboardingState.userId, requestVersion]);
+  const [closeResult, setCloseResult] = useState<{ key: string; closes: LatestCloses; error: string } | null>(null);
+  const closes: LatestCloses = closeResult?.key === closeKey ? closeResult.closes : new Map();
+  const closesError = closeResult?.key === closeKey ? closeResult.error : "";
+  const loadingCloses = publicData && Boolean(savedCodes) && closeResult?.key !== closeKey;
   useEffect(() => {
     let active = true;
-    void loadLatestCloses(getSupabaseClient(), savedCodes ? savedCodes.split(",") : [], horizon).then((next) => active && setCloses(next));
+    void loadLatestCloses(getSupabaseClient(), savedCodes ? savedCodes.split(",") : [], horizon, { throwOnError: true })
+      .then((next) => active && setCloseResult({ key: closeKey, closes: next, error: "" }))
+      .catch(() => active && setCloseResult({ key: closeKey, closes: new Map(), error: "보유 종목 신호를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요." }));
     return () => {
       active = false;
     };
-  }, [savedCodes, horizon]);
+  }, [savedCodes, horizon, closeKey]);
   // 사용자가 등록한 종목에 오늘 신호를 붙인다. 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값.
   // 신호가 없는 종목은 중립으로 꾸미지 않고 맵에서 빼고 개수만 알린다 — 없는 판단을 지어내지 않는다.
   const signalByCode = new Map(
     [...holdings, ...stocks, ...rawHoldingAlerts].map((item) => [item.code, item]),
   );
   // 보유 맵·관심 종목이 같은 신호를 쓴다(#278): 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값
-  const lightFor = (code: string) => closes.get(code)?.signal ?? signalByCode.get(code)?.signalLight;
-  const activeHoldings = savedHoldings
-    ? savedHoldings.flatMap((saved) => {
+  const lightFor = (code: string) => publicData ? closes.get(code)?.signal : signalByCode.get(code)?.signalLight;
+  const displayHoldings = savedHoldings ?? (publicData ? holdings.map(row => ({ ...row, avgBuyPrice: null })) : null);
+  const activeHoldings = displayHoldings
+    ? displayHoldings.flatMap((saved) => {
         const source = signalByCode.get(saved.code);
         const latest = closes.get(saved.code);
         const signalLight = lightFor(saved.code);
@@ -189,24 +174,26 @@ export default function Dashboard(initialData: DashboardData) {
             avgBuyPrice: price,
             priceBasis: basis,
             ...(latest ? { priceAsOf: latest.asOf } : {}),
-            provenance: latest?.signal ? chartProvenance(latest.asOf) : source!.provenance,
+            provenance: latest?.signal ? chartProvenance(latest.asOf, horizon) : source!.provenance,
           },
         ];
       })
     : holdings;
   // 어제와 달라진 근거: 보유 ∪ 관심 종목
   const changeKey = JSON.stringify([...new Map([...(savedHoldings ?? holdings), ...watchlist].map(({ code, name }) => [code, name]))]);
-  const [changes, setChanges] = useState<DailyChange[] | null | undefined>(undefined);
+  const changeRequestKey = JSON.stringify([changeKey, horizon]);
+  const [changeResult, setChangeResult] = useState<{ key: string; data: DailyChange[] | null } | null>(null);
+  const changes = changeResult?.key === changeRequestKey ? changeResult.data : undefined;
   useEffect(() => {
     let active = true;
     const stocks = (JSON.parse(changeKey) as [string, string][]).map(([code, name]) => ({ code, name }));
-    void loadDailyChanges(getSupabaseClient(), stocks, horizon).then((next) => active && setChanges(next));
+    void loadDailyChanges(getSupabaseClient(), stocks, horizon).then((next) => active && setChangeResult({ key: changeRequestKey, data: next }));
     return () => {
       active = false;
     };
-  }, [changeKey, horizon]);
-  const holdingsWithoutSignal = savedHoldings
-    ? savedHoldings.length - activeHoldings.length
+  }, [changeKey, horizon, changeRequestKey]);
+  const holdingsWithoutSignal = displayHoldings
+    ? displayHoldings.length - activeHoldings.length
     : 0;
   const activeProfile = savedProfile
     ? summaryFromProfilingOutput(savedProfile, profile)
@@ -219,15 +206,17 @@ export default function Dashboard(initialData: DashboardData) {
   // 오늘 신호가 강한 종목: 최신 게시 배치 코스피 전 종목의 4주 확신도 순(계정·데모 같은 화면). 회피 항목만 뺀다.
   const avoidedKey = (Object.entries(AVOIDED_ASSET_LABELS) as [RiskFlag, string][])
     .filter(([, label]) => activeAvoidedLabels.includes(label)).map(([flag]) => flag).join(",");
-  const [strong, setStrong] = useState<Awaited<ReturnType<typeof loadStrongSignals>> | undefined>(undefined);
+  const strongKey = JSON.stringify([avoidedKey, horizon]);
+  const [strongResult, setStrongResult] = useState<{ key: string; data: Awaited<ReturnType<typeof loadStrongSignals>> } | null>(null);
+  const strong = strongResult?.key === strongKey ? strongResult.data : undefined;
   useEffect(() => {
     let active = true;
     void loadStrongSignals(getSupabaseClient(), { userMaxRiskTier: null, avoided: new Set(avoidedKey ? avoidedKey.split(",") : []) }, horizon)
-      .then((next) => active && setStrong(next));
+      .then((next) => active && setStrongResult({ key: strongKey, data: next }));
     return () => {
       active = false;
     };
-  }, [avoidedKey, horizon]);
+  }, [avoidedKey, horizon, strongKey]);
   const strongSignals = strong ? [...strong.up, ...strong.down] : [];
   const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
@@ -238,8 +227,8 @@ export default function Dashboard(initialData: DashboardData) {
   const visibleStrong = keyword ? strongSignals.filter(matches) : strongSignals;
   const visibleAlerts = keyword ? holdingAlerts.filter(matches) : [];
   const noResult = keyword && visibleStrong.length + visibleAlerts.length === 0;
-  const holdingCount = savedHoldings ? savedHoldings.length : activeHoldings.length;
-  const summary = dashboardSummary({
+  const holdingCount = displayHoldings?.length ?? activeHoldings.length;
+  const summary = loadingCloses ? "보유 종목의 신호를 불러오는 중이에요." : closesError ? "보유 종목의 신호를 확인하지 못했어요." : holdingCount > 0 && activeHoldings.length === 0 ? "보유 종목의 게시된 신호가 아직 없어요." : dashboardSummary({
     holdings: activeHoldings.map(({ name, signalLight }) => ({ name, signal: signalLight })),
     holdingCount,
     strongCount: strongSignals.length,
@@ -326,7 +315,12 @@ export default function Dashboard(initialData: DashboardData) {
                       <Segmented label="신호 기간" value={horizon} options={[[5, "1주"], [20, "4주"]]} onChange={chooseHorizon} />
                     </>}
                   />
-                  <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />
+                  {loadingCloses ? <div aria-label="보유 종목 신호 불러오는 중" className="surface h-[330px] animate-pulse" />
+                    : closesError ? <div role="alert" className="surface flex flex-col gap-3 p-6">
+                      <p className="text-sm text-body">{closesError}</p>
+                      <button type="button" className="btn-secondary self-end" onClick={retryAuthenticatedData}>다시 시도</button>
+                    </div>
+                    : <PortfolioHeatmap holdings={activeHoldings} withoutSignalCount={holdingsWithoutSignal} horizon={horizon} />}
                 </div>
                 {changes && changeKey !== "[]" && <DailyChanges changes={changes} />}
                 {watchlist.length > 0 && (
@@ -347,7 +341,7 @@ export default function Dashboard(initialData: DashboardData) {
                                 className="flex-none text-sm font-semibold"
                                 style={{ color: light ? SIGNAL_META[light].ink : "var(--color-muted)" }}
                               >
-                                {light ? SIGNAL_META[light].label : "오늘 신호 없음"}
+                                {loadingCloses ? "불러오는 중" : light ? SIGNAL_META[light].label : "오늘 신호 없음"}
                               </span>
                               <span className="size-2 flex-none rotate-45 border-r-[1.5px] border-t-[1.5px] border-ghost" aria-hidden />
                             </Link>
@@ -379,7 +373,7 @@ export default function Dashboard(initialData: DashboardData) {
                   <div className="group-list">
                     {[...visibleStrong.filter(({ direction }) => direction === "up"), ...visibleStrong.filter(({ direction }) => direction === "down")]
                       .map((signal) => <StrongRow key={signal.code} signal={signal} />)}
-                    {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} />)}
+                    {visibleAlerts.map((stock) => <StockRow key={stock.code} stock={stock} horizon={horizon} />)}
                   </div>
                 )}
                 {!keyword && activeExcludedStocks.length > 0 && (

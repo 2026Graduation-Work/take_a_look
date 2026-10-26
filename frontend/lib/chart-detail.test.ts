@@ -32,6 +32,21 @@ test("missing public data does not retain demo chart values or invent a directio
   assert.deepEqual(detail.reasons, []);
 });
 
+test("the selected five-day snapshot labels its own band and source as one week", () => {
+  const chart = charts.find((c: typeof charts[number]) => c.horizon === 5)!;
+  const detail = chartDetail(stockDetails["005930"], chart);
+  assert.equal(detail.returnHorizon, "h5");
+  assert.equal(detail.provenance.source, "LGBM 5거래일");
+  assert.deepEqual(detail.returnBand, { ...chart.distribution.histogram.central_68, ciLevel: .68 });
+});
+
+test("a missing one-week snapshot keeps its period while leaving the band unavailable", () => {
+  const detail = chartDetail(stockDetails["005930"], undefined, 5);
+  assert.equal(detail.returnHorizon, "h5");
+  assert.equal(detail.currentPrice, undefined);
+  assert.equal(detail.provenance.source, "LGBM 5거래일");
+});
+
 test("수익률 분포: 1% 미만 tail은 양 끝 한 칸으로 묶고, 빈 칸은 버린다", () => {
   const bins = [
     { from: -30, to: -28, count: 0 },

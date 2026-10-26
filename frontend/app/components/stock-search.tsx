@@ -3,27 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { KNOWN_STOCKS } from "@/lib/mock-data";
-import { getSupabaseClient } from "@/lib/supabase";
+import { loadStockCatalog } from "@/lib/stock-catalog";
 
 type StockOption = { code: string; name: string };
 
 // 종목 마스터(code·name, 약 950행)를 처음 검색할 때 한 번만 받아 브라우저에서 거른다. 입력마다 조회하지 않는다.
 // ponytail: PostgREST 한 번에 최대 1000행. 종목 마스터가 1000행을 넘으면 range로 나눠 받는다.
-let master: Promise<StockOption[]> | null = null;
-function loadMaster(): Promise<StockOption[]> {
-  master ??= (async () => {
-    const client = getSupabaseClient();
-    if (!client) return KNOWN_STOCKS;
-    const { data, error } = await client.from("stocks").select("code,name").eq("is_active", true).order("code");
-    if (error) {
-      master = null;
-      return KNOWN_STOCKS;
-    }
-    return data as StockOption[];
-  })();
-  return master;
-}
-
 export default function StockSearch({ query, onQueryChange }: { query: string; onQueryChange: (value: string) => void }) {
   const [stocks, setStocks] = useState<StockOption[]>([]);
   const [open, setOpen] = useState(false);
@@ -32,7 +17,8 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
   useEffect(() => {
     if (!keyword) return;
     let active = true;
-    void loadMaster().then((list) => active && setStocks(list));
+    void loadStockCatalog().then((list) => active && setStocks(list))
+      .catch(() => active && setStocks(KNOWN_STOCKS));
     return () => {
       active = false;
     };

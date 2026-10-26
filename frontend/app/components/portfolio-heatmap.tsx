@@ -9,6 +9,7 @@ import { staleLabel } from "@/lib/market-status";
 import { HORIZON_AHEAD, type SignalHorizon } from "@/lib/copy-glossary";
 import HeatmapPopup from "./portfolio-heatmap-popup";
 import HeatmapLabel from "./portfolio-heatmap-label";
+import { holdingValue } from "@/lib/portfolio-value";
 
 interface WeightedHolding {
   holding: PortfolioHolding;
@@ -25,7 +26,7 @@ function layoutTiles(holdings: PortfolioHolding[]): { columns: Tile[][]; all: We
   const all = holdings
     .map((holding) => ({
       holding,
-      amount: Math.max(holding.quantity * holding.avgBuyPrice, 1),
+      amount: holdingValue(holding) ?? 0,
     }))
     .sort(
       (left, right) =>
@@ -43,7 +44,7 @@ function layoutTiles(holdings: PortfolioHolding[]): { columns: Tile[][]; all: We
   for (const tile of tiles) {
     const columnIndex = columns[1].length >= MAX_PER_COLUMN || (columns[0].length < MAX_PER_COLUMN && totals[0] <= totals[1]) ? 0 : 1;
     columns[columnIndex].push(tile);
-    totals[columnIndex] += tile.amount;
+    totals[columnIndex] += Math.max(tile.amount, 1);
   }
 
   return { columns: columns.filter((column) => column.length > 0), all };
@@ -127,8 +128,8 @@ export default function PortfolioHeatmap({
     return (
       <div className="surface flex min-h-[280px] flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="m-0 flex flex-col gap-1">
-          <span className="text-base font-medium text-ink">관심 가는 종목을 검색해 보세요</span>
-          <span className="text-xs text-muted">위 검색창에 종목명을 넣거나, 가진 종목을 넣으면 여기에 오늘 신호가 보여요.</span>
+          <span className="text-base font-medium text-ink">{withoutSignalCount ? `보유 ${withoutSignalCount}종목의 게시된 신호가 아직 없어요` : "관심 가는 종목을 검색해 보세요"}</span>
+          <span className="text-xs text-muted">{withoutSignalCount ? "신호가 준비되면 이곳에서 확인할 수 있어요." : "위 검색창에 종목명을 넣거나, 가진 종목을 넣으면 여기에 오늘 신호가 보여요."}</span>
         </p>
         {emptyAction ?? (
           <Link href="/portfolio" className="btn-primary">
@@ -143,6 +144,9 @@ export default function PortfolioHeatmap({
   const activeItem = all.find(({ holding }) => holding.code === active?.code);
   const others = columns.flat().find((tile) => "others" in tile);
   const weightOf = (amount: number) => Math.round((amount / grandTotal) * 100);
+  const valuesKnown = all.every(({ amount }) => amount > 0);
+  const weightLabel = (amount: number) => valuesKnown ? `비중 ${weightOf(amount)}%` : "비중 미제공";
+  const valueLabel = (holding: PortfolioHolding, amount: number) => amount > 0 ? `${amountLabel(holding)} ${formatAmount(amount)}` : "금액 미제공";
   return (
     <div className="surface flex flex-col gap-4 p-4">
       <div
@@ -156,20 +160,20 @@ export default function PortfolioHeatmap({
             key={columnIndex}
             className="flex min-w-0 flex-col gap-1"
             // 좁은 열에서도 이름이 몇 글자는 보이게(넓이는 정확한 비례가 아니다 — 범례에 적음)
-            style={{ flexGrow: columnTotals[columnIndex], flexBasis: 0, minWidth: columns.length > 1 ? "30%" : undefined }}
+            style={{ flexGrow: Math.max(columnTotals[columnIndex], 1), flexBasis: 0, minWidth: columns.length > 1 ? "30%" : undefined }}
           >
             {column.map((tile) => {
               if ("others" in tile) return (
-                <div key="others" role="listitem" className="flex min-h-11 min-w-0" style={{ flexGrow: tile.amount, flexBasis: 0 }}>
+                <div key="others" role="listitem" className="flex min-h-11 min-w-0" style={{ flexGrow: Math.max(tile.amount, 1), flexBasis: 0 }}>
                   <button
                     type="button"
                     aria-expanded={othersOpen}
                     aria-controls={othersId}
-                    aria-label={`그 밖의 ${tile.others.length}종목, 비중 ${weightOf(tile.amount)}%. 누르면 목록이 열려요`}
+                    aria-label={`그 밖의 ${tile.others.length}종목, ${weightLabel(tile.amount)}. 누르면 목록이 열려요`}
                     className="relative w-full min-w-0 overflow-hidden rounded-md bg-field text-ink hover:brightness-95 focus-visible:-outline-offset-2"
                     onClick={() => setOthersOpen((open) => !open)}
                   >
-                    <HeatmapLabel name={`그 밖의 ${tile.others.length}종목`} detail={`${formatAmount(tile.amount)} (${weightOf(tile.amount)}%)`} />
+                    <HeatmapLabel name={`그 밖의 ${tile.others.length}종목`} detail={valuesKnown ? `${formatAmount(tile.amount)} (${weightOf(tile.amount)}%)` : "금액, 비중 미제공"} />
                   </button>
                 </div>
               );
@@ -180,10 +184,10 @@ export default function PortfolioHeatmap({
                   key={holding.code}
                   role="listitem"
                   href={`/stocks/${holding.code}`}
-                  aria-label={`${holding.name}, ${holding.quantity}주, ${amountLabel(holding)} ${formatAmount(amount)}, 비중 ${Math.round((amount / grandTotal) * 100)}%, ${HORIZON_AHEAD[horizon]} ${signal.label} 신호`}
+                  aria-label={`${holding.name}, ${holding.quantity}주, ${valueLabel(holding, amount)}, ${weightLabel(amount)}, ${HORIZON_AHEAD[horizon]} ${signal.label} 신호`}
                   aria-describedby={active?.code === holding.code ? popupId : undefined}
                   className="relative min-h-11 min-w-0 overflow-hidden rounded-md text-white hover:text-white hover:no-underline hover:brightness-110 focus-visible:-outline-offset-2"
-                  style={{ flexGrow: amount, flexBasis: 0, backgroundColor: signal.solid }}
+                  style={{ flexGrow: Math.max(amount, 1), flexBasis: 0, backgroundColor: signal.solid }}
                   onPointerDown={(event) => { pointerType.current = event.pointerType; }}
                   onPointerEnter={(event) => {
                     if (event.pointerType === "touch") return;
@@ -210,7 +214,7 @@ export default function PortfolioHeatmap({
                   }}
                 >
                   {/* 종가도 평균 매입가도 없으면 금액을 모르므로 비중만 */}
-                  <HeatmapLabel name={holding.name} detail={holding.avgBuyPrice > 0 ? `${formatAmount(amount)} (${weightOf(amount)}%)` : `(${weightOf(amount)}%)`} />
+                  <HeatmapLabel name={holding.name} detail={amount > 0 ? `${formatAmount(amount)} (${valuesKnown ? `${weightOf(amount)}%` : "비중 미제공"})` : "금액, 비중 미제공"} />
                 </Link>
               );
             })}
@@ -229,7 +233,7 @@ export default function PortfolioHeatmap({
         <option value="" disabled>종목을 골라 정보 보기</option>
         {all.map(({ holding, amount }) => (
           <option key={holding.code} value={holding.code}>
-            {holding.name}, 비중 {weightOf(amount)}%
+            {holding.name}, {weightLabel(amount)}
           </option>
         ))}
       </select>
@@ -245,7 +249,7 @@ export default function PortfolioHeatmap({
                 <span className="flex-none text-xs font-semibold" style={{ color: SIGNAL_META[holding.signalLight].ink }}>
                   {SIGNAL_META[holding.signalLight].label}
                 </span>
-                <span className="flex-none text-xs text-muted tabular-nums">비중 {weightOf(amount)}%</span>
+                <span className="flex-none text-xs text-muted tabular-nums">{weightLabel(amount)}</span>
               </Link>
             </li>
           ))}
@@ -258,8 +262,8 @@ export default function PortfolioHeatmap({
           y={active.y}
           touch={active.input === "touch"}
           holding={activeItem.holding}
-          amount={`${amountLabel(activeItem.holding)} ${formatAmount(activeItem.amount)}`}
-          weight={Math.round((activeItem.amount / grandTotal) * 100)}
+          amount={valueLabel(activeItem.holding, activeItem.amount)}
+          weight={valuesKnown ? weightOf(activeItem.amount) : null}
           horizon={horizon}
           onClose={() => setActive(null)}
         />
