@@ -148,7 +148,7 @@ docs/               설계·데이터·설정 문서 (색인: docs/README.md)
 
 ## 기여하기
 
-브랜치·커밋·PR 규칙은 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), 아키텍처 원칙과 금지 표현은 [AGENTS.md](AGENTS.md)에 있습니다. 보안 문제는 [SECURITY.md](SECURITY.md)를 봐 주세요.
+브랜치·커밋·PR 규칙은 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), 아키텍처 원칙과 금지 표현은 [AGENTS.md](AGENTS.md)에 있습니다. 보안 문제는 [SECURITY.md](SECURITY.md)를, 접근성 불편은 [ACCESSIBILITY.md](ACCESSIBILITY.md)를 봐 주세요.
 
 ## 팀
 
