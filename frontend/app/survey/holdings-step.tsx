@@ -8,6 +8,7 @@ import { isValidHolding, saveHoldings, type SavedHolding } from "@/lib/save-hold
 import { KNOWN_STOCKS, portfolioHoldings } from "@/lib/mock-data";
 import HoldingsForm, { HOLDINGS_INTRO } from "../portfolio/holdings-form";
 import StepNav from "../components/step-nav";
+import { holdingInputError } from "@/lib/holdings-rules";
 
 // 데모 계정은 김민지 예시 보유 종목을 미리 채워 둔다. 평단은 비워 둔다(#278 점검: 옛 예시 평단이
 // 실제 최신 종가와 섞여 "평단 대비 +269%" 같은 없는 손익을 보여 줬다). 평단을 넣으면 손익이 보인다.
@@ -36,7 +37,7 @@ export default function HoldingsStep({
     setError("");
     const invalid = rows.find((row) => !isValidHolding(row));
     if (invalid) {
-      setError(`${invalid.name}의 수량을 1 이상의 정수로 적어 주세요. 보유하지 않으면 삭제를 눌러 주세요.`);
+      setError(holdingInputError(invalid));
       return;
     }
     setSaving(true);

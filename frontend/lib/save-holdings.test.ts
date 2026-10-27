@@ -58,7 +58,7 @@ test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 
   assert.equal(digitsOnly("１２", 9), "12");
   assert.equal(numberDraft("1.5", 9), "1.5"); // 보여 주고 넣을 때 막는다
   assert.ok(Number.isNaN(parseWholeNumber(numberDraft("1.5", 9))));
-  assert.equal(numberDraft("2,500주", 9), "2,500");
+  assert.equal(numberDraft("2,500주", 9), "2,500주");
   assert.equal(numberDraft("1234567", 9), "1,234,567");
   assert.equal(numberDraft("1234567.5", 9), "1,234,567.5");
   assert.equal(parseWholeNumber(numberDraft("71200", 12)), 71200); // 저장 값은 숫자 그대로
@@ -70,6 +70,20 @@ test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 
   assert.ok(Number.isNaN(parseWholeNumber("10abc")));
   assert.equal(parseWholeNumber("1,200"), 1200);
   assert.equal(parseWholeNumber(" "), null);
+});
+
+test("잘못된 숫자 입력은 보존하고 자릿수 초과와 안전하지 않은 정수는 저장하지 않는다", () => {
+  for (const text of ["-1", "1e3", "10abc", "1.2.3", "9".repeat(24)]) {
+    assert.equal(numberDraft(text, 9), text);
+    assert.ok(Number.isNaN(parseWholeNumber(numberDraft(text, 9), 9)), text);
+  }
+  assert.equal(numberDraft("-100", 12), "-100");
+  assert.ok(Number.isNaN(parseWholeNumber("9007199254740993")));
+  assert.ok(Number.isNaN(parseWholeNumber("0".repeat(13), 12)));
+  assert.equal(isValidHolding({ ...ok, quantity: 999_999_999, avgBuyPrice: 999_999_999_999 }), true);
+  assert.equal(isValidHolding({ ...ok, quantity: 1_000_000_000 }), false);
+  assert.equal(isValidHolding({ ...ok, avgBuyPrice: 1_000_000_000_000 }), false);
+  assert.equal(isValidHolding({ ...ok, avgBuyPrice: Number.MAX_SAFE_INTEGER + 1 }), false);
 });
 
 test("스크린샷에서 읽은 목록 합치기: 이미 있는 종목은 새 값으로 바꾸고 이름을 알려 준다", () => {
