@@ -117,8 +117,9 @@ export default function StockDetailView({
     return () => { live = false; };
   }, [savedCodes]);
   const held = holdings.find(({ code }) => code === detail.code);
-  const own = saved
-    ? { quantity: saved.quantity, rawAvgBuyPrice: saved.avgBuyPrice }
+  // 저장된 목록에서 빠진 종목은 미보유다. 빈 목록도 예시 보유로 되돌리지 않는다.
+  const own = savedList !== null
+    ? saved && { quantity: saved.quantity, rawAvgBuyPrice: saved.avgBuyPrice }
     : held && { quantity: held.quantity, rawAvgBuyPrice: held.rawAvgBuyPrice ?? null };
   const nudgeHoldings: HoldingWeight[] = savedList
     ? savedList.map(({ code, quantity, avgBuyPrice }) => ({
