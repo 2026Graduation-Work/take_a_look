@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 
 // 시장 흔들림 "자세히": 트리거 바로 아래에 붙는 설명.
-// 누르면 열리고 다시 누르거나 바깥을 누르거나 Esc로 닫힌다(마우스·키보드·터치 모두 같음). 올리기·포커스만으로는 열리지 않는다.
+// 기본은 클릭으로 열고 다시 클릭/바깥 클릭/Esc로 닫는다. 피처 설명만 hover를 켜고, 포털로 이동하는 동안 닫힘을 잠시 늦춘다.
 // 시장 막대가 가로 스크롤(overflow)이라 absolute는 잘린다 → 열 때 트리거 위치로 fixed 좌표를 계산한다.
 // 헤더의 backdrop-filter가 fixed의 기준 상자가 되므로 설명은 body로 portal한다.
 export default function MarketDetail({
@@ -12,17 +12,38 @@ export default function MarketDetail({
   children,
   title = "시장 흔들림 설명",
   className = "flex-none lg:ml-auto",
+  hover = false,
 }: {
   label: ReactNode;
   children: ReactNode;
   title?: string;
   className?: string;
+  hover?: boolean;
 }) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openedByHover = useRef(false);
+  const cancelClose = () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  };
+  const leave = () => {
+    if (!hover) return;
+    cancelClose();
+    closeTimer.current = setTimeout(() => setOpen(false), 150);
+  };
+  const enter = (event: ReactPointerEvent) => {
+    if (!hover || event.pointerType !== "mouse") return;
+    cancelClose();
+    openedByHover.current = true;
+    setOpen(true);
+  };
+  useEffect(() => () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  }, []);
   const [position, setPosition] = useState({ top: 0, left: 0 });
 
   useEffect(() => {
@@ -55,13 +76,19 @@ export default function MarketDetail({
   }, [open]);
 
   return (
-    <div ref={root} className={className}>
+    <div ref={root} className={className} onPointerEnter={enter} onPointerLeave={leave}>
       <button
         ref={trigger}
         type="button"
         aria-expanded={open}
         aria-controls={id}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          cancelClose();
+          // 포인터 진입 직후 클릭해도 호버로 연 설명이 곧바로 닫히지 않게 한다.
+          const keepOpen = hover && openedByHover.current;
+          openedByHover.current = false;
+          setOpen(current => keepOpen || !current);
+        }}
         className="flex min-h-11 items-center whitespace-nowrap text-xs text-body"
       >
         {label}
@@ -70,6 +97,8 @@ export default function MarketDetail({
         createPortal(
           <div
             ref={panel}
+            onPointerEnter={enter}
+            onPointerLeave={leave}
             id={id}
             role="region"
             aria-label={title}

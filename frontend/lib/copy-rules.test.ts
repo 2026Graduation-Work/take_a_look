@@ -85,6 +85,7 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
     assert.ok(caught(text), text);
   }
   assert.ok(!caught("과거 유사 신호 중 상승 비율 61%"));
+  assert.ok(!caught("하락 점수를 높였어요. 영향 비중 12.0%"));
   assert.ok(!caught("getSupabaseClient()"));
   assert.ok(!caught("const h10 = agreement.h10"));
   assert.ok(!caught("signalLabel"));

@@ -1,5 +1,8 @@
 "use client";
 
+import { featureDescription } from "@/lib/featureLabels";
+import MarketDetail from "./market-detail";
+
 // 종목 상세의 성향 기반 영역: 나에게 맞춘 체크포인트 · 판단 근거 4탭 · 계산 근거.
 // 성향은 소프트 틸트다. 탭 순서와 체크포인트에만 쓰고 종목을 거르지 않는다.
 // 연구 질문 ② "성향 기반 표시"는 탭 순서(data-card-order)로 보존한다.
@@ -65,7 +68,7 @@ import {
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
 import ChangeText from "./change-text";
-import { changeMeta, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
+import { changeMeta, contributionPercent, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -887,10 +890,11 @@ function ContributionPanel({
   }
   const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
-  // 쉽게 보이기: 상위 3개만 막대로, 나머지는 "그 밖의 N개" 한 줄. 크기는 말로(contributionWord), 숫자는 계산값 보기에만
+  // 본문은 상위 3개만 표시하되 비중의 분모는 서버가 보낸 전체 피처 합을 유지한다.
   const shown = features.slice(0, 3);
   const hiddenCount = features.length - shown.length;
-  const max = Math.max(...shown.map(f => Math.abs(f.contribution))) || 1;
+  const max = Math.max(...shown.map(feature => Math.abs(feature.contribution))) || 1;
+
   return (
     <>
       <Conclusion>
@@ -898,17 +902,25 @@ function ContributionPanel({
         <strong className="font-semibold" style={{ color: target === SIGNAL_WORD.down ? "var(--color-down)" : target === SIGNAL_WORD.up ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
         </strong>{" "}
-        점수에 가장 크게 영향을 준 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
+        점수에 영향을 준 주요 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
+      <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요.</p>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
           const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
-              <div className="flex items-baseline gap-2">
-                <span className="text-sm font-medium text-ink">{feature.label_ko}</span>
-                <span className="ml-auto flex-none text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <MarketDetail
+                  hover
+                  title={`${feature.label_ko} 설명`}
+                  className="-my-3 inline-flex flex-none"
+                  label={<><span className="whitespace-nowrap text-left text-sm font-medium text-ink">{feature.label_ko}</span><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only"> 설명 보기</span></>}
+                >
+                  <p className="m-0">{featureDescription(feature.name)}</p>
+                </MarketDetail>
+                <span className="ml-auto max-w-[55%] text-right text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
                 <span className="absolute inset-y-[-3px] left-1/2 w-px bg-line" />
@@ -916,33 +928,35 @@ function ContributionPanel({
                   className="absolute inset-y-0 rounded-full"
                   style={{
                     [up ? "left" : "right"]: "50%",
-                    width: `${(Math.abs(feature.contribution) / max) * 50}%`,
+                    width: `${Math.abs(feature.contribution) / max * 50}%`,
                     backgroundColor: color,
                   }}
                 />
               </div>
-              <span className="text-xs text-muted">{feature.meaning_ko}, 관측값 {feature.value === null ? "미제공" : feature.value.toLocaleString("ko-KR", { maximumFractionDigits: 4 })}</span>
             </li>
           );
         })}
       </ul>
       {hiddenCount > 0 && (
-        <p className="m-0 text-xs text-muted">그 밖의 {hiddenCount}개 항목은 영향이 더 작아 줄였어요. 계산 근거에서 모두 볼 수 있어요.</p>
+        <p className="m-0 text-xs text-muted">제공된 다른 {hiddenCount}개 항목은 계산 근거에서 볼 수 있어요.</p>
       )}
-      <p className="m-0 text-2xs text-muted">{total === undefined && "전체 항목 기준값이 없어 크기 말은 빼고 방향만 보여요. "}{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
+      <p className="m-0 text-xs text-muted">{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
       <Why>{why}</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <div className="flex flex-col gap-2">
+        <p className="m-0 text-xs text-muted">이번 {target} 점수에 대한 영향 비중이에요.{!total && " 전체 항목의 영향 크기 합이 없거나 0이라 비중은 미제공이에요."}</p>
         <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-sm">
           {features.map(feature => (
             <div key={feature.name} className="contents">
               <dt>{feature.label_ko}</dt>
-              <dd className="m-0 tabular-nums">{signed(feature.contribution, 4)}</dd>
+              <dd className="m-0 text-right tabular-nums">{contributionPercent(feature.contribution, total)}</dd>
             </div>
           ))}
         </dl>
-        <p className="m-0 text-2xs text-muted">계산값은 {target} 점수를 올리고(+) 내린(−) 정도예요. 결과의 몇 분의 몇이라는 뜻이 아니에요. 계산값의 절댓값이 전체 항목 절댓값 합{total !== undefined && `(이번 ${total.toFixed(4)})`}의 10분의 1 이상이면 &lsquo;크게&rsquo;, 그보다 작으면 &lsquo;조금&rsquo;이라고 써요. 모델 기준값은 제외해요. 막대 길이는 막대로 보인 항목 중 가장 큰 값을 기준으로 비교해요.</p>
+        <p className="m-0 whitespace-pre-line text-xs text-muted">{`숫자는 전체 항목에서 해당 항목이 차지하는 영향 비중이며, 확률이나 점수의 증감률은 아니에요.
+전체 항목의 절댓값을 더하면 100%예요. 여기서는 일부만 보여 합이 100%가 아닐 수 있어요.
+점수를 바꾼 항목은 비중의 크기가 10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’이라고 써요. 막대 길이는 보이는 항목 중 가장 큰 값을 기준으로 비교해요.`}</p>
         </div>
       </details>
     </>

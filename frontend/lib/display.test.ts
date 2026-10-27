@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { changeMeta, contributionWord, formatKstDateTime, formatShares, formatSignedPercent, signedPercent } from "./display.ts";
+import { changeMeta, contributionShare, contributionPercent, contributionWord, formatKstDateTime, formatShares, formatSignedPercent, signedPercent } from "./display.ts";
 
 test("formatKstDateTime shows UTC timestamps in Korean time and leaves dates alone", () => {
   assert.equal(formatKstDateTime("2026-10-06T03:53:12.940604+00:00"), "2026.10.06 12:53");
@@ -17,15 +17,28 @@ test("수급 수량 표기는 -0을 만들지 않는다", () => {
   for (let value = -30_000; value <= 30_000; value += 7) assert.ok(!formatShares(value).includes("-0"), String(value));
 });
 
-test("모델 근거 크기 말: 전체 합의 10분의 1 기준, 합이 없으면 방향만", () => {
-  assert.equal(contributionWord(0.12, "하락", 1), "하락 신호를 크게 높임");
-  assert.equal(contributionWord(0.05, "상승", 1), "상승 신호를 조금 높임");
-  assert.equal(contributionWord(-0.05, "하락", 1), "하락 신호를 조금 낮춤");
-  assert.equal(contributionWord(-0.1, "중립", 1), "중립 신호를 크게 낮춤");
-  assert.equal(contributionWord(0.3, "상승"), "상승 신호를 높임");
-  assert.equal(contributionWord(0, "하락", 1), "하락 신호를 바꾸지 않음");
+test("본문 크기 말은 기존 전체 합 10% 기준으로 유지한다", () => {
+  assert.equal(contributionWord(.12, "하락", 1), "하락 점수를 크게 높였어요.");
+  assert.equal(contributionWord(-.05, "상승", 1), "상승 점수를 조금 낮췄어요.");
+  assert.equal(contributionWord(-.1, "중립", 1), "중립 점수를 크게 낮췄어요.");
+  assert.equal(contributionWord(.3, "상승"), "상승 점수를 높였어요.");
+  assert.equal(contributionWord(0, "하락", 1), "하락 점수를 바꾸지 않았어요.");
 });
 
+test("상세 영향 비중은 원시 기여값이 아니라 전체 절댓값 합으로 나눈 %다", () => {
+  assert.equal(contributionPercent(.12, 1), "+12%");
+  assert.equal(contributionPercent(-.12, .6), "−20%");
+  assert.equal(contributionPercent(.6, 1), "+60%");
+  assert.equal(contributionPercent(-.4, 1), "−40%");
+  assert.equal(contributionPercent(.1234, 1), "+12.3%");
+  assert.equal(contributionPercent(-.00000012, 1), "−(0.1% 미만)");
+  assert.equal(contributionPercent(-0, 1), "0%");
+  assert.equal(contributionPercent(.00000012, 1), "+(0.1% 미만)");
+  for (const total of [undefined, 0, -1, NaN, Infinity, .01]) {
+    assert.equal(contributionShare(.12, total), undefined);
+    assert.equal(contributionPercent(.12, total), "미제공");
+  }
+});
 
 test("증감 표시의 방향은 표시 자릿수에 맞추고 반올림된 0에는 부호를 붙이지 않는다", () => {
   for (const value of [0, -0, 0.04, -0.04]) {
