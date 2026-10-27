@@ -1,0 +1,174 @@
+- alert: SK하이닉스
+- note: 데모 계정, 예시 데이터로 둘러보는 중이에요. 설문 결과, 보유 종목, 관심 종목과 메모는 이 브라우저에만 저장돼요.
+- banner:
+  - link "대시보드":
+    - /url: /
+    - generic: Take a Look
+  - searchbox "종목 검색"
+  - generic "김민지 계정 메뉴":
+    - text: 김민지
+    - generic: ▾
+  - link "보유 종목":
+    - /url: /portfolio
+  - link "내 투자 성향":
+    - /url: /profile
+  - link "이용 안내":
+    - /url: /guide
+  - link "계정 설정":
+    - /url: /profile#account
+  - button "로그아웃"
+  - dialog "데모에서 로그아웃할까요?":
+    - heading "데모에서 로그아웃할까요?" [level=2]
+    - paragraph: 데모에서 저장한 성향 진단 결과, 보유 종목, 관심 종목, 판단 메모가 이 브라우저에서 삭제돼요. 계속 쓰려면 이메일로 시작해 주세요.
+    - button "취소" [active]
+    - button "로그아웃":
+      - generic: 로그아웃
+- region "시장 브리핑":
+  - generic: KOSPI
+  - generic: 5,550.30
+  - generic: ▲ +0.30%
+  - generic: KOSDAQ
+  - generic: "751.69"
+  - generic: ▼ -1.62%
+  - generic: KOSPI 200
+  - generic: "862.77"
+  - generic: ▲ +0.55%
+  - button "시장 흔들림 보통 거래 낮음 설명 보기":
+    - text: 시장 흔들림
+    - strong: 보통
+    - generic: 거래
+    - strong: 낮음
+    - generic: ⓘ
+    - generic: 설명 보기
+- main:
+  - region "SK하이닉스":
+    - generic: "000660"
+    - generic: KOSPI
+    - generic: 고변동성
+    - heading "SK하이닉스" [level=1]
+    - text: 위험도
+    - strong: 높음
+    - generic: 5칸 중 4칸
+    - generic: 1,263,000원
+    - generic: 전일 대비
+    - generic: ▲ +29,000원 (+2.4%)
+  - region "관심 종목과 내 판단 메모":
+    - button "관심 종목 ✓" [pressed]
+    - generic: 지난 메모, 2026.10.26
+    - paragraph: "QA 가상 메모: 로그아웃 후 유지 여부 확인"
+    - button "고치기"
+    - button "지우기"
+  - region "모델 신호 중립앞으로 4주":
+    - heading "모델 신호 중립앞으로 4주" [level=2]
+    - button "모델 신호 설명 보기":
+      - generic: ⓘ
+      - generic: 모델 신호 설명 보기
+    - paragraph:
+      - text: "과거 비슷한 경우, 4주 뒤 수익률은 10번 중 7번 이 범위였어요:"
+      - strong:
+        - generic: ▼ -12.4%
+        - generic: (약 1,110,000원)
+        - text: ~
+        - generic: ▲ +24.8%
+        - generic: (약 1,580,000원)
+    - img "최근 60거래일 주가 흐름. 4주 뒤 수익률 범위 -12.4%부터 +24.8%까지":
+      - generic: 1,500,000
+      - generic: 3개월 전
+      - generic: 오늘 (10.23)
+      - generic: 1,263,000원
+      - generic: 최고 1,879,000원
+      - generic: 최저 1,190,000원
+      - generic: +24.8%
+      - generic: "-12.4%"
+      - generic: 4주 뒤
+    - paragraph: 2019년 1월~2026년 9월 중 오늘과 점수가 비슷했던 670번(335개 종목)의 결과예요. 원은 오늘 종가 기준이에요.
+  - region "독립 분석형이라면 이것부터 확인해 보세요":
+    - heading "독립 분석형이라면 이것부터 확인해 보세요" [level=2]
+    - list:
+      - generic: "1"
+      - paragraph: 개인은 사고 외국인은 파는 중이에요. 두 집단의 판단이 갈리고 있어요. 어느 쪽 근거를 보고 계신지 짚어 보세요.
+      - generic: "2"
+      - paragraph: 지금 가격이 최근 3개월 최고가보다 크게 낮아요. 왜 떨어졌는지 근거를 먼저 확인해 보세요.
+    - generic "다른 유형이라면?"
+  - region "무엇을 근거로 판단할까요?":
+    - heading "무엇을 근거로 판단할까요?" [level=2]
+    - generic: 판단 근거 4가지, 내 성향에 맞춘 순서
+    - tablist "판단 근거":
+      - tab "모델이 본 이유"
+      - tab "재무 상태"
+      - tab "시장 분위기" [selected]
+      - tab "누가 사고팔았나"
+    - tabpanel "시장 분위기":
+      - heading "요즘 이 종목을 둘러싼 분위기는 어떤가요?" [level=3]
+      - paragraph:
+        - text: 최근 24시간 뉴스 분위기는
+        - strong: 중립에 가까운 편
+        - text: 이에요.
+      - tablist "뉴스 분위기 기간":
+        - tab "일별" [selected]
+        - tab "월별"
+        - tab "연별"
+      - paragraph:
+        - generic: 긍정
+        - generic: 중립
+        - generic: 부정
+      - tabpanel "일별":
+        - generic "감성 시점 탐색":
+          - application:
+            - generic: 2026.10.07
+            - generic: 2026.10.14
+            - generic: 2026.10.19
+            - generic: 오늘 Live
+            - generic: 부정
+            - generic: 중립
+            - generic: 긍정
+      - paragraph: 뉴스 분위기와 함께 보는 주가 흐름
+      - term:
+        - text: 가격 흔들림
+        - button "가격 흔들림 설명 보기":
+          - generic: ⓘ
+          - generic: 가격 흔들림 설명 보기
+      - definition: 102.0%
+      - definition: 1년 기준, 코스피 상위 8%예요.
+      - term: 3개월 최고가 대비
+      - definition:
+        - generic: ▼ -32.8%
+      - term: 최근 3거래일
+      - definition:
+        - generic: ▲ +6.1%
+      - region "대표 기사":
+        - heading "대표 기사" [level=4]
+        - list "대표 기사":
+          - link "\"골드만, 코스피 목표치 3000P 대폭 삭감...AI 거품 우려에 전망 급선회\"":
+            - /url: https://www.dailian.co.kr/news/view/1705888/
+          - text: dailian.co.kr
+          - link "노동·시민단체 \"초광역특구법 철회해야, 지역발전 아닌 기업 특혜\"":
+            - /url: https://www.asiae.co.kr/article/2026102610435237813
+          - text: 아시아경제
+          - link "AI 자금 보안으로 넘어가는데...국내 ETF 여전히 HBM에 묶였다 - 이비엔(EBN)뉴스센터":
+            - /url: https://www.ebn.co.kr/news/articleView.html?idxno=1729115
+          - text: ebn.co.kr
+      - region "최근 공시":
+        - heading "최근 공시" [level=4]
+        - list "최근 공시":
+          - link "풍문또는보도에대한해명(미확정)":
+            - /url: https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261026800118
+          - generic: 2026.10.26거래소 질문에 답변
+          - link "풍문또는보도에대한해명":
+            - /url: https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261023800002
+          - generic: 2026.10.23거래소 질문에 답변
+          - link "기업설명회(IR)개최(안내공시)":
+            - /url: https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20261014800385
+          - generic: 2026.10.14기업설명회
+        - button "더 보기(1)"
+      - paragraph: 왜 봐야 하나요? 짧은 기간 가격은 분위기에 크게 흔들려서, 내 판단이 분위기에 휩쓸린 건 아닌지 볼 수 있어요.
+      - generic "계산 근거"
+  - generic "더 알아보기":
+    - generic: 더 알아보기
+- contentinfo:
+  - text: Take a Look은 투자 자문이 아니며, 제공되는 신호는 과거 데이터 기반의 통계적 참고 정보로 틀릴 수 있어요. 투자 판단과 책임은 투자자 본인에게 있어요.
+  - link "모델 성적표":
+    - /url: /performance
+  - link "개인정보 처리방침":
+    - /url: /privacy
+- generic: 부정

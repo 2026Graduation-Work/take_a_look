@@ -16,6 +16,7 @@ import EvidenceTabs, {
   useDemoStyleAxes,
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
+import Segmented from "./segmented";
 import MarketDetail from "./market-detail";
 import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale";
 import GainText from "./gain-text";
@@ -67,6 +68,8 @@ function RiskMeter({ grade }: { grade: StockDetail["riskGrade"] }) {
 }
 
 interface StockDetailViewProps {
+  signalHorizon?: 5 | 20;
+  onHorizonChange?: (horizon: 5 | 20) => void;
   detail: StockDetail;
   profile: InvestorProfileSummary;
   marketStatus: MarketStatus;
@@ -93,6 +96,8 @@ export default function StockDetailView({
   dataError = "",
   onRetry,
   chartSnapshots,
+  signalHorizon = 20,
+  onHorizonChange,
 }: StockDetailViewProps) {
   const demo = useDemoStyleAxes(styleAxes);
   const [query, setQuery] = useState("");
@@ -122,7 +127,7 @@ export default function StockDetailView({
     : holdings;
 
   const preview = chartSnapshots !== undefined;
-  const chart = chartSnapshots?.get(20);
+  const chart = chartSnapshots?.get(signalHorizon);
   const direction = chartDirection(chart);
   const signal = preview
     ? { ...SIGNAL_META[direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral"],
@@ -233,7 +238,7 @@ export default function StockDetailView({
             <div className="flex items-start">
             <h2 id="glance-title" className="text-xl font-semibold">
               모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span>
-              {preview && direction && <span className="ml-3 text-xs font-normal text-muted">{HORIZON_AHEAD[20]}</span>}
+              {preview && direction && <span className="ml-3 text-xs font-normal text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
               {!preview && <span className="block text-xs font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
             {/* '상승' 기준(ⓘ). 제목 밖에 두어 제목 이름이 바뀌지 않게 */}
@@ -242,6 +247,9 @@ export default function StockDetailView({
               <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
             </MarketDetail>
             </div>
+            {preview && onHorizonChange && <div className="flex justify-end">
+              <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />
+            </div>}
             <p className="m-0 text-sm text-body">
               {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
               <strong className="font-semibold tabular-nums text-ink">

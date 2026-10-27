@@ -10,8 +10,14 @@ const row = (horizon: number, down: number, up: number) => ({
 test("앞으로 4주 | 1주 전환: 목록·문구가 바뀌고 이 기기에 기억된다", async ({ page }) => {
   await page.route(/\/rest\/v1\/latest_chart_signal_snapshots/, (route) => {
     const short = route.request().url().includes("horizon=eq.5");
-    // 4주는 상승, 1주는 하락으로 서로 다르게
-    return route.fulfill({ json: [short ? row(5, 0.7, 0.2) : row(20, 0.2, 0.7)] });
+    // 공개 조회가 빠진 종목을 예시 값으로 채우지 않는다. 보유 신호는 조회 응답에 명시한다.
+    const samsung = short ? row(5, 0.7, 0.2) : row(20, 0.2, 0.7);
+    const closes = new URL(route.request().url()).searchParams.get("select")?.includes("close:payload");
+    return route.fulfill({ json: closes ? [samsung,
+      { ...row(short ? 5 : 20, 0.7, 0.2), stock_code: "035720", name: "카카오" },
+      { ...row(short ? 5 : 20, 0.2, 0.7), stock_code: "068270", name: "셀트리온" },
+      { ...row(short ? 5 : 20, 0.2, 0.7), stock_code: "005380", name: "현대차" },
+    ] : [samsung] });
   });
   await page.route(/\/rest\/v1\/stocks\?/, (route) =>
     route.fulfill({ json: [{ code: "005930", market: "KOSPI", risk_grade: 3, risk_flags: [] }] }));
@@ -27,12 +33,13 @@ test("앞으로 4주 | 1주 전환: 목록·문구가 바뀌고 이 기기에 �
   await expect(page.getByText(/짧은 흔들림에 더 민감/)).toHaveCount(0);
   await expect(strong.getByText(/주 기준/)).toHaveCount(0);
   const below = await tile.boundingBox();
-  // 예시 보유 4종목 중 카카오(예시 값)만 하락 → 1주로 바꾸면 삼성전자도 하락
+  // 공개 조회한 보유 4종목 중 카카오만 하락 → 1주로 바꾸면 삼성전자도 하락
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("카카오에 하락 신호가 있어요.");
 
   await group.getByRole("tab", { name: "1주" }).click();
   await expect(group.getByRole("tab", { name: "1주" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText(/짧은 흔들림에 더 민감/)).toHaveCount(0);
+  await expect(tile).toHaveAccessibleName(/앞으로 1주 하락 신호/);
   expect((await tile.boundingBox())?.y).toBe(below?.y); // 기간을 바꿔도 아래 내용이 움직이지 않는다
   await page.getByRole("button", { name: "1주와 4주 설명 보기" }).click();
   await expect(page.getByText(/1주는 짧은 흔들림에 더 민감하고, 기본은 4주예요\./)).toBeVisible();
