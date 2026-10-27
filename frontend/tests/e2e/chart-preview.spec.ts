@@ -87,8 +87,8 @@ test("feature shares use the whole-model denominator and raw values are collapse
   if (features.length > visible.length) await expect(model).toContainText(`제공된 다른 ${features.length - visible.length}개 항목`);
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
-  await expect(model.locator("dd").filter({ hasText: "점수에 미친 영향:" }).first()).toContainText(features[0].contribution.toFixed(4));
-  await expect(model).toContainText("화면에 보이지 않는 항목도 분모에 포함");
+  await expect(model.locator("dd").first()).toContainText(features[0].contribution.toFixed(4));
+  await expect(model).toContainText("전체 피처 기준으로 비교한 값");
   await expect(model.locator("[data-model-feature]")).not.toContainText(["관측값", "크게", "조금"]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -186,7 +186,7 @@ for (const [space, target, scores, color] of [
 }
 
 for (const total of [undefined, 0]) {
-  test(`missing or zero denominator (${total}) never invents a share or bar`, async ({ page }) => {
+  test(`missing or zero denominator (${total}) never invents a share`, async ({ page }) => {
     const selected = structuredClone(rows);
     for (const row of selected) {
       row.payload.inference.contribution_abs_sum = total;
@@ -197,13 +197,13 @@ for (const total of [undefined, 0]) {
     await page.getByRole("tab", { name: "모델이 본 이유" }).click();
     const panel = page.getByRole("tabpanel");
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
-    await expect(panel.locator("[data-model-feature] [aria-hidden]")).toHaveCount(0);
+    await expect(panel.locator("[data-model-feature] [aria-hidden]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature]").first()).not.toContainText("영향 비중");
     if (total === 0) await expect(panel.locator("[data-model-feature]").first()).toContainText("바꾸지 않았어요");
   });
 }
 
-test("fixed bar scale uses the entire denominator and small values survive in calculation basis", async ({ page }) => {
+test("shares use the entire denominator while bars retain relative scaling and calculation basis stays compact", async ({ page }) => {
   const selected = structuredClone(rows);
   for (const row of selected) {
     row.payload.inference.contribution_abs_sum = 1;
@@ -219,14 +219,19 @@ test("fixed bar scale uses the entire denominator and small values survive in ca
   const items = panel.locator("[data-model-feature]");
   for (const index of [0, 1]) {
     await expect(items.nth(index)).toContainText("영향 비중 12.0%");
-    expect(await items.nth(index).locator("span[style]").getAttribute("style")).toContain("width: 6%");
+    expect(await items.nth(index).locator("span[style]").getAttribute("style")).toContain("width: 50%");
   }
   await expect(items.nth(2)).toContainText("영향 비중 0.1% 미만");
   await expect(items).not.toContainText(["관측값", "관측값", "관측값"]);
   await panel.getByText("계산 근거", { exact: true }).click();
   await expect(panel).toContainText("-1.200e-7");
-  await expect(panel).toContainText("모델에 넣은 값: 미제공");
-  await expect(panel).toContainText("전체 모델 입력 목록은 아니에요");
+  await expect(panel).not.toContainText("모델에 넣은 값:");
+  await expect(panel.locator("dd")).toHaveCount(5);
+  await expect(panel).not.toContainText("계산 방법:");
+  const headingRow = items.first().locator("div").first();
+  const rightText = headingRow.locator("span").last();
+  const [rowBounds, textBounds] = await Promise.all([headingRow.boundingBox(), rightText.boundingBox()]);
+  expect(Math.abs(rowBounds!.x + rowBounds!.width - textBounds!.x - textBounds!.width)).toBeLessThanOrEqual(1);
   for (const width of [320, 390, 1200]) {
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
