@@ -58,7 +58,7 @@
 | 버전 | 날짜 | 내용 |
 |---|---|---|
 | [v1.0.0](https://github.com/2026Graduation-Work/take_a_look/releases/tag/v1.0.0) | 2026-10-21 | MVP 기준선 |
-| v1.1.0 | 2026-10-27 12:00 예정 | 코드 동결본(사용자 테스트 반영, 보안 권고 대응) |
+| [v1.1.0](https://github.com/2026Graduation-Work/take_a_look/releases/tag/v1.1.0) | 2026-10-27 | 최종 제출본, `3d988e0` (사용자 테스트 반영, 보안 권고 대응) |
 
 바뀐 내용은 [CHANGELOG.md](CHANGELOG.md)에 있습니다.
 

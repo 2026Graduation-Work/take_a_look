@@ -45,6 +45,7 @@
 - 기존 인터페이스·UI의 배치, 탭, 컴포넌트 구성을 최대한 유지한다. 데이터나 기능 연결을 이유로 화면을 재구성하지 않는다. 구조 변경이 필요하면 로컬에서 먼저 검토받는다.
 - 2026 2학기 한정: 상호 승인(approve) 없이 작성자 셀프 머지 허용 (ruleset 필수 승인 0). 학기 종료 후 1로 복구.
 - 작성자가 PR까지만 요청하면 머지하지 않는다.
+- 동결 이후(2026-10-27 v1.1.0): main에는 치명 버그와 문서만, v1.1.x로 올린다. 개선과 연구는 `co-deep` 라벨, Co-Deep 2026-2 마일스톤으로.
 - 머지는 `gh pr checks <번호> --watch --fail-fast && gh pr merge <번호> --squash --delete-branch` 형태로만 한다.
 - main 규칙(Rulesets)이 필수 체크 `lint-and-build`(Web CI)·`profiling-test`·`chart-test`·`text-test`(Python CI) 통과를 강제한다. 변경 없는 블록은 건너뜀(=통과)으로 보고된다. 실패하면 머지 버튼 자체가 막힌다(#202·#242 재발 방지).
 - 브랜치명: `feat/`, `fix/`, `chore/`, `refactor/` 접두
