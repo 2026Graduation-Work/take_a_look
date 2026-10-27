@@ -1,0 +1,61 @@
+- alert: 개인정보 처리방침 - Take a Look
+- note: 데모 계정, 예시 데이터로 둘러보는 중이에요. 설문 결과, 보유 종목, 관심 종목과 메모는 이 브라우저에만 저장돼요.
+- banner:
+  - link "대시보드":
+    - /url: /
+    - generic: Take a Look
+  - generic "김민지 계정 메뉴":
+    - text: 김민지
+    - generic: ▾
+- main:
+  - article:
+    - heading "개인정보 처리방침" [level=1]
+    - paragraph: 시행일 2026년 10월 26일
+    - paragraph: Take a Look은 성균관대학교 졸업작품으로 만든 무료 서비스예요. 판단 근거를 보여 주는 데 꼭 필요한 정보만 모으고, 팔거나 광고에 쓰지 않아요.
+    - region "모으는 정보와 쓰는 곳":
+      - heading "모으는 정보와 쓰는 곳" [level=2]
+      - term: 계정
+      - definition: 이메일, 비밀번호(암호화해 저장), 화면에 쓰는 이름
+      - definition: "쓰는 곳: 로그인, 화면 인사"
+      - term: 성향 진단
+      - definition: 설문 답으로 계산한 투자 성향 결과, 제외할 종목 유형, 자유롭게 적은 걱정(선택)
+      - definition: "쓰는 곳: 종목 화면의 확인할 것과 근거 보는 순서를 내 성향에 맞추기"
+      - term: 보유 종목
+      - definition: 종목, 수량, 평균 매입가(선택)
+      - definition: "쓰는 곳: 대시보드 '내 포트폴리오'와 평단 대비 수익률 표시"
+      - term: 관심 종목과 판단 메모
+      - definition: 고른 종목, 직접 쓴 메모와 쓴 날짜
+      - definition: "쓰는 곳: 대시보드 관심 종목, 종목 화면의 지난 메모"
+      - paragraph: 증권사 계좌와는 연결하지 않아요. 주민등록번호, 계좌번호, 연락처는 모으지 않아요.
+    - region "캡처 사진과 데모":
+      - heading "캡처 사진과 데모" [level=2]
+      - paragraph: 보유 종목 화면 캡처는 이 기기의 브라우저 안에서만 읽고 어디에도 보내지 않아요. 사진과 읽은 글자는 저장하지 않고, 확인한 종목과 수량만 내가 저장을 누를 때 저장돼요.
+      - paragraph: 데모로 둘러볼 때 넣은 설문 결과, 보유 종목, 관심 종목과 메모는 이 브라우저에만 저장되고 서버로 보내지 않아요. 로그아웃하면 보유 종목과 설문 결과를 지우고, 나머지는 브라우저 저장소를 지우면 사라져요.
+    - region "보관 기간과 삭제":
+      - heading "보관 기간과 삭제" [level=2]
+      - paragraph: 계정을 삭제할 때까지 보관하고, 삭제하면 위 정보를 바로 모두 지워요. 지운 정보는 되돌릴 수 없어요.
+      - paragraph:
+        - text: "삭제하는 곳: 로그인 뒤 이름 메뉴 › 계정 설정 ›"
+        - link "계정 삭제":
+          - /url: /profile#account
+        - text: . 정보를 보거나 고치는 것은 각 화면(내 투자 성향, 보유 종목, 종목 화면)에서 바로 할 수 있어요.
+    - region "처리를 맡기는 곳":
+      - heading "처리를 맡기는 곳" [level=2]
+      - term: Supabase
+      - definition: 계정과 위 정보의 저장, 로그인 처리. 서버 위치는 서울이에요.
+      - term: Vercel
+      - definition: 웹사이트 전송. 접속 기록(IP 주소, 접속 시각, 브라우저 정보)이 이 회사의 운영 기록에 남을 수 있어요.
+      - paragraph: 로그인 상태를 유지하려고 브라우저 저장소를 써요. 광고나 방문 분석 도구는 쓰지 않아요.
+    - region "문의":
+      - heading "문의" [level=2]
+      - paragraph:
+        - text: "개인정보 보호 책임자: Take a Look 팀장,"
+        - link "fourmi103@g.skku.edu":
+          - /url: mailto:fourmi103@g.skku.edu
+      - paragraph: 열람, 정정, 삭제, 처리 정지를 요청하면 지체 없이 처리하고 결과를 알려 드려요.
+- contentinfo:
+  - text: Take a Look은 투자 자문이 아니며, 제공되는 신호는 과거 데이터 기반의 통계적 참고 정보로 틀릴 수 있어요. 투자 판단과 책임은 투자자 본인에게 있어요.
+  - link "모델 성적표":
+    - /url: /performance
+  - link "개인정보 처리방침":
+    - /url: /privacy

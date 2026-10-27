@@ -1,7 +1,7 @@
 "use client";
 
 import { CHART } from "@/lib/chart-colors";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
@@ -50,7 +50,12 @@ export default function PriceHistoryChart({
   avgBuyPrice,
 }: PriceHistoryChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+  }, [prices]);
 
   if (
     prices.length < 2 ||
@@ -102,7 +107,9 @@ export default function PriceHistoryChart({
   };
 
   return (
-    <div className="relative">
+    <div className="min-w-0">
+    <div ref={scrollRef} role="region" aria-label="주가 차트 좌우 탐색" tabIndex={0} className="overflow-x-auto [scrollbar-width:thin]">
+    <div className="relative min-w-[860px]">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VB_W} ${VB_H}`}
@@ -117,7 +124,7 @@ export default function PriceHistoryChart({
           <g key={tick}>
             <line x1={X0} y1={y(tick)} x2={VB_W - 10} y2={y(tick)} style={{ stroke: "var(--color-line-soft)" }} />
             {Math.abs(y(tick) - yLast) > 16 && (
-              <text x={XAXIS} y={y(tick) + 4} fontSize={11} style={{ fill: "var(--color-muted)" }}>
+              <text x={XAXIS} y={y(tick) + 4} fontSize={13} style={{ fill: "var(--color-muted)" }}>
                 {tick.toLocaleString("ko-KR")}
               </text>
             )}
@@ -126,17 +133,17 @@ export default function PriceHistoryChart({
 
         {/* 오늘 경계선 — 오른쪽 미래 영역에는 H10 세로 구간 외에 아무것도 그리지 않는다 */}
         <line x1={X1} y1={PAD.top} x2={X1} y2={baseline} style={{ stroke: "var(--color-line)" }} />
-        <text x={X0} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }}>
+        <text x={X0} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }}>
           3개월 전
         </text>
-        <text x={X1} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }} textAnchor="end">
+        <text x={X1} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }} textAnchor="end">
           오늘 ({asOfLabel})
         </text>
 
         {avg !== null && (
           <g data-avg-buy-price>
             <line x1={X0} y1={y(avg)} x2={X1} y2={y(avg)} style={{ stroke: CHART.ghost }} strokeWidth={1.5} />
-            <text x={X0 + 4} y={y(avg) + (y(avg) - PAD.top < 16 ? 14 : -6)} fontSize={11} style={{ fill: "var(--color-body)" }}>
+            <text x={X0 + 4} y={y(avg) + (y(avg) - PAD.top < 16 ? 14 : -6)} fontSize={13} style={{ fill: "var(--color-body)" }}>
               평균 매입가 {Math.round(avg).toLocaleString("ko-KR")}원
             </text>
           </g>
@@ -151,16 +158,16 @@ export default function PriceHistoryChart({
           strokeLinejoin="round"
         />
         <circle cx={X1} cy={yLast} r={4} style={{ fill: CHART.priceLine }} stroke="#ffffff" strokeWidth={1.5} />
-        <text x={XAXIS} y={yLast + 4} fontSize={12} fontWeight={600} style={{ fill: "var(--color-ink)" }}>
+        <text x={XAXIS} y={yLast + 4} fontSize={14} fontWeight={600} style={{ fill: "var(--color-ink)" }}>
           {last.toLocaleString("ko-KR")}원
         </text>
         {maxIndex !== prices.length - 1 && (
-          <text x={clampX(xAt(maxIndex))} y={y(prices[maxIndex]) - 8} fontSize={11} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
+          <text x={clampX(xAt(maxIndex))} y={y(prices[maxIndex]) - 8} fontSize={13} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
             최고 {prices[maxIndex].toLocaleString("ko-KR")}원
           </text>
         )}
         {minIndex !== prices.length - 1 && (
-          <text x={clampX(xAt(minIndex))} y={y(prices[minIndex]) + 16} fontSize={11} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
+          <text x={clampX(xAt(minIndex))} y={y(prices[minIndex]) + 16} fontSize={13} textAnchor="middle" style={{ fill: "var(--color-body)" }}>
             최저 {prices[minIndex].toLocaleString("ko-KR")}원
           </text>
         )}
@@ -198,7 +205,7 @@ export default function PriceHistoryChart({
         <text
           x={XH}
           y={yHigh - 9}
-          fontSize={12}
+          fontSize={14}
           fontWeight={600}
           style={{ fill: changeMeta(band.high, 1).color }}
           textAnchor="middle"
@@ -208,14 +215,14 @@ export default function PriceHistoryChart({
         <text
           x={XH}
           y={yLow + 17}
-          fontSize={12}
+          fontSize={14}
           fontWeight={600}
           style={{ fill: changeMeta(band.low, 1).color }}
           textAnchor="middle"
         >
           {formatSignedPercent(band.low)}
         </text>
-        <text x={XH} y={baseline + 17} fontSize={11} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
+        <text x={XH} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
           {horizonLabel}
         </text>
         </>}
@@ -259,6 +266,9 @@ export default function PriceHistoryChart({
           </span>
         </div>
       )}
+    </div>
+    </div>
+    <p className="m-0 mt-2 text-2xs text-muted lg:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
     </div>
   );
 }

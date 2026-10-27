@@ -389,6 +389,7 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
   const { sentiment, psychology } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentTimelineRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipHost, setTooltipHost] = useState<HTMLDivElement | null>(null);
   const sentimentTabRefs = useRef<Record<SentimentPeriod, HTMLButtonElement | null>>({
     day: null,
     month: null,
@@ -479,6 +480,8 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
           <div
             role="tabpanel"
             id="sentiment-panel"
+            ref={setTooltipHost}
+            className="relative min-w-0"
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
           >
             {/* 그래프 전체가 하나의 가로 스크롤. 스와이프하면 선과 날짜가 함께 움직이고, 누르면 그 날 값이 보인다. */}
@@ -490,9 +493,11 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
             >
               <div style={{ width: `max(100%, ${chartPoints * SENTIMENT_POINT_PX}px)` }}>
                 <SentimentChart
+                  key={selectedSentimentPeriod}
                   days={chartDays}
                   connectLive={selectedSentimentPeriod === "day"}
                   live={chartLive}
+                  tooltipHost={tooltipHost}
                 />
               </div>
             </div>
@@ -595,7 +600,8 @@ function Stat({ label, value, change, compare }: { label: ReactNode; value: stri
   );
 }
 
-function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabel }: {
+function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabel, tooltipHost }: {
+  tooltipHost: HTMLDivElement | null;
   days: SentimentDay[];
   live: ReturnType<typeof marketSentimentView>;
   connectLive: boolean;
@@ -651,7 +657,9 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
           <Tooltip
             trigger="click"
             active={tip ? undefined : false}
-            contentStyle={TOOLTIP_STYLE}
+            portal={tooltipHost ?? undefined}
+            wrapperStyle={{ position: "absolute", top: 8, left: 0, maxWidth: "100%", pointerEvents: "none", zIndex: 10 }}
+            contentStyle={{ ...TOOLTIP_STYLE, whiteSpace: "normal", overflowWrap: "anywhere" }}
             formatter={(value, _name, item) => {
               const count = (item.payload as SentimentDay).articleCount;
               const text = `${moodWord(Number(value))} (점수 ${signed(Number(value))}, 범위 −1~+1)`;

@@ -2,26 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { KNOWN_STOCKS } from "@/lib/mock-data";
-import { getSupabaseClient } from "@/lib/supabase";
+import { loadStockCatalog, type StockOption } from "@/lib/stock-catalog";
 
-type StockOption = { code: string; name: string };
-
-// 검색 후보와 본문 링크가 같은 종목 마스터를 사용한다. 요청은 브라우저 안에서 공유한다.
-let master: Promise<StockOption[]> | null = null;
-function loadMaster(): Promise<StockOption[]> {
-  master ??= (async () => {
-    const client = getSupabaseClient();
-    if (!client) return KNOWN_STOCKS;
-    const { data, error } = await client.from("stocks").select("code,name").eq("is_active", true).order("code");
-    if (error) {
-      master = null;
-      return KNOWN_STOCKS;
-    }
-    return data as StockOption[];
-  })();
-  return master;
-}
-
+// 검색 후보와 본문 링크가 같은 종목 마스터(lib/stock-catalog)를 사용한다.
 export function useStockSearch(query: string) {
   const [stocks, setStocks] = useState<StockOption[]>([]);
   const keyword = query.trim().toLowerCase();
@@ -29,7 +12,8 @@ export function useStockSearch(query: string) {
   useEffect(() => {
     if (!keyword) return;
     let active = true;
-    void loadMaster().then((list) => active && setStocks(list));
+    void loadStockCatalog().then((list) => active && setStocks(list))
+      .catch(() => active && setStocks(KNOWN_STOCKS));
     return () => { active = false; };
   }, [keyword]);
 
