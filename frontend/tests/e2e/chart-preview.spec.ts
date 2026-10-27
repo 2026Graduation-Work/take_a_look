@@ -88,7 +88,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
   await expect(model.locator("dd").first()).toContainText(contributionPercent(features[0].contribution, 1));
-  await expect(model).toContainText("전체 피처의 영향 크기 합");
+  await expect(model).toContainText("각 항목이 점수를 바꾼 크기를 모두 더해 100%");
   await expect(model.locator("[data-model-feature]")).not.toContainText(["영향 비중", "관측값", "관측값"]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -287,4 +287,31 @@ test.describe("feature explanation touch", () => {
     await page.getByRole("tab", { name: "모델이 본 이유" }).tap();
     await expect(popup).toHaveCount(0);
   });
+});
+
+
+test("mobile feature names stay on one line and detailed copy explains size words", async ({ page }) => {
+  const selected = structuredClone(rows);
+  for (const row of selected) {
+    row.payload.inference.contribution_space = "class_0_raw_margin";
+    row.payload.inference.contribution_abs_sum = 1;
+    row.payload.inference.features[0] = { ...row.payload.inference.features[0], name: "cord_20", contribution: -.12 };
+  }
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
+  await page.goto("/stocks/005930");
+  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+  const panel = page.getByRole("tabpanel");
+  const item = panel.locator('[data-model-feature="cord_20"]');
+  const label = item.getByRole("button", { name: "20일 등락과 거래량 동행 설명 보기" }).locator("span").first();
+  for (const width of [320, 390, 430]) {
+    await page.setViewportSize({ width, height: 844 });
+    const dimensions = await label.evaluate(node => ({ height: node.getBoundingClientRect().height, lineHeight: parseFloat(getComputedStyle(node).lineHeight) }));
+    expect(dimensions.height).toBeLessThanOrEqual(dimensions.lineHeight + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  }
+  await expect(panel.getByText("하락 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.", { exact: true })).toBeVisible();
+  await panel.getByText("계산 근거", { exact: true }).click();
+  await expect(panel).toContainText("10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’");
+  await expect(panel).toContainText("각 항목이 점수를 바꾼 크기를 모두 더해 100%");
+  await expect(panel.locator("dd").first()).toHaveText("낮춤, 12%");
 });

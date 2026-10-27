@@ -903,12 +903,12 @@ function ContributionPanel({
           const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
           return (
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
-              <div className="flex items-baseline gap-2">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 <MarketDetail
                   hover
                   title={`${feature.label_ko} 설명`}
-                  className="-my-3 inline-flex min-w-0"
-                  label={<><span className="whitespace-normal text-left text-sm font-medium text-ink">{feature.label_ko}</span><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only"> 설명 보기</span></>}
+                  className="-my-3 inline-flex flex-none"
+                  label={<><span className="whitespace-nowrap text-left text-sm font-medium text-ink">{feature.label_ko}</span><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only"> 설명 보기</span></>}
                 >
                   <p className="m-0">{featureDescription(feature.name)}</p>
                 </MarketDetail>
@@ -932,7 +932,7 @@ function ContributionPanel({
       {hiddenCount > 0 && (
         <p className="m-0 text-xs text-muted">제공된 다른 {hiddenCount}개 항목은 계산 근거에서 볼 수 있어요.</p>
       )}
-      <p className="m-0 text-xs text-muted">막대 길이는 보이는 항목 중 가장 큰 영향을 기준으로 비교해요. 모델의 {target} 점수에 미친 영향이며, 예측 확률이나 수익률이 아니에요.</p>
+      <p className="m-0 text-xs text-muted">{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
       <Why>{why}</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
@@ -946,7 +946,7 @@ function ContributionPanel({
             </div>
           ))}
         </dl>
-        <p className="m-0 text-xs text-muted">영향 비중은 각 항목의 영향 크기를 전체 피처의 영향 크기 합과 비교한 값이에요. 모델 기준값은 제외하고, 보이지 않는 항목도 포함해요. 일부 항목만 보여줘 합이 100%가 아닐 수 있어요. 예측 확률이나 점수의 증가율이 아니에요.</p>
+        <p className="m-0 text-xs text-muted">점수를 높이든 낮추든, 각 항목이 점수를 바꾼 크기를 모두 더해 100%로 봐요. 영향 비중은 그중 해당 항목이 차지하는 몫이에요. 여기 없는 항목도 함께 계산해서, 보이는 비중의 합은 100%가 아닐 수 있어요. 점수를 바꾼 항목은 영향 비중이 10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’이라고 써요. 막대 길이는 보이는 항목 중 가장 큰 값을 기준으로 비교해요. 예측 확률이나 점수의 증가율은 아니에요.</p>
         </div>
       </details>
     </>
