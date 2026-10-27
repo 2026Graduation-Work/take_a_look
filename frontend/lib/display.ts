@@ -154,5 +154,7 @@ export function contributionPercent(contribution: number, total?: number): strin
   const share = contributionShare(contribution, total);
   if (share === undefined) return "미제공";
   const percent = share * 100;
-  return percent > 0 && percent < 0.1 ? "0.1% 미만" : `${Number(percent.toFixed(1))}%`;
+  if (share === 0) return "0%";
+  const sign = contribution > 0 ? "+" : "−";
+  return percent < 0.1 ? `${sign}(0.1% 미만)` : `${sign}${Number(percent.toFixed(1))}%`;
 }

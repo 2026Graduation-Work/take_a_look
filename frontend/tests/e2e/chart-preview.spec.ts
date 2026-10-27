@@ -88,7 +88,7 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
   await expect(model.locator("dd").first()).toContainText(contributionPercent(features[0].contribution, 1));
-  await expect(model).toContainText("각 항목이 점수를 바꾼 크기를 모두 더해 100%");
+  await expect(model).toContainText("전체 항목의 부호를 뺀 값을 반올림 전에 더하면 100%");
   await expect(model.locator("[data-model-feature]")).not.toContainText(["영향 비중", "관측값", "관측값"]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -224,9 +224,9 @@ test("shares use the entire denominator while bars retain relative scaling and c
   await expect(items.nth(2)).toContainText("조금 낮췄어요");
   await expect(items).not.toContainText(["관측값", "관측값", "관측값"]);
   await panel.getByText("계산 근거", { exact: true }).click();
-  await expect(panel.locator("dd").nth(0)).toHaveText("높임, 12%");
-  await expect(panel.locator("dd").nth(1)).toHaveText("낮춤, 12%");
-  await expect(panel.locator("dd").nth(2)).toHaveText("낮춤, 0.1% 미만");
+  await expect(panel.locator("dd").nth(0)).toHaveText("+12%");
+  await expect(panel.locator("dd").nth(1)).toHaveText("−12%");
+  await expect(panel.locator("dd").nth(2)).toHaveText("−(0.1% 미만)");
   await expect(panel).not.toContainText("+0.1200");
   await expect(panel).not.toContainText("모델에 넣은 값:");
   await expect(panel.locator("dd")).toHaveCount(5);
@@ -312,6 +312,6 @@ test("mobile feature names stay on one line and detailed copy explains size word
   await expect(panel.getByText("하락 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.", { exact: true })).toBeVisible();
   await panel.getByText("계산 근거", { exact: true }).click();
   await expect(panel).toContainText("10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’");
-  await expect(panel).toContainText("각 항목이 점수를 바꾼 크기를 모두 더해 100%");
-  await expect(panel.locator("dd").first()).toHaveText("낮춤, 12%");
+  await expect(panel).toContainText("전체 항목의 부호를 뺀 값을 반올림 전에 더하면 100%");
+  await expect(panel.locator("dd").first()).toHaveText("−12%");
 });

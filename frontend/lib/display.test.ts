@@ -26,13 +26,14 @@ test("본문 크기 말은 기존 전체 합 10% 기준으로 유지한다", () 
 });
 
 test("상세 영향 비중은 원시 기여값이 아니라 전체 절댓값 합으로 나눈 %다", () => {
-  assert.equal(contributionPercent(.12, 1), "12%");
-  assert.equal(contributionPercent(-.12, .6), "20%");
-  assert.equal(contributionPercent(.6, 1), "60%");
-  assert.equal(contributionPercent(-.4, 1), "40%");
-  assert.equal(contributionPercent(.1234, 1), "12.3%");
-  assert.equal(contributionPercent(-.00000012, 1), "0.1% 미만");
+  assert.equal(contributionPercent(.12, 1), "+12%");
+  assert.equal(contributionPercent(-.12, .6), "−20%");
+  assert.equal(contributionPercent(.6, 1), "+60%");
+  assert.equal(contributionPercent(-.4, 1), "−40%");
+  assert.equal(contributionPercent(.1234, 1), "+12.3%");
+  assert.equal(contributionPercent(-.00000012, 1), "−(0.1% 미만)");
   assert.equal(contributionPercent(-0, 1), "0%");
+  assert.equal(contributionPercent(.00000012, 1), "+(0.1% 미만)");
   for (const total of [undefined, 0, -1, NaN, Infinity, .01]) {
     assert.equal(contributionShare(.12, total), undefined);
     assert.equal(contributionPercent(.12, total), "미제공");

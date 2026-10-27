@@ -942,11 +942,11 @@ function ContributionPanel({
           {features.map(feature => (
             <div key={feature.name} className="contents">
               <dt>{feature.label_ko}</dt>
-              <dd className="m-0 text-right tabular-nums">{feature.contribution === 0 ? "변화 없음" : feature.contribution > 0 ? "높임" : "낮춤"}, {contributionPercent(feature.contribution, total)}</dd>
+              <dd className="m-0 text-right tabular-nums">{contributionPercent(feature.contribution, total)}</dd>
             </div>
           ))}
         </dl>
-        <p className="m-0 text-xs text-muted">점수를 높이든 낮추든, 각 항목이 점수를 바꾼 크기를 모두 더해 100%로 봐요. 영향 비중은 그중 해당 항목이 차지하는 몫이에요. 여기 없는 항목도 함께 계산해서, 보이는 비중의 합은 100%가 아닐 수 있어요. 점수를 바꾼 항목은 영향 비중이 10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’이라고 써요. 막대 길이는 보이는 항목 중 가장 큰 값을 기준으로 비교해요. 예측 확률이나 점수의 증가율은 아니에요.</p>
+        <p className="m-0 text-xs text-muted">+는 점수를 높인 방향, −는 낮춘 방향이에요. 숫자는 전체 항목에서 해당 항목이 차지하는 영향 비중이며, 확률이나 점수의 증감률은 아니에요. 비중을 계산할 수 있을 때, 전체 항목의 부호를 뺀 값을 반올림 전에 더하면 100%예요. 여기서는 일부만 보여 합이 100%가 아닐 수 있어요. 점수를 바꾼 항목은 비중의 크기가 10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’이라고 써요. 막대 길이는 보이는 항목 중 가장 큰 값을 기준으로 비교해요.</p>
         </div>
       </details>
     </>
