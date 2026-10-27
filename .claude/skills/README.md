@@ -180,3 +180,20 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | ai-jailbreaks(라이선스 없음, 별 546) | 기각 | 탈옥 프롬프트 모음. 우리 화면에는 사용자 입력을 받는 LLM이 없다 |
 | "공격적으로 질문하는 8가지 기법" | 생각만(이미 하고 있음) | 10/20 '크래시 아웃'과 같다. 프롬프트보다 테스트, 감사, 실측으로 검증한다 |
 | "출시 전 클로드에게 시킬 20가지"(분석, CTA, FAQ, 404, alt, robots, 구조화 데이터, 개인정보 처리방침 등) | 일부 이미 충족, 1건 제안 | robots, sitemap, 페이지별 제목과 설명, OG 썸네일, 맞춤 404(`not-found.tsx`)는 있다. **개인정보 처리방침 페이지가 없다** — 가입과 설문, 보유 종목을 저장하므로 넣을 가치가 크다(내용은 팀 확인 필요, 사용자 결정 대기). 분석 도구, 구조화 데이터, 문의 흐름은 졸업작품 범위 밖 |
+
+## 검토한 스크랩 (2026-10-27)
+
+코드 동결일. 레포에 들이는 도구는 없고, 보안 소식 1건과 발표 준비 후보 1건만 남긴다.
+
+| 스크랩 | 판정 | 이유 |
+| --- | --- | --- |
+| [Tailworm](https://thecybersecguru.com/news/tailworm-tailscale-ssh-unix-socket-forwarding/)(Tailscale SSH 결함 11건, 10/25 공개) | 확인만 | 실재하고 아직 패치와 공식 공지(TS-2026-013까지)가 없다. 이미 승인된 기기를 가진 공격자가 다른 기기로 옮겨 가는 문제라 바깥에서 바로 뚫리는 일은 아니다. 우리 스택(Vercel, Supabase, GitHub Actions)과 개발 WSL에는 Tailscale이 없다. 개인 PC에서 쓴다면 SSH 규칙을 기기 쌍 단위로 좁히고 다음 판으로 올린다 |
+| [Claude 형식 검증](https://interestingengineering.com/ai-robotics/claude-formal-verification-software-security)(오픈소스 123개, Theorem과 함께, 10/22) | 생각만 | 실재. 다만 RISC-V 바이너리가 64MB 미만 입력에서 멈추지 않는다는 좁은 약속이다. 우리에게 남는 교훈은 '지켜야 할 약속을 먼저 적고 경계 입력으로 검사한다'인데, #426 숫자 입력 수정(#429)이 이미 그 방식이다 |
+| Claude 슬라이드, 독스, 디자인(10/8부터 무료 요금제 포함) | **발표 준비 후보** | 실재(공식 발표 원문은 못 읽었고 2차 글들이 일치). 졸업 발표 자료를 채팅에서 만들고 PPTX나 PDF로 받을 수 있다. 레포 변경은 없다 |
+| [Laya](https://github.com/NandhaKishorM/laya)(Apache-2.0, CPU 판단 모델) | 생각만(졸업 뒤) | 실재. 뉴스 관련성 분류(`classify_live_relevance`)를 키 없이 CPU로 돌릴 후보지만, 첫 호출 때 Hugging Face 가중치를 받아야 하고 동결 뒤라 모델을 바꾸지 않는다 |
+| [OpenJarvis](https://pypi.org/project/OpenJarvis/)(스탠퍼드, Apache-2.0) | 기각 | 설치가 Ollama와 로컬 모델을 깐다. 10/18 Ollama 판정과 같다(셀프호스팅) |
+| [Gemini API CLI](https://github.com/google-gemini/gemini-api-cli)(Google, Apache-2.0, 베타) | 기각 | 이미지, 음성, 영상 생성은 API 키 종량제이고 베타라 명령이 바뀐다. 우리 화면엔 생성 미디어가 없다 |
+| [Google Stitch](https://stitch.withgoogle.com) | 아이디어만 | 무료(하루 크레딧)지만 화면 방향은 `frontend/DESIGN.md`로 정해져 있고 동결일이다. 남의 시안을 붙이면 애플식 절제 방향과 어긋난다 |
+| Glassy Dashboard V2 | 기각 | 카드 전체를 유리로 만든다. 우리는 유리를 헤더, 탭 막대, 팝오버에만 쓴다. "Code" 댓글 미끼 |
+| 무료 플러그인 6가지(superpowers, frontend-design, code-review, security-guidance, [Claude Mem](https://github.com/thedotmack/claude-mem), [gstack](https://github.com/garrytan/gstack)) | 4개 기존 판정 유지, 2개 기각 | 앞의 넷은 10/26 표 그대로. Claude Mem은 내장 메모리, `AGENTS.md`와 겹치고 라이선스 표기가 글마다 다르다(AGPL과 Apache). gstack(MIT)은 스킬 23개라 토큰이 늘고 ponytail, `/code-review`와 겹친다 |
+| 고수 도구 4개(Graft는 [Trail-code](https://github.com/trailhq/Trail-Code)로 이름 바뀜, Agency Agents, Codebase Memory MCP, OpenMontage) | 기존 판정 유지 | 10/06 기각 그대로. Trail-code는 처음 실행 때 지난 대화를 읽어 사용량이 나간다 |
