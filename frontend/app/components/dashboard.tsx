@@ -13,6 +13,7 @@ import { HORIZON_WHY, SIGNAL_WORD } from "@/lib/copy-glossary";
 import MarketDetail from "./market-detail";
 import { useSignalHorizon } from "@/lib/use-signal-horizon";
 import StockRow from "./stock-card";
+import { useStockSearch } from "./use-stock-search";
 import { useStockMarks } from "./stock-marks";
 import {
   getAuthenticatedDashboardData,
@@ -220,6 +221,7 @@ export default function Dashboard(initialData: DashboardData) {
   const strongSignals = strong ? [...strong.up, ...strong.down] : [];
   const activeExcludedStocks = activeAvoidedLabels.length > 0 ? strong?.excluded ?? excludedStocks : [];
   const keyword = query.trim();
+  const { target: searchTarget, matches: searchMatches } = useStockSearch(keyword);
   const normalized = keyword.toLowerCase();
   const matches = (stock: { name: string; code: string }) =>
     stock.name.toLowerCase().includes(normalized) ||
@@ -364,9 +366,17 @@ export default function Dashboard(initialData: DashboardData) {
                 ) : noResult ? (
                   <div className="surface flex flex-col items-center gap-4 px-6 py-8 text-center">
                     <p className="text-sm text-body">&lsquo;{keyword}&rsquo;은(는) 오늘 목록에 없어요.</p>
-                    <Link href={`/stocks/${encodeURIComponent(keyword)}`} className="btn-secondary">
-                      종목 정보 보기
-                    </Link>
+                    {searchTarget ? (
+                      <Link href={`/stocks/${searchTarget.code}`} className="btn-secondary">
+                        종목 정보 보기
+                      </Link>
+                    ) : (
+                      <p className="text-sm text-muted">
+                        {searchMatches.length > 1
+                          ? "검색창에 표시된 후보에서 종목을 골라 주세요."
+                          : "종목명이나 코드를 확인하고 다시 검색해 주세요."}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   // 묶음 제목 없이 한 목록(상승 먼저), 줄 오른쪽에 색 단어 하나(화면 규칙 v2)
