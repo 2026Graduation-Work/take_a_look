@@ -15,6 +15,7 @@
 | [stock-master-rules.md](stock-master-rules.md) | 종목 마스터 위험 등급·표시 규칙과 임계값 |
 | [disclosure-kinds.md](disclosure-kinds.md) | DART 공시 제목 유형표 |
 | [research/oss-scan.md](research/oss-scan.md) | 오픈소스·무료 공급원 조사와 채택 결정 |
+| [research/horizon-selection.md](research/horizon-selection.md) | 1주, 4주 신호를 남긴 과거 실험 근거와 H10 제외 이유 |
 | [../backend/analysis/chart/serving/README.md](../backend/analysis/chart/serving/README.md) | H5·H20 serving 구조·공개 계약·검증 상태 |
 | [../backend/analysis/chart/serving/OPERATIONS.md](../backend/analysis/chart/serving/OPERATIONS.md) | H5·H20 실행·DB 발행 절차 |
 | [../frontend/DESIGN.md](../frontend/DESIGN.md) | 화면 규칙(성균관대 색·애플 톤). 값은 `frontend/app/globals.css` `@theme` |
