@@ -1,6 +1,7 @@
 "use client";
 
 import { featureDescription } from "@/lib/featureLabels";
+import MarketDetail from "./market-detail";
 
 // 종목 상세의 성향 기반 영역: 나에게 맞춘 체크포인트 · 판단 근거 4탭 · 계산 근거.
 // 성향은 소프트 틸트다. 탭 순서와 체크포인트에만 쓰고 종목을 거르지 않는다.
@@ -67,7 +68,7 @@ import {
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
 import ChangeText from "./change-text";
-import { changeMeta, contributionValue, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
+import { changeMeta, contributionPercent, contributionWord, formatShares, kstDay, signedPercent } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail, StyleAxes } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -895,7 +896,7 @@ function ContributionPanel({
         </strong>{" "}
         점수에 영향을 준 주요 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
-      <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요. 전체 항목을 표시하지 않아 영향 비중의 합은 100%가 아닐 수 있어요.</p>
+      <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요.</p>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
@@ -903,7 +904,14 @@ function ContributionPanel({
           return (
             <li key={feature.name} className="flex flex-col gap-2" data-model-feature={feature.name}>
               <div className="flex items-baseline gap-2">
-                <span className="min-w-0 text-sm font-medium text-ink">{feature.label_ko}</span>
+                <MarketDetail
+                  hover
+                  title={`${feature.label_ko} 설명`}
+                  className="-my-3 inline-flex min-w-0"
+                  label={<><span className="whitespace-normal text-left text-sm font-medium text-ink">{feature.label_ko}</span><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only"> 설명 보기</span></>}
+                >
+                  <p className="m-0">{featureDescription(feature.name)}</p>
+                </MarketDetail>
                 <span className="ml-auto max-w-[55%] text-right text-xs text-body">{contributionWord(feature.contribution, target, total)}</span>
               </div>
               <div className="relative h-1.5 rounded-full bg-track" aria-hidden>
@@ -917,7 +925,6 @@ function ContributionPanel({
                   }}
                 />
               </div>
-              <span className="text-xs text-muted">{featureDescription(feature.name)}</span>
             </li>
           );
         })}
@@ -925,20 +932,21 @@ function ContributionPanel({
       {hiddenCount > 0 && (
         <p className="m-0 text-xs text-muted">제공된 다른 {hiddenCount}개 항목은 계산 근거에서 볼 수 있어요.</p>
       )}
-      <p className="m-0 text-xs text-muted">{!total && "전체 항목의 영향 크기 합이 없거나 0이라 영향 비중은 표시하지 않아요. "}막대 길이는 보이는 항목 중 가장 큰 영향을 기준으로 비교해요. 영향 비중은 이번 {target} 점수를 높이거나 낮춘 각 항목의 크기를 전체 피처 기준으로 비교한 값이에요. 모델 기준값은 제외하며, 예측 확률이나 수익률이 아니에요.</p>
+      <p className="m-0 text-xs text-muted">막대 길이는 보이는 항목 중 가장 큰 영향을 기준으로 비교해요. 모델의 {target} 점수에 미친 영향이며, 예측 확률이나 수익률이 아니에요.</p>
       <Why>{why}</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <div className="flex flex-col gap-2">
+        <p className="m-0 text-xs text-muted">이번 {target} 점수에 대한 영향 비중이에요.{!total && " 전체 항목의 영향 크기 합이 없거나 0이라 비중은 미제공이에요."}</p>
         <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-sm">
           {features.map(feature => (
             <div key={feature.name} className="contents">
               <dt>{feature.label_ko}</dt>
-              <dd className="m-0 tabular-nums">{contributionValue(feature.contribution)}</dd>
+              <dd className="m-0 text-right tabular-nums">{feature.contribution === 0 ? "변화 없음" : feature.contribution > 0 ? "높임" : "낮춤"}, {contributionPercent(feature.contribution, total)}</dd>
             </div>
           ))}
         </dl>
-        <p className="m-0 text-xs text-muted">계산값은 {target} 점수를 높인 값(+)과 낮춘 값(−)이에요. 정해진 최솟값과 최댓값은 없어요.</p>
+        <p className="m-0 text-xs text-muted">영향 비중은 각 항목의 영향 크기를 전체 피처의 영향 크기 합과 비교한 값이에요. 모델 기준값은 제외하고, 보이지 않는 항목도 포함해요. 일부 항목만 보여줘 합이 100%가 아닐 수 있어요. 예측 확률이나 점수의 증가율이 아니에요.</p>
         </div>
       </details>
     </>

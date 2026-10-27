@@ -144,14 +144,15 @@ export function contributionShare(contribution: number, total?: number): number 
 }
 
 export function contributionWord(contribution: number, target: SignalWord, total?: number): string {
-  const direction = contribution === 0 ? `${target} 점수를 바꾸지 않았어요.` : `${target} 점수를 ${contribution > 0 ? "높였어요" : "낮췄어요"}.`;
+  if (contribution === 0) return `${target} 점수를 바꾸지 않았어요.`;
   const share = contributionShare(contribution, total);
-  if (share === undefined) return direction;
-  const percent = share * 100;
-  return `${direction} 영향 비중 ${percent > 0 && percent < 0.1 ? "0.1% 미만" : `${percent.toFixed(1)}%`}`;
+  const size = share === undefined ? "" : share >= 0.1 ? "크게 " : "조금 ";
+  return `${target} 점수를 ${size}${contribution > 0 ? "높였어요" : "낮췄어요"}.`;
 }
 
-export function contributionValue(value: number): string {
-  if (value === 0) return "0";
-  return `${value > 0 ? "+" : ""}${Math.abs(value) < 0.00005 ? value.toExponential(3) : value.toFixed(4)}`;
+export function contributionPercent(contribution: number, total?: number): string {
+  const share = contributionShare(contribution, total);
+  if (share === undefined) return "미제공";
+  const percent = share * 100;
+  return percent > 0 && percent < 0.1 ? "0.1% 미만" : `${Number(percent.toFixed(1))}%`;
 }

@@ -31,6 +31,13 @@ fs.writeFileSync(root + '/docs/qa/2026-10-27-model-reasons/capture-fixture.json'
   await panel.locator('summary',{hasText:'계산 근거'}).click();
   await panel.screenshot({style:'nextjs-portal, header { visibility: hidden !important; }',path:`${root}/docs/qa/2026-10-27-model-reasons/${process.argv[2]}-${device}-basis.png`});
   if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)) throw Error('horizontal overflow');
+  if (process.argv[2] === 'after') {
+    await panel.locator('summary', {hasText:'계산 근거'}).click();
+    await panel.scrollIntoViewIfNeeded();
+    await panel.locator('[data-model-feature]').first().getByRole('button', {name:/설명 보기$/}).hover();
+    await page.getByRole('region', {name:'20일 주가 출렁임 설명',exact:true}).waitFor();
+    await panel.screenshot({style:'nextjs-portal, header { visibility: hidden !important; }',path:`${root}/docs/qa/2026-10-27-model-reasons/after-${device}-info.png`});
+  }
   await page.close();
  }
  await browser.close();

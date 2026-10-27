@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { featureLabel } from "../../lib/featureLabels.ts";
-import { contributionWord } from "../../lib/display.ts";
+import { contributionPercent, contributionWord } from "../../lib/display.ts";
 
 const snapshots = JSON.parse(readFileSync("../backend/analysis/chart/serving/previews/2026-09-21/snapshots.json", "utf8"));
 const rows = snapshots.map((payload: { batch_id: string; stock_code: string; horizon: number }) => ({
@@ -39,7 +39,7 @@ test("public predictions retain the original detail UI and both model directions
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
       await expect(row).toContainText(contributionWord(feature.contribution, "상승")); // 미리보기 표본은 class_2(상승). 전체 합이 없으면 방향만
     }
-    await expect(model.locator("dd").filter({ hasText: feature.contribution.toFixed(4) })).toBeVisible();
+    await expect(model.locator("dd").nth(index)).toContainText("미제공");
   }
   await expect(model).not.toContainText(/비율 합 100%|뉴스 분위기|회사 체력|사고판 주체/);
   await page.locator("summary", { hasText: "더 알아보기" }).click();
@@ -87,9 +87,9 @@ test("feature shares use the whole-model denominator and raw values are collapse
   if (features.length > visible.length) await expect(model).toContainText(`제공된 다른 ${features.length - visible.length}개 항목`);
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
-  await expect(model.locator("dd").first()).toContainText(features[0].contribution.toFixed(4));
-  await expect(model).toContainText("전체 피처 기준으로 비교한 값");
-  await expect(model.locator("[data-model-feature]")).not.toContainText(["관측값", "크게", "조금"]);
+  await expect(model.locator("dd").first()).toContainText(contributionPercent(features[0].contribution, 1));
+  await expect(model).toContainText("전체 피처의 영향 크기 합");
+  await expect(model.locator("[data-model-feature]")).not.toContainText(["영향 비중", "관측값", "관측값"]);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
@@ -175,8 +175,8 @@ for (const [space, target, scores, color] of [
     const panel = page.getByRole("tabpanel");
     await expect(panel).toContainText(`모델의 ${target} 점수`);
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
-    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 점수를 높였어요. 영향 비중 12.0%`);
-    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 점수를 낮췄어요. 영향 비중 10.0%`);
+    await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 점수를 크게 높였어요.`);
+    await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 점수를 크게 낮췄어요.`);
     // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
     expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
     expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
@@ -197,7 +197,7 @@ for (const total of [undefined, 0]) {
     await page.getByRole("tab", { name: "모델이 본 이유" }).click();
     const panel = page.getByRole("tabpanel");
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
-    await expect(panel.locator("[data-model-feature] [aria-hidden]")).toHaveCount(3);
+    await expect(panel.locator("[data-model-feature] div[aria-hidden]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature]").first()).not.toContainText("영향 비중");
     if (total === 0) await expect(panel.locator("[data-model-feature]").first()).toContainText("바꾸지 않았어요");
   });
@@ -218,13 +218,16 @@ test("shares use the entire denominator while bars retain relative scaling and c
   const panel = page.getByRole("tabpanel");
   const items = panel.locator("[data-model-feature]");
   for (const index of [0, 1]) {
-    await expect(items.nth(index)).toContainText("영향 비중 12.0%");
+    await expect(items.nth(index)).toContainText(index === 0 ? "크게 높였어요" : "크게 낮췄어요");
     expect(await items.nth(index).locator("span[style]").getAttribute("style")).toContain("width: 50%");
   }
-  await expect(items.nth(2)).toContainText("영향 비중 0.1% 미만");
+  await expect(items.nth(2)).toContainText("조금 낮췄어요");
   await expect(items).not.toContainText(["관측값", "관측값", "관측값"]);
   await panel.getByText("계산 근거", { exact: true }).click();
-  await expect(panel).toContainText("-1.200e-7");
+  await expect(panel.locator("dd").nth(0)).toHaveText("높임, 12%");
+  await expect(panel.locator("dd").nth(1)).toHaveText("낮춤, 12%");
+  await expect(panel.locator("dd").nth(2)).toHaveText("낮춤, 0.1% 미만");
+  await expect(panel).not.toContainText("+0.1200");
   await expect(panel).not.toContainText("모델에 넣은 값:");
   await expect(panel.locator("dd")).toHaveCount(5);
   await expect(panel).not.toContainText("계산 방법:");
@@ -236,4 +239,52 @@ test("shares use the entire denominator while bars retain relative scaling and c
     await page.setViewportSize({ width, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   }
+});
+
+
+test("feature explanations use the common info icon, hover remains open over the popup and Escape restores focus", async ({ page }) => {
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: rows }));
+  await page.goto("/stocks/005930");
+  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
+  const first = page.getByRole("tabpanel").locator("[data-model-feature]").first();
+  const trigger = first.getByRole("button", { name: /설명 보기$/ });
+  await expect(trigger).toContainText("ⓘ");
+  const description = page.getByRole("region", { name: /설명$/ });
+  await expect(description).toHaveCount(0);
+  await trigger.hover();
+  await expect(description).toBeVisible();
+  await expect(description).toContainText("변화율");
+  await description.hover();
+  await expect(description).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(description).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(description).toBeVisible();
+  await page.keyboard.press("Escape");
+  await trigger.hover();
+  await expect(description).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(description).toHaveCount(0);
+  await trigger.click();
+  await expect(description).toBeVisible();
+  await trigger.click();
+  await expect(description).toHaveCount(0);
+});
+
+test.describe("feature explanation touch", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test("tap opens the same info popup and outside tap dismisses it", async ({ page }) => {
+    await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: rows }));
+    await page.goto("/stocks/005930");
+    await page.getByRole("tab", { name: "모델이 본 이유" }).tap();
+    await page.getByRole("tabpanel").locator("[data-model-feature]").first().getByRole("button", { name: /설명 보기$/ }).tap();
+    const popup = page.getByRole("region", { name: /설명$/ });
+    await expect(popup).toBeVisible();
+    const bounds = (await popup.boundingBox())!;
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+    await page.getByRole("tab", { name: "모델이 본 이유" }).tap();
+    await expect(popup).toHaveCount(0);
+  });
 });
