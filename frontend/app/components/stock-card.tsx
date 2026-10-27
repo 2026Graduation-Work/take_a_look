@@ -18,10 +18,10 @@ export function oneLineReason(stock: RecommendedStock): string {
 }
 
 // 주식 앱처럼 한 줄: 종목명 · 한 줄 이유 · 신호. 밴드·상승 비율·기간별 일치는 상세로 보낸다.
-export default function StockRow({ stock }: { stock: RecommendedStock }) {
+export default function StockRow({ stock, horizon = 20 }: { stock: RecommendedStock; horizon?: 5 | 20 }) {
   const preview = isChartPreview(stock.code);
   const { charts, loading, error } = usePublicCharts(preview ? [stock.code] : []);
-  const chart = charts?.get(stock.code)?.get(20);
+  const chart = charts?.get(stock.code)?.get(horizon);
   const direction = chartDirection(chart);
   const signal = SIGNAL_META[preview ? direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral" : stock.signalLight];
   return (
@@ -43,7 +43,7 @@ export default function StockRow({ stock }: { stock: RecommendedStock }) {
         </span>
         <span className="truncate text-xs text-muted">{preview
           ? loading ? "최신 게시 결과를 불러오는 중이에요." : error ? "연결을 확인하지 못했어요. 상세에서 다시 시도해 주세요."
-            : chart ? `4주, ${chart.data_asof.slice(5, 10).replace("-", ".")}` : "게시된 예측 결과가 아직 없어요."
+            : chart ? `${horizon === 5 ? "1주" : "4주"}, ${chart.data_asof.slice(5, 10).replace("-", ".")}` : "게시된 예측 결과가 아직 없어요."
           : oneLineReason(stock)}</span>
       </div>
       <div className="flex flex-none flex-col items-end gap-1">

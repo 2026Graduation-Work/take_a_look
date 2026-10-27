@@ -47,6 +47,13 @@ test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()
 
 test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보드 맵 -> 상세 -> logout", async ({ page }) => {
   const browserErrors = collectBrowserErrors(page);
+  // 보유 맵의 공개 종가·신호를 명시한다. 누락된 응답을 예시 신호·0원으로 채우지 않는다(M04).
+  await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => {
+    const select = new URL(route.request().url()).searchParams.get("select") ?? "";
+    if (!select.includes("close:payload")) return route.fallback();
+    return route.fulfill({ json: [{ stock_code: "005930", close: 275000, as_of: "2026-09-21", status: "available",
+      scores: { down: 0.1, neutral: 0.1, up: 0.8 } }] });
+  });
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Take a Look 시작" })).toBeVisible();
@@ -125,8 +132,8 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 종목 중 하락 신호는 없어요.");
   await expect(page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem")).toHaveCount(1);
-  // e2e 스텁은 차트 스냅샷 종가를 주지 않아 평균 매입가도 없는 이 종목은 매입금액(0) 기준으로 센다
-  await expect(page.getByText("종가가 없는 종목은 매입금액 기준")).toBeVisible();
+  await expect(page.getByRole("listitem", { name: /삼성전자,.*평가금액 275만원/ })).toBeVisible();
+  await expect(page.getByText("종가가 없는 종목은 매입금액 기준")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "신호가 강한 종목" })).toBeVisible();
   await expect(page.getByText("데모 계정")).toBeVisible();
   await expect(page.getByText("적극 축적형", { exact: true })).toBeVisible();
@@ -225,6 +232,7 @@ test("옛 저장 키(signallab.*)로 저장된 데모 상태가 새로고침 후
   await page.getByRole("button", { name: "다음", exact: true }).click();
   await page.getByRole("button", { name: "저장하고 시작" }).click();
   await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { level: 1 })).not.toContainText("불러오는 중");
   const heading = await page.getByRole("heading", { level: 1 }).innerText();
 
   // 새 키에 저장된 값을 옛 키로 되돌려 심는다(이전 전 브라우저 상태 재현)

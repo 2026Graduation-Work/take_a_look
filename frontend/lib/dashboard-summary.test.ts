@@ -4,6 +4,11 @@ import { dashboardSummary } from "./dashboard-summary.ts";
 
 const h = (name: string, signal: "positive" | "neutral" | "negative" | "strong_negative") => ({ name, signal });
 
+test("신호가 없는 보유는 하락 신호 없음으로 단정하지 않는다", () => {
+  assert.equal(dashboardSummary({ holdings: [], holdingCount: 2, strongCount: 0 }), "보유 종목의 게시된 신호가 아직 없어요.");
+  assert.equal(dashboardSummary({ holdings: [h("삼성전자", "positive")], holdingCount: 2, strongCount: 0 }), "신호를 확인한 보유 종목 중 하락 신호는 없어요.");
+});
+
 test("대시보드 요약: 하락 신호 0개, 1~2종목은 이름, 3종목 이상은 개수", () => {
   assert.equal(
     dashboardSummary({ holdings: [h("삼성전자", "positive"), h("카카오", "neutral")], holdingCount: 2, strongCount: 2 }),

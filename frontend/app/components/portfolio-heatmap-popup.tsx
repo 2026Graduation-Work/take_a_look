@@ -17,7 +17,7 @@ export default function HeatmapPopup({
   touch: boolean;
   holding: PortfolioHolding;
   amount: string;
-  weight: number;
+  weight: number | null;
   onClose: () => void;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -52,7 +52,7 @@ export default function HeatmapPopup({
       <span className="shrink-0 wrap-anywhere text-base font-semibold">{holding.name}</span>
       <div className="flex shrink-0 flex-col gap-1">
         <span className="font-medium" style={{ color: signal.ink }}>{HORIZON_AHEAD[horizon]} {signal.label}</span>
-        <span className="font-semibold tabular-nums text-ink">비중 {weight}%</span>
+        <span className="font-semibold tabular-nums text-ink">{weight === null ? "비중 미제공" : `비중 ${weight}%`}</span>
         <span className="text-xs tabular-nums text-muted">{holding.quantity.toLocaleString("ko-KR")}주, {amount}</span>
       </div>
       {touch && (
