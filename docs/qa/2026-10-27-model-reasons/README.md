@@ -12,15 +12,15 @@
 
 | 화면 | 개선 전 | 개선 후 |
 |---|---|---|
-| 데스크톱 | ![데스크톱 개선 전](before-desktop.png) | ![데스크톱 개선 후](after-desktop.png) |
-| 모바일 | ![모바일 개선 전](before-mobile.png) | ![모바일 개선 후](after-mobile.png) |
-| 데스크톱 계산 근거 | ![계산 근거 개선 전](before-desktop-basis.png) | ![계산 근거 개선 후](after-desktop-basis.png) |
-| 모바일 계산 근거 | ![모바일 계산 근거 개선 전](before-mobile-basis.png) | ![모바일 계산 근거 개선 후](after-mobile-basis.png) |
+| 데스크톱 | ![데스크톱 개선 전](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/before-desktop.png) | ![데스크톱 개선 후](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-desktop.png) |
+| 모바일 | ![모바일 개선 전](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/before-mobile.png) | ![모바일 개선 후](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-mobile.png) |
+| 데스크톱 계산 근거 | ![계산 근거 개선 전](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/before-desktop-basis.png) | ![계산 근거 개선 후](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-desktop-basis.png) |
+| 모바일 계산 근거 | ![모바일 계산 근거 개선 전](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/before-mobile-basis.png) | ![모바일 계산 근거 개선 후](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-mobile-basis.png) |
 
 | 설명 팝업 | 변경 전 본문에 표시 | 변경 후 공통 ⓘ 팝업 |
 |---|---|---|
-| 데스크톱 | 위 개선 전 이미지 참조 | ![데스크톱 피처 설명](after-desktop-info.png) |
-| 모바일 | 위 개선 전 이미지 참조 | ![모바일 피처 설명](after-mobile-info.png) |
+| 데스크톱 | 위 개선 전 이미지 참조 | ![데스크톱 피처 설명](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-desktop-info.png) |
+| 모바일 | 위 개선 전 이미지 참조 | ![모바일 피처 설명](https://raw.githubusercontent.com/2026Graduation-Work/take_a_look/0f64898f98ba8bcfe6dbd58d0213760f4c8107fc/2026-10-27-model-reasons/after-mobile-info.png) |
 
 ## 표시와 계산
 
