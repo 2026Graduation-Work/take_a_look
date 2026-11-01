@@ -7,9 +7,9 @@ pandas>=2.3.3
 openpyxl>=3.1.5
 
 # ── 파이프라인 핵심 (필수) ───────────────────────────────────
-langgraph>=1.2.12
-langchain-core>=1.6.5
-pydantic>=2.13.5
+langgraph>=1.2.18
+langchain-core>=1.7.1
+pydantic>=2.14.1
 requests>=2.34.2
 
 # ── 감성 분석 (필수) ─────────────────────────────────────────
@@ -17,8 +17,8 @@ requests>=2.34.2
 # 미설치 시 39단어 사전으로 폴백하지만 두 백엔드는 점수 스케일이 비교 불가능하다.
 # 런 간 혼용 시 조용한 regime break가 생기므로 필수로 둔다.
 # (VALUE_PIPELINE_VALIDATION.md — '감성 백엔드' 기준 참조)
-torch>=2.14.0
-transformers>=5.17.0
+torch>=2.15.0
+transformers>=5.21.0
 
 # ── 재무·시세 (필수) ─────────────────────────────────────────
 # 한국 재무제표 (DART_API_KEY 필요, 무료). 재무 없이는 시그널을 만들지 않는다.
@@ -36,8 +36,8 @@ finance-datareader>=0.9.202
 # Gemini 무료 티어. GEMINI_API_KEY 필요.
 # 뉴스 관련성 라벨링·핵심 이벤트 추출·근거 문장 생성에만 쓴다(점수 산출 아님).
 # 없으면 규칙 기반으로 동작한다.
-langchain-google-genai>=4.4.0
+langchain-google-genai>=4.4.2
 # 뉴스 크롤링 폴백 (키 불필요)
 beautifulsoup4>=4.15.0
 # .env 자동 로드
-python-dotenv>=1.2.3
+python-dotenv>=1.2.4
