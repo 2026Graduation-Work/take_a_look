@@ -23,8 +23,37 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
     from .calendar import get_krx_trading_days
     if not re.fullmatch(r"[0-9A-Z]{6}", code):
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
-    days = get_krx_trading_days(start_date, end_date)
-    return fetch_price_window(code, sorted(days), root=serving_root() / "cache/prices")
+    days = sorted(get_krx_trading_days(start_date, end_date))
+    root = serving_root() / "cache/prices"
+    # Since 2026-09-14 (KRX after-market) FDR/Naver closes drift from the regular-session close.
+    # Prefer KRX raw OHLC + KRX's own adjusted close (the is_delisted path is exactly that adapter);
+    # shared/ is pinned by the pack checksum, so the choice lives here until a new pack (co-deep).
+    try:
+        return fetch_price_window(code, days, root=root, is_delisted=True)
+    except ValueError as exc:
+        krx_error = exc
+    prices = fetch_price_window(code, days, root=root)
+    try:
+        check_adjustment_steps(prices)
+    except ValueError as exc:
+        raise ValueError(f"Price providers exhausted: KRX adjusted ({krx_error}); fallback {exc}") from None
+    return prices
+
+
+def check_adjustment_steps(frame):
+    """A KRX adjustment factor may move only on corporate-action days.
+
+    Naver's after-market close moves it by 0.3~0.8% almost every day; real corporate actions
+    move it a few times a year.
+    """
+    traded = frame.loc[frame.Volume.gt(0) & ~frame[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)]
+    factor, close = traded.AdjustmentFactor.astype(float), traded.Close.astype(float)
+    # Integer rounding plus ~0.03% drift seen in suppliers' old corporate-action ratios.
+    tolerance = 0.5 / close + 0.5 / close.shift() + 1e-3
+    steps = int(((factor / factor.shift() - 1).abs() > tolerance).sum())
+    allowed = 3 + len(traded) // 250
+    if steps > allowed:
+        raise ValueError(f"Adjustment factor moved on {steps} days (allowed {allowed})")
 
 
 def load_prices(path: str | Path) -> pd.DataFrame:

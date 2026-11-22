@@ -2,13 +2,15 @@
 
 Fixtures are real KRX raw rows and Naver closes from chart_prices.
 """
+import time
 from contextlib import nullcontext
-from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from serving.internal import calendar
+from serving.internal.prices import fetch_prices
+from shared.data import prices as shared_prices
 from shared.data import providers
-from shared.data.prices import fetch_price_window
 
 
 def _raw(dates, ohlc, volume, amount):
@@ -30,12 +32,22 @@ def _adapter(closes, calls, name):
     return fetch
 
 
-def _fetch(tmp_path, raw, fdr_close, krx_close):
-    calls = []
-    source = SimpleNamespace(_fetch_ohlcv_fdr=_adapter(fdr_close, calls, "fdr"),
-                             _fetch_ohlcv_pykrx=_adapter(krx_close, calls, "pykrx"),
-                             _krx_request_timeout=nullcontext, time=SimpleNamespace(sleep=lambda *_: None))
-    return fetch_price_window("000000", raw.index, root=tmp_path, raw=raw, source=source), calls
+@pytest.fixture
+def fetch(tmp_path, monkeypatch):
+    monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(providers, "_krx_request_timeout", nullcontext)
+    monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+    def run(raw, naver, krx_adjusted):
+        calls = []
+        monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: set(raw.index.date))
+        monkeypatch.setattr(shared_prices, "supplement_raw_ohlc", lambda *_: raw)
+        monkeypatch.setattr(providers, "_fetch_delisted_pykrx", _adapter(krx_adjusted, calls, "krx"))
+        monkeypatch.setattr(providers, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
+        monkeypatch.setattr(providers, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
+        result = fetch_prices("005930", str(raw.index[0].date()), str(raw.index[-1].date()))
+        return result, calls
+    return run
 
 
 SAMSUNG_DAYS = ["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-19", "2026-10-20",
@@ -51,10 +63,9 @@ SAMSUNG = _raw(SAMSUNG_DAYS,
 SAMSUNG_NAVER = [234500, 207500, 217000, 223500, 209000, 223500, 214500, 213500, 213500, 225000]
 
 
-def test_after_market_close_falls_back_to_krx_regular_close(tmp_path):
-    prices, calls = _fetch(tmp_path, SAMSUNG, SAMSUNG_NAVER, SAMSUNG.RawClose.tolist())
-    assert calls == ["fdr", "pykrx"]  # the drift is deterministic, so no FDR retries
-    assert set(prices.PriceProvider) == {"pykrx"}
+def test_serving_uses_krx_regular_close(fetch):
+    prices, calls = fetch(SAMSUNG, SAMSUNG_NAVER, SAMSUNG.RawClose.tolist())
+    assert calls == ["krx"] and set(prices.PriceProvider) == {"pykrx"}
     close = prices.set_index("Date").Close
     # Naver showed 213,500 -> 213,500 ('전일 대비 0원'); the KRX close moved -2,500 won.
     assert close["2026-10-26"] - close["2026-10-23"] == -2500
@@ -62,24 +73,24 @@ def test_after_market_close_falls_back_to_krx_regular_close(tmp_path):
     assert prices.AdjustmentFactor.eq(1).all()
 
 
-def test_drifting_close_is_never_published_when_krx_is_unavailable(tmp_path):
-    with pytest.raises(ValueError, match="Adjustment factor moved"):
-        _fetch(tmp_path, SAMSUNG, SAMSUNG_NAVER, None)
+def test_drifting_fallback_close_is_never_published(fetch):
+    with pytest.raises(ValueError, match="^Price providers exhausted: .*Adjustment factor moved"):
+        fetch(SAMSUNG, SAMSUNG_NAVER, None)
 
 
-def test_stock_without_after_market_keeps_supplier_close(tmp_path):
+def test_stock_without_after_market_can_fall_back_to_fdr(fetch):
     raw = _raw(SAMSUNG_DAYS,  # 000040: Naver close equaled the KRX close every day after 9/14
                [(1000, 1000, 963, 979), (955, 975, 930, 952), (956, 990, 950, 972), (940, 997, 940, 992),
                 (1100, 1289, 1025, 1289), (1402, 1485, 1192, 1248), (1283, 1350, 1141, 1172),
                 (1202, 1243, 1095, 1165), (1165, 1165, 1060, 1117), (1154, 1154, 1051, 1132)],
                [25607, 12863, 15214, 45849, 995289, 1237030, 208575, 55265, 47288, 46878],
                [24932254, 12138048, 14717770, 45098401, 1248221713, 1606436032, 254490546, 64059420, 52536733, 52250002])
-    prices, calls = _fetch(tmp_path, raw, raw.RawClose.tolist(), None)
-    assert calls == ["fdr"] and set(prices.PriceProvider) == {"fdr"}
+    prices, calls = fetch(raw, raw.RawClose.tolist(), None)
+    assert calls[-1] == "fdr" and set(prices.PriceProvider) == {"fdr"}
     assert prices.Close.tolist() == raw.RawClose.tolist()
 
 
-def test_real_corporate_action_step_is_kept(tmp_path):
+def test_real_corporate_action_step_is_kept(fetch):
     # 006490: halted 9/3~9/9, then a real adjustment (factor 1.577 -> 1) from 9/10.
     raw = _raw(["2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09",
                 "2026-09-10", "2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16"],
@@ -87,14 +98,25 @@ def test_real_corporate_action_step_is_kept(tmp_path):
                                        (2400, 2745, 2250, 2250), (2270, 2440, 2030, 2030)],
                [0] * 5 + [122620, 164384, 2016401, 405646, 146025],
                [0] * 5 + [222000961, 392156975, 5499412217, 984032110, 322757366])
-    naver = [1416] * 5 + [1840, 2390, 2590, 2250, 2030]
-    prices, calls = _fetch(tmp_path, raw, naver, None)
-    assert calls == ["fdr"]
-    factor = prices.set_index("Date").AdjustmentFactor
-    assert factor[:"2026-09-09"].round(3).eq(1.577).all() and factor["2026-09-10":].eq(1).all()
+    adjusted = [1416] * 5 + [1840, 2390, 2590, 2250, 2030]
+    for krx, naver in ((adjusted, None), (None, adjusted)):
+        prices, _ = fetch(raw, naver, krx)
+        factor = prices.set_index("Date").AdjustmentFactor
+        assert factor[:"2026-09-09"].round(3).eq(1.577).all() and factor["2026-09-10":].eq(1).all()
 
 
-def test_several_real_steps_in_a_window_are_allowed(tmp_path):
+def test_several_real_steps_in_a_window_are_allowed(fetch):
     steps = [0.5] * 3 + [0.8] * 3 + [1.0] * 4  # two corporate actions inside ten sessions
-    prices, calls = _fetch(tmp_path, SAMSUNG, (SAMSUNG.RawClose * steps).tolist(), None)
-    assert calls == ["fdr"] and prices.AdjustmentFactor.round(6).tolist() == steps
+    prices, _ = fetch(SAMSUNG, (SAMSUNG.RawClose * steps).tolist(), None)
+    assert set(prices.PriceProvider) == {"fdr"} and prices.AdjustmentFactor.round(6).tolist() == steps
+
+
+def test_shared_builder_still_matches_the_active_pack():
+    # Editing shared/ (prices, features...) breaks the daily run with a pack checksum error;
+    # such fixes belong in serving/ until a new pack is built.
+    from pathlib import Path
+
+    import yaml
+    from shared.settings import processing_contract
+    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())
+    assert config["active_pack"]["builder_sha256"] == processing_contract()["sha256"]
