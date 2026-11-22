@@ -2,6 +2,11 @@
 
 버전별로 사용자에게 보이는 변화를 적습니다. 서비스명과 레포 이름 변경, 초기 데이터 전환 기록은 [docs/CHANGELOG.md](docs/CHANGELOG.md)에 있습니다.
 
+## v1.1.1 (2026-11-22)
+
+### 보안
+- Next.js 16.4.5로 올려 11월 보안 권고 7건 대응(Dependabot 알림 #51~#64). 우리 앱은 해당 기능('use cache', Edge 런타임, next/image, 미들웨어)을 쓰지 않아 실제 노출은 없었다
+
 ## v1.1.0 최종 제출본 (2026-10-27)
 
 `3d988e0`(#435). [Release](https://github.com/2026Graduation-Work/take_a_look/releases/tag/v1.1.0). v1.0.0 뒤 동결일까지 머지된 것입니다. 동결 이후 main에는 치명 버그 수정과 문서만 들어가며 v1.1.x로 올립니다.
