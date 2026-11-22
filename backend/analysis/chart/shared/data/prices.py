@@ -74,6 +74,27 @@ def supplement_raw_ohlc(root, code, days, raw, source):
 
 
 
+class UnstableAdjustment(ValueError):
+    """The supplier close is not the KRX regular-session close scaled by corporate actions."""
+
+
+def check_adjustment_steps(frame):
+    """A KRX adjustment factor may move only on corporate-action days.
+
+    Since 2026-09-14 (KRX after-market) Naver's daily close drifts from the regular-session
+    close by ~0.5% almost every day; that jitter must not reach prices or features.
+    """
+    traded = frame.loc[frame.Volume.gt(0) & ~frame[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)]
+    factor, close = traded.AdjustmentFactor.astype(float), traded.Close.astype(float)
+    # Integer rounding plus ~0.03% drift seen in suppliers' old corporate-action ratios;
+    # after-market drift is mostly 0.3~0.8% a day.
+    tolerance = 0.5 / close + 0.5 / close.shift() + 1e-3
+    steps = int(((factor / factor.shift() - 1).abs() > tolerance).sum())
+    allowed = 3 + len(traded) // 250
+    if steps > allowed:
+        raise UnstableAdjustment(f"Adjustment factor moved on {steps} days (allowed {allowed})")
+
+
 def fetch_price_window(code, days, *, root, raw=None, is_delisted=False, source=None, progress=None):
     from . import providers
     source = source or providers
@@ -94,7 +115,9 @@ def fetch_price_window(code, days, *, root, raw=None, is_delisted=False, source=
                     raise ValueError("Empty provider response")
                 candidate = candidate.rename_axis("Date").reset_index()
                 candidate = candidate.loc[pd.to_datetime(candidate.Date).isin(days)]
-                return validate_prices(candidate, days).assign(PriceProvider=provider)
+                candidate = validate_prices(candidate, days)
+                check_adjustment_steps(candidate)
+                return candidate.assign(PriceProvider=provider)
             except Exception as exc:
                 event = {"state": "request_failed", "stage": "prices", "code": code,
                          "provider": provider, "attempt": attempt,
@@ -103,6 +126,8 @@ def fetch_price_window(code, days, *, root, raw=None, is_delisted=False, source=
                 if progress:
                     progress(event)
                 failures.append(f"{provider}: {exc}")
+                if isinstance(exc, UnstableAdjustment):
+                    break  # deterministic: retrying the same supplier returns the same drift
                 if attempt < 3:
                     source.time.sleep(attempt)
     raise ValueError("Price providers exhausted: " + "; ".join(failures))
