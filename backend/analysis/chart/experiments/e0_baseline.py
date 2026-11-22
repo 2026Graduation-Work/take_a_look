@@ -11,9 +11,14 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from experiments.evaluation.metrics import (calculate_classification_metrics, calculate_rank_ic,
-                                            compare_daily_ic, daily_rank_ic, summarize_daily_ic,
-                                            top_bottom_spread)
+from experiments.evaluation.metrics import (
+    calculate_classification_metrics,
+    calculate_rank_ic,
+    compare_daily_ic,
+    daily_rank_ic,
+    summarize_daily_ic,
+    top_bottom_spread,
+)
 
 
 def with_excess(frame, kospi):

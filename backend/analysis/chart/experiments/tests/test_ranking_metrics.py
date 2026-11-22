@@ -1,8 +1,13 @@
 import numpy as np
 import pandas as pd
 import pytest
-from experiments.evaluation.metrics import (calculate_rank_ic, compare_daily_ic, daily_rank_ic,
-                                            summarize_daily_ic, top_bottom_spread)
+from experiments.evaluation.metrics import (
+    calculate_rank_ic,
+    compare_daily_ic,
+    daily_rank_ic,
+    summarize_daily_ic,
+    top_bottom_spread,
+)
 
 
 def _panel(days=60, stocks=30, seed=0):
