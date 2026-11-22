@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFram
 
 
 def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
+    from shared.data import providers
     from shared.data.prices import fetch_price_window
     from shared.settings import serving_root
 
@@ -25,19 +27,40 @@ def fetch_prices(code: str, start_date: str, end_date: str) -> pd.DataFrame:
         raise ValueError("Stock code must be six uppercase alphanumeric characters")
     days = sorted(get_krx_trading_days(start_date, end_date))
     root = serving_root() / "cache/prices"
-    # Since 2026-09-14 (KRX after-market) FDR/Naver closes drift from the regular-session close.
-    # Prefer KRX raw OHLC + KRX's own adjusted close (the is_delisted path is exactly that adapter);
-    # shared/ is pinned by the pack checksum, so the choice lives here until a new pack (co-deep).
-    try:
-        return fetch_price_window(code, days, root=root, is_delisted=True)
-    except ValueError as exc:
-        krx_error = exc
-    prices = fetch_price_window(code, days, root=root)
-    try:
-        check_adjustment_steps(prices)
-    except ValueError as exc:
-        raise ValueError(f"Price providers exhausted: KRX adjusted ({krx_error}); fallback {exc}") from None
-    return prices
+    # Since 2026-09-14 (KRX after-market) Naver closes drift from the regular-session close, and
+    # pykrx's stock API serves adjusted=True from Naver too. Use KRX raw OHLC + KRX's own adjusted
+    # series first. shared/ is pinned by the pack checksum, so the choice lives here until a new pack.
+    krx_only = SimpleNamespace(krx=providers.krx, time=providers.time,
+                               _krx_request_timeout=providers._krx_request_timeout,
+                               _fetch_delisted_pykrx=_fetch_krx_adjusted)
+    errors = []
+    for options in ({"is_delisted": True, "source": krx_only}, {}):
+        try:
+            prices = fetch_price_window(code, days, root=root, **options)
+            check_adjustment_steps(prices)
+            return prices
+        except ValueError as exc:
+            errors.append(str(exc))
+    raise ValueError("Price providers exhausted: " + " | ".join(errors))
+
+
+def _fetch_krx_adjusted(code, start_date, end_date, *, raw_df):
+    """KRX 개별종목 시세 with 수정종가 (MDCSTAT01701, adjStkPrc=2), scaled onto KRX raw OHLC."""
+    import contextlib
+    import io
+
+    from shared.data.krx import install_request_timeout
+    install_request_timeout()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        from pykrx.website.krx.market.wrap import get_market_ohlcv_by_date
+    adjusted = get_market_ohlcv_by_date(start_date.replace("-", ""), end_date.replace("-", ""), code, True)
+    if adjusted is None or adjusted.empty:
+        raise ValueError("Empty KRX adjusted response")
+    adjusted = adjusted.rename(columns={"시가": "Open", "고가": "High", "저가": "Low", "종가": "Close",
+                                        "거래량": "Volume", "등락률": "Change"})
+    adjusted = adjusted[["Open", "High", "Low", "Close", "Volume", "Change"]].apply(pd.to_numeric, errors="raise")
+    adjusted.index.name = "Date"
+    return attach_actual_vwap(adjusted, raw_df)
 
 
 def check_adjustment_steps(frame):

@@ -8,6 +8,7 @@ from contextlib import nullcontext
 import pandas as pd
 import pytest
 from serving.internal import calendar
+from serving.internal import prices as serving_prices
 from serving.internal.prices import fetch_prices
 from shared.data import prices as shared_prices
 from shared.data import providers
@@ -42,7 +43,7 @@ def fetch(tmp_path, monkeypatch):
         calls = []
         monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: set(raw.index.date))
         monkeypatch.setattr(shared_prices, "supplement_raw_ohlc", lambda *_: raw)
-        monkeypatch.setattr(providers, "_fetch_delisted_pykrx", _adapter(krx_adjusted, calls, "krx"))
+        monkeypatch.setattr(serving_prices, "_fetch_krx_adjusted", _adapter(krx_adjusted, calls, "krx"))
         monkeypatch.setattr(providers, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
         monkeypatch.setattr(providers, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
         result = fetch_prices("005930", str(raw.index[0].date()), str(raw.index[-1].date()))
@@ -73,9 +74,11 @@ def test_serving_uses_krx_regular_close(fetch):
     assert prices.AdjustmentFactor.eq(1).all()
 
 
-def test_drifting_fallback_close_is_never_published(fetch):
+@pytest.mark.parametrize("krx", [None, SAMSUNG_NAVER])
+def test_drifting_close_is_never_published(fetch, krx):
+    # pykrx's stock API serves adjusted=True from Naver as well, so the KRX path is checked too.
     with pytest.raises(ValueError, match="^Price providers exhausted: .*Adjustment factor moved"):
-        fetch(SAMSUNG, SAMSUNG_NAVER, None)
+        fetch(SAMSUNG, SAMSUNG_NAVER, krx)
 
 
 def test_stock_without_after_market_can_fall_back_to_fdr(fetch):
