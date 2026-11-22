@@ -197,3 +197,16 @@ taste-skill의 다이얼(DESIGN_VARIANCE·MOTION_INTENSITY·VISUAL_DENSITY)은 �
 | Glassy Dashboard V2 | 기각 | 카드 전체를 유리로 만든다. 우리는 유리를 헤더, 탭 막대, 팝오버에만 쓴다. "Code" 댓글 미끼 |
 | 무료 플러그인 6가지(superpowers, frontend-design, code-review, security-guidance, [Claude Mem](https://github.com/thedotmack/claude-mem), [gstack](https://github.com/garrytan/gstack)) | 4개 기존 판정 유지, 2개 기각 | 앞의 넷은 10/26 표 그대로. Claude Mem은 내장 메모리, `AGENTS.md`와 겹치고 라이선스 표기가 글마다 다르다(AGPL과 Apache). gstack(MIT)은 스킬 23개라 토큰이 늘고 ponytail, `/code-review`와 겹친다 |
 | 고수 도구 4개(Graft는 [Trail-code](https://github.com/trailhq/Trail-Code)로 이름 바뀜, Agency Agents, Codebase Memory MCP, OpenMontage) | 기존 판정 유지 | 10/06 기각 그대로. Trail-code는 처음 실행 때 지난 대화를 읽어 사용량이 나간다 |
+
+## JHarvis에서 다시 가져오기 (2026-11-22)
+
+[JHarvis](https://github.com/Choi-Jung-Hyeon/JHarvis)(MIT, 이 레포 세팅을 일반화한 개인 키트, `a93c84f`)의 동결 뒤 변경 중 우리 레포에 해당하는 것만 골랐다.
+
+| 항목 | 판정 | 이유 |
+| --- | --- | --- |
+| 훅 `guard.py` 새 판(+`test_guard.py`) | 채택 | 기존 커밋 검사는 스테이징된 파일만 봐서 `git add -A && git commit` 한 줄에선 검사가 건너뛰어졌다. 새 판은 작업 트리 전체를 본다. `.env` 읽기 차단, 강제 push와 원격 브랜치 삭제 push 차단도 더한다 |
+| `github-setup.sh` 미리보기 | 확인 | 꺼진 것은 Dependabot security updates 하나. 켜는 것은 사람이(조직 레포 설정) |
+| actionlint, lychee(`--offline`) | 후보 | 워크플로와 문서 링크 검사. 바이너리를 받아 실행하는 일이라 이번엔 시험하지 않았다. 코딥 CI 정비 때 |
+| 출시 전 점검: 개인정보 처리방침 | 제안만 | 가입을 받으므로 필요하다. 화면 추가라 동결 규칙상 팀 결정 |
+| 다크패턴 9가지(DESIGN 템플릿), PR 양식의 위험도와 되돌리는 법 | 생각만 | 동결 뒤라 새 화면이 없다. 코딥에서 PR 양식을 고칠 때 |
+| shellcheck, markdownlint, 스모크 테스트, 커뮤니티 파일 | 해당 없음 | 셸 스크립트가 적고, 커뮤니티 파일(행동 강령, 보안 정책, 라이선스, 기여 안내)은 이미 있다 |
