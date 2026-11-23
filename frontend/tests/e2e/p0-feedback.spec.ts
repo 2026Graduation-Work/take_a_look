@@ -37,7 +37,7 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
 
 test("2. 첫 화면은 한 줄 소개, 환영 화면이 '살 종목을 골라 주지 않아요'를 말한다", async ({ page }) => {
   await page.goto("/login");
-  await expect(page.getByText("초보 투자자를 위한 판단 근거 서비스")).toBeVisible();
+  await expect(page.getByText("초보 투자자를 위한 의사결정 지원 서비스")).toBeVisible();
   await expect(page.getByText(/살 종목을 골라 주지 않아요/)).toHaveCount(0);
   await page.getByRole("button", { name: "데모로 둘러보기" }).click();
   await expect(page.getByText(/살 종목을 골라 주지 않아요/)).toBeVisible();

@@ -31,5 +31,5 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /prob_up/, reason: "개발 변수명 → '과거 비슷한 신호 구간'" },
   { pattern: /BIT\b|Pompian 행동투자자 유형\(BIT\)/, reason: "개발 용어 → '투자 유형'" },
   { pattern: /실데이터/, reason: "실데이터가 기본이라 표시하지 않는다. 예시 값에만 '예시'를 단다(DESIGN.md 0장)" },
-  { pattern: /시그널랩|signal ?lab(?!el)/i, reason: "옛 서비스명 → Take a Look (docs/CHANGELOG.md)" },
+  { pattern: /시그널랩|signal ?lab(?!el)/i, reason: "옛 서비스명 → Take a Look (CHANGELOG.md)" },
 ];

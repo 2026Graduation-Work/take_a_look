@@ -13,7 +13,7 @@ test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로
   const password = "secret123";
 
   await page.goto("/login");
-  await expect(page.getByText("초보 투자자를 위한 판단 근거 서비스")).toBeVisible();
+  await expect(page.getByText("초보 투자자를 위한 의사결정 지원 서비스")).toBeVisible();
   await expect(page.getByText("가입 없이 예시 사용자")).toHaveCount(0);
   await page.getByRole("button", { name: "이메일로 시작" }).click();
 
