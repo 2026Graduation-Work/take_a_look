@@ -1,0 +1,20 @@
+name: Docs CI
+
+# 깨진 상대 링크와 docs/README.md 색인에 없는 문서를 찾는다. 의존성이 없어 몇 초면 끝나므로 경로 필터 없이 모든 PR에서 돈다.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  doc-links:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check doc links and index
+        run: python3 .github/scripts/check_doc_links.py
