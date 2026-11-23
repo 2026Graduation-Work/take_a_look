@@ -33,7 +33,6 @@ def split_identity(split: dict) -> dict:
 
 
 def _bound_splits_to_data_range(splits: list[dict], data_cfg: dict) -> list[dict]:
-    """Clip generated folds to the configured data range and drop empty folds."""
     data_start = pd.to_datetime(data_cfg.get("start_date"), errors="coerce")
     data_end = pd.to_datetime(data_cfg.get("end_date"), errors="coerce")
     bounded = []
@@ -70,13 +69,7 @@ def _bound_splits_to_data_range(splits: list[dict], data_cfg: dict) -> list[dict
 
 
 def resolve_splits(config: dict) -> list[dict]:
-    """Return canonical split dictionaries shared by train/evaluation/backtest tools.
-
-    Sliding and expanding strategies use non-overlapping test windows.  A
-    two-year window, for example, evaluates ``2020-01-08..2021-12-31`` and
-    then starts the next fold in 2022; this prevents the same OOS observation
-    from being evaluated in multiple folds.
-    """
+    """Test windows never overlap, so no OOS observation is evaluated in two folds."""
     data_cfg = config.get("data", {})
     strategy = data_cfg.get("split_strategy", "single")
     embargo_days = data_cfg.get("embargo_days", 7)
@@ -213,7 +206,6 @@ def validate_embargo(splits: list[dict], embargo_days: int) -> bool:
 
 
 def _candidate_price_dirs(config: dict) -> list[Path]:
-    """Find the configured processed-data directory without relying on CWD."""
     configured = Path(config.get("data", {}).get("price_dir", "data/processed"))
     if configured.is_absolute():
         return [configured]
@@ -227,7 +219,6 @@ def _universe_path(config: dict) -> Path:
 
 
 def resolve_tickers(config: dict, anchor_file: str) -> str | list[str]:
-    """Use the frozen experiment universe when one is configured."""
     data = config.get("data", {})
     universe_file = data.get("universe_file")
     if not universe_file:
@@ -258,7 +249,6 @@ def resolve_tickers(config: dict, anchor_file: str) -> str | list[str]:
 
 
 def load_universe_intervals(config: dict) -> pd.DataFrame | None:
-    """Read the existing listing/delisting metadata used for point-in-time membership."""
     if not config.get("data", {}).get("universe_file"):
         return None
     frame = pd.read_csv(_universe_path(config), dtype={"Code": str})
@@ -273,12 +263,9 @@ def load_universe_intervals(config: dict) -> pd.DataFrame | None:
 
 
 def data_fingerprint(config: dict) -> dict:
-    """Return a low-cost data-source fingerprint for cache invalidation.
+    """Hashes parquet names, sizes and mtimes, not contents.
 
-    The manifest hashes relative parquet names, byte sizes and nanosecond mtimes
-    rather than scanning every file's full content on each training run.  Set
-    ``data.version`` when replacing data while intentionally preserving those
-    metadata values (for example, restoring an archive verbatim).
+    Set ``data.version`` when replacing data while keeping that metadata identical.
     """
     configured_version = config.get("data", {}).get("version")
     source_dir = next((path for path in _candidate_price_dirs(config) if path.is_dir()), None)
@@ -397,11 +384,6 @@ def cache_dir(anchor_file: str) -> str:
 
 
 def model_cache_dir(anchor_file: str) -> str:
-    """Return the LightGBM wrapper's model cache location.
-
-    Keep this path in one place so the dashboard reads the same models that
-    ``train.py`` writes through ``train_src.lgbm_wrapper.LGBMWrapper``.
-    """
     return os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "training", "models")
 
 
@@ -615,11 +597,9 @@ def build_fold_alignment(
 
 
 def filter_to_test_fold_rows(frame: pd.DataFrame, splits: list[dict]) -> pd.DataFrame:
-    """Return only rows whose Date belongs to the union of configured test folds.
+    """Embargo dates and the label horizon buffer are not OOS predictions.
 
-    Evaluation labels are loaded with a right-side horizon buffer and may otherwise
-    include embargo dates between folds.  Those dates are not OOS predictions and
-    must not participate in exact key alignment or metrics.
+    They must not enter key alignment or metrics.
     """
     if "Date" not in frame.columns:
         raise ValueError("test fold filtering requires a Date column")

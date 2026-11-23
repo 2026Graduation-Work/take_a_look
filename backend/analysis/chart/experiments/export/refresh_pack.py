@@ -219,7 +219,6 @@ def main(argv=None):
             "release_tag": "chart-serving-" + args.pack_id, "asset_name": archive.name,
             "sha256": sha256_file(archive), "builder_sha256": processing_contract()["sha256"]}}, sort_keys=False))
         temporary.replace(config_path)
-        # Explicitly export one operational preview input, with provenance. Serving never scans research paths.
         inputs = CHART_ROOT / "workspace/serving/inputs/raw"
         inputs.mkdir(parents=True, exist_ok=True)
         source = dataset / "raw/005930.parquet"

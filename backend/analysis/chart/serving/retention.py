@@ -1,9 +1,6 @@
-"""무료 한도 보존 정리(docs/ops/free-tier-budget.md). 차트 서빙 게시 뒤 별도 step에서 돈다(python -m serving.retention).
+"""Supabase 무료 한도 안에 머물도록 오래된 배치·입력·기사를 지운다.
 
-1. 예측 요약 로그 적재 + 게시 배치는 최근 KEEP_BATCHES개만 남김(DB 함수 prune_chart_batches, 0009)
-2. Storage 차트 입력 파일과 그 기록(chart_feature_snapshots)은 남은 게시 배치(5영업일)보다 오래된 날짜분 삭제.
-   종목별 전체 가격 이력(raw-history-v3)은 남기고, 수급 원본(investor-flows-v3)은 FLOW_DAYS일(재조회 호출을 줄이려고)
-3. 뉴스 원문(news_articles)·공시 목록(disclosures)은 ARTICLE_DAYS일 초과분 삭제. 일별 집계(news_sentiment_daily)는 그대로
+수급 원본(investor-flows-v3)은 재조회 호출을 줄이려고 FLOW_DAYS일 남긴다.
 """
 
 import json
@@ -12,7 +9,7 @@ from urllib.parse import quote
 
 from serving.internal.storage import SupabaseStore
 
-KEEP_BATCHES = 5  # 영업일 하루 1배치 → 입력 파일도 5영업일만(1GB 무료 한도, docs/ops/free-tier-budget.md)
+KEEP_BATCHES = 5  # 영업일 하루 1배치 → 입력 파일도 5영업일만(1GB 무료 한도)
 FLOW_DAYS = 30
 ARTICLE_DAYS = 90
 BUCKET = "chart-features"
@@ -20,7 +17,6 @@ BUCKET = "chart-features"
 
 
 def prune_corrected_inputs(store, cutoff, flow_cutoff):
-    """Keep the full current history; expire dated replay/flow objects only."""
     def listing(prefix):
         rows = []
         while True:

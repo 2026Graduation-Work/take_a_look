@@ -1,5 +1,3 @@
-"""Captured provider failures, cache preservation, and incomplete flow windows."""
-
 import json
 from contextlib import nullcontext
 from pathlib import Path

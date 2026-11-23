@@ -1,17 +1,7 @@
-"""운영 기록 지표(성적표 맨 위, #370 전 단계): 날짜별로 게시된 신호를 학습 기간 밖 실제 가격으로 채점한다.
+"""게시된 신호를 학습 기간 밖 실제 가격으로 채점한다.
 
-평가 시 검증한 pack의 기간별 학습 라벨로 게시 기록을 다시 채점한다. 입력 피처 배수는 채점에 쓰지 않는다.
-로그에는 과거 pack의 라벨 정의가 없으므로 당시 모델별 적중률이 아닌, 명시한 평가 pack 기준의 기록이다.
-
-- 목록: 그날 '신호가 강한 종목' 규칙(frontend/lib/strong-signals.ts rankSignals, 회피 항목 없음)
-  1위 − 2위 점수 차 순, 중립 1위 제외, 방향별 상위 5개. 후보 제외는 isTradable과 같은 정의:
-  그날 거래량 0(또는 그날 시세 없음)인 종목. 기록(log)에는 게시 상태가 없어 거래량으로 본다
-- 비교: 같은 날 점수가 있는 전체 종목
-- 지표: 상승 목록 중 기간 안에 상승 기준선에 먼저 닿은 비율 vs 전체 종목 같은 비율. 하락도 같은 방식
-- 표본 수(날짜, 종목)를 함께 남기고, 라벨이 확정된 날이 20거래일 미만이면 sufficient=false
-
-실행: backend/analysis/chart에서 python -m experiments.live_record (SUPABASE_URL, SUPABASE_SECRET_KEY)
-결과: frontend/artifacts/performance/live_record.json. 같은 DB 상태면 같은 결과(결정론).
+로그에는 과거 pack의 라벨 정의가 없어서, 지정한 평가 pack의 라벨로 다시 채점한다.
+목록 규칙은 frontend/lib/strong-signals.ts의 rankSignals와 같다.
 """
 from __future__ import annotations
 
@@ -34,7 +24,7 @@ from shared.features.builder import add_sigma_barriers  # noqa: E402
 from shared.settings import serving_root  # noqa: E402
 
 SHOW = 5
-MIN_DAYS = 20  # 1주 기준 라벨 확정 20거래일 이상이어야 화면에 쓴다(#370 전 단계 요청)
+MIN_DAYS = 20
 OUT = Path(__file__).resolve().parents[4] / "frontend" / "artifacts" / "performance" / "live_record.json"
 PAGE = 1000
 MIN_UNIVERSE = 100
@@ -66,7 +56,6 @@ def strong_lists(day: pd.DataFrame) -> dict[str, list[str]]:
 
 
 def labels_for(prices: pd.DataFrame, horizon: int, pack: dict) -> pd.DataFrame:
-    """Sigma 계산 설정과 정답 라벨 배수는 pack의 서로 다른 항목에서 읽는다."""
     barriers = pack["horizons"][f"h{horizon}"]["label_barriers"]
     for key in ("up_mult", "down_mult"):
         value = barriers[key]
@@ -83,14 +72,13 @@ def labels_for(prices: pd.DataFrame, horizon: int, pack: dict) -> pd.DataFrame:
 
 
 def score(log: pd.DataFrame, labels: pd.DataFrame) -> dict:
-    """날짜마다 목록과 전체의 '먼저 닿은 쪽' 비율. 라벨이 확정된 날만 쓴다."""
-    # 목록은 그날 게시된 전체 점수로 고르고(화면과 같게), 채점은 라벨이 확정된 종목만
+    # 목록은 화면처럼 그날 게시된 전체 점수로 고르고, 채점은 라벨이 확정된 종목만 한다.
     merged = log.merge(labels, on=["stock_code", "as_of"], how="left")
     days, picked = [], {"up": [], "down": []}
     for as_of, posted in merged.groupby("as_of", sort=True):
         if len(posted) < MIN_UNIVERSE:  # 9/21 화면 시험 게시(1종목)처럼 전 종목 게시가 아닌 날
             continue
-        # 거래정지 등 그날 거래가 없는 종목은 목록 후보에서 뺀다(대시보드 isTradable과 같은 정의, #378)
+        # 대시보드 isTradable과 같은 정의: 그날 거래가 없는 종목은 목록 후보에서 뺀다.
         lists = strong_lists(posted[posted.volume > 0] if "volume" in posted else posted)
         day = posted.dropna(subset=["label"])
         if day.empty:
@@ -98,7 +86,6 @@ def score(log: pd.DataFrame, labels: pd.DataFrame) -> dict:
         days.append(as_of)
         for direction, target in (("up", 1), ("down", -1)):
             chosen = day[day.stock_code.isin(lists[direction])]
-            # 라벨이 없는 목록 종목(거래정지 등 기간 안 거래가 없어 채점 불가)은 따로 센다
             picked[direction].append({"as_of": as_of, "list_hits": int((chosen.label == target).sum()),
                                       "list_n": len(chosen), "unscored": len(lists[direction]) - len(chosen),
                                       "all_hits": int((day.label == target).sum()), "all_n": len(day)})
@@ -110,7 +97,7 @@ def score(log: pd.DataFrame, labels: pd.DataFrame) -> dict:
             "list_rate": round(sum(r["list_hits"] for r in rows) / list_n, 4) if list_n else None,
             "list_n": list_n,
             "list_unscored": sum(r["unscored"] for r in rows),
-            # 같은 날 전체 종목 평균: 날짜마다 비율을 내고 단순평균(목록과 같은 날 가중)
+            # 목록과 같은 날 가중이 되도록 날짜별 비율을 단순평균한다.
             "all_rate": round(sum(r["all_hits"] / r["all_n"] for r in rows) / len(rows), 4) if rows else None,
             "all_n": all_n,
         }

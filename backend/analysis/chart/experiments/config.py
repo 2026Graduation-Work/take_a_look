@@ -1,5 +1,3 @@
-"""Validated local research configuration; all relative paths are chart-relative."""
-
 from __future__ import annotations
 
 import json
@@ -51,7 +49,6 @@ def load_dataset_config(path):
         if name not in config:
             raise ValueError(f"Missing dataset.{name}")
     root = chart_path(config["root"])
-    # Rebuild must never touch the historical serving/source dataset.
     if (
         root == CHART_ROOT / "workspace/serving"
         or CHART_ROOT / "workspace/serving" in root.parents

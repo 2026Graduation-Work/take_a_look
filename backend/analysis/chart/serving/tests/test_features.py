@@ -1,5 +1,3 @@
-"""Causal feature construction and true VWAP are required for live inference."""
-
 import pandas as pd
 import pytest
 from serving.internal.features import build_feature_frame

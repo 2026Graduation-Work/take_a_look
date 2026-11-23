@@ -60,7 +60,6 @@ def _format_float(value: float) -> str:
 
 
 def add_kospi_benchmark(out_dir, config):
-    """Add the same KOSPI buy-and-hold comparison to a saved backtest."""
     returns_path = os.path.join(out_dir, "daily_returns.csv")
     comparison_path = os.path.join(out_dir, "benchmark_comparison.csv")
     metadata_path = os.path.join(out_dir, "benchmark_metadata.csv")

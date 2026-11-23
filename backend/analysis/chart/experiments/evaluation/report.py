@@ -13,19 +13,14 @@ def generate_markdown_report(
     benchmark_comparison_df: pd.DataFrame,
     output_path: str,
 ) -> None:
-    """
-    평가/백테스트 분석 결과를 예쁘게 포맷팅하여 report.md 파일로 저장합니다.
-    """
     exp_name = config.get("experiment_name", "default_exp")
     desc = config.get("description", "설명 없음")
 
-    # 1. 문서 헤더
     md = []
     md.append(f"# 실험 결과 분석 보고서: {exp_name}")
     md.append(f"**실험 설명**: {desc}\n")
     md.append("## 1. 실험 설정 (Experiment Configuration)\n")
 
-    # 데이터 및 모델 설정 요약
     data_cfg = config.get("data", {})
     labels_cfg = config.get("labels", {})
     strat_cfg = config.get("strategy", {})
@@ -41,7 +36,6 @@ def generate_markdown_report(
     md.append(f"| 거래 비용 (Fee) | 편도 {bt_cfg.get('fee', 0.0025) * 100:.3f}% |")
     md.append(f"| 최대 포지션 보유일 | {bt_cfg.get('max_holding_days', 5)}일 |\n")
 
-    # 2. 종합 평가 지표 요약
     md.append("## 2. 종합 성과 요약 (Overall Performance Summary)\n")
     md.append("전체 Out-of-Sample 테스트 기간 동안 집계된 핵심 ML 및 트레이딩 성과 요약입니다.\n")
 
@@ -69,19 +63,16 @@ def generate_markdown_report(
         md.append(f"| {k.replace('_', ' ').title()} | {val_str} |")
     md.append("")
 
-    # 3. 벤치마크 전략 대비 성능 비교
     md.append("## 3. 벤치마크 대비 성능 (Benchmark Comparison)\n")
     md.append("단순 벤치마크 전략들과의 성능 비교표입니다. (부트스트랩된 Random 전략의 경우 평균값 및 신뢰구간이 표시됩니다.)\n")
     md.append(benchmark_comparison_df.to_markdown(index=False))
     md.append("")
 
-    # 4. 연도별 성능 추이
     md.append("## 4. 연도별 성능 추이 (Yearly Performance Trend)\n")
     md.append("수익률 및 Sharpe Ratio의 연도별 안정성 분포입니다.\n")
     md.append(backtest_by_year_df.to_markdown(index=False))
     md.append("")
 
-    # 5. 폴드별 세부 지표
     md.append("## 5. 폴드별 세부 분석 (Fold-by-Fold Detailed Analysis)\n")
     md.append("### 폴드별 머신러닝 성능")
     md.append(model_metrics_df.to_markdown(index=False))
@@ -89,17 +80,14 @@ def generate_markdown_report(
     md.append(backtest_metrics_df.to_markdown(index=False))
     md.append("")
 
-    # 6. 확률 구간별 실제 상승 성공률 (Calibration 분석)
     md.append("## 6. 확률 캘리브레이션 분석 (Probability Calibration Analysis)\n")
     md.append("모델이 예측한 확률 구간에 속한 샘플들의 실제 Up Class(상승 성공) 비율 분석입니다. "
               "모델 예측의 신뢰도를 판별할 수 있습니다.\n")
     md.append(calibration_df.to_markdown(index=False))
     md.append("")
 
-    # 7. 결론 및 제안
     md.append("## 7. 결론 및 향후 실험 제안 (Conclusion & Action Items)\n")
 
-    # 간단한 자동 해석 추가
     sharpe = summary_metrics.get("trade_sharpe_ratio", 0.0)
     mdd = summary_metrics.get("trade_max_drawdown", 0.0)
 
@@ -118,7 +106,6 @@ def generate_markdown_report(
     md.append("2. **Rank Target 도입**: 절대 확률 임계치 분류 방식에서 상대적 랭킹 스코어로 전환해 IC를 평가합니다.")
     md.append("3. **매수 필터 강화**: P(up) 단독 점수 외에 P(up) - P(down) 보수적 시그널 필터 적용을 시도합니다.")
 
-    # 파일 작성
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(md))

@@ -40,12 +40,6 @@ def _json_safe(value):
 def _restrict_predictions_to_labeled_rows(
     predictions: pd.DataFrame, actual: pd.DataFrame
 ) -> tuple[pd.DataFrame, int]:
-    """Keep evaluable predictions while rejecting missing or duplicate keys.
-
-    Predictions can legitimately contain the unlabeled tail of delisted stocks.
-    Those rows remain available to the canonical backtest, but ML metrics can
-    only use rows whose future outcome is observable.
-    """
     keys = ["Date", "Code"]
     if predictions.duplicated(keys).any():
         raise ValueError("예측 캐시에 중복 Date/Code 키가 있습니다.")
@@ -84,7 +78,6 @@ def main(config_path, predictions_path=None):
     predictions_hash = generate_predictions_hash(config, splits)
     print(f"[*] Target Predictions Cache Hash: {predictions_hash}")
 
-    # Load predictions (either cached or explicitly passed path)
     final_predictions = load_predictions(config, splits, __file__, predictions_path)
     final_predictions["Date"] = pd.to_datetime(final_predictions["Date"]).dt.tz_localize(None)
 
@@ -95,7 +88,6 @@ def main(config_path, predictions_path=None):
     tickers_cfg = resolve_tickers(config, __file__)
     universe_intervals = load_universe_intervals(config)
 
-    # Load actual labels
     label_params = label_params_from_config(config)
     label_cols = ["Date", "Code", "Y_Label"]
     actual_df = load_parquet_data(
@@ -105,7 +97,7 @@ def main(config_path, predictions_path=None):
         columns_only=label_cols,
         tickers=tickers_cfg,
         label_params=label_params,
-        training=False,  # Load all requested columns normally
+        training=False,
         sample_only=config.get("contract_version") == 3,
         universe_only=config.get("data", {}).get("point_in_time", False),
         strict=config.get("data", {}).get("point_in_time", False),
@@ -121,7 +113,6 @@ def main(config_path, predictions_path=None):
         final_predictions, actual_df
     )
 
-    # Align predictions and actual labels
     alignment_df, alignment_status = build_fold_alignment(final_predictions, splits, eval_df=actual_df)
     if not alignment_status["is_exact_row_match"]:
         raise ValueError(
@@ -129,7 +120,6 @@ def main(config_path, predictions_path=None):
             f"alignment={alignment_status}"
         )
 
-    # Merge predictions with actuals
     eval_df = pd.merge(
         final_predictions,
         actual_df,
@@ -138,10 +128,8 @@ def main(config_path, predictions_path=None):
         validate="one_to_one",
     )
 
-    # Calculate fold alignment details
     alignment_df.to_csv(os.path.join(result_dir(config, __file__), "fold_alignment.csv"), index=False)
 
-    # Compute fold-by-fold metrics
     model_metrics_list = []
     calibration_list = []
     bins = config.get("evaluation", {}).get("probability_bins", [0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
@@ -157,9 +145,7 @@ def main(config_path, predictions_path=None):
             print(f"[!] Warning: Fold {fold_name} has no matching evaluation samples.")
             continue
 
-        # Classifications metrics
         cls_metrics = calculate_classification_metrics(fold_df["Y_Label"], fold_df["Prob"])
-        # Rank IC metrics
         ic_metrics = calculate_rank_ic(fold_df, prob_col="Prob", target_col="Y_Label")
 
         fold_record = {
@@ -182,7 +168,6 @@ def main(config_path, predictions_path=None):
         }
         model_metrics_list.append(fold_record)
 
-        # Calibration
         fold_calib = calculate_calibration_table(fold_df["Y_Label"], fold_df["Prob"], bins)
         fold_calib.insert(0, "Fold", fold_name)
         fold_calib.insert(0, "fold_id", fold_id)
@@ -191,7 +176,6 @@ def main(config_path, predictions_path=None):
     model_metrics_df = pd.DataFrame(model_metrics_list)
     calibration_df = pd.concat(calibration_list, ignore_index=True) if calibration_list else pd.DataFrame()
 
-    # Compute overall metrics
     overall_cls = calculate_classification_metrics(eval_df["Y_Label"], eval_df["Prob"])
     overall_ic = calculate_rank_ic(eval_df, prob_col="Prob", target_col="Y_Label")
 
@@ -216,7 +200,6 @@ def main(config_path, predictions_path=None):
         **{f"fold_alignment_{k}": _json_safe(v) for k, v in alignment_status.items()}
     }
 
-    # Save files
     out_dir = result_dir(config, __file__)
     from shared.io import atomic_json, atomic_parquet
     from shared.io import sha256

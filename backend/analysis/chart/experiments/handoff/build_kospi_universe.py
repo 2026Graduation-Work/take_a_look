@@ -1,5 +1,3 @@
-"""학습 종료일 기준 KOSPI 주권 universe 스냅샷을 생성한다."""
-
 from __future__ import annotations
 
 import argparse
@@ -11,7 +9,6 @@ from .package_processed import HandoffContractError
 
 
 def fetch_listing_inputs(history_start: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Use the shared verified listing adapters for historical universe inputs."""
     from datetime import date
 
     from shared.data.metadata import load_metadata
@@ -37,7 +34,6 @@ def build_kospi_snapshot(
     cutoff: str,
     processed_dir: str | Path,
 ) -> pd.DataFrame:
-    """현재 활성 목록과 상폐 이력으로 cutoff 당시 KOSPI 주권을 복원한다."""
     cutoff_date = pd.Timestamp(cutoff).normalize()
     active_required = {"Code", "Name", "Market", "ListingDate"}
     delisted_required = {
@@ -99,7 +95,6 @@ def build_kospi_history(
     end: str,
     processed_dir: str | Path,
 ) -> pd.DataFrame:
-    """Reconstruct each KOSPI common stock's listing interval over a period."""
     start_date, end_date = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
     if start_date > end_date:
         raise HandoffContractError("history start must not be after end")

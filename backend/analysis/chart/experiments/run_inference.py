@@ -16,12 +16,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# 각 워커 프로세스에서 재사용될 전역 모델 객체
 _model = None
 
 
 def resolve_model_path(profile, model_path=None, registry_path=None):
-    """명시 경로 또는 registry의 profile에 해당하는 모델을 검증해 반환합니다."""
     if model_path:
         resolved = os.path.abspath(model_path)
         if not os.path.isfile(resolved):
@@ -55,9 +53,6 @@ def resolve_model_path(profile, model_path=None, registry_path=None):
 
 
 def init_worker(model_path):
-    """
-    워커 프로세스가 생성될 때 단 1회 실행되어 단일 모델을 로드합니다.
-    """
     global _model
     import lightgbm as lgb
 
@@ -65,10 +60,6 @@ def init_worker(model_path):
 
 
 def process_ticker(file_path, target_date, threshold):
-    """
-    개별 종목 데이터를 로드하여 shared.features.builder를 수행합니다.
-    전처리 및 피처 생성은 shared.features.builder에 위임합니다.
-    """
     global _model
     ticker = os.path.basename(file_path).replace(".parquet", "")
     try:
@@ -90,7 +81,6 @@ def process_ticker(file_path, target_date, threshold):
         if len(df_slice) < 65:
             return None
 
-        # shared.features.builder에 전처리 및 예측을 위임 — 중복 로직 없음
         from shared.data.trading_calendar import get_krx_trading_days
         from shared.features.builder import build_feature_frame
         days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
@@ -100,7 +90,6 @@ def process_ticker(file_path, target_date, threshold):
         if prob_series.empty:
             return None
 
-        # class 2 모델 스코어. 미래 상승을 보장하는 확률이 아닙니다.
         model_score = float(prob_series.iloc[-1])
         last_row = df_slice.iloc[-1]
 
@@ -188,11 +177,9 @@ def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # 1. registry 또는 명시 경로에서 모델 확인
     model_path = resolve_model_path(args.profile, args.model_path)
     print(f"📦 모델 로드: {os.path.basename(model_path)} ({args.profile})")
 
-    # 2. 데이터 파일 목록 수집
     raw_dir = os.path.join(project_root, "data", "raw")
     data_files = glob.glob(os.path.join(raw_dir, "*.parquet"))
 
@@ -205,7 +192,6 @@ def main():
 
     results = []
 
-    # 3. ProcessPoolExecutor로 병렬 추론 수행
     with ProcessPoolExecutor(
         max_workers=num_workers, initializer=init_worker, initargs=(model_path,)
     ) as executor:
@@ -223,7 +209,6 @@ def main():
         )
         return
 
-    # 4. 결과 정렬 및 저장
     result_df = pd.DataFrame(results)
     result_df = result_df.sort_values(by="Model_Score", ascending=False).reset_index(drop=True)
 
@@ -237,7 +222,6 @@ def main():
     result_df.to_csv(output_file, index=False, encoding="utf-8-sig")
     print(f"\n💾 추론 결과 저장 완료: {output_file}")
 
-    # 5. 상위 종목 출력
     display_date = unique_dates[0] if len(unique_dates) == 1 else "복수"
     print("\n" + "=" * 85)
     print(f"📊 class 2 모델 스코어 상위 {args.top_n}개 종목 (기준 영업일: {display_date})")

@@ -1,5 +1,3 @@
-"""Cached daily investor queries, shared with local research collection."""
-
 import json
 
 import pandas as pd

@@ -1,5 +1,3 @@
-"""Cash-aware daily execution, then VectorBT accounting of the actual orders."""
-
 from math import floor
 from pathlib import Path
 
@@ -10,8 +8,6 @@ from shared.io import atomic_json
 
 
 class DailyPortfolio:
-    """Expose daily marked values while retaining VectorBT orders and trades."""
-
     def __init__(self, portfolio, initial_cash, exclusions):
         self.portfolio = portfolio
         self.initial_cash = initial_cash
@@ -132,13 +128,11 @@ def simulate(config, entries, weights, price_df):
         for row in event_rows[:3]:
             marks.loc[row] = fields["Open"].loc[day]
         marks.loc[event_rows[-1]] = fields["Close"].loc[day]
-        # A writeoff changes valuation only. No fictitious sale or cash proceeds.
         for loss in writeoffs:
             code = loss["code"]
             if available[code]:
                 raise ValueError(f"New price path after writeoff requires corporate-event mapping: {code}")
             marks.loc[event_rows, code] = 0.0
-        # Open exits (expiry, previously confirmed close stop and gaps).
         for code in list(positions):
             if fields["Trading_Halt"].loc[day, code] != 0:
                 continue

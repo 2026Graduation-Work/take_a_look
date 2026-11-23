@@ -1,5 +1,3 @@
-"""Structural and cross-field validation of public chart snapshots."""
-
 import json
 import math
 from pathlib import Path

@@ -1,5 +1,3 @@
-"""Private Supabase price and feature storage for daily serving."""
-
 import hashlib
 import io
 import json
@@ -166,7 +164,6 @@ class SupabaseStore:
                 for code, frame in panel.groupby("stock_code", sort=True)}
 
     def upload_feature_panel(self, as_of, builder_id, raw_hashes, frames):
-        """Archive current model inputs in one file; raw history remains in chart_prices."""
         if not frames or set(frames) != set(raw_hashes):
             raise ValueError("Feature panel/input identities mismatch")
         frame = pd.DataFrame([dict(frames[code][1], stock_code=code) for code in sorted(frames)])
@@ -254,7 +251,6 @@ class SupabaseStore:
         return frame
 
     def save_raw_price_panel(self, as_of, frames):
-        """One daily price object plus its checksum manifest, preserving per-stock input hashes."""
         if not frames:
             raise ValueError("Empty raw price panel")
         hashes, parts = {}, []

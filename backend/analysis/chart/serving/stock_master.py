@@ -1,8 +1,6 @@
 """종목 마스터(stocks)를 차트 서빙 universe 기준으로 넣고 고친다. 지우지 않는다.
 
-차트 서빙 워크플로의 마지막 step에서 돈다(python -m serving.stock_master). 위험 표시는 아래 규칙으로
-계산하고, 임계값 표는 docs/stock-master-rules.md에 있다. 관리종목 목록(KIND)을 받지 못하면
-아무것도 쓰지 않고 실패한다 — 확인 안 된 종목이 관리종목 회피를 통과하지 않게(하드 제약 보수적).
+관리종목 목록(KIND)을 받지 못하면 아무것도 쓰지 않고 실패한다. 확인 안 된 종목이 관리종목 회피를 통과하지 않게 하려는 것이다.
 """
 
 import argparse
@@ -22,15 +20,14 @@ from serving.internal.storage import SupabaseStore
 
 PENNY_CLOSE = 1_000  # 종가(원) 미만 → penny_stock
 LIQUIDITY_DAYS = 20  # 평균 거래대금 기간(거래일)
-LOW_LIQUIDITY_QUANTILE = 0.10  # 20일 평균 거래대금 하위 10% → low_liquidity
+LOW_LIQUIDITY_QUANTILE = 0.10
 VOLATILITY_DAYS = 250  # 1년 변동성 기간(거래일). 데이터가 짧으면 있는 만큼
-MIN_VOLATILITY_DAYS = 60  # 이보다 짧으면 변동성 미확인 → risk_grade 1
-HIGH_VOLATILITY_QUANTILE = 0.90  # 1년 변동성 상위 10% → high_volatility
+MIN_VOLATILITY_DAYS = 60
+HIGH_VOLATILITY_QUANTILE = 0.90
 # risk_grade(1 매우 위험 ~ 5 매우 안전): 연 변동성 절대 기준. 아래 임계값 미만이면 5·4·3·2, 그 이상은 1.
 # 대형주(시가총액 상위 LARGE_CAP_RANK)는 한 단계 완화. 변동성 미확인·spac·managed_stock은 1.
 GRADE_VOLATILITY_CUTS = (0.25, 0.40, 0.60, 0.90)  # → 5, 4, 3, 2
 LARGE_CAP_RANK = 100  # KRX 대형주 기준(시가총액 상위 100)
-# spac·managed_stock은 1로 내린다.
 KOSDAQ_CODES = {"247540"}  # serving/internal/pipeline.py EXTRA_CODES (코스피 밖 서비스 종목)
 PREFERRED_NAME = re.compile(r"\d?우[B-C]?(\(전환\))?$")
 

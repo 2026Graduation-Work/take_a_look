@@ -1,5 +1,3 @@
-"""Comparison-only helpers not already provided by the canonical evaluator."""
-
 from __future__ import annotations
 
 import math
@@ -12,7 +10,6 @@ import pandas as pd
 def expected_calibration_error(
     y_true: Iterable[int], probabilities: Iterable[float], bins: int = 10
 ) -> float:
-    """Return equal-width expected calibration error (lower is better)."""
     if bins < 2:
         raise ValueError("calibration bins must be at least 2")
     actual = np.asarray(list(y_true), dtype=float)
@@ -38,7 +35,6 @@ def select_volatile_dates(
     volatility_column: str,
     fraction: float = 0.2,
 ) -> tuple[pd.DatetimeIndex, float]:
-    """Select the highest daily cross-sectional mean Sigma dates deterministically."""
     if not 0.0 < fraction <= 1.0:
         raise ValueError("volatile fraction must be in (0, 1]")
     daily_volatility = frame.groupby(date_column, sort=True)[volatility_column].mean()

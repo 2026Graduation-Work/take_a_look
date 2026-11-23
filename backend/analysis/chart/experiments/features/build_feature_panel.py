@@ -1,5 +1,3 @@
-"""외부 피처를 결합한 feature store를 생성하는 CLI."""
-
 from __future__ import annotations
 
 import argparse

@@ -1,5 +1,3 @@
-"""H5/H20 inference and signed explanations of the highest-scoring class."""
-
 import hashlib
 import json
 import math
@@ -80,7 +78,6 @@ def feature_info(name):
 
 
 def infer_batch(model, features, *, class_index=None):
-    """One model call per horizon for all valid current stock rows."""
     if isinstance(model, (str, bytes)) or hasattr(model, "__fspath__"):
         model = lgb.Booster(model_file=str(model))
     names = model.feature_name()
