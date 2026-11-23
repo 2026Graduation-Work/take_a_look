@@ -1,8 +1,5 @@
 "use client";
 
-// 온보딩: (처음이면) 환영 → 성향 진단(한 화면 한 문항) → 결과 확인 → 보유 종목 → 대시보드.
-// "다시 진단"으로 들어오면 환영·보유 종목 단계 없이 진단 → 결과 → 대시보드.
-
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -77,7 +74,6 @@ function buildPages(mode: SurveyMode): Page[] {
 
 const PAGES: Record<SurveyMode, Page[]> = { short: buildPages("short"), quick: buildPages("quick") };
 
-// 16문항 뒤 '추가 질문': 24문항 중 아직 답하지 않은 문항만 묻는다(이미 답한 것은 그대로 합쳐 채점).
 const unansweredIds = (style: Record<string, number>) =>
   PAGES.quick.flatMap((page) => (page.kind === "style" && style[page.question.id] === undefined ? [page.question.id] : []));
 
@@ -94,12 +90,11 @@ interface Draft {
   experience: ExperienceChoice | "";
   avoided: RiskFlag[];
   freeText: string;
-  extra?: string[]; // 추가 질문 단계에서 물을 문항 id
+  extra?: string[];
 }
 
 const EMPTY_DRAFT: Draft = { mode: "short", page: 0, style: {}, experience: "", avoided: [], freeText: "" };
 
-// 데모 응답: 김민지와 비슷한 추종형 패턴(축 방향 강도 -2~+2)
 const DEMO_PATTERN = {
   market_participation: 0,
   loss_tolerance: -1,
@@ -162,13 +157,11 @@ export default function SurveyFlow() {
   const router = useRouter();
   const { state: onboardingState } = useOnboarding();
   const demo = onboardingState.mode === "demo";
-  // 처음 온 사람(프로필 없음)만 환영·보유 종목 단계를 거친다. 저장 후 상태가 바뀌어도 흐름은 유지한다.
   const [firstRun] = useState(onboardingState.status === "needs_survey");
   const [stageState, setStage] = useState<Stage>(firstRun ? "welcome" : "survey");
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [restored, setRestored] = useState(false);
   const [result, setResult] = useState<ProfilingOutput | null>(null);
-  // 결과는 메모리에만 있다. 브라우저 앞으로 가기로 결과 단계에 왔는데 결과가 없으면 마지막 문항을 보여 준다.
   const stage: Stage = stageState === "result" && !result ? "survey" : stageState;
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -183,8 +176,7 @@ export default function SurveyFlow() {
     }
   }, [stage, draft.page]);
 
-  // 중간 저장 불러오기. localStorage는 브라우저에서만 읽을 수 있어 마운트 후에 한 번 읽는다.
-  // 다시 진단은 지난 답이 채워진 상태로 1번부터 시작한다(답하던 중간 저장이 있으면 그쪽이 먼저).
+  // localStorage는 브라우저에서만 읽을 수 있어 마운트 후에 한 번 읽는다.
   useEffect(() => {
     const stored = readDraft();
     const previous = firstRun ? null : readDraft(ANSWERS_KEY);
@@ -196,13 +188,11 @@ export default function SurveyFlow() {
     } else {
       setDraft({ ...previous!, page: 0 });
     }
-    restoringRef.current = true; // 중간 저장 복원은 새 기록이 아니라 지금 기록을 고친다
+    restoringRef.current = true;
     setStage("survey");
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [firstRun]);
 
-  // 단계·문항 이동을 브라우저 기록에 맞춘다. 브라우저 뒤로 가기가 한 단계씩 돌아간다(사전 참가자 P0 10/13:
-  // 진단 마무리에서 뒤로 가기를 누르면 첫 단계로 돌아갔다). 주소는 그대로 /survey다.
   const position = `${stage}:${draft.page}`;
   useEffect(() => {
     const state = window.history.state as Record<string, unknown> | null;
@@ -212,7 +202,6 @@ export default function SurveyFlow() {
     else window.history.pushState(next, "");
     restoringRef.current = false;
   }, [position]);
-  // 화면의 "이전"도 바로 앞 기록이 그 단계면 브라우저 기록을 되돌린다(앞으로 가기가 엉키지 않게)
   function stepBack(target: string, fallback: () => void) {
     if ((window.history.state as Record<string, unknown> | null)?.surveyPrev === target) window.history.back();
     else fallback();
@@ -261,7 +250,6 @@ export default function SurveyFlow() {
       free_text: draft.freeText,
       ...(adjusted && Object.keys(adjusted).length ? { adjusted_axes: adjusted } : {}),
       preferred_sectors: ["semiconductor", "healthcare"],
-      // 보유 종목은 다음 단계(또는 보유 종목 화면)에서 따로 저장한다. 데모 계정만 김민지 보유 종목을 쓴다.
       ...(demo ? { portfolio: DEMO_PORTFOLIO } : {}),
       investment_amount_krw: 500000,
       action_intent: "buy_consideration",
@@ -302,7 +290,6 @@ export default function SurveyFlow() {
     });
   }
 
-  // 결과 화면의 "다음"(다시 진단이면 "저장")을 눌러야 저장한다. 조정했으면 다시 계산해 저장한다.
   function confirm(adjusted: Partial<Record<StyleAxisId, number>>) {
     void run(async () => {
       const profile = Object.keys(adjusted).length ? await requestProfile(payload(adjusted)) : result!;
@@ -315,7 +302,6 @@ export default function SurveyFlow() {
     });
   }
 
-  // 16문항 → 24문항: 이미 답한 문항은 다시 묻지 않고 남은 문항만 이어서 답한다.
   const extraIds = unansweredIds(draft.style);
   function moreAccurate() {
     update({ mode: "quick", page: 0, extra: extraIds });
@@ -337,7 +323,6 @@ export default function SurveyFlow() {
 
   return (
     <div className="min-h-dvh bg-page">
-      {/* 단계 표시는 390에서 로고 줄 아래로 내려간다(로고 줄 높이는 다른 화면과 같게) */}
       <BrandHeader>
         {firstRun ? (
           <ol aria-label="시작 단계" className="order-last m-0 flex basis-full list-none items-center gap-2 p-0 text-xs sm:order-none sm:basis-auto sm:gap-3">
@@ -441,7 +426,6 @@ function Welcome({ onStart }: { onStart: () => void }) {
         ))}
       </ol>
       <p className="-mt-2 m-0 text-sm text-body">맞고 틀린 답은 없어요. 요즘의 나와 가까운 쪽을 고르면 돼요.</p>
-      {/* 보조 버튼 하나: 서비스 흐름이 궁금하면 이용 안내(새 탭, 설문 진행은 그대로) */}
       <div className="flex items-center justify-between gap-3">
         <Link href="/guide" target="_blank" className="btn-secondary min-w-[112px]">이용 안내</Link>
         <button type="button" onClick={onStart} className="btn-primary min-w-[112px]">시작하기</button>
@@ -476,13 +460,12 @@ function QuestionPage({
   onRestart: () => void;
 }) {
   const total = pagesFor(draft).length;
-  // 고른 뒤 "다음"을 눌러야 넘어간다(#278: 고친 답을 확인할 기회). 답한 문항에서만 켜진다.
   const answered =
     page.kind === "style"
       ? draft.style[page.question.id] !== undefined
       : page.kind === "experience"
         ? draft.experience !== ""
-        : true; // 제외 항목·걱정되는 점은 비워 둬도 된다
+        : true;
   const progress = ((draft.page + 1) / total) * 100;
   const label =
     page.kind === "style"
@@ -665,10 +648,8 @@ function ChoiceRow({
   );
 }
 
-// 유형 이름 옆 ⓘ(두 문장 이하)
 const TYPE_NOTE = "투자 습관으로 나눈 유형이라 증권사 투자자 등급과 달라요. 종목 화면에서 무엇부터 보여 줄지 정하는 데만 쓰고, 볼 수 있는 종목을 줄이지는 않아요.";
 
-// 설문 결과. readOnly는 저장된 결과를 다시 보는 화면(/profile): 조정·24문항 없이 뒤로 / 다시 진단만.
 export function ResultView({
   result,
   submitting = false,
@@ -684,7 +665,7 @@ export function ResultView({
   submitting?: boolean;
   error?: string;
   nextLabel: string;
-  extraCount?: number; // 남은 추가 질문 수(0이면 버튼 없음)
+  extraCount?: number;
   onConfirm: (adjusted: Partial<Record<StyleAxisId, number>>) => void;
   onMoreAccurate?: () => void;
   onBack: () => void;
@@ -702,7 +683,6 @@ export function ResultView({
 
   return (
     <section className="surface overflow-hidden">
-      {/* 선 대신 간격으로 나눈다(화면 규칙 v2) */}
       <div className="px-6 pt-7 sm:px-10">
         <span className="text-xs font-semibold text-brand">{readOnly ? "내 투자 성향" : "진단 결과"}</span>
         <div className="mt-2 flex items-center">
@@ -744,7 +724,6 @@ export function ResultView({
           </div>
         )}
 
-        {/* 제외 항목, 자유 답 판정: 상자 없이 글자, 쉼표로(화면 규칙 v2). 판정이 없으면 줄을 두지 않는다 */}
         <LabelRows
           className="mt-12"
           rows={[
@@ -753,7 +732,6 @@ export function ResultView({
           ]}
         />
 
-        {/* 조정: 축마다 5칸 중 하나를 누른다(방향키로도). 누른 칸의 가운데 값(−1, −0.5, 0, 0.5, 1)을 저장한다 */}
         {!readOnly && (adjusting ? (
           <section id="style-axes-adjust" aria-labelledby="adjust-title" className="mt-12 flex flex-col gap-4">
             <div className="flex items-center justify-between gap-4">

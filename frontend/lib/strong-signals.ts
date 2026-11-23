@@ -4,9 +4,6 @@ import { passesHardConstraints, type HardConstraints } from "./recommendation-fi
 import type { RiskFlag } from "./types.ts";
 import type { SignalHorizon } from "./copy-glossary.ts";
 
-// 대시보드 "오늘 신호가 강한 종목": 최신 게시 배치의 코스피 전 종목에서 선택 기간(기본 4주 H20, 1주 H5) 분류 점수의
-// 확신도(가장 높은 점수 − 두 번째 점수)가 큰 순으로 상승·하락 각 SHOW개. 규칙 코드이며 성향으로 거르지 않는다.
-// 사용자가 직접 고른 회피 항목(하드 제약)만 뺀다. payload 전체 대신 필요한 경로만 한 번에 읽는다.
 const SHOW = 5;
 const SHORTLIST = 30; // 하드 제약으로 빠질 몫을 감안해 방향마다 이만큼만 종목 마스터를 조회
 
@@ -27,12 +24,9 @@ export interface SnapshotRow {
   volume?: number | string | null; // 게시 기준일 거래량(prices.history 마지막 날)
 }
 
-// 후보 제외 규칙(대시보드 목록과 운영 기록 live_record.py가 같은 정의): 게시 상태가 available이 아니거나(매매정지 등)
-// 그날 거래량이 0인 종목. 우선주, 거래대금 하한은 넣지 않는다(#208 팀 결정)
 export const isTradable = (row: Pick<SnapshotRow, "status" | "volume">) =>
   row.status === "available" && Number(row.volume ?? 1) > 0;
 
-// 확신도 순위(순수 함수). 중립이 1위인 종목은 넣지 않는다.
 export function rankSignals(rows: SnapshotRow[]): StrongSignal[] {
   return rows.flatMap((row) => {
     if (!isTradable(row) || !row.scores) return [];

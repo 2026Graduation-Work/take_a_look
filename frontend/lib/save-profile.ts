@@ -9,7 +9,6 @@ import { STORAGE_KEYS } from "./storage-keys";
 export const PROFILE_STORAGE_KEY = STORAGE_KEYS.profile;
 export const PROFILE_UPDATED_EVENT = "takealook:profile-updated";
 
-// mode는 로그인한 방식이다. 데모 계정은 환경변수가 있어도 이 브라우저에만 저장한다.
 export async function saveProfile(
   profile: ProfilingOutput,
   mode: "demo" | "supabase",
@@ -38,7 +37,6 @@ export async function saveProfile(
     .maybeSingle();
   assertOk(existingUserError, "기존 사용자 확인");
 
-  // Supabase Auth ID를 최초 DB 사용자 ID로 사용하고, 재설문 시 기존 ID를 재사용한다.
   const userId = (existingUser as { id: string } | null)?.id ?? authUserId;
   const storedProfile: ProfilingOutput = { ...profile, user_id: userId };
   const { error: userError } = await client.from("users").upsert(
@@ -57,7 +55,6 @@ export async function saveProfile(
   const psychology = profile.psychological_state;
   const freeText = profile.free_text_signal;
   const context = profile.context;
-  // 성향 카드 3축(8축 묶음 요약)을 그대로 컬럼에 둔다. SQL로 봐도 화면과 같은 숫자가 나온다.
   if (!profile.style_axes) throw new Error("8축 진단 결과(style_axes)가 없어 저장할 수 없어요.");
   const summary = threeAxisSummary(profile.style_axes);
   const { error: profileError } = await client.from("ips_profiles").upsert(
@@ -101,8 +98,6 @@ export async function saveProfile(
   );
   assertOk(profileError, "IPS 프로필 저장");
 
-  // 보유 종목(save-holdings.ts)·관심 종목(watchlist.ts)은 각자 저장한다. 성향을 다시 저장해도 건드리지 않는다
-  // (전에는 여기서 둘 다 비활성화한 뒤 설문 payload의 빈 목록으로 덮어 다시 진단할 때마다 지워졌다).
   const { error: avoidedResetError } = await client
     .from("avoided_assets")
     .update({ is_active: false, updated_at: now })
@@ -210,9 +205,8 @@ function isProfilingOutput(value: unknown): value is ProfilingOutput {
   );
 }
 
-// 헤더 이름: 저장된 이름 → 가입 때 받은 이름 → 이메일 앞부분.
 export function displayNameFor(user: User, storedName?: string | null): string {
-  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다. 그 값은 건너뛴다.
+  // 이름 칸이 생기기 전 가입자는 설문 예시 ID(u_minji_001)가 이름으로 저장됐다.
   if (storedName?.trim() && storedName !== "u_minji_001") return storedName.trim();
   const fullName = user.user_metadata.full_name;
   if (typeof fullName === "string" && fullName.trim()) return fullName.trim();

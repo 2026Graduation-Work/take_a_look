@@ -18,10 +18,9 @@ interface WeightedHolding {
 
 type Tile = WeightedHolding | { others: WeightedHolding[]; amount: number };
 
-// 모든 칸은 높이 44px 이상(이름이 늘 보이게, #326 후속). 280px 맵에 44px 칸 + 4px 간격은 한 열에 5개까지.
+// 칸 높이는 44px 이상. 280px 맵에 44px 칸 + 4px 간격이면 한 열에 5개까지.
 const MAX_PER_COLUMN = 5;
 
-// 금액 큰 순으로 두 열에 나눈다. 다 들어가지 않으면 작은 종목들을 "그 밖의 N종목" 칸 하나로 묶는다.
 function layoutTiles(holdings: PortfolioHolding[]): { columns: Tile[][]; all: WeightedHolding[] } {
   const all = holdings
     .map((holding) => ({
@@ -50,7 +49,6 @@ function layoutTiles(holdings: PortfolioHolding[]): { columns: Tile[][]; all: We
   return { columns: columns.filter((column) => column.length > 0), all };
 }
 
-// 평가금액(수량 × 최신 종가). 종가가 없는 종목은 상위에서 매입금액(수량 × 평균 매입가)으로 채워 넘긴다.
 function amountLabel(holding: PortfolioHolding): string {
   return holding.priceBasis === "close" ? "평가금액" : "매입금액";
 }
@@ -95,8 +93,6 @@ export default function PortfolioHeatmap({
     };
     const scroll = (event: Event) => {
       if (event.target instanceof Node && document.getElementById(popupId)?.contains(event.target)) return;
-      // 터치 선택기의 기본 스크롤이나 팝업 내부 스크롤은 정보를 닫지 않는다.
-      // 바깥에서 시작한 터치는 pointerdown에서 닫힌다.
       if (popupInput === "touch") return;
       // 키보드 포커스는 브라우저가 칸을 화면 안으로 스크롤하므로 닫지 않고 칸을 따라간다
       const focused = document.activeElement;
@@ -159,7 +155,6 @@ export default function PortfolioHeatmap({
           <div
             key={columnIndex}
             className="flex min-w-0 flex-col gap-1"
-            // 좁은 열에서도 이름이 몇 글자는 보이게(넓이는 정확한 비례가 아니다 — 범례에 적음)
             style={{ flexGrow: Math.max(columnTotals[columnIndex], 1), flexBasis: 0, minWidth: columns.length > 1 ? "30%" : undefined }}
           >
             {column.map((tile) => {
@@ -195,7 +190,6 @@ export default function PortfolioHeatmap({
                   }}
                   onPointerMove={(event) => {
                     if (event.pointerType === "touch") return;
-                    // Esc로 닫은 팝업은 칸에 다시 들어오기 전까지 열지 않는다.
                     setActive((current) => current?.code === holding.code && current.input === "pointer"
                       ? { ...current, x: event.clientX, y: event.clientY } : current);
                   }}
@@ -213,7 +207,6 @@ export default function PortfolioHeatmap({
                       : { code: holding.code, x: event.clientX, y: event.clientY, input: "touch" });
                   }}
                 >
-                  {/* 종가도 평균 매입가도 없으면 금액을 모르므로 비중만 */}
                   <HeatmapLabel name={holding.name} detail={amount > 0 ? `${formatAmount(amount)} (${valuesKnown ? `${weightOf(amount)}%` : "비중 미제공"})` : "금액, 비중 미제공"} />
                 </Link>
               );
@@ -268,12 +261,9 @@ export default function PortfolioHeatmap({
           onClose={() => setActive(null)}
         />
       )}
-      {/* 맵 아래는 색 범례 한 줄만(10/18 사용자 피드백). 기간은 위 전환 버튼, '참고 정보'는 맨 아래 면책 문구가 말한다.
-          검증 상태·예시 표시와, 필요할 때만 생기는 종가 기준 안내는 같은 줄 끝에 짧은 말로 둔다 */}
       <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-muted">
         <DotLegend items={SIGNAL_LEGEND} />
         <span>평가금액 (비중)</span>
-        {/* 개발 표시(모델 검증 전)·예시 표시는 두지 않는다(화면 규칙 v2, 예시는 상단 데모 띠 한 곳). 필요할 때만 생기는 기준 안내만 */}
         {closeAsOf && staleLabel(closeAsOf) && <span>{closeAsOf.replaceAll("-", ".")} 종가</span>}
         {holdings.some(({ priceBasis }) => priceBasis !== "close") && <span>종가가 없는 종목은 매입금액 기준</span>}
       </p>

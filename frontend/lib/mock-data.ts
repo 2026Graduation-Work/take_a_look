@@ -1,7 +1,3 @@
-// 데모용 목데이터. 추후 Supabase 조회로 교체하되 형태는 schema/ 계약을 따른다.
-// (수치는 디자인 프로토타입 "Main Dashboard"/"Stock Detail" 기준.
-//  데이터 기준일과 예측 생성일은 하나의 날짜로 통일한다. 팀 리뷰 결정)
-
 import { summaryFromStyleAxes } from "./profiling-rules.ts";
 import { MARKET_SNAPSHOT, SNAPSHOT_AS_OF, snapshotPrice } from "./providers/demo-snapshot.ts";
 import type {
@@ -14,10 +10,8 @@ import type {
   StyleAxes,
 } from "./types";
 
-// 이 파일의 수치는 모두 손으로 정한 예시다. 화면에는 "예시 데이터"로 표시된다.
 const DEMO: DataProvenance = { kind: "mock", source: "데모 데이터" };
 
-// 시장 브리핑은 실데이터 스냅샷(KRX 지수, FinanceDataReader 캐시). 산식: scripts/build_demo_snapshot.py
 export const marketStatus: MarketStatus = MARKET_SNAPSHOT;
 
 const samsungElectronics: RecommendedStock = {
@@ -32,7 +26,7 @@ const samsungElectronics: RecommendedStock = {
   similarCaseCount: 128,
   horizonAgreement: { h5: "up", h10: "up", h20: "up", agreement: "aligned" },
   riskFlags: [],
-  reason: "20일 이동평균이 60일 이동평균을 상향 돌파", // 상세 모델 근거 1순위와 같은 문장
+  reason: "20일 이동평균이 60일 이동평균을 상향 돌파",
   provenance: DEMO,
 };
 
@@ -48,7 +42,7 @@ const hyundaiMotor: RecommendedStock = {
   similarCaseCount: 52,
   horizonAgreement: { h5: "up", h10: "up", h20: "up", agreement: "aligned" },
   riskFlags: [],
-  reason: "60일 모멘텀이 전체 종목 상위 5%", // 상세 모델 근거 1순위와 같은 문장
+  reason: "60일 모멘텀이 전체 종목 상위 5%",
   provenance: DEMO,
 };
 
@@ -66,11 +60,10 @@ const celltrion: RecommendedStock = {
   riskFlags: ["high_volatility"],
   caution:
     "위험 2등급 종목으로, 성향 기준 허용 범위(4, 5등급) 밖에 있어요.",
-  reason: "최근 20거래일 거래량이 평소의 2.8배", // 상세 모델 근거 1순위와 같은 문장
+  reason: "최근 20거래일 거래량이 평소의 2.8배",
   provenance: DEMO,
 };
 
-// supabase/seed.sql 035720 예측 행과 같은 값
 const kakao: RecommendedStock = {
   code: "035720",
   name: "카카오",
@@ -88,22 +81,16 @@ const kakao: RecommendedStock = {
   provenance: DEMO,
 };
 
-// 추천 리스트. 위험등급은 거르지 않는다 — 성향에서 자동 파생된 max_risk_tier는
-// 소프트 틸트라 주의 문구로만 쓴다 (AGENTS.md "명시 규칙만 하드 제약").
 export const recommendedStocks: RecommendedStock[] = [samsungElectronics, hyundaiMotor];
 
-// 보유 중이지만 추천 목록에 없는 종목. 보유 종목은 모두 추천 또는 이 알림 중 한 곳에 보인다.
 export const holdingAlerts: RecommendedStock[] = [celltrion, kakao];
 
-// 회피 설정(avoided_assets)으로 추천에서 제외된 종목 안내.
-// 화이트박스 원칙: 어떤 종목이 왜 빠졌는지 펼쳐서 확인 가능해야 한다.
 export const avoidanceNotice = {
   avoidedLabels: ["SPAC", "관리종목"],
   excludedStocks: [{ name: "미래에셋비전스팩3호", code: "418250", reason: "SPAC" }],
 };
 
-// 김민지 8축(schema v1.1). supabase/seed.sql과 같은 값이다.
-// 4축은 기존 v1.0 필드를 schema style_axes 축약 규칙의 역으로 구했다(ratio = 2 × v1.0값 − 1):
+// 4축은 v1.0 필드를 schema style_axes 축약 규칙의 역으로 구했다(ratio = 2 × v1.0값 − 1):
 //   loss_tolerance ← risk_tolerance 0.35, urgency ← fomo_index 0.72,
 //   drawdown_reaction ← panic_sell_tendency 0.65, information_reliance ← herding_score 0.58.
 // turnover -0.25는 time_horizon_months 48에 가장 가까운 구간(1800일)이다.
@@ -123,14 +110,12 @@ export const investorStyleAxes: StyleAxes = {
   ],
 };
 
-// 김민지 성향 카드. 3축과 유형명은 위 8축에서 계산한다(대시보드·상세·설문 결과와 같은 규칙).
 export const investorProfile: InvestorProfileSummary = summaryFromStyleAxes(investorStyleAxes, {
   displayName: "김민지",
   avatarLabel: "민",
   surveyedAt: "2026.03",
 });
 
-// supabase/seed.sql portfolio_holdings와 같은 종목·수량·평단 (N08 보유 비중 넛지가 의존)
 export const portfolioHoldings: PortfolioHolding[] = [
   {
     code: "005930",
@@ -166,10 +151,8 @@ export const portfolioHoldings: PortfolioHolding[] = [
   },
 ];
 
-// 시세는 실데이터 스냅샷(네이버 금융 수정주가, 기준일 2025-12-30). 예측 수치(신호·밴드·분포·근거)는 예시다.
 const realPrice = (code: string) => ({ asOf: SNAPSHOT_AS_OF, ...snapshotPrice(code) });
 
-// 종목 상세. 진입 동선: 대시보드 카드 "근거 보기" → /stocks/[code]
 export const stockDetails: Record<string, StockDetail> = {
   [celltrion.code]: {
     ...celltrion,
@@ -290,11 +273,8 @@ export const stockDetails: Record<string, StockDetail> = {
   },
 };
 
-// 카카오는 예측 근거·분포 예시가 없다. 시세만 실데이터로 두고 나머지는 "없음"으로 보인다.
 stockDetails[kakao.code] = { ...kakao, ...realPrice(kakao.code), reasons: [] };
 
-// 데모 모드에서 보유 종목을 고를 때 쓰는 종목 목록.
-// 로그인 사용자는 Supabase stocks 테이블을 직접 검색한다.
 export const KNOWN_STOCKS: { code: string; name: string }[] = [
   samsungElectronics,
   hyundaiMotor,
@@ -302,7 +282,6 @@ export const KNOWN_STOCKS: { code: string; name: string }[] = [
   kakao,
 ].map(({ code, name }) => ({ code, name }));
 
-// 코드 → 이름. 로그인 사용자의 관심 종목(Supabase에는 코드만 있다)에 이름을 붙일 때 쓴다.
 export const STOCK_NAMES: Record<string, string> = Object.fromEntries([
   ...KNOWN_STOCKS.map(({ code, name }) => [code, name]),
   ...Object.values(stockDetails).map(({ code, name }) => [code, name]),

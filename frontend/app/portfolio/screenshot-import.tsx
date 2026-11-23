@@ -1,8 +1,6 @@
 "use client";
 
-// 스크린샷으로 보유 종목 불러오기(보유 종목 화면과 온보딩 보유 단계가 같이 쓴다).
-// 사진은 이 기기 안(웹 워커)에서만 읽고 어디에도 보내지 않는다. 읽은 값은 사용자가 확인하고 고친 뒤
-// '목록에 넣기'를 눌러야 편집 목록에 들어가고, 저장은 기존 저장 버튼이 한다.
+// 사진은 이 기기 안(웹 워커)에서만 읽고 어디에도 보내지 않는다.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -12,15 +10,13 @@ import { mergeResults, parseHoldings, type CheckField, type ParsedHolding, type 
 import { groupDigits, holdingInputError, isValidHolding, numberDraft, parseWholeNumber, PRICE_DIGITS, QUANTITY_DIGITS, type SavedHolding } from "@/lib/holdings-rules";
 
 type Row = ParsedHolding & { quantityText: string; priceText: string };
-// 기다리는 세 단계: preparing(1/3 읽는 도구 준비) → reading(2/3 글자 찾기) → matching(3/3 종목 맞춰 보기)
 type Phase = "idle" | "preparing" | "reading" | "matching" | "review" | "unsupported" | "empty" | "blurry" | "toolFailed" | "failed";
 
 const PAGE = 1000; // Supabase 한 번에 돌려주는 최대 행 수
 const FEW_LINES = 3;
 const SLOW_MS = 10_000; // 이보다 오래 걸리면 '조금 더 걸리고 있어요'와 취소(NN/g 기다림 기준)
-const TOOL_MB = Math.round(TOOL_BYTES / 1e6); // 읽은 글줄이 이보다 적으면 종목이 없는 화면이 아니라 글자를 못 읽은 것으로 본다
+const TOOL_MB = Math.round(TOOL_BYTES / 1e6);
 
-// 종목 마스터 전체(이름 대조용). 연결이 없거나 실패하면 화면이 가진 후보 목록으로 대신한다.
 let masterCache: Promise<StockRef[]> | null = null;
 async function loadMaster(fallback: StockRef[]): Promise<StockRef[]> {
   const client = getSupabaseClient();
@@ -51,7 +47,6 @@ const toRow = (holding: ParsedHolding): Row => ({
 
 function CheckMark({ show }: { show: boolean }) {
   if (!show) return null;
-  // 주황은 점만, 글자는 본문색(DESIGN.md 색 역할표)
   return (
     <span className="flex items-center gap-1 text-2xs text-body">
       <span aria-hidden className="size-1.5 rounded-full bg-caution-mark" />
@@ -60,7 +55,6 @@ function CheckMark({ show }: { show: boolean }) {
   );
 }
 
-// leading: 버튼 왼쪽에 둘 것(종목 검색칸). children: 버튼 줄과 읽은 결과 사이에 둘 안내(평균 매입가 설명 등)
 export default function ScreenshotImport({
   catalog,
   onAdd,
@@ -68,7 +62,7 @@ export default function ScreenshotImport({
   children,
 }: {
   catalog: StockRef[];
-  onAdd: (rows: SavedHolding[]) => string[]; // 이미 있어서 새 값으로 바꾼 종목 이름
+  onAdd: (rows: SavedHolding[]) => string[];
   leading?: ReactNode;
   children?: ReactNode;
 }) {
@@ -79,11 +73,10 @@ export default function ScreenshotImport({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  // 실패했을 때만 '읽은 글자 보기'로 보여 줄 인식 글자. 이 화면 상태에만 두고 저장, 전송, 로그하지 않는다
+  // 인식 글자는 이 화면 상태에만 두고 저장, 전송, 로그하지 않는다
   const [readText, setReadText] = useState<string[]>([]);
   const [download, setDownload] = useState({ received: 0, started: 0, now: 0 });
   const [slow, setSlow] = useState(false);
-  // 지금 불러오기 차례. 취소하면 올려서, 늦게 끝난 앞 차례 결과를 버린다
   const job = useRef(0);
   const abort = useRef<AbortController | null>(null);
   const busy = phase === "preparing" || phase === "reading" || phase === "matching";
@@ -110,7 +103,6 @@ export default function ScreenshotImport({
     setNotice("");
     setSlow(false);
     try {
-      // 처음 한 번은 읽는 도구를 받는다. 받은 바이트로 %와 남은 시간을 보인다. 두 번째부터는 캐시에서 바로
       if (!toolCached()) {
         setPhase("preparing");
         const started = Date.now();
@@ -142,8 +134,6 @@ export default function ScreenshotImport({
       setRows(merged.holdings.map(toRow));
       setUnsupported(merged.unsupported);
       setReadText(merged.holdings.length ? [] : text);
-      // 코스피 종목이 하나라도 있으면 그것만 확인 표로, 다루지 않는 종목만 읽혔으면 그 이름을, 둘 다 없으면
-      // 글자를 거의 못 읽었는지(흐린 캡처) 글자는 읽었는데 종목이 없는지(다른 화면)를 나눠 말한다
       setSlow(false);
       setPhase(merged.holdings.length ? "review" : merged.unsupported.length ? "unsupported" : text.length < FEW_LINES ? "blurry" : "empty");
     } catch {
@@ -160,7 +150,7 @@ export default function ScreenshotImport({
     setRows((current) =>
       current.map((row) => {
         if (row.code !== code) return row;
-        const check = row.check.filter((item: CheckField) => item !== field); // 고친 칸은 확인한 것으로 본다
+        const check = row.check.filter((item: CheckField) => item !== field);
         return field === "quantity"
           ? { ...row, check, quantityText: text, quantity: parseWholeNumber(text, QUANTITY_DIGITS) }
           : { ...row, check, priceText: text, avgBuyPrice: parseWholeNumber(text, PRICE_DIGITS), avgComputed: false };
@@ -186,7 +176,6 @@ export default function ScreenshotImport({
 
   return (
     <section aria-label="종목 넣기" className="flex flex-col gap-3">
-      {/* 검색칸 + 오른쪽 '캡처로 불러오기'. 390에서는 검색 아래 줄 */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         {leading && <div className="min-w-0 flex-1">{leading}</div>}
         <button type="button" onClick={() => input.current?.click()} disabled={busy} className="btn-secondary flex-none self-start sm:self-auto">
@@ -261,10 +250,8 @@ export default function ScreenshotImport({
       </div>
 
       {phase === "review" && (
-        // 입력칸(회색)이 보이도록 흰 카드 위에(보유 목록 편집 카드와 같은 모양)
         <div className="surface mt-2 flex flex-col gap-3 px-5 py-5">
           <h3 className="m-0 text-base font-semibold">읽은 내용을 확인해 주세요</h3>
-          {/* 칸마다 바로 고친다. 이름은 마스터에서 맞춘 것이라 틀렸으면 그 줄을 삭제하고 직접 입력한다 */}
           <ul className="m-0 flex list-none flex-col gap-3 p-0" aria-label="읽은 보유 종목">
             {rows.map((row) => (
               <li key={row.code} className="grid grid-cols-2 items-start gap-x-3 gap-y-1 sm:grid-cols-[1.4fr_1fr_1fr_auto]">

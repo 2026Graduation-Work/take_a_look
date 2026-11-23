@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { formatKstDateTime } from "@/lib/display";
 import type { DataProvenance } from "@/lib/types";
 
-// 페이지 맨 아래 "데이터 출처·기준" 표(상세: 더 알아보기 안, 대시보드: 하단). 카드마다 출처 버튼을 두지 않는다.
 export function SourceTable({ rows, children }: { rows: [string, DataProvenance | null][]; children?: ReactNode }) {
   return (
     <dl className="m-0 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
@@ -17,10 +16,8 @@ export function SourceTable({ rows, children }: { rows: [string, DataProvenance 
   );
 }
 
-// 출처 전체 목록(더 알아보기)용 한 줄 글.
 function sourceText(provenance: DataProvenance): string {
   if (provenance.kind !== "real") return "예시 데이터";
-  // DB·수집기가 적은 출처 이름의 가운데 점도 화면에서는 쉼표로(화면 규칙 v2, 원본 데이터는 그대로)
   const source = provenance.source.replaceAll("\u00b7", ", ");
   return [source, provenance.asOf && formatKstDateTime(provenance.asOf)].filter(Boolean).join(", ");
 }

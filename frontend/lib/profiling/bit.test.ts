@@ -1,4 +1,3 @@
-// node --test "lib/**/*.test.ts" (Node 24 타입 스트리핑, 추가 의존성 없음)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { StyleAxes, StyleAxisId } from "../types.ts";
@@ -34,7 +33,6 @@ function axes(ratios: Partial<Record<StyleAxisId, number>>, confidence = 0.9): S
   };
 }
 
-// 분류 3축을 같은 값으로 두면 composite도 그 값이다.
 const spectrum = (value: number) =>
   axes({ turnover: value, loss_tolerance: value, concentration: value });
 
@@ -54,7 +52,6 @@ const CALM: NudgeMarket = {
   riskGrade: 3,
 };
 
-// 모든 시장 조건이 참인 시장. 성향 조건만으로 발화가 갈린다.
 const ALL_MARKET: NudgeMarket = {
   retailNetBuyStreakDays: 5,
   retailNetLatest: 1,
@@ -63,7 +60,7 @@ const ALL_MARKET: NudgeMarket = {
   volatilityPercentile: 0.95,
   drawdownFrom3mHigh: -0.2,
   return3d: 0.12,
-  sentimentChange: 2, // 감성 점수 폭(-1~1)의 최대 변화. N07 임계 산출값과 무관하게 참
+  sentimentChange: 2,
   sentimentDayLabel: "오늘",
   isTopHolding: true,
   holdingGain: null,
@@ -154,20 +151,15 @@ test("N05는 보유 손익 ±10% 이상이면 평단 기준으로 말한다(#255
     selectNudges(classifyBit(axes({ drawdown_reaction: 0.5 })), { ...CALM, ...market }).find(({ id }) => id === "N05")?.text;
   assert.equal(n05({ holdingGain: -0.123 }), "평균 매입가보다 12.3% 낮은 상태예요. 처음 살 때 봤던 근거가 지금도 맞는지 확인해 보세요.");
   assert.equal(n05({ holdingGain: 0.1 }), "평균 매입가보다 10.0% 높은 상태예요. 처음 산 이유를 다시 확인해 보세요.");
-  // ±10% 미만이면 손익으로는 발화하지 않고, 3개월 고점 조건이면 기존 문구
   assert.equal(n05({ holdingGain: 0.05 }), undefined);
   assert.match(n05({ holdingGain: 0.05, drawdownFrom3mHigh: -0.2, isHolding: true })!, /처음 살 때/);
-  // 보유하지 않은 종목에는 "처음 살 때"라고 하지 않는다(#278 점검)
   assert.match(n05({ drawdownFrom3mHigh: -0.2 })!, /왜 떨어졌는지/);
-  // 하락 시 유지 쪽(-) 성향에는 손익이 커도 없음
   assert.deepEqual(ids(axes({ drawdown_reaction: -0.5 }), { holdingGain: -0.3 }), []);
 });
 
 test("같은 축 근거 넛지는 우선순위가 높은 하나만 남는다", () => {
   const hot = { volatilityPercentile: 0.95, drawdownFrom3mHigh: -0.2 };
-  // N05·N04는 둘 다 drawdown_reaction. 우선순위 N05 > N04
   assert.deepEqual(ids(axes({ drawdown_reaction: 0.5 }), hot, Infinity), ["N05"]);
-  // 축이 다르면 둘 다 남는다
   assert.deepEqual(
     ids(axes({ drawdown_reaction: 0.5, urgency: 0.5 }), { ...hot, return3d: 0.12 }),
     ["N05", "N06"],
@@ -199,7 +191,6 @@ test("N01~N03은 information_reliance >= 0.3 단독 조건. FOLLOWER여도 낮�
   assert.deepEqual(ids(herding, { retailNetBuyStreakDays: 5 }), ["N01"]);
   assert.deepEqual(ids(herding, { retailNetLatest: 1, foreignNetLatest: -1 }), ["N02"]);
   assert.deepEqual(ids(herding, { institutionNetBuyDaysOf5: 4 }), ["N03"]);
-  // 셋 다 참이어도 같은 축이라 우선순위가 가장 높은 N02만 남는다
   const fired = selectNudges(classifyBit(herding), { ...CALM, ...supplyMarket }, Infinity);
   assert.deepEqual(
     fired.map(({ id, axis, ratio }) => [id, axis, ratio]),
@@ -244,7 +235,6 @@ test("최대 2개, 우선순위 N02 > N05 > N11 > N04 > N01 > id 순, 같은 축
       riskGrade: 3,
       volatilityPercentile: 0.5,
     }),
-    // N03·N07은 각각 N01·N06과 같은 축이라 빠진다
     ["N01", "N06"],
   );
 });

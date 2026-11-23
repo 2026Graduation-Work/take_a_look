@@ -3,10 +3,6 @@
 import { featureDescription } from "@/lib/featureLabels";
 import MarketDetail from "./market-detail";
 
-// 종목 상세의 성향 기반 영역: 나에게 맞춘 체크포인트 · 판단 근거 4탭 · 계산 근거.
-// 성향은 소프트 틸트다. 탭 순서와 체크포인트에만 쓰고 종목을 거르지 않는다.
-// 연구 질문 ② "성향 기반 표시"는 탭 순서(data-card-order)로 보존한다.
-
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   Line,
@@ -78,7 +74,6 @@ import { staleLabel } from "@/lib/market-status";
 import TermLabel from "./term-tip";
 import FINANCIAL_MEDIANS from "@/lib/financial-medians.json";
 
-// 8축 진단 결과가 없을 때의 순서
 const DEFAULT_CARD_ORDER: readonly CardId[] = [
   "nudge",
   "contribution",
@@ -90,7 +85,6 @@ const DEFAULT_CARD_ORDER: readonly CardId[] = [
 
 type TabId = "market" | "supply" | "financial" | "contribution";
 
-// 유형별 카드 순서(bit.ts CARD_ORDER) → 판단 근거 탭. 넛지는 체크포인트로, 변동성은 시장 분위기 탭으로 간다.
 const CARD_TO_TAB: Partial<Record<CardId, TabId>> = {
   sentiment: "market",
   risk: "market",
@@ -133,14 +127,12 @@ const TOOLTIP_STYLE = { border: `1px solid ${CHART.line}`, borderRadius: 8, font
 const signed = (value: number, digits = 2) => `${value > 0 ? "+" : ""}${value.toFixed(digits)}`;
 const sentimentDateLabel = (date: string) => date.replaceAll("-", ".");
 const SENTIMENT_DAY_LIMIT = 365;
-const SENTIMENT_POINT_PX = 28; // 점 하나의 가로 폭. 날짜 글자는 겹치지 않게 Recharts가 건너뛴다
-// 감성 점수(-1~+1) → 구간 말. 경계는 점수 분포가 아니라 읽기 쉬운 고정 구간이다.
-// 강조 1단(판정 단어): 굵게 + 의미 색. 긍정 = 적, 부정 = 청, 그 사이 = 본문색(DESIGN.md 2-1).
+const SENTIMENT_POINT_PX = 28; // 날짜 글자는 겹치지 않게 Recharts가 건너뛴다
+// 경계는 점수 분포가 아니라 읽기 쉬운 고정 구간이다.
 function moodColor(score: number): string {
   return score >= 0.1 ? "var(--color-up)" : score <= -0.1 ? "var(--color-down)" : "var(--color-ink)";
 }
 
-// 차트 SVG용 같은 판정 색(lib/chart-colors.ts 이유)
 const moodChartColor = (score: number) => (score >= 0.1 ? CHART.up : score <= -0.1 ? CHART.down : CHART.muted);
 
 function moodWord(score: number): string {
@@ -153,7 +145,6 @@ function moodWord(score: number): string {
 
 export type DemoStyleAxes = ReturnType<typeof useDemoStyleAxes>;
 
-// "다른 유형이라면?": BIT 4유형 프리셋으로 이 화면만 바꿔 본다. DB·localStorage에 쓰지 않는다.
 export function useDemoStyleAxes(original: StyleAxes | null) {
   const [viewAs, setViewAs] = useState<BitType | null>(null);
   const styleAxes: StyleAxes | null =
@@ -171,7 +162,6 @@ export function useDemoStyleAxes(original: StyleAxes | null) {
   };
 }
 
-// 판단 근거 탭 순서(유형별 카드 순서 → 탭). 탭과 "다른 유형이라면?" 안내가 같이 쓴다.
 function evidenceTabOrder(bit: ReturnType<typeof classifyBit> | null): TabId[] {
   const order = bit?.cardOrder ?? DEFAULT_CARD_ORDER;
   return [...new Set(order.map((id) => CARD_TO_TAB[id]).filter((id): id is TabId => Boolean(id)))];
@@ -190,8 +180,6 @@ function Unavailable({ children }: { children: ReactNode }) {
   return <p className="m-0 text-sm text-muted">{children}</p>;
 }
 
-// ── 나에게 맞춘 체크포인트 ───────────────────────────────────
-
 export function Checkpoints({
   demo,
   detail,
@@ -203,10 +191,9 @@ export function Checkpoints({
   detail: StockDetail;
   insights: StockInsights;
   holdings: HoldingWeight[];
-  extra: string | null; // 성향 대비 위험도 안내(넛지 외). 있으면 체크포인트 뒤에 붙는다
+  extra: string | null;
 }) {
   const { bit } = demo;
-  // 유형을 바꿔도 화면이 같아 보이면 바뀐 건지 헷갈린다(사전 참가자 P0 10/13) → 근거 순서가 바뀌었는지 한 줄로
   const [orderNote, setOrderNote] = useState("");
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
@@ -285,8 +272,6 @@ export function Checkpoints({
   );
 }
 
-// ── 판단 근거 4탭 ────────────────────────────────────────────
-
 export default function EvidenceTabs({
   detail,
   insights,
@@ -360,7 +345,6 @@ export default function EvidenceTabs({
         className="surface flex flex-col gap-4 p-6"
       >
         <h3 className="text-lg font-semibold">{TAB_META[active].question}</h3>
-        {/* 네 탭 모두 같은 순서: 결론 → 숫자와 비교 기준 → 왜 봐야 하나요? → 계산 근거(접기) */}
         {active === "market" && <MarketPanel detail={detail} insights={insights} why={TAB_META.market.why} />}
         {active === "supply" && <SupplyPanel supply={insights.supply} volume={insights.supplyVolume} why={TAB_META.supply.why} />}
         {active === "financial" && (
@@ -407,17 +391,14 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
   const sentimentDates = sentiment ? sentimentPeriod(sentiment) : null;
   const periodMismatch = Boolean(prices && sentimentDates && !periodsOverlap(prices, sentimentDates));
   const sentimentTabs: SentimentPeriod[] = ["day", "month", "year"];
-  // 일별에서 오늘은 '오늘 Live' 점(직전 24시간)이 맡는다.
   const periodInput = sentimentDaysIncludingLive(insights)
     .filter(({ date }) => !chartLive || date !== kstDay(Date.parse(chartLive.asOf)));
   const periodDays = aggregateSentimentPeriods(periodInput, selectedSentimentPeriod);
-  // 일별은 최근 1년만 한 줄 스크롤로 그린다. 더 긴 기간은 월별·연별에서 본다.
   // ponytail: 점 하나당 SENTIMENT_POINT_PX 폭이라 일별 전체(10년, 약 3,700점)는 너무 넓다. 필요하면 가상 스크롤로.
   const chartDays = selectedSentimentPeriod === "day" ? periodDays.slice(-SENTIMENT_DAY_LIMIT) : periodDays;
   const chartPoints = chartDays.length + (chartLive ? 1 : 0);
 
   useEffect(() => {
-    // 처음 위치는 오른쪽 끝(가장 최근)
     const timeline = sentimentTimelineRef.current;
     if (timeline) timeline.scrollLeft = timeline.scrollWidth;
   }, [selectedSentimentPeriod, chartPoints]);
@@ -487,7 +468,6 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
             className="relative min-w-0"
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
           >
-            {/* 그래프 전체가 하나의 가로 스크롤. 스와이프하면 선과 날짜가 함께 움직이고, 누르면 그 날 값이 보인다. */}
             <div
               ref={sentimentTimelineRef}
               className="overflow-x-auto pb-2 [scrollbar-width:thin]"
@@ -543,7 +523,6 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
                     {headline.title}
                   </a>
                 ) : headline.title}
-                {/* 근거·출처 항상 표시(AGENTS.md HITL) — 날짜는 빼도 언론사는 남긴다 */}
                 <span className="ml-2 text-2xs text-muted">{headline.press}</span>
               </li>
           )} />
@@ -565,7 +544,6 @@ function MarketPanel({ detail, insights, code = detail?.code, why }: { detail: S
   );
 }
 
-// DART 공시 목록. 뉴스와 같은 '더 보기' 방식, 분류는 이름만으로 이해되게(copy-glossary DISCLOSURE_KIND).
 function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosures"] }) {
   return (
     <section aria-labelledby="disclosure-title" className="flex flex-col gap-2">
@@ -614,7 +592,6 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
     ...days.map((day) => ({ ...day, label: dateLabel(day.date), liveScore: null as number | null })),
     ...(live ? [{ date: live.asOf, label: "오늘 Live", score: connectLive ? live.score : null, liveScore: live.score, articleCount: live.articleCount }] : []),
   ];
-  // 점을 누르면 그 날 값, 바깥을 누르거나 Esc로 닫는다(올리기만으로는 열지 않음)
   const [tip, setTip] = useState(false);
   const chartRoot = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -645,7 +622,6 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             interval="preserveStartEnd"
             minTickGap={24}
           />
-          {/* 세로축은 판정 구간 이름(moodColor와 같은 ±0.1 경계). 점수 숫자는 툴팁에만 */}
           <YAxis
             domain={[-1, 1]}
             ticks={[-0.55, 0, 0.55]}
@@ -680,7 +656,6 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
             name={TERM.sentiment}
             stroke={CHART.priceLine}
             strokeWidth={2}
-            // 점마다 그날 판정 색(긍정 적, 부정 청, 중립 회색). 기사 적은 날은 속 빈 점(풀이는 툴팁)
             dot={({ cx, cy, payload }) =>
               typeof payload.score !== "number" ? <g key={payload.label} /> : payload.articleCount < FEW_ARTICLES ? (
                 <circle key={payload.label} data-sentiment-few="true" cx={cx} cy={cy} r={3} fill={CHART.page} stroke={moodChartColor(payload.score)} strokeWidth={1.5} />
@@ -712,7 +687,6 @@ function SentimentChart({ days, live, connectLive, dateLabel = sentimentDateLabe
   );
 }
 
-// 투자자별 20일 순매수 합계를 가운데 0 기준 막대로. 순매수 = 적, 순매도 = 청.
 function SupplyPanel({ supply, volume, why }: { supply: SupplyDemandDay[] | null; volume: number | null; why: string }) {
   if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>;
   const totals = SUPPLY_SERIES.map((series) => ({
@@ -785,7 +759,6 @@ function SupplyPanel({ supply, volume, why }: { supply: SupplyDemandDay[] | null
   );
 }
 
-// '시점'이에요 / '폭'이에요 / '비율'이에요 / '추세'예요. 끝이 한글이 아니면 '예요'.
 function copula(word: string): string {
   const code = word.charCodeAt(word.length - 1) - 0xac00;
   return code >= 0 && code < 11172 && code % 28 ? "이에요" : "예요";
@@ -793,8 +766,7 @@ function copula(word: string): string {
 
 const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 
-// 비교 기준: DB에 업종 분류가 없어 코스피 중간값(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
-// 업종 분류가 생기면 같은 업종 10개사 이상일 때 업종 중간값으로 바꾼다(#372).
+// DB에 업종 분류가 없어 코스피 중간값과 비교한다(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
 const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
 
 function FinancialPanel({ financial, why }: { financial: FinancialSnapshot | null; why: string }) {
@@ -850,7 +822,6 @@ function FinancialPanel({ financial, why }: { financial: FinancialSnapshot | nul
   );
 }
 
-// 부호 막대: 선택한 분류 점수의 강화는 오른쪽, 완화는 왼쪽. 방향과 부호는 별개다.
 function ContributionPanel({
   space,
   features,
@@ -890,7 +861,6 @@ function ContributionPanel({
   }
   const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
-  // 본문은 상위 3개만 표시하되 비중의 분모는 서버가 보낸 전체 피처 합을 유지한다.
   const shown = features.slice(0, 3);
   const hiddenCount = features.length - shown.length;
   const max = Math.max(...shown.map(feature => Math.abs(feature.contribution))) || 1;
@@ -962,9 +932,6 @@ function ContributionPanel({
     </>
   );
 }
-
-// ── 더 알아보기: 내 투자 유형, 가격 흐름 분위기, 계산 근거 ─────────────────
-// 설문 축과 가격 흐름은 5칸 단계 막대(stage-bar.tsx)로 보이고, 점수 숫자는 '계산 근거' 묶음에만 범위와 함께 쓴다.
 
 export function CalculationBasis({
   demo,
@@ -1051,7 +1018,6 @@ export function CalculationBasis({
   );
 }
 
-// 더 알아보기의 '계산 근거' 묶음: 단계 막대 뒤의 점수와 나눈 기준을 범위와 함께 쓴다.
 export function BasisNumbers({ demo, insights, chart }: { demo: DemoStyleAxes; insights: StockInsights; chart?: ChartSnapshot }) {
   const { close, sigma, barriers } = chart?.inference ?? {};
   const barrier = close && sigma && barriers && [close, sigma, barriers.up, barriers.down].every((v) => Number.isFinite(v) && v > 0)
@@ -1073,7 +1039,6 @@ export function BasisNumbers({ demo, insights, chart }: { demo: DemoStyleAxes; i
   );
 }
 
-// 유형 네 구간 중 내 구간만 진하게. 점수 숫자는 계산 근거에만 둔다.
 function TypeZones({ current }: { current: number }) {
   return (
     <div role="img" aria-label={`네 유형 중 ${BIT_LABEL[BIT_TYPES[current]]}`} className="flex flex-col gap-2">
@@ -1087,9 +1052,7 @@ function TypeZones({ current }: { current: number }) {
   );
 }
 
-// 데이터 출처 전체 — 섹션마다 한 줄로 둔 출처를 한곳에 모은다.
 export function SourceList({ detail, insights }: { detail: StockDetail; insights: StockInsights }) {
-  // 데이터가 없어 빈 상태로 보이는 항목은 "예시 데이터"가 아니라 "미제공"이다.
   const { provenance: p } = insights;
   const shown = (data: unknown, provenance: DataProvenance) => (data ? provenance : null);
   const rows: [string, DataProvenance | null][] = [

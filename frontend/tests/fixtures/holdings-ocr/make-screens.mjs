@@ -1,6 +1,5 @@
-// 스크린샷 보유 종목 불러오기의 시험 화면(가짜 수치). 실제 계좌 캡처는 쓰지 않는다(AGENTS.md).
+// 스크린샷 보유 종목 불러오기의 시험 화면(가짜 수치).
 // 사용: node tests/fixtures/holdings-ocr/make-screens.mjs → 같은 폴더에 *.png와 answers.json
-// A 밝은 표형(종목 한 칸이 2줄), B 어두운 목록형(이름 아래 N주, 오른쪽 평가금과 손익), C PC 웹 표형(평균단가 열).
 import { chromium } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 
@@ -22,7 +21,6 @@ const STOCKS = {
   celltrion: { code: "068270", name: "셀트리온", qty: 13, avg: 176300, price: 181900 },
   posco: { code: "005490", name: "POSCO홀딩스", qty: 6, avg: 389000, price: 341000 },
   doosan: { code: "034020", name: "두산에너빌리티", qty: 120, avg: 19870, price: 24350 },
-  // 검증용(holdout) 화면에만 쓰는 종목: 규칙을 고칠 때 보지 않은 화면으로 정확도를 따로 잰다
   kia: { code: "000270", name: "기아", qty: 15, avg: 98300, price: 104700 },
   shinhan: { code: "055550", name: "신한지주", qty: 33, avg: 47150, price: 55900 },
   lgchem: { code: "051910", name: "LG화학", qty: 2, avg: 455000, price: 318500 },
@@ -34,7 +32,6 @@ const STOCKS = {
   meritz: { code: "138040", name: "메리츠금융지주", qty: 6, avg: 101200, price: 118900 },
   korzinc: { code: "010130", name: "고려아연", qty: 1, avg: 512000, price: 776000 },
 };
-// 마스터에 없는 줄(다루지 않는 종목)
 const ETF = [
   { name: "KODEX 200", qty: 10, avg: 35120, price: 37480 },
   { name: "TIGER 미국S&P500", qty: 7, avg: 18950, price: 21030 },
@@ -50,7 +47,6 @@ const metrics = (s) => {
 let FONT = `"Noto Sans KR","Malgun Gothic",sans-serif`;
 const css = () => `*{box-sizing:border-box;margin:0;padding:0}body{font-family:${FONT};-webkit-font-smoothing:antialiased}`;
 
-// A. 밝은 표형: 종목명 | 평가손익/수익률 | 보유수량/평가금액, 맨 아래 지수 바
 function formA(rows, { dark = false } = {}) {
   const bg = dark ? "#121417" : "#fff", ink = dark ? "#eef0f3" : "#111", muted = dark ? "#9aa0a8" : "#777";
   const up = dark ? "#ff6b6b" : "#e02020", down = dark ? "#5aa0ff" : "#1a64e0", line = dark ? "#2a2e34" : "#e6e6e6";
@@ -74,7 +70,6 @@ function formA(rows, { dark = false } = {}) {
   <div class="bar"><span>KOSPI</span><span style="color:${up}">2,684.31</span><span style="color:${up}">▲ 12.47(0.47%)</span><span style="color:${muted}">장종료</span></div>`;
 }
 
-// B. 어두운 목록형: 원형 로고, 이름 아래 N주, 오른쪽 평가금(원) 아래 ±손익(수익률%). 수익률에 부호가 없다
 function formB(rows, { dark = true } = {}) {
   const bg = dark ? "#17171c" : "#fff", ink = dark ? "#f2f2f5" : "#191f28", muted = dark ? "#8b8f98" : "#8b95a1";
   const up = dark ? "#f0616d" : "#f04452", down = dark ? "#5b8def" : "#3182f6";
@@ -101,7 +96,6 @@ function formB(rows, { dark = true } = {}) {
   <div class="sec">국내주식<span>+12.4%</span></div>${body}`;
 }
 
-// C. PC 웹 표형: 종목명, 보유수량, 평균단가, 현재가, 평가금액, 손익
 function formC(rows, { dark = false } = {}) {
   const bg = dark ? "#16181d" : "#fff", ink = dark ? "#e9ebee" : "#222", muted = dark ? "#99a" : "#666", line = dark ? "#2b2f36" : "#ddd";
   const up = "#d32f2f", down = "#1565c0";
@@ -130,7 +124,6 @@ const SCREENS = [
   { id: "C-dark", html: (r) => formC(r, { dark: true }), rows: [S.kakao, S.naver, S.hyundai, S.kb, S.bio], avgSource: "label" },
 ];
 
-// 검증용: 다른 글꼴(나눔스퀘어), 다른 종목, 더 긴 목록
 const ETF2 = [{ name: "KODEX 레버리지", qty: 4, avg: 18750, price: 21340 }, { name: "ACE 미국나스닥100", qty: 9, avg: 16200, price: 17985 }];
 const HOLDOUT = [
   { id: "A-light-v2", html: formA, rows: [S.kia, S.shinhan, ETF2[0], S.meritz, S.lgchem, S.hdhi], avgSource: "computed" },
@@ -141,9 +134,8 @@ const HOLDOUT = [
   { id: "C-dark-v2", html: (r) => formC(r, { dark: true }), rows: [S.meritz, S.korzinc, S.kia, ETF2[1], S.shinhan], avgSource: "label" },
 ];
 
-// 실제 폰 캡처 조건(2026-10-20 실패 신고): 아이폰 1179×2556, 위 상태 표시줄, 아래 탭 바, 원형 로고, 다크 모드.
-// P-A 밝은 표형인데 보유가 전부 ETF, P-B 어두운 목록형에 국내 주식 1종목 + ETF 여러 개 + 해외 지수 줄 + 소수점 해외 주식
-// 종목명과 수치는 지어낸 것이다. 신고한 실제 캡처의 종목과 겹치지 않게 골랐다(사용자 개인정보, AGENTS.md)
+// 실제 폰 캡처 조건: 아이폰 1179×2556, 위 상태 표시줄, 아래 탭 바, 원형 로고, 다크 모드.
+// 종목명과 수치는 지어낸 것이다. 신고한 실제 캡처의 종목과 겹치지 않게 골랐다.
 const ETF3 = [
   { name: "SOL 조선TOP3플러스", qty: 12, avg: 13250, price: 14080 }, { name: "ACE 미국배당다우존스", qty: 3, avg: 128400, price: 139250 },
   { name: "KODEX 은행", qty: 20, avg: 21800, price: 24660 }, { name: "HANARO 원자력iSelect", qty: 6, avg: 38900, price: 41150 },

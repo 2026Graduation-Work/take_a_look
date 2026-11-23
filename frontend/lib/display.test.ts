@@ -52,7 +52,6 @@ test("증감 표시의 방향은 표시 자릿수에 맞추고 반올림된 0에
   assert.equal(formatSignedPercent(-0.004, 2), "0.00%");
   assert.equal(changeMeta(0.06, 1).arrow, "▲");
   assert.equal(changeMeta(-0.06, 1).arrow, "▼");
-  // 수급처럼 '1만 주 미만'을 말로 표시하는 값은 작은 수량도 실제 방향을 유지한다.
   assert.equal(changeMeta(-1).arrow, "▼");
 });
 

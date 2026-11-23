@@ -71,7 +71,6 @@ for (const code of CODES) {
   test(`${code}: 4개 Provider가 값을 반환한다`, async () => {
     const sentiment = await sentimentProvider(code);
     assert.equal(sentiment?.days.length, 20);
-    // 4종목 모두 실제 BigKinds 기사 집계. 기사 제목은 삼성전자(기존)만 있고 나머지는 커밋하지 않는다.
     assert.equal(sentiment?.headlines.length, code === "005930" ? 3 : 0);
     assert.equal(sentiment?.source, "real");
     assert.ok(sentiment?.days.every(({ score }) => score >= -1 && score <= 1));
@@ -129,11 +128,10 @@ function minjiWith(overrides: Record<string, number>): StyleAxes {
 }
 
 async function samsungNudges(styleAxes: StyleAxes) {
-  // 1년 변동성·백분위는 종목 마스터 값(2026-10-06 운영 실측)을 넣는다
+  // 2026-10-06 운영 실측 종목 마스터 값
   const detail = { ...stockDetails["005930"], volatilityAnnual: 0.8681, volatilityPercentile: 0.8518 };
-  // 수급은 DB에서만 오므로(0013), 넛지 규칙 검사에는 저장된 실데이터 20영업일을 직접 넣는다
   const base = await loadStockInsights("005930", null);
-  // N07은 Live 일별 최근 두 수집일로 본다(#254). 기사 충분한 두 날, 변화량 |Δ| 0.6 >= p90
+  // N07: 기사 충분한 두 날, 변화량 |Δ| 0.6 >= p90
   const liveSentiment = { score: 0, scoreStd: 0, articleCount: 40, publisherCount: 5, status: "ok" as const,
     asOf: "2026-10-09T09:41:00+09:00", windowStart: "", windowEnd: "", coverage: base.sentiment!.coverage!,
     periodDays: [{ date: "2026-10-08", score: 0.4, articleCount: 58 }, { date: "2026-10-09", score: -0.2, articleCount: 21 }] };
@@ -157,7 +155,6 @@ test("김민지 + 삼성전자: information_reliance를 0.3으로 올리면 수�
 
 // urgency +0.44 × Live 최근 두 수집일 |Δ| >= p90 → N07.
 // N04(변동성 백분위 0.48)·N05(3개월 고점 대비, 실데이터 시세)는 시장 조건이 거짓이라 발화하지 않는다.
-// sentiment-fixture.ts가 다시 생성되면 재확인한다.
 const EXPECTED_MINJI_SAMSUNG: string[] = ["N07"];
 
 type SupabaseResponse = { data: unknown; error: { message: string } | null };
@@ -240,7 +237,7 @@ test("운영(DB 연결)에서 live만 있으면 과거 감성·기여도는 대�
   assert.equal(insights.contributions, null);
   assert.equal(insights.liveSentiment?.score, 0.6);
   assert.equal(insights.sentiment?.headlines.length, 3);
-  assert.equal(insights.financial, null); // 고정 재무 대체값은 두지 않는다(최신 정기보고서만)
+  assert.equal(insights.financial, null);
   assert.equal(insights.provenance.liveSentiment.source, "NewsAPI.ai와 KR-FinBERT");
   assert.equal(insights.provenance.sentiment.source, "NewsAPI.ai와 KR-FinBERT, DB 조회");
   const collectedAt = Date.parse("2026-09-26T09:00:00+09:00");

@@ -1,9 +1,5 @@
 "use client";
 
-// 보유 종목 입력 한 벌: /portfolio와 설문 보유 단계가 같이 쓴다(10/20 읽는 순서 정리). 저장 버튼 줄만 부르는 쪽이 정한다.
-// 위에서 아래로: 종목 넣기(검색 + 캡처로 불러오기) → 평균 매입가 설명 한 번 → 캡처 결과 확인 → '넣은 종목 N개' 목록.
-// 검색에서 종목을 고르면 바로 목록 맨 위에 행이 생기고 수량 칸으로 간다. 저장 형식(SavedHolding)은 그대로다.
-
 import { useEffect, useRef, useState } from "react";
 import { loadStockCatalog } from "@/lib/stock-catalog";
 import GainText from "../components/gain-text";
@@ -30,7 +26,6 @@ export default function HoldingsForm({
   closes?: Map<string, { close: number }>;
 }) {
   const [keyword, setKeyword] = useState("");
-  // 줄 안 수정칸에 친 글자 그대로("1.5"). 점을 보여 주고 저장할 때 막는다(페르소나 워크스루 2026-10)
   const [texts, setTexts] = useState<Record<string, string>>({});
   const { options } = useStockOptions(keyword, catalog);
   const [searchError, setSearchError] = useState("");
@@ -39,8 +34,6 @@ export default function HoldingsForm({
   const currentRows = useRef(rows);
   useEffect(() => { currentRows.current = rows; }, [rows]);
 
-  // 후보 목록에서 고르거나 Enter를 누르면 바로 맨 위에 행을 만들고 수량 칸으로 간다. 이미 있으면 그 행 수량 칸으로.
-  // 키보드로 치는 중에는 넣지 않는다('LG'를 치다 'LG'가 바로 들어가지 않게)
   async function pick(value: string) {
     if (!value.trim()) return;
     const version = ++selectionVersion.current;
@@ -117,7 +110,6 @@ export default function HoldingsForm({
                 void pick(keyword);
               }}
               placeholder="종목명 또는 코드"
-              // 페이지 바탕 위라 흰 면(카드 안 입력칸은 회색 field)
               className={field.replace("bg-field", "bg-surface")}
             />
             <datalist id="holding-stock-catalog">
@@ -132,7 +124,7 @@ export default function HoldingsForm({
           </label>
         }
       >
-        {/* 첫 실행은 읽는 도구 24.9MB를 받아 43초~2분(2026-10-20 실측). 용량은 사용자에게 의미가 없어 시간만 적는다 */}
+        {/* 첫 실행은 읽는 도구 24.9MB를 받아 43초~2분 걸린다(2026-10-20 실측) */}
         <div className="flex flex-col gap-1 px-1 text-xs text-muted">
           <p className="m-0">평균 매입가를 넣으면 산 가격보다 몇 % 오르거나 내렸는지 보여요. 몰라도 괜찮아요.</p>
           <p className="m-0">캡처는 이 기기 안에서만 읽고 어디에도 보내지 않아요. 처음 한 번은 1분쯤 걸려요.</p>
@@ -146,7 +138,6 @@ export default function HoldingsForm({
         {rows.length === 0 ? (
           <p className="m-0 px-1 text-sm text-muted">아직 넣은 종목이 없어요. 위에서 검색하거나 캡처를 불러오세요.</p>
         ) : (
-          // 열 이름은 PC에서 위에 한 번만, 390에서는 행 안 작은 라벨. 편집 행이라 선 없이 간격으로 나눈다(화면 규칙 v2)
           <div className="surface flex flex-col gap-2 py-2">
             <div aria-hidden className="hidden grid-cols-[1.4fr_1fr_1fr_4rem] gap-3 px-5 pt-2 text-2xs text-muted sm:grid">
               <span>종목</span>

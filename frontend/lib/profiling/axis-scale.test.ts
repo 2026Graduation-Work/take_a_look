@@ -12,13 +12,11 @@ test("단계 구간: −1~−0.6 / −0.6~−0.2 / −0.2~0.2 / 0.2~0.6 / 0.6~1,
 
 test("극 방향: 오른쪽은 축 이름의 '더' 쪽, 화면만 뒤집고 저장 값은 그대로", () => {
   const { turnover, rule_adherence, loss_tolerance } = STYLE_AXIS_SCALE;
-  // 저장 +1 = 단기 매매(style-questions.json) → 보유 기간 막대에서는 왼쪽(짧게)
   assert.equal(turnover.right, "길게");
   assert.equal(stageOf(turnover, 1), 0);
   assert.equal(stageWord(turnover, stageOf(turnover, 1)), "아주 단기 매매");
   assert.equal(stageWord(turnover, stageOf(turnover, -0.5)), "장기 보유");
   assert.equal(stageOf(rule_adherence, 1), 0);
-  // 저장 +1 = 손실 감수 쪽 → 오른쪽, 극 이름은 결과가 아니라 행동
   assert.equal(stageOf(loss_tolerance, 1), 4);
   assert.doesNotMatch(loss_tolerance.right + loss_tolerance.rightSide, /수익/);
   assert.equal(SUMMARY_SCALE.horizon.flip, true);

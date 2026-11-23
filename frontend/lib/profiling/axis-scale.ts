@@ -1,16 +1,14 @@
-// 성향 축의 화면 이름과 방향 한 곳. 설문 결과, 내 투자 성향, 더 알아보기가 모두 여기서 가져온다.
-// 극 이름 규칙: 오른쪽은 축 이름의 '더' 쪽, 극 이름은 결과(수익 기회)가 아니라 행동(손실도 감수)으로 쓴다.
 // flip은 화면만 뒤집는다. 저장 값(ratio)과 채점은 style-questions.json의 극성 그대로다.
 import type { StyleAxisId } from "../types";
 
 export interface AxisScale {
-  name: string; // 단어형 축 이름
-  left: string; // 막대 아래 왼쪽 끝 한 단어
+  name: string;
+  left: string;
   right: string;
   leftSide: string; // 단계 말에 쓰는 행동(명사형, 예: '원금을 지킴')
   rightSide: string;
   flip?: boolean; // 저장 값 +1이 화면 왼쪽이면 true
-  words?: readonly [string, string, string, string, string]; // 단계 말을 따로 정한 축
+  words?: readonly [string, string, string, string, string];
 }
 
 // 5칸: −1~−0.6 / −0.6~−0.2 / −0.2~0.2 / 0.2~0.6 / 0.6~1. 경계값은 가운데 쪽 칸에 넣어 좌우가 대칭이다.
@@ -27,12 +25,12 @@ export function stageIndex(value: number): number {
 
 const shown = (axis: AxisScale, stored: number) => (axis.flip ? -stored : stored);
 
-// 저장 값 → 화면 칸(0 = 왼쪽)
+// 0 = 왼쪽 칸
 export function stageOf(axis: AxisScale, stored: number): number {
   return stageIndex(shown(axis, stored));
 }
 
-// 화면 칸 → 저장할 값(그 칸의 가운데)
+// 그 칸의 가운데 값
 export function storedForStage(axis: AxisScale, stage: number): number {
   const center = STAGE_CENTERS[stage];
   return axis.flip ? -center || 0 : center;
@@ -40,7 +38,6 @@ export function storedForStage(axis: AxisScale, stage: number): number {
 
 export function stageWord(axis: AxisScale, stage: number): string {
   if (axis.words) return axis.words[stage];
-  // '쪽'을 붙이지 않고 행동만 쓴다. 양 끝 칸만 '아주'(10/26 사용자 피드백: 줄이 들쭉날쭉하고 '쪽'은 군더더기)
   return [`아주 ${axis.leftSide}`, axis.leftSide, "중간", axis.rightSide, `아주 ${axis.rightSide}`][stage];
 }
 
@@ -56,14 +53,13 @@ export const STYLE_AXIS_SCALE: Record<StyleAxisId, AxisScale> = {
   drawdown_reaction: { name: "하락 때 팔기", left: "들고 감", right: "팔고 나옴", leftSide: "떨어져도 들고 감", rightSide: "떨어지면 팖" },
 };
 
-// 3축 요약(profiling-rules.ts threeAxisSummary의 −1~1 평균). 투자 기간은 turnover와 같은 방향으로 뒤집는다.
 export const SUMMARY_SCALE = {
   riskTaking: { name: "위험 감수", left: "적게", right: "많이", leftSide: "원금을 지킴", rightSide: "손실도 감수" },
   sensitivity: { name: "흔들림 민감도", left: "덤덤함", right: "민감함", leftSide: "덤덤함", rightSide: "쉽게 흔들림" },
   horizon: { ...STYLE_AXIS_SCALE.turnover, name: "투자 기간" },
 } satisfies Record<string, AxisScale>;
 
-// 종목 상세 '가격 흐름 분위기'(psych_greed_fear_axis −1 움츠러듦 ~ +1 들뜸)
+// psych_greed_fear_axis: −1 움츠러듦 ~ +1 들뜸
 export const PSYCHOLOGY_SCALE: AxisScale = {
   name: "가격 흐름 분위기",
   left: "움츠러듦",

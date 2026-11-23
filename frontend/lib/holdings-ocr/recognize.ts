@@ -1,13 +1,6 @@
-// 보유 화면 캡처의 글자 읽기. 사용자 브라우저(웹 워커) 안에서만 돌고 이미지는 어디에도 보내지 않는다.
-// 엔진: PaddleOCR.js 0.4.2(Apache-2.0)의 워커 파일 + PP-OCRv5 검출 + 한국어 인식(korean_PP-OCRv5_mobile_rec).
-// - 워커 파일(OpenCV, ONNX Runtime이 들어 있는 완성본, 약 11MB), wasm, 모델(검출 4.8MB + 한국어 인식 13.5MB)은
-//   빌드 때 고정 판을 sha256으로 확인해 public/ocr/에 둔다(scripts/fetch-ocr-assets.mjs). 우리 사이트에서 주므로
-//   어느 화면에서 들어와도(문서를 새로 열지 않은 화면 이동 포함) 화면 CSP에 막히지 않는다.
-// - 패키지를 번들에 넣으면 Turbopack이 워커를 다시 묶다 실패하고, 메인 화면에도 OpenCV 10MB가 실린다.
-//   그래서 패키지와 같은 통신 규약(worker-transport-request/response)으로 워커에 직접 말을 건다.
-// 모두 '캡처로 불러오기'를 처음 누를 때만 받는다.
-// - 파일 경로에 판(/ocr/v1/)을 넣고 1년 immutable 캐시를 건다(next.config.ts). 판을 올리면 v2로 옮긴다.
-//   1단계 % 막대는 같은 주소를 화면 쪽에서 먼저 받아 세고(prefetch), 워커는 그 캐시에서 바로 읽는다.
+// 엔진: PaddleOCR.js 0.4.2(Apache-2.0) 워커 파일 + PP-OCRv5 검출 + 한국어 인식(korean_PP-OCRv5_mobile_rec).
+// 패키지를 번들에 넣으면 Turbopack이 워커를 다시 묶다 실패하고, 메인 화면에도 OpenCV 10MB가 실린다.
+// 그래서 패키지와 같은 통신 규약(worker-transport-request/response)으로 워커에 직접 말을 건다.
 
 import { STORAGE_KEYS } from "../storage-keys.ts";
 
@@ -20,9 +13,9 @@ export interface OcrLine {
   y1: number;
 }
 
-const ASSETS = "/ocr/v1/"; // 워커, wasm, 모델(워커 안에서 같은 출처로 풀린다)
+const ASSETS = "/ocr/v1/";
 const SDK = `${ASSETS}worker-entry-C9UNuyOJ.js`;
-// 워커가 받는 파일과 크기(scripts/fetch-ocr-assets.mjs와 같은 판). 압축 전송이면 Content-Length가 없어 크기를 여기 둔다
+// 압축 전송이면 Content-Length가 없어 워커가 받는 파일 크기를 여기 둔다
 const FILES: [string, number][] = [
   ["worker-entry-C9UNuyOJ.js", 11_341_486],
   ["ort-wasm-simd-threaded.jsep.mjs", 46_595],
@@ -31,8 +24,8 @@ const FILES: [string, number][] = [
   ["korean_PP-OCRv5_mobile_rec_onnx_infer.tar", 13_537_280],
 ];
 export const TOOL_BYTES = FILES.reduce((sum, [, size]) => sum + size, 0);
-const DARK_LUMA = 0.45; // 평균 밝기가 이보다 어두우면 뒤집어 읽는다(어두운 화면)
-const MIN_WIDTH = 1000; // 이보다 좁은 캡처는 키워서 읽는다(작은 글자)
+const DARK_LUMA = 0.45;
+const MIN_WIDTH = 1000;
 
 // PaddleOCR.create({ textDetectionModelName, textRecognitionModelName, textRecognitionModelAsset, worker: true })가
 // 워커에 보내는 init 값과 같다(0.4.2 기준, 문서 밖 기능인 문서 보정, 글줄 방향은 뺐다).
@@ -71,13 +64,12 @@ type Response = { kind: string; status: "success" | "error"; requestId: number; 
 
 let worker: Worker | null = null;
 let ready: Promise<unknown> | null = null;
-let loaded = false; // 이 탭에서 읽는 도구를 이미 받았는지(화면이 '내려받는 중'을 따로 보인다)
+let loaded = false;
 let nextId = 1;
 const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
 function request(type: string, payload: unknown, transfer: Transferable[] = []): Promise<unknown> {
   if (!worker) {
-    // 같은 출처 파일로 바로 만든다. 워커는 /ocr/ 응답의 CSP('unsafe-eval' 허용, next.config.ts)를 받는다
     worker = new Worker(SDK, { type: "module" });
     worker.onmessage = ({ data }: MessageEvent<Response>) => {
       const job = pending.get(data?.requestId);
@@ -102,7 +94,6 @@ function request(type: string, payload: unknown, transfer: Transferable[] = []):
   });
 }
 
-// 이 탭에서 이미 받았거나, 이 브라우저 캐시에 받아 둔 적이 있으면 1단계를 건너뛴다
 export function toolCached(): boolean {
   if (loaded) return true;
   try {
@@ -112,7 +103,7 @@ export function toolCached(): boolean {
   }
 }
 
-// 1단계: 워커가 받을 파일을 같은 주소로 먼저 받아 받은 바이트를 센다(내용은 버리고 브라우저 캐시에만 남는다)
+// 워커가 받을 파일을 같은 주소로 먼저 받아 바이트를 센다. 내용은 버려도 브라우저 캐시에 남아 워커가 바로 읽는다
 export async function prefetch(onProgress: (received: number) => void, signal: AbortSignal): Promise<void> {
   let received = 0;
   await Promise.all(FILES.map(async ([name]) => {
@@ -128,7 +119,6 @@ export async function prefetch(onProgress: (received: number) => void, signal: A
   }));
 }
 
-// 취소: 워커를 끝내고 기다리던 요청을 모두 실패로 돌린다. 다음 불러오기는 처음부터 다시 만든다
 export function cancel(): void {
   worker?.terminate();
   worker = null;
@@ -148,13 +138,12 @@ export function init(): Promise<unknown> {
     }
     return value;
   }, (error: unknown) => {
-    ready = null; // 받기에 실패하면 다음 시도에서 다시 받는다
+    ready = null;
     throw error;
   });
   return ready;
 }
 
-// 어두우면 밝기를 뒤집고, 좁으면 키운다. 전처리 규칙은 이 두 가지뿐이다.
 export async function prepareImage(file: Blob): Promise<ImageBitmap> {
   const bitmap = await createImageBitmap(file);
   const scale = bitmap.width < MIN_WIDTH ? Math.min(3, MIN_WIDTH / bitmap.width) : 1;

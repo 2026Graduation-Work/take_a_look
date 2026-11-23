@@ -1,13 +1,9 @@
-// FIXTURE — 실데이터 아님.
-// 모델 근거(기여도) 예시만 남았다. 삼성전자(005930)·현대차(005380) 두 종목, 손으로 정한 상수다.
-// 수급·재무·감성은 실데이터(demo-snapshot.json, sentiment-*.json)로 옮겼다.
-// 실데이터 구현체로 교체하면 이 파일을 지운다.
+// FIXTURE — 실데이터 아님. 모델 근거(기여도) 예시로 손으로 정한 상수다.
 
 import type { ContributionSignalInput } from "./index";
 import { SUPPLY_SNAPSHOT } from "./demo-snapshot.ts";
 
 // ponytail: 평일 휴장일은 예시 수급 구간(2025-12 20영업일)에 걸린 날만 둔다.
-// 실데이터 연동 시 날짜를 데이터에서 받으므로 이 표는 지운다.
 const KRX_WEEKDAY_HOLIDAYS = new Set(["2025-12-25"]);
 
 export function businessDaysEndingAt(end: string, count: number): string[] {
@@ -24,11 +20,9 @@ export function businessDaysEndingAt(end: string, count: number): string[] {
 
 // 원점수 weight는 부호 없는 크기. provider가 합 100으로 정규화한다.
 // direction은 그 근거가 신호를 어느 쪽으로 밀었는지(+1 오르는 쪽, -1 내리는 쪽)다.
-// 수급 근거는 실제 순매수(SUPPLY_SNAPSHOT) 20일 합계의 부호에서 계산하고, 나머지는 예시 신호(긍정)와 같은 쪽으로 둔다.
 const flowDirection = (code: string, key: "foreign" | "institution"): 1 | -1 =>
   SUPPLY_SNAPSHOT[code].reduce((sum, day) => sum + day[key], 0) >= 0 ? 1 : -1;
 
-// description은 신호의 정의만 적는다. 다른 카드 수치와 어긋나는 사실 주장을 넣지 않는다.
 export const CONTRIBUTION_FIXTURE: Record<string, ContributionSignalInput[]> = {
   "005930": [
     {

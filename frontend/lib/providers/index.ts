@@ -1,6 +1,3 @@
-// 종목 상세 인사이트 어댑터. 인터페이스 뒤에 실데이터 스냅샷과 픽스처 구현을 둔다.
-// 시세·수급·재무·감성은 데모 4종목, 모델 기여도 픽스처는 삼성전자·현대차를 지원한다.
-
 import type { NudgeMarket } from "../profiling/nudges";
 import { kstDay } from "../display.ts";
 import { FEW_ARTICLES } from "../copy-glossary.ts";
@@ -32,12 +29,12 @@ import {
   type SupabaseSentimentResult,
 } from "./supabase-insights.ts";
 
-// 순매수 수량(주). + 순매수, - 순매도. 날짜 오름차순. 기타법인은 원천(네이버 금융)에 없어 뺐다.
+// 수량(주). + 순매수, - 순매도. 날짜 오름차순.
 export interface SupplyDemandDay {
   date: string;
   retail: number;
   foreign: number;
-  institution: number; // 기관합계
+  institution: number;
 }
 
 export interface SentimentDay {
@@ -76,13 +73,12 @@ export interface Headline {
   url?: string;
   publishedAt?: string;
 }
-// 생성 파일(sentiment-fixture.ts)이 쓰는 형태. 생성 스크립트와 맞춰야 한다.
 export interface SentimentSeries {
   days: SentimentDay[]; // 날짜 오름차순
-  headlines: Headline[]; // 대표 기사 3건
+  headlines: Headline[];
 }
 export interface SentimentData extends SentimentSeries {
-  source: "real" | "synthetic"; // real = 실제 기사에서 집계
+  source: "real" | "synthetic";
   track?: NewsTrack["track"];
   provider?: NewsTrack["source"];
   backend?: string;
@@ -176,13 +172,13 @@ export interface FinancialMetric {
   label: string;
   value: number | null; // null = 확인 불가(검증 탈락·계산 불가). note에 이유
   unit: "배" | "%";
-  basis: string; // 계산 근거(식과 원자료 값)
+  basis: string;
   note: string | null;
 }
 export interface FinancialSnapshot {
   valuationPriceAsOf?: string; // PER·PBR에 실제 사용한 종가 기준일(보고서 기준과 분리)
-  period: string; // "2025년 연간 기준"
-  filing?: string; // 연결/별도·공시일·접수번호·주식수·주가 기준(출처 줄을 펼치면 보임)
+  period: string;
+  filing?: string;
   metrics: FinancialMetric[];
   asOf?: string;
 }
@@ -213,11 +209,10 @@ export type HoldingWeight = Pick<PortfolioHolding, "code" | "quantity" | "avgBuy
   rawAvgBuyPrice?: number | null; // 사용자가 입력한 평단 원값(모르면 null). avgBuyPrice는 비중 계산용으로 종가가 채워질 수 있다
 };
 
-// 가격·거래량으로 본 분위기 한 줄(psychology_market_v1). 구간 말 + 풀이.
 export interface PsychologyLine {
   word: string;
   explain: string;
-  axis: number; // psych_greed_fear_axis -1(움츠러듦)~+1(들뜸). 숫자는 계산 근거에만
+  axis: number; // psych_greed_fear_axis -1(움츠러듦)~+1(들뜸)
   provenance: DataProvenance;
 }
 
@@ -260,10 +255,7 @@ export async function loadStockInsights(
         loadSupabasePsychology(code, queryClient).catch(() => null),
       ])
     : [emptySentiment, null, [], [], null];
-  // 운영(DB 연결)에서는 저장본·픽스처로 대신하지 않는다 — DB에 없으면 "미제공"(#198).
-  // DB가 없는 데모·로컬 실행에서만 저장본을 "예시 데이터"로 보인다.
   const offline = !queryClient;
-  // 수급은 DB(KRX 투자자별 순매수)만 쓴다. 예시·고정 대체값은 두지 않는다.
   const supply = supplyRows.length ? supplyRows : null;
   const historical = remoteSentiment.historical ?? (offline ? fallbackSentiment : null);
   const sentiment = historical
@@ -283,7 +275,6 @@ export async function loadStockInsights(
           track: "live" as const,
         }
       : null;
-  // 재무는 DB(최신 정기보고서)만 쓴다. 고정 대체값은 두지 않는다.
   const financial = remoteFinancial;
   const psychology = remotePsychology
     ? { ...remotePsychology, provenance: { kind: "real", source: "KRX 종가와 거래량, 최신 게시 차트", asOf: remotePsychology.asOf } as DataProvenance }
@@ -347,7 +338,7 @@ export interface MarketSentimentView {
   headlines: Headline[];
 }
 
-// 수집은 평일 09:13 1회라 금요일분이 월요일 09시대까지 최신이다(72시간). 그보다 오래되면 "최근 24시간"이라 부르지 않는다.
+// 수집은 평일 09:13 1회라 금요일분이 월요일 09시대까지 최신이다(72시간).
 const LIVE_MAX_AGE_MS = 72 * 3_600_000;
 
 export function marketSentimentView(
@@ -380,7 +371,6 @@ export function marketSentimentView(
   };
 }
 
-// A recent collection can remain usable for 72h, but only a current KST day is "오늘".
 export function todayLiveSentimentView(
   insights: StockInsights,
   now: number = Date.now(),
@@ -391,14 +381,12 @@ export function todayLiveSentimentView(
   return Number.isFinite(asOf) && asOf <= now && kstDay(asOf) === kstDay(now) ? view : null;
 }
 
-// 과거(BigKinds) 일별 뒤에 매일 수집(Live) 일별을 잇는다. 겹치는 날 Live는 기사 단위로 중복을 뺀 값이다(loadSupabaseSentiment).
 export function sentimentDaysIncludingLive(insights: StockInsights): SentimentDay[] {
   return [...(insights.sentiment?.days ?? []), ...(insights.liveSentiment?.periodDays ?? [])]
     .map((day) => ({...day}))
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-// 여러 입력에서 파생된 수치(넛지 등)는 입력이 모두 실데이터일 때만 실데이터다.
 export function combinedProvenance(...inputs: DataProvenance[]): DataProvenance {
   return inputs.every(({ kind }) => kind === "real") ? inputs[0] : FIXTURE;
 }
@@ -408,7 +396,6 @@ export interface Period {
   end: string;
 }
 
-// mock 시세는 날짜 없이 기준일까지의 종가 배열이다. 기준일에서 거래일을 거꾸로 세어 기간을 만든다.
 export function pricePeriod(detail: StockDetail): Period | null {
   const count = detail.priceHistory?.length ?? 0;
   if (count < 2) return null;
@@ -430,13 +417,12 @@ export const periodsOverlap = (left: Period, right: Period) =>
 export interface RiskSnapshot {
   volatilityAnnual: number; // 1년, 일간 로그수익률 표준편차 × √252(종목 마스터, 위험 등급과 같은 계산)
   volatilityPercentile: number; // 0~1, 코스피 전 종목 중 위치
-  asOf?: string; // 위 두 값의 기준일
+  asOf?: string;
   drawdownFrom3mHigh: number; // 60거래일(≈3개월) 최고가 대비
   return3d: number;
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
 
-// 변동성·백분위는 종목 마스터(1년), 고점 대비·3일 수익률은 priceHistory(최근 60거래일 종가)에서 계산한다.
 export function riskSnapshot(detail: StockDetail): RiskSnapshot | null {
   const prices = detail.priceHistory ?? [];
   const { volatilityAnnual, volatilityPercentile } = detail;
@@ -453,8 +439,7 @@ export function riskSnapshot(detail: StockDetail): RiskSnapshot | null {
   };
 }
 
-// 넛지 판정 입력. 필요한 데이터가 하나라도 없으면 null이고, 그 종목은 넛지를 판정하지 않는다.
-// 감성 변화(N07)는 매일 수집(Live) 일별의 최근 두 수집일 기준이다(#254). 과거(BigKinds) 일별로 "오늘"을 말하지 않는다.
+// 필요한 데이터가 하나라도 없으면 null이다.
 export function toNudgeMarket(
   detail: StockDetail,
   insights: StockInsights,
@@ -466,7 +451,6 @@ export function toNudgeMarket(
   if (!risk || !supply?.length) return null;
   const [previousDay, latestDay] = [...(insights.liveSentiment?.periodDays ?? [])]
     .sort((left, right) => left.date.localeCompare(right.date)).slice(-2);
-  // 두 날이 다 있고 둘 다 기사가 충분할 때만 비교한다(한두 기사로 점수가 크게 흔들리는 날 제외)
   const comparable = previousDay && latestDay && previousDay.articleCount >= FEW_ARTICLES && latestDay.articleCount >= FEW_ARTICLES;
 
   let retailStreak = 0;
@@ -474,7 +458,7 @@ export function toNudgeMarket(
     retailStreak += 1;
   }
   const latest = supply[supply.length - 1];
-  // 보유 비중: avgBuyPrice는 호출하는 쪽이 최신 종가로 채운 값(평가금액, costBasis). 종가가 없으면 매입금액
+  // avgBuyPrice는 호출하는 쪽이 최신 종가로 채운 값(costBasis)이다. 종가가 없으면 매입금액
   const cost = ({ quantity, avgBuyPrice }: HoldingWeight) => quantity * avgBuyPrice;
   const topHolding = holdings.reduce<HoldingWeight | null>(
     (top, holding) => (!top || cost(holding) > cost(top) ? holding : top),

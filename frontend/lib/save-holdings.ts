@@ -8,9 +8,6 @@ import { STORAGE_KEYS } from "./storage-keys.ts";
 export { isValidHolding, parseSavedHoldings } from "./holdings-rules.ts";
 export type { SavedHolding } from "./holdings-rules.ts";
 
-// 보유 종목은 사용자가 직접 입력한 값이다(증권사 연동 없음).
-// 저장 경로는 설문 프로필(save-profile.ts)과 같은 모양을 따른다:
-// 데모는 이 브라우저에만, 로그인 사용자는 Supabase에.
 export const HOLDINGS_STORAGE_KEY = STORAGE_KEYS.holdings;
 export const HOLDINGS_UPDATED_EVENT = "takealook:holdings-updated";
 
@@ -78,7 +75,6 @@ export async function saveHoldings(
   const userId = owner.userId;
   const now = new Date().toISOString();
 
-  // stocks에 없는 종목은 FK 제약에 걸린다. 미리 걸러 어떤 종목이 빠졌는지 알려준다.
   const codes = valid.map(({ code }) => code);
   const known = new Set<string>();
   if (codes.length > 0) {
@@ -94,7 +90,6 @@ export async function saveHoldings(
     throw new Error(`종목 마스터에 없는 종목을 확인해 주세요: ${unknown.map(({ name }) => name).join(", ")}`);
   }
 
-  // 저장 실패가 기존 목록을 비우지 않도록 현재 목록을 먼저 쓴다.
   if (valid.length > 0) {
     const { error: upsertError } = await db.from("portfolio_holdings").upsert(
       valid.map((holding, index) => ({

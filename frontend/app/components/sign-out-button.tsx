@@ -30,7 +30,6 @@ export default function SignOutButton({ className, label }: { className?: string
 
   return (
     <div className="flex items-center">
-      {/* 로그인 계정은 Supabase에 남으므로 묻지 않는다. 문구는 lib/auth.ts signOut이 실제로 지우는 것만 적는다. */}
       <ConfirmButton
         ask={state.mode === "demo"}
         title="데모에서 로그아웃할까요?"

@@ -17,7 +17,6 @@ import {
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
 
-// 대시보드 맨 위 성향 한 줄을 누르면 오는 화면: 저장된 결과를 그대로 보여 주고, 다시 진단으로 이어진다.
 export default function ProfileView() {
   const router = useRouter();
   const { state: account } = useOnboarding();
@@ -30,7 +29,6 @@ export default function ProfileView() {
   return (
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} />
-      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2) */}
       <main className="page pb-12 pt-6">
       <div className="page-narrow flex flex-col gap-12">
         {saved?.style_axes ? (
@@ -49,8 +47,6 @@ export default function ProfileView() {
             </Link>
           </section>
         )}
-        {/* 헤더 계정 메뉴 "계정 설정"이 여기로 온다. 로그아웃은 계정 메뉴 한 곳(같은 목적지의 길은 하나).
-            계정 삭제는 로그인 계정만(데모에서는 DeleteAccountButton이 숨김). */}
         <section id="account" aria-labelledby="account-title" className="surface flex scroll-mt-40 flex-col items-start gap-4 px-6 py-7 sm:scroll-mt-20 sm:px-10">
           <h2 id="account-title" className="m-0 text-lg font-semibold text-ink">
             계정 설정

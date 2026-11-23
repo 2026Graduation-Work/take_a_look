@@ -1,10 +1,5 @@
 "use client";
 
-// 종목 상세 — "이 종목, 지금 뭘 확인하면 되지?"
-// 순서: 헤더(가격, 내 보유) → 관심 종목과 메모 → 한눈에 보기 → 나에게 맞춘 체크포인트 → 판단 근거 4탭 → 더 알아보기(접힘).
-// #372에서 보유와 버튼을 결론 아래로 옮겼다가 사용자 피드백으로 되돌렸다(10/20).
-// 필수 정보는 지우지 않고 "더 알아보기"에 접는다.
-
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
@@ -101,13 +96,10 @@ export default function StockDetailView({
 }: StockDetailViewProps) {
   const demo = useDemoStyleAxes(styleAxes);
   const [query, setQuery] = useState("");
-  // 이 종목 보유 정보(#255). 대시보드처럼 이 브라우저에 저장한 보유 종목이 먼저, 없으면 계정 보유 종목.
-  // 평단은 사용자가 입력한 원값만 쓴다(모르면 미제공). 체크포인트 N05도 같은 값을 본다.
   const savedList = parseSavedHoldings(
     useSyncExternalStore(subscribeToSavedHoldings, getSavedHoldingsSnapshot, getServerHoldingsSnapshot),
   );
   const saved = savedList?.find(({ code }) => code === detail.code);
-  // 체크포인트 N08 비중은 보유 맵과 같은 평가금액(최신 게시 종가) 기준(#257). 종가가 없으면 매입금액
   const savedCodes = savedList?.map(({ code }) => code).join(",") ?? "";
   const [closes, setCloses] = useState<LatestCloses>(() => new Map());
   useEffect(() => {
@@ -117,7 +109,6 @@ export default function StockDetailView({
     return () => { live = false; };
   }, [savedCodes]);
   const held = holdings.find(({ code }) => code === detail.code);
-  // 저장된 목록에서 빠진 종목은 미보유다. 빈 목록도 예시 보유로 되돌리지 않는다.
   const own = savedList !== null
     ? saved && { quantity: saved.quantity, rawAvgBuyPrice: saved.avgBuyPrice }
     : held && { quantity: held.quantity, rawAvgBuyPrice: held.rawAvgBuyPrice ?? null };
@@ -146,17 +137,14 @@ export default function StockDetailView({
     typeof detail.changePercent === "number" &&
     Number.isFinite(detail.changePercent);
   const changePercent = detail.changePercent ?? 0;
-  // 전일 대비 원: 가격 기록 마지막 두 날(등락률과 같은 기록). 기록이 없으면 %만
   const changeWon = priceHistory.length >= 2 ? priceHistory[priceHistory.length - 1] - priceHistory[priceHistory.length - 2] : null;
   const { color: changeColor, arrow: changeArrow } = changeMeta(changePercent, 1);
   const safeMaxRiskTier =
     Number.isInteger(maxRiskTier) && maxRiskTier >= 1 && maxRiskTier <= 5 ? maxRiskTier : 4;
-  // 성향에서 나온 허용 범위(소프트 틸트)보다 위험한 종목이면 체크포인트에 한 줄 더한다. 종목을 거르지 않는다.
   const riskNote =
     detail.riskGrade < safeMaxRiskTier
       ? `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요. 설문에서 답한 위험 감수(${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))})보다 가격이 크게 흔들릴 수 있어요.`
       : null;
-  // #170: 공개 모델은 1주·4주 둘. 하락 시 이탈 쪽으로 답한 성향(체크포인트와 같은 0.3 기준)은 단기 흔들림보다 4주를 먼저 본다.
   const drawdownFirst = (demo.styleAxes?.axes.find(({ axis_id }) => axis_id === "drawdown_reaction")?.ratio ?? 0) > 0.3;
   const horizonKeys = preview ? (drawdownFirst ? (["h20", "h5"] as const) : (["h5", "h20"] as const)) : (["h5", "h10", "h20"] as const);
   const horizons = horizonKeys.map((key) => [key, detail.horizonAgreement[key]] as const);
@@ -164,7 +152,6 @@ export default function StockDetailView({
     <div className="w-full">
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} />
 
-      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 960px(화면 규칙 v2). 대시보드로 가는 길은 상단 메뉴 하나 */}
       <main className="page pb-12 pt-6">
       <div className="page-wide flex flex-col gap-12">
 
@@ -187,7 +174,6 @@ export default function StockDetailView({
           </div>
         )}
 
-        {/* 1. 헤더 */}
         <section aria-labelledby="stock-name" className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
           <div className="flex flex-col gap-2">
             <span className="flex flex-wrap gap-x-3 text-2xs text-muted tabular-nums">
@@ -206,7 +192,6 @@ export default function StockDetailView({
                 <span className="text-4xl font-semibold tabular-nums">
                   {detail.currentPrice?.toLocaleString("ko-KR")}원
                 </span>
-                {/* 전일 대비와 평단 대비를 같은 두 칸(이름, 값)으로 맞춰 오른쪽 끝을 가지런히(#360 리뷰) */}
                 <span className="inline-grid grid-cols-[4rem_auto] items-baseline gap-x-2 self-start text-xs text-muted sm:self-end">
                   <span>전일 대비</span>
                   <span className="whitespace-nowrap text-right text-sm font-semibold tabular-nums" style={{ color: changeColor }}>
@@ -233,7 +218,6 @@ export default function StockDetailView({
 
         <StockMarks code={detail.code} name={detail.name} />
 
-        {/* 2. 한눈에 보기 */}
         <section aria-labelledby="glance-title" className="surface flex flex-col gap-4 p-6">
           <div className="flex flex-col gap-1">
             <div className="flex items-start">
@@ -242,7 +226,6 @@ export default function StockDetailView({
               {preview && direction && <span className="ml-3 text-xs font-normal text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
               {!preview && <span className="block text-xs font-normal text-muted sm:ml-2 sm:inline">{topPercentLabel(detail.rankPercentile)}</span>}
             </h2>
-            {/* '상승' 기준(ⓘ). 제목 밖에 두어 제목 이름이 바뀌지 않게 */}
             <MarketDetail title="모델 신호 설명" className="inline-flex"
               label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">모델 신호 설명 보기</span></>}>
               <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
@@ -278,22 +261,18 @@ export default function StockDetailView({
               최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.
             </p>
           )}
-          {/* 기준일은 시장 바에 한 번. 2영업일 넘게 밀렸을 때만 여기에도 적는다. 성적표는 맨 아래 면책 문구에서 간다 */}
           <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}{similar
             ? similarCasesLine(similar.period_start!, similar.period_end!, similar.sample_count, similar.stock_count)
             : `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}{hasBand && hasCurrentPrice && " 원은 오늘 종가 기준이에요."}</p>
         </section>
 
-        {/* 3. 나에게 맞춘 체크포인트 */}
         <Checkpoints demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
 
-        {/* 4. 판단 근거 4가지 */}
         <EvidenceTabs detail={detail} insights={insights} demo={demo}
           contributionSpace={chart?.inference.contribution_space}
           contributionTotal={chart?.inference.contribution_abs_sum}
           modelFeatures={preview ? chart?.inference.features ?? [] : undefined} />
 
-        {/* 5. 더 알아보기 */}
         <details className="disclosure surface p-6">
           <summary>
             <span className="text-lg font-semibold">더 알아보기</span>

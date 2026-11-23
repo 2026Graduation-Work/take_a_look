@@ -66,7 +66,7 @@ export interface StockDetailData {
   marketStatus: MarketStatus;
   maxRiskTier: number;
   styleAxes: StyleAxes | null; // v1.0 프로필이면 null
-  holdings: HoldingWeight[]; // 넛지 N08 보유 비중 판정용
+  holdings: HoldingWeight[];
   source: "mock" | "supabase";
 }
 
@@ -94,9 +94,8 @@ const PREDICTION_FEATURE_COLUMNS =
 
 const STOCK_COLUMNS = "code,name,market,risk_grade,risk_flags,volatility_annual,volatility_percentile,risk_as_of";
 
-// 첫 화면(서버 렌더)은 데모 계정 데이터로 그린다. 개인 테이블은 RLS로 본인만 읽을 수 있어
-// 서버의 비로그인 조회로는 얻을 수 없다. 로그인한 사용자는 브라우저에서
-// getAuthenticatedDashboardData로 자기 데이터를 다시 불러온다.
+// 개인 테이블은 RLS로 본인만 읽을 수 있어 서버의 비로그인 조회로는 얻을 수 없다. 그래서 첫 화면은 데모 계정 데이터로
+// 그리고, 로그인한 사용자는 브라우저에서 getAuthenticatedDashboardData로 자기 데이터를 다시 불러온다.
 export function getDashboardData(): DashboardData {
   return {
     marketStatus,
@@ -145,7 +144,6 @@ export async function getAuthenticatedDashboardData(): Promise<DashboardData> {
     profile: profileContext.result.profile,
     maxRiskTier: profileContext.result.maxRiskTier,
     avoidedLabels: profileContext.result.avoidedLabels,
-    // 종목 마스터가 전 종목이라, 제외 목록은 오늘 목록 후보에서 실제로 뺀 종목만 보인다.
     excludedStocks: profileContext.result.excludedStocks.filter(({ code }) => candidates.has(code)),
   };
 }
@@ -185,9 +183,6 @@ export async function getAuthenticatedStockDetailData(
   return queryStockDetail(client, appUser.id, code);
 }
 
-// 시장 브리핑은 실데이터 스냅샷(KRX 지수, providers/demo-snapshot.ts)을 쓴다.
-// DB market_status에는 손으로 쓴 시드만 있어 읽지 않는다(없는 데이터를 실데이터처럼 보이지 않게).
-// ponytail: 백엔드가 market_status를 매일 채우게 되면 여기서 DB를 다시 읽는다(행 매퍼 mapMarketStatus는 git 기록에 있음).
 async function loadMarketStatus(): Promise<MarketStatus> {
   return marketStatus;
 }
@@ -295,7 +290,6 @@ async function queryPortfolio(
   return holdings.flatMap((holding) => {
     const stock = stockByCode.get(holding.stock_code);
     const prediction = predictionByCode.get(holding.stock_code);
-    // 신호가 없는 종목은 중립으로 채우지 않는다(대시보드가 맵에서 빼고 개수만 알린다).
     return stock && (closes.get(holding.stock_code)?.signal || prediction)
       ? [mapPortfolioHolding(holding, stock, prediction, closes)]
       : [];
@@ -338,7 +332,6 @@ async function queryStockDetail(
   if (!stockResult.data) throw new Error(`종목 정보를 찾지 못했습니다: ${code}`);
 
   const profile = profileResult.data as IpsProfileRow;
-  // 8축은 profile_payload(schema v1.1) 안에만 있다. v1.0 프로필이면 null.
   const payloadStyleAxes = (profileResult.data as { style_axes?: unknown }).style_axes;
   const { data: predictionData, error: predictionError } = await client
     .from("predictions")
@@ -363,7 +356,6 @@ async function queryStockDetail(
   assertOk(featureError, "상세 화면 예측 근거 조회");
 
   return {
-    // 시세는 붙이지 않는다. 상세 화면(ChartPreviewDetail)이 최신 게시 차트 종가로 채우고, 없으면 미제공(#198).
     detail: mapStockDetail(prediction, stockResult.data as StockRow, (featureData ?? []) as PredictionFeatureRow[]),
     profile: mapProfileSummary(
       userResult.data as UserRow,
@@ -464,8 +456,6 @@ function toProfileSettings(
 ): ProfileSettings {
   return {
     profileType: profile.profile_type,
-    // ips_profiles.max_risk_tier는 profile_type에서 자동 파생된 값이다(save-profile.ts).
-    // 사용자가 직접 정하는 경로가 생기기 전까지는 종목을 거르지 않는다.
     userMaxRiskTier: null,
     avoided: new Set(avoidedRows.map(({ asset_type }) => asset_type)),
   };

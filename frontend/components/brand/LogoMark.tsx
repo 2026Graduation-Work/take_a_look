@@ -1,5 +1,4 @@
-// 브랜드 마크: 진녹 타일 아래에서 올라와 옆을 보는 고양이(docs/brand/README.md).
-// 20px 이하는 눈을 뺀 단순형을 쓴다(작으면 눈이 뭉개진다). 늘 서비스명 글자 옆에 쓰므로 장식(aria-hidden)이다.
+// 20px 이하는 눈이 뭉개지므로 눈을 뺀 단순형을 쓴다.
 export default function LogoMark({
   size = 28,
   className,

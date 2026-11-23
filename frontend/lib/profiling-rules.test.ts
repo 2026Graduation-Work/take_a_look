@@ -24,7 +24,6 @@ const INPUT = {
   free_text: "남들 다 버는데 뒤처지는 것 같아요",
 };
 
-// schema의 required를 재귀로 따라가며 빠진 키를 모은다.
 function missingRequired(schema: Record<string, unknown>, value: unknown, at = "$"): string[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
   const record = value as Record<string, unknown>;
@@ -69,7 +68,6 @@ test("성향 카드 3축은 8축 묶음 요약이고, 유형명은 BIT만 쓴다
   // 김민지: loss -0.3, concentration -0.4 → -0.35 → 33 / urgency 0.44, drawdown 0.3, info 0.16 → 0.3 → 65
   const { ratios, ...scores } = threeAxisSummary(investorStyleAxes);
   assert.deepEqual(scores, { riskTaking: 33, sensitivity: 65, horizonScore: 38, horizon: "mid" });
-  // 화면 5칸 막대는 반올림 전 −1~1 값을 쓴다(점수 60에 걸친 0.205가 가운데 칸으로 내려가지 않게)
   assert.ok(Math.abs(ratios.riskTaking + 0.35) < 1e-9 && Math.abs(ratios.sensitivity - 0.3) < 1e-9 && ratios.horizon === -0.25);
   assert.equal(investorProfile.profileTypeLabel, "추종형");
   assert.equal(investorProfile.riskTolerance, 33);

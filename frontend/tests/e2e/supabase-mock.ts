@@ -1,7 +1,5 @@
 import type { Page, Route } from "@playwright/test";
 
-// e2e 서버는 NEXT_PUBLIC_SUPABASE_URL을 이 주소로 띄운다(playwright.config.ts, web-ci.yml).
-// 실제 Supabase 없이 브라우저가 부르는 Auth·REST 요청만 가로채 흉내 낸다. 서버 쪽 조회는 연결 실패 → 정적 폴백.
 export const SUPABASE_URL = "http://127.0.0.1:54321";
 
 interface MockUser {
@@ -38,8 +36,7 @@ function authUser(user: MockUser) {
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
-// 가입·로그인·로그아웃을 흉내 낸다. profile을 주면 서비스 사용자(users)·성향(ips_profiles)이 있는 "준비됨" 상태,
-// 없으면 설문 필요 상태. watchlist·stock_notes는 메모리에 담아 upsert·삭제·조회를 흉내 낸다.
+// profile을 주면 "준비됨" 상태, 없으면 설문 필요 상태.
 export async function mockSupabaseAuth(
   page: Page,
   { profile, notesTableMissing = false }: { profile?: unknown; notesTableMissing?: boolean } = {},
@@ -89,7 +86,6 @@ export async function mockSupabaseAuth(
         return json(route, profile && current ? [{ id: `app-${current.id}`, display_name: "테스터" }] : []);
       }
       if (table === "ips_profiles" && method === "GET") return json(route, profile ? [{ profile_payload: profile }] : []);
-      // 종목 마스터 검색(보유 종목 추가). 데모 4종목 밖 종목도 고를 수 있어야 한다.
       if (table === "stocks" && method === "GET") return json(route, [{ code: "005935", name: "삼성전자우" }, { code: "000660", name: "SK하이닉스" }]);
       // 0006 마이그레이션 적용 전 DB: PostgREST가 모르는 테이블
       if (table === "stock_notes" && notesTableMissing) {

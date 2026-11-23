@@ -73,7 +73,6 @@ export default function StockDetailBoundary({
       ? authenticatedResult
       : null;
   const fetched = currentResult?.data ?? initialData;
-  // 데모 모드에서도 이 브라우저에서 마친 설문 결과가 있으면 대시보드와 같은 8축을 쓴다.
   const savedProfile = parseSavedProfile(
     useSyncExternalStore(subscribeToSavedProfile, getSavedProfileSnapshot, getServerProfileSnapshot),
   );

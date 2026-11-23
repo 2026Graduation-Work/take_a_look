@@ -1,5 +1,3 @@
-// PR #16 러너 출력으로 교체 예정. 현재 수치는 화면 검증용 샘플 데이터입니다.
-
 import type { ComparisonResults } from "./performance-types";
 
 export const performanceResults = {
