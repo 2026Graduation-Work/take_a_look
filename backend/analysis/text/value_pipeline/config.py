@@ -11,12 +11,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-try:  # .env 자동 로드 (없으면 무시)
+try:
     from dotenv import load_dotenv
 
     # 실행 위치가 repo root가 아니어도 항상 동일한 .env를 읽는다.
     load_dotenv(Path(__file__).resolve().parents[4] / ".env")
-except Exception:  # python-dotenv 미설치 시
+except Exception:
     pass
 
 
@@ -32,7 +32,6 @@ class Settings:
 
     # Gemini 무료 티어 권장 모델 (1M 컨텍스트, JSON 모드, 한국어 우수)
     gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
-    # 한국어 금융 감성 특화 모델 (HuggingFace, 무료)
     finbert_model: str = field(
         default_factory=lambda: os.getenv("FINBERT_MODEL", "snunlp/KR-FinBert-SC")
     )
@@ -47,7 +46,7 @@ class Settings:
     price_lookback_days: int = 120
     # 발행주식수 스냅샷 기준연도 — 이 연도 주식총수부터 내림차순으로 탐색한다.
     # today() 기반이면 실행 연도에 따라 같은 입력의 per/pbr가 달라져 재현성이
-    # 깨진다(PR #67 리뷰). 새 액면분할·대규모 증자가 생기면 이 값을 올리고
+    # 깨진다. 새 액면분할·대규모 증자가 생기면 이 값을 올리고
     # 데이터셋을 재생성할 것 — 낡으면 collectors가 warning을 낸다.
     shares_asof_year: int = field(
         default_factory=lambda: int(os.getenv("SHARES_ASOF_YEAR", "2025"))
@@ -64,7 +63,6 @@ class Settings:
     max_daily_articles: int = 200
     # staleness 계산 시 비교할 직전 기사 수 (Tetlock 2011은 10건)
     staleness_lookback_articles: int = 10
-    # 직전 기사 10건을 채우기 위해 거슬러 올라갈 최대 일수
     staleness_lookback_days: int = 7
 
     @property

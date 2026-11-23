@@ -1,18 +1,8 @@
 """LangGraph 오케스트레이터.
 
-    START → ingest → ┌ news_agent ──────┐
-                     └ financial_agent ─┴→ validation_agent → synthesis_agent → END
-
-ingest가 뉴스·재무 2개 소스를 수집하면, 2개 분석 에이전트가 병렬 실행되고,
-validation_agent가 둘의 산출물이 정합적인지 규칙으로 검증한 뒤,
-synthesis_agent가 종합 시그널 JSON을 만든다.
-
 validation_agent를 병렬 구간이 아니라 fan-in 뒤 선형 구간에 두는 이유:
 PipelineState의 각 키에 reducer가 없어 last-write-wins이므로, 병렬 노드가 같은
-키를 쓰면 LangGraph가 InvalidUpdateError를 낸다. 현재는 각 노드가 서로 다른
-키만 써서 안전하다.
-
-소셜(SNS/종목토론) 소스는 데이터 확보가 어려워 파이프라인에서 제외되었다.
+키를 쓰면 LangGraph가 InvalidUpdateError를 낸다.
 """
 from __future__ import annotations
 
@@ -26,17 +16,14 @@ from .config import SETTINGS
 
 
 class PipelineState(TypedDict, total=False):
-    # 입력
     ticker: str
     date: str
     company_name: str
-    # ingest 산출 원천 데이터
     raw_news: list
-    prior_news: list       # staleness 비교용 직전 기사
+    prior_news: list
     news_source: str
     raw_financials: dict
     financial_source: str
-    # 에이전트 산출
     news_result: dict
     financial_result: dict
     validation: dict
@@ -74,7 +61,7 @@ def build_graph():
 
     g.add_edge(START, "ingest")
     for node in ("news_agent", "financial_agent"):
-        g.add_edge("ingest", node)              # 병렬 fan-out
+        g.add_edge("ingest", node)
         g.add_edge(node, "validation_agent")    # fan-in (둘 다 끝난 뒤 1회 실행)
     g.add_edge("validation_agent", "synthesis_agent")
     g.add_edge("synthesis_agent", END)
@@ -85,7 +72,6 @@ APP = build_graph()
 
 
 def run_pipeline(ticker: str, date: str, company_name: str = "") -> dict:
-    """파이프라인 실행 → 최종 ValueSignal dict 반환."""
     state: PipelineState = {"ticker": ticker, "date": date, "company_name": company_name}
     result = APP.invoke(state)
     return result["final"]

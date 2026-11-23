@@ -1,16 +1,6 @@
 """CLI 실행기 — 가치투자 피처 JSON 생성.
 
-예시:
-    python -m value_pipeline.run                       # 삼성전자(005930), 오늘 날짜
-    python -m value_pipeline.run --ticker 000660        # SK하이닉스
-    python -m value_pipeline.run --ticker 005930 --date 2026-05-17 --out out.json
-    python -m value_pipeline.run --ticker 005930 --name 삼성전자 --period 2022-01
-                                                        # 기간(월) 요약 1건
-
-뉴스는 data/의 로컬 엑셀 파일(빅카인즈)을 우선 사용한다.
 .env에 DART_API_KEY가 필요하다 — 재무 없이는 시그널을 만들지 않는다(exit 2).
-GEMINI_API_KEY가 있으면 뉴스 관련성 필터·근거 생성에 쓰이고, 없으면 규칙 기반으로
-동작한다. LLM 출력은 content-hash로 캐시되어 재실행 시 결정론이 유지된다.
 """
 from __future__ import annotations
 

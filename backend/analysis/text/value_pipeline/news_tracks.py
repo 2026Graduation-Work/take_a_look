@@ -255,7 +255,6 @@ def build_historical_track(
     require_finbert: bool = False,
     inference_batch_size: int = 16,
 ) -> dict[str, Any]:
-    """BigKinds 수동 다운로드 기사로 일별 심리지수를 만든다."""
     start = date.fromisoformat(date_start)
     end = date.fromisoformat(date_end)
     if start > end:
@@ -294,7 +293,6 @@ def _assert_safe_to_persist(value: object) -> None:
 
 
 def write_track_json(output: dict[str, Any], path: Path) -> None:
-    """본문 미포함을 검증한 후 JSON을 원자적으로 저장한다."""
     _assert_safe_to_persist(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f"{path.suffix}.tmp")

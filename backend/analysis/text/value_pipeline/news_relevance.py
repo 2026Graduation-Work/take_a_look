@@ -1,8 +1,4 @@
-"""실시간 뉴스의 종목 관련성: 명시 규칙, 학습·LLM 호출 없음.
-
-과거 BigKinds 필터는 변경하지 않는다. 기사 전체의 감성이 특정 기업의
-감성과 같다는 보장은 없으며, 결정 근거는 별도 검토 표에 기록할 수 있다.
-"""
+"""실시간 뉴스의 종목 관련성: 명시 규칙, 학습·LLM 호출 없음."""
 from __future__ import annotations
 
 import re
@@ -11,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any
 
 POLICY_VERSION = "live-context-v3-subject-industry-market"
-# Supported company names match the six-stock collection targets.
 _ALIASES = {
     "삼성전자": ("삼성전자", "Samsung Electronics"),
     "현대차": ("현대차", "현대자동차"),
@@ -185,7 +180,6 @@ def classify_live_relevance(
     """Deterministic subject-first Live policy; uncertain input is held for review.
 
     Market/industry decisions describe article scope, not target-company polarity.
-    Historical aggregation uses its existing filter independently.
     """
     name = _compact(company)
     if name not in CONTEXTUAL_LIVE_COMPANIES:

@@ -1,13 +1,6 @@
 """출력/중간 데이터 스키마 (Pydantic v2).
 
-피처 설계 원칙
-- 다운스트림 모델이 (ticker, date)로 OHLCV와 조인할 수 있게 복합키 보장.
-- 점수는 100% 결정론 공식으로 산출(설명가능성·재현성). LLM은 라벨·추출·설명만.
-- 소셜(대중 심리) 소스는 제외되고 뉴스(전문가 매체) 감성만 피처로 노출한다.
-
-## 행 스스로 감사 가능(self-auditing)
-
-출력 행 안의 모든 숫자를 그 행만 보고 재계산할 수 있어야 한다 — 이게 화이트박스다:
+출력 행 안의 모든 숫자를 그 행만 보고 재계산할 수 있어야 한다:
 
     composite  = clip(valuation_score*0.6 + financial_health_score*0.4
                       + news_sentiment*(news_impact_score/10)*2, 0, 10)
@@ -38,25 +31,23 @@ class FinancialMetrics(BaseModel):
     값이 없으면 None(결측).
     """
 
-    per: float | None = None              # 밸류에이션 대표: 주가수익비율
-    pbr: float | None = None              # 밸류에이션 보조: 주가순자산비율
-    roe: float | None = None              # 수익성 대표: 자기자본이익률
+    per: float | None = None
+    pbr: float | None = None
+    roe: float | None = None
     revenue_growth: float | None = None   # 성장성 대표: 매출 증가율(전년 대비)
     debt_ratio: float | None = None       # 안정성 대표: 부채총계/자본총계 (배)
-    altman_z: float | None = None         # 부도 위험 종합: Altman Z-Score
+    altman_z: float | None = None
 
 
 class KeyEvent(BaseModel):
-    """핵심 이벤트 + 출처 (HITL '근거·출처 항상 표시')."""
-
     event: str
-    news_ids: list[str] = Field(default_factory=list)  # 근거 기사 식별자
+    news_ids: list[str] = Field(default_factory=list)
 
 
 class NewsAnalysis(BaseModel):
-    news_sentiment: float = Field(0.0, ge=-1, le=1)   # -1 극부정 ~ +1 극긍정
+    news_sentiment: float = Field(0.0, ge=-1, le=1)
     news_impact_score: int = Field(5, ge=1, le=10)    # 주가 영향력(부정이어도 클 수 있음)
-    news_sentiment_std: float = Field(0.0, ge=0)      # 기사 간 의견 분산(불확실성)
+    news_sentiment_std: float = Field(0.0, ge=0)
     key_events: list[KeyEvent] = Field(default_factory=list)
     article_count: int = 0                            # 관련성 필터 통과 기사 수
     article_count_raw: int = 0                        # 필터 전 그날 전체 기사 수
@@ -68,10 +59,10 @@ class NewsAnalysis(BaseModel):
 
 
 class FinancialAnalysis(BaseModel):
-    financial_health_score: float = Field(5.0, ge=0, le=10)  # 재무 건전성
+    financial_health_score: float = Field(5.0, ge=0, le=10)
     valuation_score: float = Field(5.0, ge=0, le=10)         # 저평가 정도
     metrics: FinancialMetrics = Field(default_factory=FinancialMetrics)
-    fiscal_year: int | None = None  # 어느 사업연도 재무를 썼는지 (point-in-time 감사)
+    fiscal_year: int | None = None
     source: str = "sample"  # dart / sample
     reasoning: str = ""
 
@@ -92,12 +83,10 @@ class ValidationResult(BaseModel):
 class ValueSignal(BaseModel):
     """최종 출력 — 다운스트림 모델용 가치투자 피처 한 줄(=하루치)."""
 
-    # 식별자 (복합 기본키)
     ticker: str
     date: str
     company_name: str = ""
 
-    # 뉴스
     news_sentiment: float = 0.0
     news_impact_score: int = 5
     news_sentiment_std: float = 0.0
@@ -106,23 +95,19 @@ class ValueSignal(BaseModel):
     article_count: int = 0               # 관련성 통과 기사 수 (결측 지시자)
     article_count_raw: int = 0           # 필터 전 전체 기사 수
 
-    # 재무
     financial_health_score: float = 5.0
     valuation_score: float = 5.0
     financial_metrics: FinancialMetrics = Field(default_factory=FinancialMetrics)
-    financial_fiscal_year: int | None = None  # point-in-time 감사용
+    financial_fiscal_year: int | None = None
 
-    # 종합 판단
     composite_score: float = Field(5.0, ge=0, le=10)  # 시그널을 결정하는 실제 점수
     value_investment_signal: Signal = "HOLD"
     confidence: float = Field(0.5, ge=0, le=1)
     reasoning: str = ""
 
-    # 출처 (HITL: 근거·출처 항상 표시)
     news_source: str = ""       # bigkinds / naver_api / naver / sample
     financial_source: str = ""  # dart / sample
 
-    # 검증 (규칙 기반, 결정론)
     validation: ValidationResult = Field(default_factory=ValidationResult)
 
 
@@ -154,14 +139,12 @@ class PeriodValueSignal(BaseModel):
     무데이터이며, article_count=0 과 함께 validation 에러로 드러난다.
     """
 
-    # 식별자
     ticker: str
     period: str          # 입력 그대로: 'YYYY' 또는 'YYYY-MM'
     period_start: str
     period_end: str
     company_name: str = ""
 
-    # 뉴스 (기간 집계)
     news_sentiment: float = 0.0
     news_impact_score: int = 5
     news_sentiment_std: float = 0.0
@@ -174,7 +157,6 @@ class PeriodValueSignal(BaseModel):
     days_with_articles: int = 0   # 관련 기사가 1건 이상인 날 수
     days_covered: int = 0         # 워크북이 커버한 날 수 (결측 지시자)
 
-    # 재무 (기간 종료일 기준 point-in-time)
     financial_health_score: float = 5.0
     valuation_score: float = 5.0
     financial_metrics: FinancialMetrics = Field(default_factory=FinancialMetrics)
@@ -184,16 +166,13 @@ class PeriodValueSignal(BaseModel):
     # 이 신선도 차이가 모델이 쓸 수 있는 신호라 연도 대신 나이로 노출한다.
     financial_age_months: int | None = None
 
-    # 종합 판단 (일별과 동일 공식)
     composite_score: float = Field(5.0, ge=0, le=10)
     value_investment_signal: Signal = "HOLD"
     confidence: float = Field(0.5, ge=0, le=1)
     reasoning: str = ""
 
-    # 출처 (기간 모드 뉴스는 빅카인즈 엑셀 전용 — 폴백 없음)
     news_source: str = ""       # bigkinds / none
     financial_source: str = ""  # dart / sample
 
-    # 검증 + 일별 감사 행
     validation: ValidationResult = Field(default_factory=ValidationResult)
     daily_metrics: list[DailyNewsMetrics] = Field(default_factory=list)
