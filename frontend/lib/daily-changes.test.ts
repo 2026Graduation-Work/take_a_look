@@ -15,7 +15,7 @@ const base: ChangeInput = {
   sentiment: [
     { stock_code: "068270", track: "live", sentiment_date: "2026-10-07", sentiment_mean: 0.35 },
     { stock_code: "068270", track: "live", sentiment_date: "2026-10-08", sentiment_mean: -0.22 },
-    { stock_code: "068270", track: "historical", sentiment_date: "2026-10-08", sentiment_mean: 0.5 }, // 같은 날은 Live 우선
+    { stock_code: "068270", track: "historical", sentiment_date: "2026-10-08", sentiment_mean: 0.5 },
   ],
   supply: [
     { stock_code: "035720", trade_date: "2026-10-07", foreign_investor: -165941, institution: -81776 },

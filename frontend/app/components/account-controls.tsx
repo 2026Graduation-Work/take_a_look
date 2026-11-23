@@ -5,9 +5,6 @@ import type { InvestorProfileSummary } from "@/lib/types";
 import { useOnboarding } from "./onboarding-provider";
 import SignOutButton from "./sign-out-button";
 
-// 헤더 오른쪽: 이름 하나. 누르면 계정 메뉴(보유 종목, 내 투자 성향, 이용 안내, 계정 설정, 로그아웃).
-// profile이 없는 화면(이용 안내)은 저장된 이름만 쓴다.
-// 다시 진단은 내 투자 성향 화면의 버튼 하나로만 간다(같은 목적지의 길은 하나)
 export default function AccountControls({ profile }: { profile?: InvestorProfileSummary }) {
   const { state } = useOnboarding();
   const displayName = state.displayName?.trim() || profile?.displayName || "내 계정";

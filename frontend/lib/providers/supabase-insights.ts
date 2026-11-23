@@ -65,10 +65,9 @@ const FINANCIAL_LABEL: Record<string, string> = {
   revenue_growth: "매출 증가율(전년 대비)",
 };
 
-// DART fs_div 코드 → 화면 말. 정적 스냅샷(demo-snapshot.ts)은 이미 "연결"·"별도"로 저장돼 있다.
+// DART fs_div 코드
 const STATEMENT_LABEL: Record<string, string> = { CFS: "연결", OFS: "별도" };
-// DART 정기보고서 종류(financial_snapshots.report_code, 0012). 비율은 사업보고서(연간)로만 만든다(#292) → "2025년 연간 기준".
-// 10/13 이전에 적재된 분기·반기 행은 이름만 '누적'으로 맞춘다(새 적재는 연간만)
+// DART 정기보고서 종류(report_code)
 const REPORT_LABEL: Record<string, string> = { "11013": "최근 1분기 누적", "11012": "최근 반기 누적", "11014": "최근 3분기 누적", "11011": "연간" };
 
 const METRIC_KEYS = Object.keys(FINANCIAL_LABEL);
@@ -323,7 +322,6 @@ export async function loadSupabaseSentiment(
   const liveTrack = tracks.find(({ track }) => track === "live");
   const liveEnd = liveTrack ? Date.parse(liveTrack.as_of) : NaN;
   const liveStart = liveEnd - 24 * 3_600_000;
-  // Live 일별 행은 저장된 기사 전체로 날짜마다 다시 집계된다(supabase_store.live_daily_rows). 수집한 모든 날을 잇는다.
   const liveDailyResult = liveTrack
     ? await client.from("news_sentiment_daily")
       .select("sentiment_date,sentiment_mean,article_count")
@@ -351,8 +349,6 @@ export async function loadSupabaseSentiment(
     .map((row) => ({date:row.sentiment_date,score:row.sentiment_mean as number,articleCount:row.article_count}));
   const historicalDates = new Set(days.map(({date}) => date));
   const overlappingDates = liveDays.map(({date}) => date).filter((date) => historicalDates.has(date));
-  // Stored Live daily scores already split the rolling window by KST date.
-  // Only overlapping days need article-level deduplication against historical.
   let periodDays = liveDays;
   if (overlappingDates.length) {
     const [overlappingLive, overlappingHistorical] = await Promise.all([
@@ -462,9 +458,8 @@ export async function loadSupabaseFinancial(
       note: row.note,
     };
   });
-  // 보고서 수집과 가격 갱신을 분리한다. 같은 이익·자본·주식수 기준에서는
-  // PER/PBR(new) = 저장 배수 × 새 종가 / 저장 주가. 매 조회마다 원본 DB 값에서
-  // 계산하므로 일별 반올림 오차가 누적되지 않는다(저장 배수의 소수점 4자리 정밀도).
+  // PER/PBR(new) = 저장 배수 × 새 종가 / 저장 주가. 매 조회마다 원본 DB 값에서 계산해
+  // 일별 반올림 오차가 누적되지 않는다(저장 배수는 소수점 4자리).
   let priceAsOf = snapshot.price_as_of;
   let priceSource = snapshot.price_source;
   let asOf = snapshot.as_of;
@@ -485,16 +480,14 @@ export async function loadSupabaseFinancial(
         const baseline = quote.history?.find(({ date }) => date === snapshot.price_as_of)?.close;
         const factor = positiveFinite(baseline) ? quote.close / baseline : NaN;
         const valuation = metrics.filter(({ key }) => key === "per" || key === "pbr");
-        // 비정상 가격비나 저장값이면 기존 값·날짜를 함께 유지한다.
         if (positiveFinite(factor) && valuation.every(({ value }) => value === null
           || (Number.isFinite(value) && Number.isFinite(value * factor)))) {
           priceSource = (quote.source || "KRX").replace("KRX adjusted daily OHLCV", "KRX 수정종가");
           for (const metric of valuation) {
-            if (metric.value === null) continue; // 적자·결측은 주가로 채우지 않는다.
+            if (metric.value === null) continue;
             const original = metric.value;
             metric.value = Number((original * factor).toFixed(4));
-            // 저장된 배수에서 주당 값을 환산한다. 수정종가를 사용해 분할 전후 단위를 맞춘다.
-            // 원자료의 정확한 EPS/BPS가 아니므로 '약'으로 표시하고 결과 정밀도는 카드와 맞춘다.
+            // 원자료의 정확한 EPS/BPS가 아니므로 '약'으로 표시한다.
             const displayValue = metric.value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
             const denominator = metric.key === "per" ? "주당순이익" : "주당순자산";
             metric.basis = positiveFinite(original)
@@ -526,7 +519,6 @@ export interface Disclosure {
   filedOn: string;
 }
 
-// DART 공시 목록(제목·날짜·유형만 저장). 원문은 DART 링크로 연다.
 export async function loadSupabaseDisclosures(code: string, client: InsightQueryClient): Promise<Disclosure[]> {
   const result = await client.from("disclosures")
     .select("rcept_no,title,kind,filed_on")
@@ -538,7 +530,7 @@ export async function loadSupabaseDisclosures(code: string, client: InsightQuery
   return rows.map((row) => ({ rceptNo: row.rcept_no, title: row.title, kind: row.kind, filedOn: row.filed_on }));
 }
 
-// 투자자별 순매수(주, 0013). 최근 20영업일, 날짜 오름차순.
+// 순매수(주). 최근 20영업일, 날짜 오름차순.
 export async function loadSupabaseSupply(code: string, client: InsightQueryClient) {
   const result = await client.from("supply_demand")
     .select("trade_date,retail,foreign_investor,institution")
@@ -553,14 +545,13 @@ export async function loadSupabaseSupply(code: string, client: InsightQueryClien
   }));
 }
 
-// 수급 기간(첫날~마지막 날)의 하루 평균 거래량(주). 겹치는 날이 없으면 null
+// 겹치는 날이 없으면 null
 export function averageVolume(history: Array<{ date: string; volume: number }>, start: string, end: string): number | null {
   const days = history.filter(({ date }) => date >= start && date <= end);
   return days.length ? days.reduce((sum, { volume }) => sum + volume, 0) / days.length : null;
 }
 
-// 가격 흐름 분위기(psychology_market_v1의 psych_greed_fear_axis)를 최신 게시 차트의 종가·거래량으로 같은 산식으로 계산한다.
-// 원본: backend/analysis/chart/experiments/features/psychology/market_psychology.py · frontend/scripts/build_demo_snapshot.py mood_word
+// psych_greed_fear_axis를 backend market_psychology.py와 같은 산식으로 최신 게시 차트의 종가·거래량에서 계산한다.
 export function psychologyAxis(history: Array<{ close: number; volume: number }>): number | null {
   // 요약축에 필요한 건 20일 수익(종가 21개)과 60일 거래량가중 평균가(60개)뿐이라 60거래일이면 된다(게시 차트가 60개를 싣는다).
   if (history.length < 60) return null;
@@ -580,7 +571,7 @@ export function psychologyAxis(history: Array<{ close: number; volume: number }>
 }
 
 export function moodWord(axis: number): string {
-  return stageWord(PSYCHOLOGY_SCALE, stageIndex(axis)); // 더 알아보기 5칸 막대와 같은 구간
+  return stageWord(PSYCHOLOGY_SCALE, stageIndex(axis));
 }
 
 export async function loadSupabasePsychology(code: string, client: InsightQueryClient) {
@@ -589,6 +580,5 @@ export async function loadSupabasePsychology(code: string, client: InsightQueryC
     .eq("stock_code", code).eq("horizon", 20).maybeSingle() as QueryResult;
   const row = unwrap(result, "latest_chart_signal_snapshots") as { as_of: string; history: Array<{ date: string; close: number; volume: number }> | null } | null;
   const axis = row?.history ? psychologyAxis(row.history) : null;
-  // history는 수급 탭의 '하루 평균 거래량 대비'에도 쓴다(같은 조회 한 번)
   return axis === null ? null : { axis, word: moodWord(axis), asOf: row!.as_of, history: row!.history! };
 }

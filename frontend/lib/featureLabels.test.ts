@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { featureDescription, featureGroup, featureLabel } from "./featureLabels.ts";
 import { FORBIDDEN_COPY } from "./copy-rules.ts";
 
-// 2026-10-13 운영 latest_chart_signal_snapshots에 실제로 나온 피처명 전체(#257) + 수급 모델 피처
+// 운영 latest_chart_signal_snapshots에 실제로 나온 피처명 전체 + 수급 모델 피처
 const SHOWN = [
   "std_20",
   "wvma_20",

@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mockSupabaseAuth } from "./supabase-mock";
 
-// 사전 참가자 P0(10/13, 실제 가입) 이해 문제 4건(#272)
 test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
 
 async function demoReady(page: Page) {
@@ -25,22 +24,17 @@ test("1. 신호 방향과 함께 '앞으로 4주'를 한 번씩 보여 미래 �
   await page.route(/\/rest\/v1\/stocks\?/, (route) =>
     route.fulfill({ json: [{ code: "005930", market: "KOSPI", risk_grade: 3, risk_flags: [] }] }));
   await demoReady(page);
-  // 강한 신호 목록: 기간은 섹션 제목에 한 번, 방향은 묶음 제목. 줄에는 종목명·코드만
   const strong = page.getByRole("region", { name: "신호가 강한 종목" });
-  // 묶음 제목 없이 한 목록, 줄 오른쪽에 색 단어 하나
   await expect(strong.getByRole("heading", { name: /^(상승|하락)$/ })).toHaveCount(0);
   await expect(page.locator('[data-stock-row="005930"]')).toHaveText("삼성전자005930하락");
   const tile = page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem", { name: /삼성전자/ });
   await expect(tile).toHaveAccessibleName(/앞으로 4주 하락 신호/);
-  // 보유 맵 아래는 색 범례만(설명 문장 없음), '틀릴 수 있다'는 맨 아래 면책 문구에
   await expect(page.getByText(/방향이에요|맞는다는 보장/)).toHaveCount(0);
   await expect(page.getByText(/참고 정보로 틀릴 수 있어요/)).toBeVisible();
-  // 성향 줄: 요약 아래, 유형 + "놓치기 쉬운 것"만(데모 응답 = 추종형, 10/20 읽는 순서)
   await expect(page.getByRole("link", { name: /내 투자 성향: 추종형/ })).toContainText("많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요.");
   await expect(page.getByText(/조심스럽게 움직이는 편이에요/)).toHaveCount(0);
 });
 
-// 첫 화면은 한 줄 소개만(10/20 사용자 피드백), '골라 주지 않는다'는 설명은 환영 화면이 말한다
 test("2. 첫 화면은 한 줄 소개, 환영 화면이 '살 종목을 골라 주지 않아요'를 말한다", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByText("초보 투자자를 위한 판단 근거 서비스")).toBeVisible();
@@ -56,7 +50,7 @@ test("3. 다른 유형으로 바꾸면 근거 순서가 바뀌었는지 알려 �
   const mine = labels[(await page.locator("[data-bit-type]").getAttribute("data-bit-type"))!];
   await page.getByText("다른 유형이라면?").click();
   const note = page.locator("details p[aria-live=polite]");
-  await page.getByRole("button", { name: mine }).click(); // 내 유형 그대로 → 순서 같음
+  await page.getByRole("button", { name: mine }).click();
   await expect(note).toHaveText("이 종목은 유형과 관계없이 같은 순서예요.");
   await page.getByRole("button", { name: mine === "추종형" ? "자산 보존형" : "추종형" }).click();
   await expect(note).toHaveText("근거 순서가 바뀌었어요.");
@@ -74,7 +68,6 @@ async function backStepsOneAtATime(page: Page) {
   await expect(page.getByText("질문 3/16")).toBeVisible();
   await page.goBack();
   await expect(page.getByText("질문 2/16")).toBeVisible();
-  // 화면의 "이전"과 브라우저 기록이 같은 길을 쓴다
   await page.getByRole("button", { name: "이전" }).click();
   await expect(page.getByText("질문 1/16")).toBeVisible();
   await page.goForward();
@@ -114,6 +107,5 @@ test("4. 진단 완료 → 대시보드에서 뒤로 가기 두 번에 같은 �
     await page.waitForLoadState();
     urls.push(page.url());
   }
-  // 대시보드로 되돌려 보내는 화면이 끼면 두 번 모두 "/"에 머문다
   expect(urls.some((url) => !/\/$/.test(new URL(url).pathname))).toBe(true);
 });

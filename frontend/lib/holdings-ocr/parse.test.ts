@@ -3,13 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { mergeResults, parseHoldings, type StockRef } from "./parse.ts";
 
-// 시험 화면(tests/fixtures/holdings-ocr, 가짜 수치)을 실제 인식 모듈로 읽은 고정값으로 해석 규칙만 검사한다. CI는 모델을 받지 않는다.
 const DIR = new URL("../../tests/fixtures/holdings-ocr/", import.meta.url);
 type Answer = { form: string; holdout?: boolean; widths: number[]; holdings: (StockRef & { quantity: number; avgBuyPrice: number; avgSource: "computed" | "label" })[]; unsupported: string[] };
 const answers: Record<string, Answer> = JSON.parse(readFileSync(new URL("answers.json", DIR), "utf8"));
 const ocr = (id: string) => JSON.parse(readFileSync(new URL(`ocr/${id}.json`, DIR), "utf8"));
 
-// 정답 종목 + 헷갈리기 쉬운 실제 종목(로고 글자 '두산', 비슷한 이름 '삼성전자우', '카카오뱅크' 등)
 const MASTER: StockRef[] = [
   ...new Map<string, StockRef>(Object.values(answers).flatMap((screen) => screen.holdings.map(({ code, name }) => [code, { code, name }]))).values(),
   { code: "005935", name: "삼성전자우" },

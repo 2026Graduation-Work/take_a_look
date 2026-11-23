@@ -1,13 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// DESIGN.md 0-1 ①: 누르는 것은 44px 이상. 문장 안 글자 링크와 세그먼트 탭(3장 예외)은 뺀다.
+// 누르는 것은 44px 이상. 문장 안 글자 링크와 세그먼트 탭은 뺀다.
 async function smallTargets(page: Page): Promise<string[]> {
   return page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>("a, button, summary, input, select, textarea")]
       .filter((el) => {
         const box = el.getBoundingClientRect();
         if (!box.width || !box.height || box.height >= 44) return false;
-        if (el instanceof HTMLInputElement && ["radio", "checkbox"].includes(el.type)) return false; // 라벨 전체가 누르는 곳
+        if (el instanceof HTMLInputElement && ["radio", "checkbox"].includes(el.type)) return false;
         if (el.closest(".segmented")) return false;
         return !(el.tagName === "A" && getComputedStyle(el).display === "inline" && el.closest("p"));
       })

@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 
-// 목록은 기본으로 다 보여 주고, 많을 때만 처음 3개 + "더 보기(N)"(화면 규칙 v2 펼치기). 뉴스·공시가 같은 방식을 쓴다.
 const FIRST = 3;
 
 export default function MoreList<T>({ items, label, render }: { items: T[]; label: string; render: (item: T) => ReactNode }) {

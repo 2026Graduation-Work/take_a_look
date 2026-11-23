@@ -36,13 +36,11 @@ interface DemoSession {
   signedInAt: string;
 }
 
-// 세션이 정해지기 전(로딩 중)의 표시용 모드. 실제 모드는 로그인한 방식으로 정한다.
 export function getAuthMode(): OnboardingState["mode"] {
   return readDemoSession() ? "demo" : isSupabaseConfigured() ? "supabase" : "demo";
 }
 
 export async function resolveOnboardingState(): Promise<OnboardingState> {
-  // 데모 계정으로 들어왔으면 환경변수가 있어도 데모로 둔다(Supabase를 부르지 않는다).
   if (readDemoSession()) return resolveDemoOnboardingState();
   const client = getSupabaseClient();
   if (!client) return { status: "signed_out", mode: "demo" };
@@ -136,7 +134,7 @@ function resolveDemoOnboardingState(): OnboardingState {
 }
 
 export function startDemoSession(): void {
-  clearSavedProfile(); // 이전 계정의 설문 결과가 데모 화면에 섞이지 않게
+  clearSavedProfile();
   const session: DemoSession = {
     userId: "demo_minji",
     displayName: "김민지",
@@ -147,7 +145,6 @@ export function startDemoSession(): void {
 }
 
 
-// 비밀번호 가입.
 // Supabase에서 이메일 확인이 켜져 있으면 세션 없이 돌아오고, 확인 메일을 눌러야 로그인된다.
 export async function signUpWithPassword(
   email: string,
@@ -172,7 +169,6 @@ export async function signInWithPassword(email: string, password: string): Promi
   if (error) throw new Error(`로그인 실패: ${koreanAuthError(error.message)}`);
 }
 
-// Supabase Auth 영문 오류 중 자주 나오는 것만 옮긴다. 나머지는 원문을 그대로 보여 준다.
 export function koreanAuthError(message: string): string {
   const lower = message.toLowerCase();
   if (lower.includes("invalid login credentials")) return "이메일 또는 비밀번호가 맞지 않아요.";
@@ -187,7 +183,6 @@ export function koreanAuthError(message: string): string {
   return message;
 }
 
-// 계정과 Supabase에 저장된 성향·보유·관심·메모를 모두 지운다(0008 delete_my_account, cascade).
 export async function deleteAccount(): Promise<void> {
   const client = getSupabaseClient();
   if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았어요.");
@@ -196,7 +191,6 @@ export async function deleteAccount(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
-  // 데모 계정은 Supabase 세션이 없으므로 로컬만 지운다.
   const demo = readDemoSession() !== null;
   const client = demo ? null : getSupabaseClient();
   let signOutError: Error | null = null;
@@ -206,8 +200,6 @@ export async function signOut(): Promise<void> {
   }
 
   window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
-  // 보유 종목은 개인 금융 정보라 계정과 관계없이 지운다. 공용 PC에서 다음 사람에게 남지 않게.
-  // 로그인 계정은 다시 로그인하면 Supabase에서 읽어 온다.
   window.localStorage.removeItem(STORAGE_KEYS.holdings);
   clearSavedProfile();
   window.dispatchEvent(new Event(AUTH_UPDATED_EVENT));

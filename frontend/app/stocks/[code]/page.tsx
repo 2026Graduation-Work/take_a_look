@@ -14,11 +14,8 @@ import type { StockDetail } from "@/lib/types";
 // GitHub Actions가 매일 적재한 뉴스가 재배포 없이 화면에 반영되도록 한다.
 export const revalidate = 3600;
 
-// 데모 예시가 없는 종목은 종목 마스터(stocks, 차트 서빙 universe로 매일 갱신)에서 찾는다.
-// 게시된 차트 스냅샷이 있으면 다른 종목과 같은 상세 화면, 없으면 뉴스만 보인다.
 type MasterStock = Pick<StockDetail, "name" | "market" | "riskGrade" | "riskFlags" | "volatilityAnnual" | "volatilityPercentile" | "riskAsOf">;
 
-// cache: 메타데이터와 본문이 같은 요청에서 한 번만 조회한다
 const loadMasterStock = cache(async (code: string): Promise<MasterStock | null> => {
   const client = getSupabaseClient();
   if (!client || !/^[0-9A-Z]{6}$/.test(code)) return null;
@@ -35,7 +32,6 @@ const loadMasterStock = cache(async (code: string): Promise<MasterStock | null> 
   };
 });
 
-// 예측·시세 칸은 ChartPreviewDetail이 스냅샷 값으로 덮는다(chartDetail).
 function chartOnlyDetail(code: string, stock: MasterStock): StockDetail {
   return {
     code, ...stock, signalLight: "neutral", rankPercentile: 0,
@@ -49,7 +45,6 @@ export function generateStaticParams() {
   return Object.keys(stockDetails).map((code) => ({ code }));
 }
 
-// 검색 결과·공유 미리보기에 종목 이름이 보이게(예: "삼성전자 005930 · Take a Look")
 export async function generateMetadata({ params }: PageProps<"/stocks/[code]">): Promise<Metadata> {
   const { code } = await params;
   const name = stockDetails[code]?.name ?? (await loadMasterStock(code))?.name;
@@ -59,7 +54,6 @@ export async function generateMetadata({ params }: PageProps<"/stocks/[code]">):
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
   const { code } = await params;
   const [master, insights] = await Promise.all([loadMasterStock(code), loadStockInsights(code)]);
-  // 데모 예시 종목도 1년 변동성·백분위는 종목 마스터(실데이터)를 쓴다
   const stock = stockDetails[code] ? null : master;
   const charts = stock ? await loadPublicCharts([code]).catch(() => null) : null;
   const mockData = getMockStockDetailData(code, stock && charts?.has(code) ? chartOnlyDetail(code, stock) : undefined);

@@ -1,8 +1,5 @@
-// 글자 읽기 도구(워커, ONNX Runtime wasm, 모델)를 빌드 때 받아 public/ocr/에 둔다(git에는 넣지 않는다, 약 55MB).
-// 같은 출처에서 주면 화면 CSP에 외부 출처와 'unsafe-eval'을 열 필요가 없고(워커는 /ocr/ 응답 헤더의 CSP를 따로 받는다),
 // 판을 sha256으로 고정해 CDN 쪽 파일이 바뀌어도 그대로 쓰지 않는다. 판을 올리면 주소와 해시를 같이 바꾼다.
-// 이 레포 Release(ocr-assets-v1)의 사본을 먼저 받고, 실패할 때만 원 출처(jsDelivr, Baidu 모델 저장소)를 쓴다.
-// prebuild에서는 받기 실패면 멈추고, predev(--soft)에서는 경고 한 줄 뒤 넘어간다. 이미 받은 파일은 해시만 확인한다.
+// prebuild에서는 받기 실패면 멈추고, predev(--soft)에서는 경고 한 줄 뒤 넘어간다.
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
@@ -10,7 +7,6 @@ import { setDefaultAutoSelectFamilyAttemptTimeout } from "node:net";
 // 모델 저장소(중국)는 첫 연결이 느려 Node 기본값(250ms 안에 IPv4가 안 붙으면 IPv6로 넘김)으로는 끊긴다
 setDefaultAutoSelectFamilyAttemptTimeout(10_000);
 
-// 판(v1)을 경로에 넣어 1년 immutable 캐시를 건다(next.config.ts). 파일이나 해시를 바꾸면 v2로 옮기고 recognize.ts도 같이
 const DIR = new URL("../public/ocr/v1/", import.meta.url);
 const MIRROR = "https://github.com/2026Graduation-Work/take_a_look/releases/download/ocr-assets-v1/";
 const NPM = "https://cdn.jsdelivr.net/npm/";
@@ -28,7 +24,6 @@ const ASSETS = [
 
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
-// 한 주소에서 받아 해시까지 맞으면 내용을, 아니면 오류를 던진다(연결 오류는 3번까지 다시)
 async function download(url, hash) {
   let response;
   for (let attempt = 1; ; attempt++) {

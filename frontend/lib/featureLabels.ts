@@ -1,7 +1,3 @@
-// 모델 근거 항목명(차트 pack 피처명) → 초보자용 쉬운 말 (#257).
-// 차트 label_ko는 그대로 두고 화면에서만 덮어쓴다. 기간이 붙는 피처(std_20 등)는 "{n}일"을 채운다.
-// 사전에 없으면 차트 label_ko(영문 없는 경우)를, 그것도 없으면 묶음 이름을 쓴다. 원문 피처명은 노출하지 않는다.
-
 const WINDOWED: Record<string, string> = {
   roc: "{n}일 전보다 오른 정도",
   ma: "{n}일 평균 가격과 차이",
@@ -56,7 +52,6 @@ const FIXED: Record<string, string> = {
   Barrier_Down: "최근 아래쪽 변동 범위",
 };
 
-// 묶음 판단: 사전에 없는 피처의 접두어(토큰)로 고른다.
 export function featureGroup(name: string): string {
   const head = name.toLowerCase().split(/[^a-z0-9]+/)[0];
   if (/^(news|sentiment|finbert|headline)/.test(head)) return "뉴스 분위기";
@@ -73,7 +68,6 @@ export function featureLabel(name: string, labelKo?: string | null): string {
   return featureGroup(name);
 }
 
-// 정의는 입력값의 뜻만 설명한다. 이번 예측에 미친 방향은 기여값으로 별도 표시한다.
 const FEATURE_DESCRIPTIONS: Record<string, string> = {
   Change: "오늘 마감 가격이 전날 마감 가격보다 얼마나 달라졌는지 나타내요.",
   kmid: "시작 가격에 비해 마감 가격이 얼마나 오르거나 내렸는지 나타내요.",

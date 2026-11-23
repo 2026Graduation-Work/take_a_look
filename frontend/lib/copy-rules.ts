@@ -1,10 +1,7 @@
-// 사용자 노출 문구 금지 표현 목록. copy-rules.test.ts가 app/·lib/의 문자열을 이 목록으로 검사한다.
-// 출처: AGENTS.md "사용자 노출 표현 규칙"(재점검 신호·근거 서술)과 모델 지표 오표기.
-
 export interface CopyRule {
   pattern: RegExp;
   reason: string;
-  allowIn?: readonly string[]; // 이 규칙을 지키지 않아도 되는 파일(법으로 이름을 밝혀야 하는 곳)
+  allowIn?: readonly string[];
 }
 
 export const FORBIDDEN_COPY: readonly CopyRule[] = [
@@ -16,7 +13,6 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /적중률/, reason: "모델 지표(ROC-AUC 등)를 적중률로 오표기할 수 있는 용어" },
   { pattern: /정확도\s*[\d{$]/, reason: "'정확도 N%' 표기 (ROC-AUC 오표기)" },
   { pattern: /기여도\s*[\d{$]|기여도[^"'`<]{0,15}%/, reason: "'기여도 N%' 대신 방향과 '영향 비중'을 분리하고 전체 피처 절댓값 합 기준을 밝힌다" },
-  // 쉬운 말 규칙(copy-glossary.ts). "계산 근거" 영역도 예외 없이 검사한다.
   { pattern: /저평가|고평가|비싸|싸(요|다|게)/, reason: "재무 비교는 높아요, 낮아요, 비슷해요까지만(#372). 싸다, 비싸다는 판정이다" },
   { pattern: /추천/, reason: "모델 신호 순 목록을 '추천'으로 부르지 않는다 → '오늘 신호가 강한 종목'" },
   { pattern: /넛지/, reason: "개발 용어 → '확인할 것'" },
@@ -28,9 +24,8 @@ export const FORBIDDEN_COPY: readonly CopyRule[] = [
   { pattern: /·/, reason: "화면 규칙 v2: 가운데 점 금지(AI 느낌) → 간격 또는 쉼표" },
   { pattern: /니다[.?!]/, reason: "문장 끝은 해요체(DESIGN.md 0장, 10/20) → '~해요.' '~없어요.'" },
   { pattern: /신뢰구간/, reason: "개발 용어 → '10번 중 N번 이 범위'" },
-  // 처리방침은 개인정보 보호법상 처리를 맡기는 곳(수탁자)의 이름을 밝혀야 해서 예외
+  // 개인정보 보호법상 처리방침은 처리를 맡기는 곳(수탁자)의 이름을 밝혀야 한다
   { pattern: /Supabase(?![A-Za-z_])/, reason: "내부 인프라 이름을 화면에 쓰지 않는다", allowIn: ["app/privacy/page.tsx"] },
-  // 화면에 값과 함께 쓴 경우만 잡는다(코드 식별자 bit.composite는 통과)
   { pattern: /composite\s*[+\-\d{=]/, reason: "개발 용어 → '유형 점수'" },
   { pattern: /psych_[a-z]/, reason: "개발 변수명 → '가격 흐름 분위기'" },
   { pattern: /prob_up/, reason: "개발 변수명 → '과거 비슷한 신호 구간'" },

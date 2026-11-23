@@ -5,10 +5,6 @@ import GuideAccount from "../guide/guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import { SERVICE_NAME } from "@/lib/brand";
 
-// 개인정보 처리방침(개인정보 보호법 제30조 공개 의무). 로그인 없이 열린다(onboarding-provider).
-// 실제 코드 기준: 테이블은 supabase/migrations(users, ips_profiles, avoided_assets, portfolio_holdings, watchlist, stock_notes),
-// 탈퇴는 0008 delete_my_account(auth.users 삭제 → 연결 행 cascade), 캡처는 lib/holdings-ocr(기기 안 워커), 데모는 localStorage.
-// 항목이나 위탁처가 바뀌면 이 파일과 시행일을 같이 고친다.
 export const metadata: Metadata = {
   title: "개인정보 처리방침",
   description: `${SERVICE_NAME}이 어떤 개인정보를 왜 모으고 언제 지우는지 안내해요.`,

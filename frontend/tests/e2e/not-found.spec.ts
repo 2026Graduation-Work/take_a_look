@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { finishDemo } from "./demo-steps";
 
-// 페르소나 워크스루(2026-10): 없는 종목·주소에서 영어 기본 404만 보이고 돌아갈 길이 없었다.
 for (const path of ["/stocks/999999", "/stocks/abc", "/no-such-page"]) {
   test(`없는 주소 ${path}는 한국어 안내와 대시보드 링크`, async ({ page }) => {
     await finishDemo(page);

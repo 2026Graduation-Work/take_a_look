@@ -52,18 +52,15 @@ function AccountHoldingsEditor({
   );
   const saved = parseSavedHoldings(savedSnapshot);
 
-  // 저장된 목록이 있으면 그것이 정답이다. 없을 때만 데모 시드를 보여 준다.
-  // (로그인 사용자는 데모 시드를 받지 않으므로 빈 목록에서 시작한다.)
   const initial: SavedHolding[] = supabaseMode ? [] :
     saved ?? demoHoldings.map(({ code, name, quantity }) => ({
           code,
           name,
           quantity,
-          avgBuyPrice: null, // 예시 평단은 실제 종가와 섞지 않는다(설문 보유 단계와 같음)
+          avgBuyPrice: null,
         }));
 
   const [rows, setRows] = useState<SavedHolding[]>(initial);
-  // 평단 대비 평가손익(#255): 대시보드와 같은 최신 게시 종가(loadLatestCloses)
   const codeKey = rows.map(({ code }) => code).join(",");
   const [closes, setCloses] = useState<LatestCloses>(new Map());
   useEffect(() => {
@@ -73,7 +70,7 @@ function AccountHoldingsEditor({
       active = false;
     };
   }, [codeKey]);
-  const [baseline, setBaseline] = useState<SavedHolding[]>(initial); // 마지막으로 저장된 목록
+  const [baseline, setBaseline] = useState<SavedHolding[]>(initial);
   const dirty = JSON.stringify(rows) !== JSON.stringify(baseline);
 
   // 새로고침·탭 닫기 때만 막는다. ponytail: 앱 안 링크 이동은 못 막음, 필요해지면 라우터 가드 추가
@@ -84,11 +81,11 @@ function AccountHoldingsEditor({
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty]);
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const [saveError, setSaveError] = useState(""); // 저장 오류
+  const [saveError, setSaveError] = useState("");
   const [loaded, setLoaded] = useState(!supabaseMode);
   const [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0);
-  const [formVersion, setFormVersion] = useState(0); // 되돌리기: 입력 중 글자까지 새로
+  const [formVersion, setFormVersion] = useState(0);
   useEffect(() => {
     let active = true;
     const request = supabaseMode
@@ -115,7 +112,6 @@ function AccountHoldingsEditor({
   async function submit() {
     if (!loaded || status === "saving") return;
     setSaveError("");
-    // 수량을 비운 종목이 있으면 저장하지 않는다(저장 단계에서 조용히 빠지지 않게)
     const empty = rows.find(({ quantity }) => quantity === 0);
     if (empty) {
       setSaveError(`${empty.name}의 수량을 1 이상으로 적어 주세요. 보유하지 않으면 삭제를 눌러 주세요.`);
@@ -141,7 +137,6 @@ function AccountHoldingsEditor({
     <div className="w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} />
 
-      {/* 왼쪽 끝 = 헤더 로고, 본문 폭만 720px(화면 규칙 v2). 설문 보유 단계와 같은 입력(HoldingsForm) */}
       <main className="page pb-12 pt-6">
       <div className="page-narrow flex flex-col gap-6">
         <div className="flex flex-col gap-1 px-1">
@@ -166,7 +161,6 @@ function AccountHoldingsEditor({
           </p>
         )}
 
-        {/* 저장: 목록 아래, PC 오른쪽, 390 전체 폭. 저장하지 않은 변경은 버튼 옆 13px */}
         <div className="flex flex-col items-stretch gap-2 px-1 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
           {dirty ? (
             <span className="flex items-center gap-2 text-xs text-body sm:mr-auto">

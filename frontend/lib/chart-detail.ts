@@ -7,7 +7,6 @@ export function chartDirection(chart: ChartSnapshot | undefined): HorizonDirecti
   return inferenceDirection(chart?.inference);
 }
 
-// 세 분류 점수 중 가장 높은 쪽. 대시보드는 payload 전체 대신 이 두 필드만 읽는다.
 export function inferenceDirection(
   inference: Pick<ChartSnapshot["inference"], "status" | "scores"> | undefined,
 ): HorizonDirection | null {
@@ -17,7 +16,6 @@ export function inferenceDirection(
   return scores.reduce((best, next) => next[1] > best[1] ? next : best)[0];
 }
 
-// Keep the existing view model; replace only fields present in the serving output.
 export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefined, requestedHorizon: 5 | 20 = 20): StockDetail {
   const band = chart?.distribution.histogram.central_68;
   const horizon = chart?.horizon ?? requestedHorizon;
@@ -41,8 +39,7 @@ export function chartDetail(detail: StockDetail, chart: ChartSnapshot | undefine
 
 export type ClippedBin = ReturnBin & { tail?: "low" | "high" };
 
-// 분포 양 끝 tail(기본 각 1%)을 "그 이하"·"그 이상" 한 칸씩으로 묶어, 막대가 1~99% 구간 폭을 채우게 한다.
-// 묶은 칸은 바로 옆 칸과 같은 폭으로 붙인다(그리는 자리일 뿐 실제 수익률 범위는 아니다).
+// 양 끝 tail 칸의 from·to는 옆 칸 폭을 빌린 그리기용 값이고 실제 수익률 범위가 아니다.
 export function clipReturnBins(bins: readonly ReturnBin[], tail = 0.01): ClippedBin[] {
   const total = bins.reduce((sum, bin) => sum + bin.count, 0);
   if (!total) return [...bins];

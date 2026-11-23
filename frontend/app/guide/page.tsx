@@ -6,9 +6,6 @@ import DisclaimerFooter from "../components/disclaimer-footer";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
 
-// 이용 안내(로그인 없이 열림, 지도교수 피드백 "처음 사용자에게 취지와 흐름 안내"). 위에서 아래 한 줄기, 맨 위 목차.
-// 강제 튜토리얼, 코치마크는 두지 않는다(NN/g 모바일 튜토리얼 연구: 성공률을 높이지 않고 앱을 더 어렵게 느끼게 함).
-// 용어 모음은 ⓘ와 같은 출처(TERM_INFO)에서 만든다. 문구를 따로 쓰지 않는다.
 export const metadata: Metadata = {
   title: "이용 안내",
   description: `${SERVICE_NAME}이 무엇을 하는 서비스인지, 어떤 순서로 보면 되는지 안내해요.`,

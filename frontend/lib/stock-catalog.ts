@@ -3,7 +3,6 @@ import { getSupabaseClient } from "./supabase";
 
 export type StockOption = { code: string; name: string };
 
-// Public master, shared by demo and signed-in search. Failed reads are not cached.
 let master: Promise<StockOption[]> | null = null;
 export function loadStockCatalog(): Promise<StockOption[]> {
   if (master) return master;

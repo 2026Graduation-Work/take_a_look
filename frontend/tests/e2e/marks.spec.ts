@@ -18,7 +18,6 @@ async function demoReady(page: Page) {
   await expect(page).toHaveURL("/");
 }
 
-// 관심 종목 추가 → 대시보드 표시 → 편집 화면에서 삭제 → 대시보드에서 사라짐, 메모 저장 → 다시 열면 표시 → 고치기·지우기
 async function watchAndNote(page: Page) {
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
   await page.goto("/stocks/005930");
@@ -52,7 +51,6 @@ async function watchAndNote(page: Page) {
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
 }
 
-// 지우기·삭제·데모 로그아웃은 확인 창(confirm-button.tsx)을 띄운다(DESIGN.md 0-1 ④). 테스트는 창의 행동 버튼을 누른다.
 test("데모: 관심 종목·판단 메모가 브라우저에 남고 다시 읽힌다", async ({ page }) => {
   await demoReady(page);
   await watchAndNote(page);
@@ -77,7 +75,6 @@ test("로그인: 관심 종목·판단 메모가 Supabase에 저장되고 다시
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await expect.poll(() => tables.stock_notes.get("005930")?.note).toBe("DB에 남는 메모");
 
-  // 브라우저 값을 지워도 Supabase에서 다시 읽어 온다
   await page.evaluate(() => {
     localStorage.removeItem("takealook.watchlist.v1");
     localStorage.removeItem("takealook.stock-notes.v1");
@@ -111,15 +108,12 @@ test("로그인 + stock_notes 테이블 적용 전: 메모는 브라우저에 �
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("테이블 없어도 남는 메모");
   await page.getByRole("button", { name: "저장", exact: true }).click();
-  // 저장이 끝나 "지난 메모" 카드로 바뀐 뒤 새로고침한다(저장 중 새로고침하면 메모가 사라지는 경쟁).
   await expect(page.getByText(/지난 메모/)).toBeVisible();
   await expect(page.locator("p[role=alert]")).toHaveCount(0);
   await page.reload();
   await expect(page.getByText("테이블 없어도 남는 메모")).toBeVisible();
 });
 
-
-// 사용성 평가는 한 브라우저로 여러 참가자를 받는다. 데모 로그아웃 뒤 앞사람 보유 종목이 남으면 안 된다.
 test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예시부터 시작한다", async ({ page }) => {
   await demoReady(page);
   const holdings = () => page.evaluate(() => localStorage.getItem("takealook.holdings.v1"));
@@ -139,7 +133,6 @@ test("데모: 로그아웃하면 보유 종목도 지워져 다음 데모는 예
   await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
 });
 
-// #278 QA, #426: 잘못된 숫자는 보존하고 저장을 막는다. 검색은 Esc 뒤 다시 입력하면 목록이 다시 열린다.
 test("QA #278: 보유 수량과 평단 입력 및 검색 Esc 뒤 재입력", async ({ page }) => {
   await demoReady(page);
   await page.goto("/portfolio");
@@ -165,7 +158,7 @@ test("QA #278: 보유 수량과 평단 입력 및 검색 Esc 뒤 재입력", asy
   await page.getByRole("button", { name: /^저장/ }).first().click();
   await expect(page.getByRole("alert").filter({ hasText: "카카오의 수량은" })).toBeVisible();
 
-  // 검색 목록은 종목 마스터(stocks 전체)에서 고른다. e2e 스텁은 코드 조회만 답하므로 여기서 목록을 준다
+  // e2e 스텁은 코드 조회만 답하므로 검색 목록을 여기서 준다
   await page.route(/\/rest\/v1\/stocks\?.*is_active/, (route) =>
     route.fulfill({ json: [{ code: "005930", name: "삼성전자" }, { code: "028260", name: "삼성물산" }] }),
   );
@@ -179,7 +172,6 @@ test("QA #278: 보유 수량과 평단 입력 및 검색 Esc 뒤 재입력", asy
   await expect(page.getByRole("list", { name: "종목 검색 결과" })).toBeVisible();
 });
 
-// #278 QA: 같은 종목이 보유 맵과 관심 종목에서 다른 신호로 보이지 않는다(둘 다 최신 게시 차트 4주 방향)
 test("QA #278: 보유 맵과 관심 종목의 신호가 같다", async ({ page }) => {
   await page.route(/\/rest\/v1\/latest_chart_signal_snapshots/, (route) =>
     route.fulfill({

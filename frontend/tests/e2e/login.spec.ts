@@ -17,7 +17,6 @@ test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로
   await expect(page.getByText("가입 없이 예시 사용자")).toHaveCount(0);
   await page.getByRole("button", { name: "이메일로 시작" }).click();
 
-  // 이메일 화면: 워드마크 아래 제목 한 줄, 데모·로그인 링크 버튼 없음, 뒤로는 있음
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("로그인");
   await expect(page.getByRole("button", { name: "데모로 둘러보기" })).toHaveCount(0);
   await expect(page.getByText("로그인 링크")).toHaveCount(0);
@@ -33,7 +32,6 @@ test("이메일 회원가입 → 로그아웃 → 같은 계정으로 다시 로
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page.getByRole("heading", { name: "Take a Look은 이렇게 도와줘요" })).toBeVisible();
 
-  // 로그인 계정은 Supabase에 남으므로 확인 창 없이 바로 나간다(confirm-button ask=false).
   await page.getByRole("button", { name: /로그아웃|나가기/ }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(/\/login$/);
@@ -88,7 +86,6 @@ test("로그인: 종목 마스터의 종목(우선주)을 보유 종목으로 �
   const search = page.getByLabel("종목 검색");
   await search.fill("삼성전자우");
   await expect.poll(() => calls.some((call) => call.startsWith("GET /rest/v1/stocks"))).toBe(true);
-  // 검색 후보가 온 뒤 Enter로 고르면 바로 행이 생긴다
   await expect(async () => {
     await search.press("Enter");
     await expect(page.getByLabel("삼성전자우 수량")).toBeVisible({ timeout: 500 });

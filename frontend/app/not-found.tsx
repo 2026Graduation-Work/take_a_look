@@ -1,7 +1,6 @@
 import Link from "next/link";
 import BrandHeader from "./components/brand-header";
 
-// 없는 주소·없는 종목 코드(/stocks/999999)에서 보이는 화면. Next 기본 화면은 영어이고 돌아갈 길이 없었다(페르소나 워크스루 2026-10).
 export default function NotFound() {
   return (
     <>

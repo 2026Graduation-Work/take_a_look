@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { loadLatestCloses } from "./latest-closes.ts";
 
-// 최신 게시 스냅샷 행 → 종가 + 4주 방향 신호. 점수 없는 행은 신호 없이 종가만.
 test("loadLatestCloses maps H20 scores to signal light", async () => {
   const rows = [
     { stock_code: "005930", close: 269000, as_of: "2026-10-07", status: "available", scores: { down: 0.5, neutral: 0.3, up: 0.2 } },

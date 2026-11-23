@@ -1,7 +1,3 @@
-// 편향 넛지 11종. 순수 함수, 외부 의존성 없음.
-// 문구는 2026-09-22 쉬운 말·해요체로 다듬었다(팀 승인). 판정 조건·근거 축은 그대로다.
-// 형식 규칙: 사실 + 사실 병렬. 인과 주장·추종 유도·매수/매도 권유 금지.
-
 import { SENTIMENT_SHIFT_P90 } from "../providers/sentiment-fixture.ts";
 import type { RiskGrade, StyleAxisId } from "../types";
 import type { BitResult } from "./bit";
@@ -10,44 +6,41 @@ export type NudgeId =
   | "N01" | "N02" | "N03" | "N04" | "N05" | "N06"
   | "N07" | "N08" | "N09" | "N10" | "N11";
 
-// 종목·시장 사실. 수급·감성·시세 어댑터 결과에서 계산해 넣는다.
 export interface NudgeMarket {
-  retailNetBuyStreakDays: number; // 최근일부터 센 개인 연속 순매수 일수
+  retailNetBuyStreakDays: number;
   retailNetLatest: number; // 최근일 개인 순매수(+)/순매도(-)
   foreignNetLatest: number; // 최근일 외국인 순매수(+)/순매도(-)
-  institutionNetBuyDaysOf5: number; // 최근 5거래일 중 기관 순매수 일수
+  institutionNetBuyDaysOf5: number;
   volatilityPercentile: number; // 0~1, 시장 내 변동성 백분위. 1 = 가장 큼
   drawdownFrom3mHigh: number; // 3개월 고점 대비. -0.15 = -15%
   return3d: number; // 최근 3거래일 누적. 0.10 = +10%
   sentimentChange: number | null; // 뉴스 감성(-1~1) 최근 두 수집일(Live 일별) 변화량. 두 날이 없거나 기사가 적으면 null
-  sentimentDayLabel: string; // 최근 수집일 말: 오늘 수집이면 "오늘", 아니면 "10.08에" — 지난 날을 "오늘"이라 부르지 않는다
-  isTopHolding: boolean; // 보유 종목 중 비중 1위
-  isHolding: boolean; // 이 종목을 보유 중인가. 아니면 "처음 살 때" 같은 보유 전제 문구를 쓰지 않는다
-  holdingGain: number | null; // 이 종목 평단 대비 평가손익(0.12 = +12%, #255). 보유하지 않거나 평단을 모르면 null
+  sentimentDayLabel: string; // 최근 수집일이 오늘이면 "오늘", 아니면 "10.08에"
+  isTopHolding: boolean;
+  isHolding: boolean;
+  holdingGain: number | null; // 평단 대비 평가손익(0.12 = +12%). 보유하지 않거나 평단을 모르면 null
   riskGrade: RiskGrade; // 1 매우 위험 ~ 5 매우 안전
 }
 
 export interface FiredNudge {
   id: NudgeId;
   text: string;
-  axis: StyleAxisId; // 근거가 된 성향 축
-  ratio: number; // 그 축의 실제 값. 화면에서 발화 이유를 검증할 수 있게 함께 넘긴다
+  axis: StyleAxisId;
+  ratio: number;
 }
 
 export const MAX_VISIBLE_NUDGES = 2;
-// 앞에 있을수록 먼저 노출. 여기 없는 id는 id 순으로 뒤에 붙는다.
 const PRIORITY: readonly NudgeId[] = ["N02", "N05", "N11", "N04", "N01"];
 
-// 성향 임계. 경계 포함: side 1이면 ratio >= +0.3, side -1이면 ratio <= -0.3.
+// 경계 포함: side 1이면 ratio >= +0.3, side -1이면 ratio <= -0.3.
 export const AXIS_THRESHOLD = 0.3;
 const STREAK_DAYS = 5;
 const INSTITUTION_BUY_DAYS = 4;
 const VOLATILITY_TOP_10 = 0.9;
 const DRAWDOWN_LIMIT = -0.15;
-export const HOLDING_GAIN = 0.1; // 평단 대비 ±10% 이상이면 N05가 손익 방향으로 말한다
+export const HOLDING_GAIN = 0.1;
 const RALLY_3D = 0.1;
 // 감성 "급변" 임계 = news_corpus 일별 감성 변화량 |Δ|의 p90.
-// 계산: frontend/scripts/build_sentiment_fixture.py. 산출값·표본·감성 백엔드는 sentiment-fixture.ts 헤더에 있다.
 const SENTIMENT_SHIFT = SENTIMENT_SHIFT_P90;
 
 interface NudgeRule {
@@ -63,7 +56,6 @@ const always = () => true;
 export const NUDGES: readonly NudgeRule[] = [
   {
     id: "N01",
-    // information_reliance: -1=본인 판단, +1=시장·타인 추종
     axis: "information_reliance",
     side: 1,
     market: (m) => m.retailNetBuyStreakDays >= STREAK_DAYS,
@@ -71,7 +63,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N02",
-    // information_reliance: -1=본인 판단, +1=시장·타인 추종
     axis: "information_reliance",
     side: 1,
     market: (m) => m.retailNetLatest > 0 && m.foreignNetLatest < 0,
@@ -79,7 +70,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N03",
-    // information_reliance: -1=본인 판단, +1=시장·타인 추종
     axis: "information_reliance",
     side: 1,
     market: (m) => m.institutionNetBuyDaysOf5 >= INSTITUTION_BUY_DAYS,
@@ -87,7 +77,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N04",
-    // drawdown_reaction: -1=하락 시 유지, +1=하락 시 이탈
     axis: "drawdown_reaction",
     side: 1,
     market: (m) => m.volatilityPercentile >= VOLATILITY_TOP_10,
@@ -95,11 +84,9 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N05",
-    // drawdown_reaction: -1=하락 시 유지, +1=하락 시 이탈
     axis: "drawdown_reaction",
     side: 1,
     market: (m) => m.drawdownFrom3mHigh <= DRAWDOWN_LIMIT || Math.abs(m.holdingGain ?? 0) >= HOLDING_GAIN,
-    // 보유 종목 손익이 ±10% 이상이면 평단 기준으로, 아니면 3개월 고점 기준으로 말한다(#255)
     text: (m) => {
       const gain = m.holdingGain ?? 0;
       const percent = `${Math.abs(gain * 100).toFixed(1)}%`;
@@ -112,7 +99,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N06",
-    // urgency: -1=여유, +1=조급함
     axis: "urgency",
     side: 1,
     market: (m) => m.return3d >= RALLY_3D,
@@ -120,7 +106,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N07",
-    // urgency: -1=여유, +1=조급함
     axis: "urgency",
     side: 1,
     market: (m) => m.sentimentChange !== null && Math.abs(m.sentimentChange) >= SENTIMENT_SHIFT,
@@ -128,7 +113,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N08",
-    // concentration: -1=폭넓은 분산, +1=소수 집중
     axis: "concentration",
     side: 1,
     market: (m) => m.isTopHolding,
@@ -136,7 +120,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N09",
-    // turnover: -1=장기 보유, +1=단기 매매
     axis: "turnover",
     side: 1,
     market: always,
@@ -144,8 +127,7 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N10",
-    // rule_adherence: -1=사전 규칙 준수, +1=상황별 재량.
-    // 이름과 반대로 +가 "규칙을 덜 지킨다"는 뜻이다. "지키기 어려운 편"은 + 쪽이다.
+    // rule_adherence는 이름과 반대로 +가 "규칙을 덜 지킨다"(상황별 재량)는 뜻이다.
     axis: "rule_adherence",
     side: 1,
     market: always,
@@ -153,7 +135,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
   {
     id: "N11",
-    // loss_tolerance: -1=원금 보전, +1=수익 기회. risk_grade: 1=매우 위험 ~ 5=매우 안전
     axis: "loss_tolerance",
     side: -1,
     market: (m) => m.riskGrade <= 2,
@@ -161,8 +142,6 @@ export const NUDGES: readonly NudgeRule[] = [
   },
 ];
 
-// 체크포인트 줄(최대 MAX_VISIBLE_NUDGES). 위험도 안내는 한 줄만(#256): 성향 숫자가 들어간 riskNote가 있으면
-// N11 자리를 대신하고, N11이 없으면 뒤에 붙는다.
 export function checkpointItems(nudges: FiredNudge[], riskNote: string | null): { key: string; text: string }[] {
   const items = nudges.map(({ id, text }) => (id === "N11" && riskNote ? { key: "risk", text: riskNote } : { key: id, text }));
   if (riskNote && !nudges.some(({ id }) => id === "N11")) items.push({ key: "risk", text: riskNote });
@@ -179,8 +158,6 @@ export function selectNudges(
   market: NudgeMarket,
   limit = MAX_VISIBLE_NUDGES,
 ): FiredNudge[] {
-  // 같은 축 근거 넛지는 우선순위가 높은 하나만 남긴다.
-  // 같은 사실을 두 번 말하지 않고, 노출 슬롯에 서로 다른 관점이 오게 하려는 것이다.
   const seenAxes = new Set<StyleAxisId>();
   return NUDGES.filter(
     (rule) => rule.side * bit.ratios[rule.axis] >= AXIS_THRESHOLD && rule.market(market),

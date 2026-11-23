@@ -1,6 +1,3 @@
-// 설문 응답 → schema profiling_output v1.1 변환. 8축 채점은 lib/profiling/style-scoring.ts가 정본이다.
-// 결정론이며 LLM을 쓰지 않는다. 종목을 거르는 값은 avoided_assets(사용자가 직접 고른 항목)뿐이다.
-
 import { BIT_BLIND_SPOT, BIT_LABEL, BIT_SUMMARY, classifyBit } from "./profiling/bit.ts";
 import { extractFreeTextSignals } from "./free-text-signals.ts";
 import type {
@@ -48,29 +45,29 @@ export const AVOIDED_ASSET_DESCRIPTIONS: Record<RiskFlag, string> = {
   preferred_stock: "의결권 대신 배당을 우선 받는 주식으로 보통주와 가격 흐름이 다를 수 있어요.",
 };
 
-// 8축에 원천 문항이 없는 v1.0 필드. 구 설문의 투자 기간 → 유동성 필요도 표를 기간 구간으로 이어 쓴다.
+// 8축에 원천 문항이 없는 v1.0 필드라 구 설문의 투자 기간 → 유동성 필요도 표를 기간 구간으로 이어 쓴다.
 const LIQUIDITY_BY_MONTHS = [
   { maxMonths: 12, ratio: 0.7 },
   { maxMonths: 60, ratio: 0.25 },
   { maxMonths: Infinity, ratio: 0.1 },
 ] as const;
 const TARGET_RETURN_ANNUAL = 0.08;
-const CURRENT_MARKET_ANXIETY_INITIAL = 0.5; // text 블록이 채운다
-const OVERHEATING_CAUTION_INITIAL = 0.61; // chart·text 블록이 채운다
+const CURRENT_MARKET_ANXIETY_INITIAL = 0.5;
+const OVERHEATING_CAUTION_INITIAL = 0.61;
 const OVERHEATING_CAUTION_CONFIDENCE = 0.55;
 
 export interface SurveyAnswers {
   user_id: string;
   session_id: string;
   timestamp: string;
-  style: StyleAnswers; // 리커트 응답(mode의 문항)
+  style: StyleAnswers;
   mode?: "short" | "quick"; // 기본 quick. short = 온보딩 16문항
   experience: ExperienceChoice;
   avoided_assets: RiskFlag[];
   free_text?: string;
-  // 결과 화면에서 사용자가 지운 자유 답 판정(lib/free-text-signals.ts의 field). 이 판정은 보조값에 넣지 않는다.
+  // lib/free-text-signals.ts의 field. 이 판정은 보조값에 넣지 않는다.
   dismissed_signals?: string[];
-  // 결과 확인 단계에서 사용자가 직접 옮긴 축. 있으면 채점값 대신 이 ratio를 쓴다.
+  // 있으면 채점값 대신 이 ratio를 쓴다.
   adjusted_axes?: Partial<Record<StyleAxisId, number>>;
   preferred_sectors?: string[];
   portfolio?: ProfilingOutput["portfolio"];
@@ -81,9 +78,6 @@ export interface SurveyAnswers {
   benchmark_index?: string;
 }
 
-// ── 3축 요약: 대시보드 성향 카드와 결과 화면이 같은 8축에서 읽는다 ─────
-// 위험 감수 = mean(loss_tolerance, concentration), 흔들림 민감도 = mean(urgency,
-// drawdown_reaction, information_reliance), 투자 기간 = turnover. 값은 ratio를 0~100으로 옮긴 것이다.
 export interface ThreeAxisSummary {
   riskTaking: number; // 0 원금 보전·분산 ~ 100 수익 기회·집중
   sensitivity: number; // 0 흔들림 적음 ~ 100 흔들림 큼
@@ -116,8 +110,6 @@ export function threeAxisSummary(styleAxes: StyleAxes): ThreeAxisSummary {
   };
 }
 
-// 성향 카드 표시값. 유형명은 BIT만 쓴다(금융회사 투자자 등급명과 겹치는 이름을 쓰지 않는다).
-// 8축이 없는 프로필(v1.0)은 유형을 단정하지 않는다.
 export function summaryFromStyleAxes(
   styleAxes: StyleAxes | null | undefined,
   identity: Pick<InvestorProfileSummary, "displayName" | "avatarLabel" | "surveyedAt">,
@@ -156,7 +148,6 @@ export function summaryFromProfilingOutput(
   return summaryFromStyleAxes(output.style_axes, { ...identity, surveyedAt });
 }
 
-// 결과 확인 단계의 수동 조정을 반영한다. 신뢰도·응답 수는 채점값 그대로 둔다.
 export function applyAdjustments(
   styleAxes: StyleAxes,
   adjusted: Partial<Record<StyleAxisId, number>> = {},
@@ -193,14 +184,12 @@ export function convertSurveyAnswers(input: unknown): ProfilingOutput {
       )!.ratio,
       target_return_annual: TARGET_RETURN_ANNUAL,
       investment_experience_years: experience.years,
-      // risk_tolerance 0.6 이상이면 aggressive 모델(chart model_type과 매칭)
       profile_type: legacy.risk_tolerance >= 0.6 ? "aggressive" : "stable",
     },
     psychological_state: {
       fomo_index: legacy.fomo_index,
       panic_sell_tendency: legacy.panic_sell_tendency,
       herding_score: legacy.herding_score,
-      // 본인 판단 ↔ 시장·타인 추종 축의 반대편. 구 설문의 정보 출처 문항을 대신한다.
       self_confidence: round6((1 - axis("information_reliance").ratio) / 2),
       current_market_anxiety: CURRENT_MARKET_ANXIETY_INITIAL,
       overheating_caution: OVERHEATING_CAUTION_INITIAL,
@@ -296,7 +285,7 @@ function parseAdjustedAxes(value: unknown): SurveyAnswers["adjusted_axes"] {
   return value as SurveyAnswers["adjusted_axes"];
 }
 
-// schema v1.1 style_axes 계약 검사: 8축 전부, ratio -1~1, confidence 0~1.
+// 8축 전부, ratio -1~1, confidence 0~1.
 export function isStyleAxes(value: unknown): value is StyleAxes {
   if (
     !isRecord(value) ||

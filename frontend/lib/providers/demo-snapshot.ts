@@ -1,6 +1,3 @@
-// 데모 4종목·시장 지수 실데이터 스냅샷(기준일 2025-12-30). 생성: frontend/scripts/build_demo_snapshot.py
-// 원천·산식은 그 스크립트 머리말에 있다. 예측 스코어·순위·신호는 여기에 없다(예시 유지, 이슈 #107).
-
 import snapshot from "./demo-snapshot.json" with { type: "json" };
 import type { DataProvenance, MarketIndexQuote, MarketStatus, StockDetail } from "../types.ts";
 
@@ -39,7 +36,6 @@ export const MARKET_SNAPSHOT: MarketStatus = {
   indexQuotes: snapshot.market.indexQuotes as MarketIndexQuote[],
 };
 
-// 상세 화면 시세 필드. 스냅샷에 없는 종목은 빈 객체(시세 없음으로 표시).
 export function snapshotPrice(
   code: string,
 ): Partial<Pick<StockDetail, "currentPrice" | "changePercent" | "asOf" | "priceHistory" | "priceDates" | "priceProvenance">> {

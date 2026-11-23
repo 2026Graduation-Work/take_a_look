@@ -1,4 +1,3 @@
-// 기간, 표본 같은 값 전환(공용). 모양은 globals.css의 .segmented, 성적표와 대시보드가 같이 쓴다.
 export default function Segmented<T extends string | number>({
   label,
   value,

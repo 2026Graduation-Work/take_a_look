@@ -23,7 +23,7 @@ export default function StockSearch({ query, onQueryChange }: { query: string; o
         value={query}
         onChange={(event) => {
           onQueryChange(event.target.value);
-          setOpen(true); // Esc로 닫은 뒤 다시 입력하면 목록을 다시 연다(#278)
+          setOpen(true);
         }}
         placeholder="종목명 또는 코드 검색"
         aria-label="종목 검색"

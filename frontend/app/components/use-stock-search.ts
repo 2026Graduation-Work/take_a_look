@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { KNOWN_STOCKS } from "@/lib/mock-data";
 import { loadStockCatalog, type StockOption } from "@/lib/stock-catalog";
 
-// 검색 후보와 본문 링크가 같은 종목 마스터(lib/stock-catalog)를 사용한다.
 export function useStockSearch(query: string) {
   const [stocks, setStocks] = useState<StockOption[]>([]);
   const keyword = query.trim().toLowerCase();

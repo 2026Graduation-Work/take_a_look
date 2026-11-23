@@ -7,7 +7,6 @@ import { deleteAccount } from "@/lib/auth";
 import ConfirmButton from "./confirm-button";
 import { useOnboarding } from "./onboarding-provider";
 
-// 로그인 계정만. 데모는 로그아웃이 곧 브라우저 데이터 삭제다.
 export default function DeleteAccountButton() {
   const router = useRouter();
   const { state, logOut } = useOnboarding();

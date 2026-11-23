@@ -1,8 +1,5 @@
 "use client";
 
-// 모델 성적표: 연구용 화면이라 도메인 용어를 쓰되, 같은 수치는 한 번만 보인다.
-// 성향·표본을 고르면 표 하나(A | B | Δ)가 바뀐다. 0~1 막대는 0.01 차이를 못 보여 줘서 두지 않는다.
-
 import { useState } from "react";
 import DisclaimerFooter from "./disclaimer-footer";
 import LabelRows from "./label-rows";
@@ -33,7 +30,6 @@ interface PerformanceDashboardProps {
   marketStatus: MarketStatus;
 }
 
-// 연구 산출물(artifacts/performance) 문장의 가운데 점은 화면에서만 쉼표로 바꾼다(화면 규칙 v2, 원본 데이터는 그대로)
 const plain = (text: string) => text.replaceAll(" \u00b7 ", ", ").replaceAll("\u00b7", ", ");
 
 const SAMPLE_LABEL: Record<ComparisonSample, string> = {
@@ -44,13 +40,11 @@ const SAMPLE_LABEL: Record<ComparisonSample, string> = {
 const RETURN_METRIC = METRICS.find((metric) => metric.key === "cumulative_return")!;
 
 const GROUPS: { title: string; keys: MetricDefinition["key"][] }[] = [
-  // '상승 여부 일치율'은 "상승 아님"만 답해도 0.60이 나와 실력을 보여 주지 못해 표에서 뺐다(docs/research/metric-choice.md 5장)
   { title: "분류 성능", keys: ["auc"] },
   { title: "확률 보정", keys: ["calibration_brier", "calibration_ece"] },
   { title: "백테스트", keys: ["sharpe", "mdd", "cumulative_return", "trade_count"] },
 ];
 
-// 좋아졌는지는 색이 아니라 단어가 말한다(가격 방향색 적·청과 섞이지 않게).
 const OUTCOME_WORD: Record<DeltaOutcome, string> = {
   improved: "개선",
   worsened: "저하",
@@ -68,7 +62,6 @@ const DESIGN: [string, string][] = [
   ["고변동일", "시장이 크게 흔들린 상위 20% 날만 따로 다시 평가해요."],
 ];
 
-// 대시보드에 있던 "데이터 출처·기준"을 여기로 모은다(10/18 사용자 피드백). 화면별 기준일은 시장 바·각 카드가 말한다
 const SOURCES: [string, string][] = [
   ["시장 지수와 흔들림", "KRX 지수(pykrx), 영업일마다"],
   ["모델 신호와 종가", "LightGBM 게시 배치(앞으로 4주, 1주)"],
@@ -91,7 +84,6 @@ export default function PerformanceDashboard({
   const a = rows.find((row) => row.profile === runProfile && row.variant === "A");
   const b = rows.find((row) => row.profile === runProfile && row.variant === "B");
   const delta = data.comparison_deltas.find((row) => row.profile === runProfile && row.sample === sample);
-  // 결론 아래 두 줄 비교: 전체 구간의 B − A(4주, 1주 순)
   const both = (format: (row: ComparisonDeltaRow) => string) =>
     (["stable", "aggressive"] as const)
       .map((id) => {
@@ -104,7 +96,6 @@ export default function PerformanceDashboard({
     <div className="min-h-screen w-full">
       <SiteHeader profile={profile} marketStatus={marketStatus} />
 
-      {/* 머리말·표·정의가 모두 같은 폭(왼쪽·오른쪽 끝이 맞게, 10/18 사용자 피드백) */}
       <main className="page pb-12 pt-6">
       <div className="page-narrow flex flex-col gap-12">
         <section aria-labelledby="scorecard-title" className="flex flex-col gap-2 px-1">
@@ -131,7 +122,7 @@ export default function PerformanceDashboard({
                       {AUC_ABILITY}(AUC)
                       <MarketDetail
                         title="AUC 설명"
-                        className="-my-3 inline-flex" // 누르는 높이 44px는 두고 줄 높이는 늘리지 않는다
+                        className="-my-3 inline-flex"
                         label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">AUC 설명 보기</span></>}
                       >
                         <p className="m-0">{AUC_DEFINITION}</p>

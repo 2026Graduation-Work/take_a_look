@@ -479,14 +479,13 @@ test("날짜만 저장된 Live 창도 overlap 기사 집계는 기준시각 직�
 
 test("가격 흐름 분위기는 백엔드 산식(20일 위험 대비 수익 + 60일 거래량가중 평균가 대비 위치)과 같다", async () => {
   const { psychologyAxis, moodWord } = await import("./supabase-insights.ts");
-  // 60일 동안 하루 1%씩 고르게 오르면(흔들림이 거의 없음) 들뜸 쪽 끝
   const rising = Array.from({ length: 60 }, (_, i) => ({ close: 100 * 1.01 ** i * (i % 2 ? 1.001 : 1), volume: 1000 }));
   const axis = psychologyAxis(rising)!;
   assert.ok(axis > 0.5);
   assert.equal(moodWord(axis), "많이 들뜸");
-  assert.equal(psychologyAxis(rising.slice(1)), null); // 60일 미만이면 미제공
+  assert.equal(psychologyAxis(rising.slice(1)), null);
   const flat = Array.from({ length: 60 }, () => ({ close: 100, volume: 1000 }));
-  assert.equal(psychologyAxis(flat), null); // 흔들림 0 → 나눗셈 불가(백엔드 _safe_divide와 같이 값 없음)
+  assert.equal(psychologyAxis(flat), null);
 });
 
 function financialPriceClient(quote: unknown, snapshotOverrides: Record<string, unknown> = {}) {
@@ -550,7 +549,6 @@ test("기준 가격이 없으면 새 가격으로 배수를 추정하지 않는�
 
 test("적자로 없는 PER은 새 가격이 들어와도 없는 상태를 유지한다", async () => {
   const client = financialPriceClient({ close: 12000, as_of: "2026-10-13" });
-  // 별도의 DB 대역으로 실제 적자 행을 반환한다.
   const from = client.from.bind(client);
   client.from = (table: string) => {
     if (table !== "financial_metrics") return from(table);
