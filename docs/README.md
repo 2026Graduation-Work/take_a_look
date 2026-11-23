@@ -7,7 +7,7 @@
 | 문서 | 내용 |
 |---|---|
 | [../README.md](../README.md) | 서비스 소개·빠른 시작·구조·기여 안내 |
-| [../AGENTS.md](../AGENTS.md) | PR 규칙·아키텍처 원칙·표현 규칙·금지사항 |
+| [../AGENTS.md](../AGENTS.md) | 공통 지침·제품 원칙·운영과 안전·작업별 정본 |
 | [data-inventory.md](data-inventory.md) | 화면 수치 43행의 출처·실데이터 여부, 시장 분위기 산식 |
 | [auth-setup.md](auth-setup.md) | 계정 로그인 설정(Supabase·Vercel), 사람이 할 일 |
 | [erd.md](erd.md) | Supabase 테이블(마이그레이션 0001~0015) |
@@ -20,7 +20,7 @@
 | [../backend/analysis/chart/serving/OPERATIONS.md](../backend/analysis/chart/serving/OPERATIONS.md) | H5·H20 실행·DB 발행 절차 |
 | [../frontend/DESIGN.md](../frontend/DESIGN.md) | 화면 규칙(성균관대 색·애플 톤). 값은 `frontend/app/globals.css` `@theme` |
 | [../.claude/skills/README.md](../.claude/skills/README.md) | 검토한 디자인 스킬 5종·충돌 판정표 |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 작업 흐름(규칙 본문은 AGENTS.md) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 블록 구분·브랜치·커밋·PR·머지·훅 변경 절차 |
 | [CHANGELOG.md](CHANGELOG.md) | 서비스 단위 변경 기록(서비스명 등) |
 | [brand/README.md](brand/README.md) | 로고 후보·선택 이유·사용 규칙 |
 | [../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md](../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md) | 가치투자 파이프라인 출력 검증 절차 |

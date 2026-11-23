@@ -1,31 +1,46 @@
 # CONTRIBUTING.md — 협업 규칙
 
-규칙 본문(블록 나누기, 머지, 커밋 형식, 훅 변경)은 [`AGENTS.md`](../AGENTS.md)의 "PR 규칙" 한 곳에 있다. 이 문서는 사람이 따라 하는 작업 흐름만 적는다.
+[AGENTS.md](../AGENTS.md)는 공통 지침이다. 브랜치, PR, 머지, 훅 변경 절차는 여기에서 관리한다.
 
 ## 작업 흐름
 
-1. `main`을 최신으로 받는다. `git pull origin main`
-2. 작업 브랜치를 딴다. `git switch -c feat/기능명` (접두는 `feat/` `fix/` `docs/` `chore/` `refactor/` `test/`)
-3. 한 블록 안에서만 고치고 커밋한다. `fix(web): 차트 축 라벨 겹침 수정`
-4. 다른 블록도 고쳐야 하면 브랜치를 새로 따서 PR을 따로 올린다.
-5. PR 템플릿을 채워 올린다. 필수 체크가 초록이 되면 작성자가 바로 머지한다(승인 필요 없음).
-6. 머지하면 작업 브랜치는 지워진다(`--delete-branch`).
+1. `git fetch origin`을 실행하고 `git switch -c feat/기능명 origin/main`처럼 최신 `origin/main`에서 작업 브랜치를 만든다.
+2. 변경 블록을 로컬에서 검증한 뒤 커밋·push한다. 브랜치 접두는 `feat/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/`를 쓴다.
+3. [PR 템플릿](../.github/pull_request_template.md)을 채운다. 기능 추가·수정이면 변경 요약, 로컬 검증 결과와 해당하는 확인용 주소를 남긴다.
+4. 팀 방침은 필수 체크를 통과한 PR의 작성자 셀프 머지를 허용한다. PR까지만 요청받았다면 거기서 끝낸다. 머지할 PR 번호를 `pr_number`에 지정해 아래 명령을 실행한다.
 
-## 커밋 타입
+```sh
+gh pr checks "${pr_number:?PR 번호를 지정하세요}" --required --watch --fail-fast &&
+  gh pr merge "$pr_number" --squash --delete-branch
+```
 
-| 타입 | 용도 |
-| --- | --- |
-| `feat` | 새로운 기능 |
-| `fix` | 버그 수정 |
-| `docs` | 문서 변경 |
-| `chore` | 설정·빌드·잡일 (코드 동작 변화 없음) |
-| `refactor` | 동작 변경 없는 코드 정리 |
-| `test` | 테스트 추가·수정 |
-| `ci` | `.github/` 워크플로 |
+필수 체크 이름은 `lint-and-build`, `profiling-test`, `chart-test`, `text-test`다. 영향이 없는 블록은 CI에서 건너뛴다. 실제 머지 요건은 GitHub의 main Ruleset을 따른다.
 
-괄호 안 범위는 블록 이름이다(`web`, `profiling`, `chart`, `text`, `db`, `schema`, `ci`, `harness`, `docs`). 표는 `AGENTS.md`에 있다.
+## 블록과 커밋
 
-## 참고
+| 블록·커밋 범위 | 경로 |
+|---|---|
+| `web` | `frontend/` |
+| `profiling` | `backend/profiling/` |
+| `chart` | `backend/analysis/chart/` (serving 포함) |
+| `text` | `backend/analysis/text/` |
+| `db` | `supabase/` |
+| `schema` | `schema/` |
+| `ci` | `.github/` |
+| `harness` | `.claude/settings.json`, `.claude/hooks/`, Codex와 공용 훅 설정 |
+| `docs` | `docs/`, 루트 Markdown, `.claude/skills/README.md` |
 
-- 프로젝트 전반 안내는 루트의 [`README.md`](../README.md)
-- 졸업작품 제출본은 태그 [`v1.1.0`](https://github.com/2026Graduation-Work/take_a_look/releases/tag/v1.1.0)
+- 누구나 어느 블록이든 고칠 수 있다. 여러 블록을 바꾸면 PR을 나누고 먼저 머지할 순서대로 올린다. 각 PR이 단독으로 머지돼도 main이 동작해야 한다.
+- 계약을 맞추려면 동시에 바뀌어야 하는 짝은 같은 PR에 담고 본문에 이유를 한 줄 적는다. 예를 들어 스키마와 파생 타입, 마이그레이션과 문서 표, 에이전트 지침과 그 규칙을 넘겨받는 블록 문서가 해당한다. 블록 아래의 문서는 해당 블록에 속한다.
+- 커밋 메시지는 한국어 `타입(블록): 설명` 형식을 쓴다. 예시는 `fix(web): 차트 축 라벨 겹침 수정`이다. 이동·리네임과 로직 수정은 커밋을 나눈다.
+- 스키마 변경 PR 제목에 `[schema]`를 붙이고 팀 전원을 멘션한다.
+
+## 훅과 권한 변경
+
+- 훅과 권한 설정은 별도 harness PR로 올린다. Claude Code와 Codex 양쪽에서 작동하는 데 필요한 공용 훅·CI 설정은 같은 PR에 담고 이유를 적는다.
+- 비밀 파일 접근처럼 실행 전에 막아야 하는 동작은 두 도구에서 실행 시점에 차단한다. 머지 전 검증은 두 도구 공용 CI 필수 체크로 둘 수 있다. PR에 두 도구에서 각각 직접 확인한 결과를 남긴다.
+
+## 운영 경로 변경
+
+- 워크플로, 비밀키, 인증, 차트 서빙 팩, DB 마이그레이션을 바꾸면 머지 전에 main 대비 diff만 보안 검토한다. 지원하는 도구에서는 `/security-review`로 검토한다.
+- 정기 작업은 해당 워크플로가 지원하는 `dry_run`으로 검증한다. 지원하지 않는 작업은 테스트 DB나 모의 클라이언트에서 해당 경로를 검증한다. 뉴스·공시·재무 워크플로의 수동 `mode`는 운영에 적재한다. 검증 방법과 결과를 PR에 남긴다.
