@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-collect_ignore = ["archive", "workspace"]
+collect_ignore = ["workspace"]
 
 @pytest.fixture(autouse=True)
 def offline_providers(monkeypatch):

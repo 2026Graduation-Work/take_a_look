@@ -6,7 +6,8 @@
 - `experiments/`: 장기 구축·재개, 미래 정보가 필요한 라벨·표본 선택, 학습·평가·백테스트, 검증된 결과의 pack 내보내기.
 - `serving/`: 운영 입력 갱신·재실행, pack 검사, 추론·Supabase 저장·발행. 연구 코드와 연구 저장 경로를 참조하지 않는다.
 - `workspace/experiments/`, `workspace/serving/`, `workspace/archive/`: 데이터·캐시·산출물. 전체 Git 제외.
-- `archive/`: 이전 코드·문서 원문. 현재 실행 경로가 아니다.
+
+재현성: 실험은 시드를 고정하고 공용 평가함수(`experiments/evaluation/`)로만 평가한다. 모델별로 평가 코드를 따로 만들지 않는다.
 
 모든 명령은 `backend/analysis/chart`에서 `python -m experiments...`, `python -m serving...`로 실행한다.
 
@@ -14,6 +15,6 @@
 
 `settings.py`는 원문 해시까지 pack 계약에 포함된다. 설명을 추가하는 변경도 기존 pack과의 호환성을 확인해야 하므로, 채점 오류를 고치려고 공통 피처 설정을 바꾸지 않는다.
 
-실행법: [실험](experiments/README.md), [serving](serving/OPERATIONS.md). 해석 전 [품질 제한](docs/DATA_QUALITY.md)을 확인한다.
+실행법: [실험](experiments/README.md), [serving](serving/OPERATIONS.md). 해석 전 [품질 제한](docs/RESULTS.md#품질-제한)을 확인한다.
 
-대표 결과는 [RESULTS.md](docs/RESULTS.md), 이동·검증 기록은 [VALIDATION.md](docs/VALIDATION.md), 삭제 검토 목록은 [DELETION_CANDIDATES.md](docs/DELETION_CANDIDATES.md)에 있다.
+대표 결과와 품질 제한은 [RESULTS.md](docs/RESULTS.md)에 있다. 이전 코드·문서 원문(`archive/`)은 태그 [`v1.1.0`](https://github.com/2026Graduation-Work/take_a_look/tree/v1.1.0/backend/analysis/chart/archive)에 남아 있다.
