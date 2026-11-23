@@ -1,8 +1,3 @@
-"""무료 한도 주간 감시(free-tier-watch.yml). 기준을 넘으면 이슈를 열거나 기존 이슈에 코멘트한다.
-
-기준: docs/ops/free-tier-budget.md. 표준 라이브러리와 gh CLI만 쓴다.
-"""
-
 import json
 import os
 import re
@@ -12,20 +7,19 @@ from datetime import date, datetime, timedelta, timezone
 from urllib.request import Request, urlopen
 
 DB_LIMIT_MB = 350
-STORAGE_LIMIT_MB = 700  # 1GB 무료 한도에 여유(2/1까지 600MB 아래 목표)
-NEWSAPI_DAILY_PLAN = 20  # 하루 상한(AGENTS.md 무료 운영 규칙)
+STORAGE_LIMIT_MB = 700  # 무료 한도 1GB에 여유를 둔 값
+NEWSAPI_DAILY_PLAN = 20
 PLAN_END = date(2027, 2, 1)
-MAX_PUBLISH_LAG = 2  # 영업일(주말만 뺀다. 공휴일이 끼면 하루 늦게 울릴 수 있다)
+MAX_PUBLISH_LAG = 2  # 주말만 뺀 영업일. 공휴일은 세지 않는다
 TITLE = "[ops] 무료 한도 경고"
-SITE_URL = "https://takealook-skku.vercel.app"  # Vercel 연동이 덮어쓴 적 있음(docs/auth-setup.md 3-3)
+SITE_URL = "https://takealook-skku.vercel.app"  # Vercel 연동이 이 값을 덮어쓸 수 있다
 SITE_URL_TITLE = "[ops] 인증 Site URL 변경됨"
-OWNER = "Choi-Jung-Hyeon"  # 운영 감시 담당
+OWNER = "Choi-Jung-Hyeon"
 SECURITY_TITLE = "[ops] 보안 감시 경고"
-SIGNUPS_7D_LIMIT = 50  # 수업 과제 규모에서 주 50건 넘는 가입은 남용 의심(docs/security/2026-10-audit.md)
+SIGNUPS_7D_LIMIT = 50  # 수업 과제 규모에서 주 50건을 넘는 가입은 남용 의심
 
 
 def weekdays_between(start, end):
-    """start 다음 날부터 end까지의 평일 수."""
     return sum((start + timedelta(days=i)).weekday() < 5 for i in range(1, (end - start).days + 1))
 
 
@@ -48,7 +42,6 @@ def check(usage, newsapi_remaining, today):
 
 
 def security_check(usage):
-    """RLS가 꺼진 public 테이블과 가입 수. 값이 없으면(0015 미적용) 그것도 경고다."""
     alerts = []
     tables = usage.get("rls_disabled_tables")
     if tables is None:
@@ -67,7 +60,6 @@ def post_json(url, body, headers):
 
 
 def site_url():
-    """인증 Site URL(Management API). 되돌리지 않고 읽기만 한다."""
     ref = re.match(r"https://([^.]+)\.", os.environ["SUPABASE_URL"]).group(1)
     request = Request(f"https://api.supabase.com/v1/projects/{ref}/config/auth",
                       headers={"Authorization": "Bearer " + os.environ["SUPABASE_ACCESS_TOKEN"],
@@ -82,7 +74,6 @@ def report(title, body):
     if found:
         subprocess.run(["gh", "issue", "comment", found, "--body", body], check=True)
     else:
-        # 담당·라벨·Type을 바로 채운다(팀 이슈 규칙). Priority 등 필드는 사람이 정한다
         url = subprocess.run(["gh", "issue", "create", "--title", title, "--body", body, "--label", "bug",
                               "--assignee", OWNER], capture_output=True, text=True, check=True).stdout.strip()
         subprocess.run(["gh", "api", "-X", "PATCH", f"repos/{os.environ['GH_REPO']}/issues/{url.rsplit('/', 1)[1]}",
@@ -108,7 +99,7 @@ def main():
         current = f"읽기 실패({type(exc).__name__})"
     print(json.dumps({"event": "free_tier_watch", **measured, "alerts": alerts + security, "site_url": current},
                      ensure_ascii=False))
-    if os.environ.get("DRY_RUN") == "true":  # 수동 시험: 이슈는 남기지 않고 실패 여부만 본다
+    if os.environ.get("DRY_RUN") == "true":
         sys.exit(1 if security else 0)
     if current.rstrip("/") != SITE_URL:
         report(SITE_URL_TITLE, f"{today} 주간 감시\n\n- 인증 Site URL `{current}` ≠ `{SITE_URL}`\n\n"
