@@ -13,7 +13,6 @@ BENCHMARK_WEIGHTS_VERSION = "krx_annual_market_cap_v1"
 
 
 def _parse_naive_dates(values: pd.Series) -> pd.Series:
-    """Parse mixed date representations without retaining timezone information."""
     try:
         parsed = pd.to_datetime(values, format="mixed")
     except (TypeError, ValueError):
@@ -160,7 +159,6 @@ def _compute_internal_equal_weight_benchmark(
 
 
 def configured_benchmark(config, index, price_df):
-    """Use a frozen benchmark when supplied; never silently substitute another index."""
     path = config.get("evaluation", {}).get("benchmark_file")
     if not path:
         if config.get("contract_version") == 3:
@@ -180,7 +178,6 @@ def configured_benchmark(config, index, price_df):
 
 
 def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) -> pd.Series:
-    """KOSPI price-index buy-and-hold returns on the portfolio's trading dates."""
     index = pd.DatetimeIndex(index).tz_localize(None)
     if csv_path:
         closes = pd.read_csv(csv_path, parse_dates=["Date"]).set_index("Date")["Close"]
@@ -224,12 +221,7 @@ def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) ->
 def compute_custom_krx_composite(
     index: pd.DatetimeIndex, price_df: pd.DataFrame | None = None
 ) -> pd.Series:
-    """
-    커스텀 KRX 통합 지수 (Custom KRX Composite Index) 산출 함수
-
-    KOSPI(^KS11)와 KOSDAQ(^KQ11)의 일별 수익률을 각 시장의
-    연간 평균 유동 시가총액 비중으로 가중 평균하여 통합 지수를 구성합니다.
-    """
+    """KOSPI(^KS11)·KOSDAQ(^KQ11) 일별 수익률을 연간 평균 유동 시가총액 비중으로 가중한다."""
     cached = _load_cached_benchmark(index)
     if cached is not None:
         print("[*] 커스텀 KRX 통합 지수 산출: benchmark cache 로드")
@@ -314,7 +306,6 @@ def calculate_rule_exits(
     down_mult,
     hard_sl_mult,
 ):
-    """Stops and horizon exits from one synchronized position state."""
     n = len(entry_series)
     exits = pd.Series(False, index=entry_series.index)
     exit_prices = pd.Series(float("nan"), index=entry_series.index)
@@ -343,8 +334,7 @@ def calculate_rule_exits(
 
             trading_days_held += 1
 
-            # D. 보유 기간 만기 청산 (Time Exit) - 만기 도래 시 당일 시가(T+Holding) 청산
-            # 장중 가격 움직임보다 먼저 체크되어야 함. 당일 시가에 이미 파는 것이기 때문.
+            # 만기 청산은 당일 시가 체결이라 장중 가격 움직임보다 먼저 본다.
             if trading_days_held >= holding_days:
                 exits.iloc[i] = True
                 exit_prices.iloc[i] = open_series.iloc[i]
@@ -352,7 +342,6 @@ def calculate_rule_exits(
                 trading_days_held = 0
                 continue
 
-            # A. 하드 손절 (Hard Stop Loss) - 장중 저가가 손절 라인 돌파 시 당일 청산
             hard_stop_line = (
                 entry_price * (1.0 - hard_sl_mult * entry_sigma)
                 if hard_sl_mult is not None
@@ -365,7 +354,6 @@ def calculate_rule_exits(
                 trading_days_held = 0
                 continue
 
-            # B. 하드 익절 (Hard Take Profit) - 장중 고가가 익절 라인 돌파 시 당일 청산
             take_profit_line = (
                 entry_price * (1.0 + up_mult * entry_sigma) if up_mult is not None else float("inf")
             )
@@ -376,7 +364,6 @@ def calculate_rule_exits(
                 trading_days_held = 0
                 continue
 
-            # C. 소프트 스톱 (Soft Stop) - 당일 종가가 소프트 스톱선 이탈 시 다음날 시가 청산
             soft_stop_line = entry_price * (1.0 - down_mult * entry_sigma)
             if close_series.iloc[i] < soft_stop_line:
                 pending_next_open_exit = True
@@ -394,7 +381,6 @@ def calculate_rule_exits(
 def calculate_soft_exits(
     entry_series, open_series, close_series, sigma_series, halt_series, holding_days, down_mult
 ):
-    """Backward-compatible wrapper for legacy callers."""
     exits, _ = calculate_rule_exits(
         entry_series=entry_series,
         open_series=open_series,
@@ -412,8 +398,6 @@ def calculate_soft_exits(
 
 
 class VectorBTEngine:
-    """VectorBT 기반의 고속 포트폴리오 백테스트 엔진"""
-
     def __init__(self, config: dict):
         self.config = config
         self.bt_cfg = config.get("backtest", {})
@@ -422,7 +406,6 @@ class VectorBTEngine:
         self.up_mult = self.bt_cfg.get("up_mult", 3.5)
         self.down_mult = self.bt_cfg.get("down_mult", 2.0)
         self.hard_sl_mult = self.bt_cfg.get("hard_sl_mult", 2.5)
-        # 라벨 horizon은 학습 타깃 정의이고, 실제 보유 기간은 별도 실험 변수다.
         self.holding_days = self.bt_cfg.get(
             "max_holding_days", config.get("labels", {}).get("horizon", 5)
         )
@@ -479,12 +462,9 @@ class VectorBTEngine:
         exit_prices = pd.DataFrame(exit_price_dict, index=entries.index)
         order_price = open_price.astype(float).mask(exits, exit_prices.astype(float))
 
-        # [4] 시그널 충돌 방지 마스킹 (Signal Conflict Resolution)
-        # Entry와 Exit가 같은 날 겹칠 때 vectorbt의 청산 누락 버그 방지를 위해
-        # Exit가 발생하는 날에는 Entry를 강제로 차단(False)합니다.
+        # vectorbt는 같은 날 Entry와 Exit가 겹치면 청산을 놓치므로 Exit 날 Entry를 막는다.
         entries = entries & ~exits
 
-        # [보완 패치] 비중 매트릭스 동기화 (Size Alignment)
         weights = weights.where(entries, np.nan)
 
         print("[Backtest] 포트폴리오 성과 집계 중...")
@@ -513,7 +493,6 @@ class VectorBTEngine:
             print(stats)
             print("=" * 60)
 
-            # 결과 저장 폴더 설정 (experiments/results 기준)
             exp_name = self.config.get("experiment_name", "default_exp")
             current_dir = os.path.dirname(os.path.abspath(__file__))
             result_dir = os.path.abspath(os.path.join(current_dir, "..", "results", exp_name))

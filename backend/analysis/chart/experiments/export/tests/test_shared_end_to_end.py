@@ -1,4 +1,3 @@
-"""Small real pipeline: provider mocks, causal inputs, labels, models, evaluation and serving."""
 from types import SimpleNamespace
 
 import lightgbm as lgb
@@ -78,7 +77,6 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch, with_flow
         assert lgb.Booster(model_file=str(paths[horizon][0])).feature_name() == names
         scores = infer_batch(paths[horizon][0], frame.tail(1))[0][0]
         assert sum(scores.values()) == pytest.approx(1)
-    # A changed setting must fail before collection, Storage or publication.
     pack["processing_contract"]["preprocessing"]["sigma_window"] = 21
     atomic_json(root / "manifest.json", pack)
     with pytest.raises(ValueError, match="checksum mismatch"):

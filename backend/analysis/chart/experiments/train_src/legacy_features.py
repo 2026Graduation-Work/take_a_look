@@ -1,5 +1,3 @@
-"""Research compatibility functions using local causal features and shared labels."""
-
 from shared.features.builder import (
     generate_full_alpha158_features as generate_full_alpha158_features,
 )

@@ -1,4 +1,3 @@
-"""Contract tests use preserved metadata without downloading historical models."""
 import json
 from pathlib import Path
 

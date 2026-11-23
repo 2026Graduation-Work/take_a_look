@@ -1,4 +1,3 @@
-"""Serving calendar storage uses the shared v3 verification rules."""
 import json
 
 import pandas as pd

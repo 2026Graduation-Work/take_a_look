@@ -1,10 +1,3 @@
-"""Run the fixed stable/aggressive Alpha158 feature A/B experiments.
-
-The comparison deliberately reuses the chart block's canonical parquet loader and
-dynamic-sigma labeler.  A profile owns its horizon, barriers, date split and two
-feature-store directories; only A/B inside that profile must have identical rows.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -199,7 +192,6 @@ def _assert_ab_alignment(
 def prepare_profile_data(
     config: dict[str, Any], profile: str, *, config_dir: Path
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, list[str], list[str], dict]:
-    """Load canonical labels independently for one profile and verify its A/B pair."""
     profile_config = _profile_config(config, profile)
     data = profile_config["data"]
     baseline_features, treatment_features = resolve_feature_sets(config, config_dir)
@@ -363,7 +355,6 @@ def _delta_table(metrics: pd.DataFrame) -> pd.DataFrame:
 def _build_backtest_config(
     config: dict[str, Any], profile: str, variant: str, profile_config: dict[str, Any]
 ) -> dict[str, Any]:
-    """공용 run_backtest.py가 직접 읽을 수 있는 profile/variant config를 만듭니다."""
     data = profile_config["data"]
     labels = dict(profile_config["labels"])
     horizon = int(labels["horizon"])

@@ -189,7 +189,6 @@ def test_forward_fill_requires_and_respects_staleness_limit(tmp_path: Path) -> N
 
 
 def test_forward_fill_sorts_shuffled_base_before_propagating(tmp_path: Path) -> None:
-    """현재 공개값이 입력 행 순서 때문에 과거 날짜로 역류하면 안 된다."""
     source_path = tmp_path / "shuffled_news.parquet"
     pd.DataFrame(
         {

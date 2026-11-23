@@ -1,5 +1,3 @@
-"""Assemble and validate the public chart detail v2 payload."""
-
 from ..contracts import validate_snapshot
 from .distribution import POLICY_ID, TOLERANCES
 

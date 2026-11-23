@@ -54,7 +54,7 @@ def _pr_auc_score_binary(y_true: pd.Series, y_prob: pd.Series) -> float:
     precision = np.r_[1.0, precision]
     recall = np.r_[0.0, recall]
 
-    # NumPy 2.0+ 에서는 np.trapz가 삭제되고 np.trapezoid로 대체되었습니다. 하위 호환성을 유지합니다.
+    # NumPy 2.0에서 np.trapz가 np.trapezoid로 바뀌었다.
     if hasattr(np, "trapezoid"):
         return float(np.trapezoid(precision, recall))
     else:
@@ -64,13 +64,8 @@ def _pr_auc_score_binary(y_true: pd.Series, y_prob: pd.Series) -> float:
 def calculate_classification_metrics(
     y_true: pd.Series, y_prob: pd.Series, threshold: float = 0.5
 ) -> dict:
-    """
-    이진 분류 기준(Y_Label == 2 가 양성)으로 ML 모델 평가 지표들을 계산합니다.
-    """
-    # 0, 1, 2 라벨에서 Up class (2)를 1로, 나머지를 0으로 이진화
     y_true_binary = (y_true == 2).astype(int)
 
-    # 예측 레이블 결정 (임계값 이상이면 1)
     y_pred = (y_prob >= threshold).astype(int)
 
     tp, tn, fp, fn = _binary_classification_counts(y_true_binary, y_pred)
@@ -99,13 +94,8 @@ def calculate_classification_metrics(
 def calculate_calibration_table(
     y_true: pd.Series, y_prob: pd.Series, bins: list[float]
 ) -> pd.DataFrame:
-    """
-    예측 확률 구간별 실제 상승 성공(Up Class = 2)의 Hit Rate를 계산하여 캘리브레이션 테이블을 반환합니다.
-    """
     y_true_binary = (y_true == 2).astype(int)
 
-    # bin별 구간 할당
-    # bins가 [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] 형태인 경우
     labels = [f"{bins[i]:.1f}-{bins[i+1]:.1f}" for i in range(len(bins) - 1)]
     categories = pd.cut(y_prob, bins=bins, labels=labels, include_lowest=True)
 
@@ -123,7 +113,6 @@ def calculate_calibration_table(
         actual_up_hit_rate=("y_true", "mean"),
     )
 
-    # NaN 제거 및 깔끔하게 정리
     summary = summary.fillna(0.0).reset_index()
     return summary
 
@@ -131,26 +120,21 @@ def calculate_calibration_table(
 def calculate_rank_ic(
     eval_df: pd.DataFrame, prob_col: str = "Prob", target_col: str = "Y_Label"
 ) -> dict:
-    """
-    일별 예측 확률과 타겟 라벨 간의 Spearman Rank IC 및 통계치(mean, std, t-stat, p-value 등)를 계산합니다.
-    eval_df는 반드시 'Date', prob_col, target_col 컬럼을 포함해야 합니다.
-    """
+    """eval_df에는 'Date', prob_col, target_col 컬럼이 있어야 한다."""
 
     def get_spearman(group):
         if len(group) < 5:
             return np.nan
-        # 예측값이나 라벨이 모두 동일하여 std가 0인 경우 NaN 방지
         if group[prob_col].std() == 0 or group[target_col].std() == 0:
             return np.nan
         prob_rank = group[prob_col].rank(method="average")
         target_rank = group[target_col].rank(method="average")
         return prob_rank.corr(target_rank, method="pearson")
 
-    # 일별 Rank IC 계산 및 결측치 제거 (Pandas 2.2.0+ include_groups=False 호환성 확보)
     try:
         daily_ic = eval_df.groupby("Date", include_groups=False).apply(get_spearman).dropna()
     except TypeError:
-        # include_groups 옵션을 지원하지 않는 구버전 Pandas의 경우 기존 방식으로 처리
+        # include_groups는 pandas 2.2부터 지원한다.
         daily_ic = eval_df.groupby("Date").apply(get_spearman).dropna()
 
     n_days = len(daily_ic)
@@ -167,7 +151,6 @@ def calculate_rank_ic(
     mean_ic = daily_ic.mean()
     std_ic = daily_ic.std()
 
-    # t-statistic = Mean / (Std / sqrt(N))
     if std_ic == 0:
         t_stat = 0.0
         p_val = 1.0

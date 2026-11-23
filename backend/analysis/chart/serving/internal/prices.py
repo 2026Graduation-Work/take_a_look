@@ -1,5 +1,3 @@
-"""Adjusted KRX OHLCV with actual turnover-derived adjusted VWAP."""
-
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,7 +9,6 @@ REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
 
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
-    """Use the same raw OHLC scaling and VWAP calculation as collection."""
     from shared.data.providers import _attach_actual_vwap
 
     return _attach_actual_vwap(adjusted, raw)
@@ -80,7 +77,6 @@ def check_adjustment_steps(frame):
 
 
 def load_prices(path: str | Path) -> pd.DataFrame:
-    """Load an immutable raw price snapshot with the fields needed by training."""
     frame = pd.read_parquet(path)
     missing = set(REQUIRED).difference(frame.columns)
     if missing:

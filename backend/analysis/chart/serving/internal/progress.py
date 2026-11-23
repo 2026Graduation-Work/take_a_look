@@ -1,5 +1,3 @@
-"""Immediate, credential-free serving stage timings for Actions logs."""
-
 import json
 import time
 from contextlib import contextmanager

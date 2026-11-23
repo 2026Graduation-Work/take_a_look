@@ -1,5 +1,3 @@
-"""Small synthetic data verifies the local contract, never research results."""
-
 import json
 from pathlib import Path
 
@@ -357,7 +355,6 @@ def test_flow_ab_matching_preserves_price_paths(local_dataset):
 
 @pytest.mark.parametrize("with_flow", [False, True])
 def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
-    """Exercise the real CLIs with five trees and a synthetic price dataset."""
     import os
     import subprocess
 
@@ -773,7 +770,6 @@ def test_revision_detection_preserves_snapshot_and_records_non_close_changes(loc
     record = json.loads(next((root / "price_revisions").glob("*.json")).read_text())
     assert record["changed_columns"] == ["High"]
     assert record["rows"] == 1
-    # An identical response, including any matching NaNs, is safe.
     reject_price_revision(root, "005930", previous, previous.copy())
 
 

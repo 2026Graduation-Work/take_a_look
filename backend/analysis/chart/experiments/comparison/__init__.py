@@ -1,5 +1,3 @@
-"""Reproducible multiclass baseline-versus-treatment comparison experiment."""
-
 from .metrics import expected_calibration_error, select_volatile_dates
 
 __all__ = ["expected_calibration_error", "select_volatile_dates"]

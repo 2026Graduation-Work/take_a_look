@@ -1,4 +1,3 @@
-"""A flow pack must match its actual training inputs, including missing values."""
 import json
 from pathlib import Path
 

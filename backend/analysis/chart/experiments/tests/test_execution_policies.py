@@ -1,5 +1,3 @@
-"""Integer orders and explicit zero-recovery delisting losses."""
-
 import pandas as pd
 import pytest
 from experiments.backtest.local_execution import save_execution, simulate

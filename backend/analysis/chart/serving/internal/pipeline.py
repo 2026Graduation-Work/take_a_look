@@ -1,5 +1,3 @@
-"""Daily and cached-preview chart serving flow."""
-
 import hashlib
 import io
 import json
@@ -41,7 +39,7 @@ def official_day(requested=None):
 
 
 def fetch_universe(as_of, code=None):
-    """KOSPI 목록 ∩ 상장일 확인 목록(KRX '주권'). pack 학습 범위 밖(리츠·인프라 등)은 빼고 로그에 남긴다(#296)."""
+    """pack 학습 범위 밖(리츠·인프라 등)은 빼고 로그에 남긴다."""
     from shared.data import metadata, providers
 
     if code:
@@ -134,7 +132,7 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
                     # Daily serving updates only the recent input window. Keep the
                     # saved prefix for the existing feature calculation; source
-                    # revisions must never trigger a 2016~ history requery (#320).
+                    # revisions must never trigger a 2016~ history requery.
                     fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
@@ -274,7 +272,7 @@ def run(args):
         print(json.dumps({"event": "holiday", "as_of": as_of, "pack_id": pack["pack_id"]}))
         return
     store = SupabaseStore()
-    # Live collection for the latest confirmed day even when a delayed schedule starts after midnight KST (#291)
+    # Live collection for the latest confirmed day even when a delayed schedule starts after midnight KST
     replay = getattr(args, "replay", False) or (as_of != official_day(None) and not historical_test)
     collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)

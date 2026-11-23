@@ -1,4 +1,3 @@
-"""Export validated research artifacts as an immutable serving pack."""
 import json
 import shutil
 import tarfile

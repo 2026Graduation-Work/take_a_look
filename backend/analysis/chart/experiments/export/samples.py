@@ -1,5 +1,3 @@
-"""Join stored walk-forward scores to the next H actually traded price rows."""
-
 from collections import Counter
 from pathlib import Path
 

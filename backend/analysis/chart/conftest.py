@@ -1,4 +1,3 @@
-"""Chart tests always replace lazy providers before a library login can occur."""
 import sys
 from pathlib import Path
 from types import SimpleNamespace

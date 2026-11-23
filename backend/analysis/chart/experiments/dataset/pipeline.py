@@ -1,5 +1,3 @@
-"""Dataset collection and preprocessing using existing provider adapters."""
-
 from __future__ import annotations
 
 import json
@@ -35,7 +33,6 @@ from shared.settings import PRICE_BASIS, VALIDATION_VERSION, processing_contract
 
 
 def reject_price_revision(root, code, previous, current):
-    """Keep a dataset's validated historical prices immutable after collection."""
     columns = ["Open", "High", "Low", "Close", "Volume", "Change", "Amount",
                "RawVolume", "RawClose", "AdjustmentFactor", "VWAP"]
     if set(columns) - set(previous):
@@ -96,7 +93,6 @@ def flow_coverage(root, investors, columns, market_days):
 
 
 def verify_cached_flows(config_path):
-    """Audit existing flow caches independently of unfinished price collection."""
     from shared.data import providers as source
 
     config = load_dataset_config(config_path)
@@ -170,7 +166,6 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         if calendar_path.exists():
             calendar = json.loads(calendar_path.read_text())
             if "checked_end" not in calendar:
-                # Legacy caches never verified the unobserved tail. Check it too.
                 calendar["checked_end"] = calendar["requested_end"]
             calendar["schedule_validation"] = verify_calendar_schedule(calendar)
             atomic_json(calendar_path, calendar)

@@ -1,27 +1,3 @@
-"""시장 심리 피처를 표준 외부 피처 Parquet으로 생성하는 CLI.
-
-산출물은 ``ONBOARDING.md`` §9의 추가 피처 계약(``Date``/``Code``/``AvailableDate`` +
-숫자형 컬럼)을 그대로 따른다. 따라서 이 파일을 ``build_feature_panel.py``의 source로
-넣으면 ``data/feature_store/<name>/``이 만들어지고, 그 경로가 A/B 러너의
-``treatment_price_dir``이 된다.
-
-```bash
-# 1) 심리 피처 원본을 만든다. 워밍업 때문에 실험 시작일보다 넉넉히 앞선 기간을 넣는다.
-python -m experiments.features.build_psychology_features \
-    --price-dir data/processed --out data/external/psychology_market_v1.parquet
-
-# 2) 기존 도구로 treatment feature store를 만든다(이 스크립트가 하지 않는다).
-python -m experiments.features.build_feature_panel \
-    --config experiments/configs/local_psychology.yaml
-
-# 데이터가 없는 환경: 시드 고정 합성 패널로 형식과 결정론만 확인한다.
-python -m experiments.features.build_psychology_features --demo --out /tmp/psych.parquet
-```
-
-이 스크립트는 학습·백테스트·실험 실행을 하지 않는다. 피처 표와 메타데이터만 만든다.
-자세한 정의와 한계는 ``experiments/features/PSYCHOLOGY_FEATURES.md``를 본다.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -34,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-if __package__ in (None, ""):  # ``python build_psychology_features.py`` 직접 실행 지원
+if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from experiments.features.psychology import (  # noqa: E402
@@ -77,7 +53,6 @@ def load_price_panel(
     demo: bool = False,
     demo_periods: int = 180,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """가격 패널과 그 출처 설명을 읽어온다."""
     if demo:
         panel = build_demo_price_panel(periods=demo_periods)
         return panel, {
@@ -143,7 +118,6 @@ def write_outputs(
     *,
     overwrite: bool = False,
 ) -> Path:
-    """피처 Parquet과 메타데이터 JSON을 쓴다."""
     if output_path.exists() and not overwrite:
         raise FileExistsError(
             f"기존 산출물을 덮어쓰지 않습니다: {output_path}. --overwrite를 쓰거나 새 경로를 지정하세요."
@@ -157,7 +131,6 @@ def write_outputs(
 
 
 def write_sample_csv(features: pd.DataFrame, sample_path: Path, rows: int) -> Path:
-    """저장소에 커밋할 소규모 검증 샘플을 남긴다."""
     sample_path.parent.mkdir(parents=True, exist_ok=True)
     sample = features.groupby("Code", sort=True, observed=True).head(rows)
     sample = sample.sort_values(["Code", "Date"], kind="stable")
