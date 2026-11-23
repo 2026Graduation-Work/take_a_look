@@ -1,9 +1,3 @@
-"""배치 러너·수집 캐시·일별 피처 추출 검증.
-
-- batch.run_batch: LLM 강제 OFF, 하루 실패가 배치를 죽이지 않음, manifest 기록
-- collectors 캐시: DART는 (종목, 사업연도)당 1콜, 반환 dict 변형이 캐시를 오염 안 함
-- features: 일별(ValueSignal) 행 지원 + 일별/기간 혼입 거부
-"""
 from __future__ import annotations
 
 import dataclasses
@@ -25,7 +19,6 @@ def _llm_switch_reset():
     llm_mod.set_llm_enabled(True)
 
 
-# ── 배치 러너 ──────────────────────────────────────────────────────
 def _ok_signal(date: str, ok: bool = True) -> dict:
     return {
         "ticker": "005930", "date": date,
@@ -49,11 +42,10 @@ def test_run_batch_forces_llm_off_and_survives_daily_errors(
         "005930", "삼성전자", "2022-06-01", "2022-06-04", tmp_path
     )
 
-    assert seen["llm_disabled"] is True          # LLM 강제 OFF 상태에서 실행됨
+    assert seen["llm_disabled"] is True
     assert manifest["ok"] == 2                    # 06-01, 06-04
     assert manifest["validation_failed"] == 1     # 06-03
-    assert [e["date"] for e in manifest["errors"]] == ["2022-06-02"]  # 계속 진행됨
-    # 에러 난 날짜만 파일이 없다 + manifest 파일이 남는다
+    assert [e["date"] for e in manifest["errors"]] == ["2022-06-02"]
     assert not (tmp_path / "005930_2022-06-02.json").exists()
     assert (tmp_path / "005930_2022-06-01.json").exists()
     assert (tmp_path / "_manifest_005930_2022-06-01_2022-06-04.json").exists()
@@ -77,14 +69,14 @@ def test_run_batch_skip_existing_resumes(
         "005930", "삼성전자", "2022-06-01", "2022-06-02", tmp_path, skip_existing=True
     )
 
-    assert calls == ["2022-06-02"]  # 이미 있는 날짜는 건너뜀
+    assert calls == ["2022-06-02"]
     assert manifest["skipped_existing"] == 1
 
 
 def test_run_batch_skip_existing_refuses_mixed_provenance(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """생성 조건이 다르거나 기록이 없는 기존 산출물에 이어 쓰지 않는다 (0Cracker 4)."""
+    """생성 조건이 다르거나 기록이 없는 기존 산출물에 이어 쓰지 않는다."""
     (tmp_path / "005930_2022-06-01.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(batch_mod, "run_pipeline", lambda t, d, n: _ok_signal(d))
 
@@ -122,7 +114,7 @@ def test_run_batch_skip_existing_regenerates_corrupt_json(
 
     assert calls == ["2022-06-01"]
     json.loads((tmp_path / "005930_2022-06-01.json").read_text(encoding="utf-8"))
-    assert not list(tmp_path.glob("*.tmp"))  # 임시 파일이 남지 않는다
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_run_batch_aborts_on_financials_unavailable(
@@ -138,7 +130,6 @@ def test_run_batch_aborts_on_financials_unavailable(
         batch_mod.run_batch("005930", "삼성전자", "2022-06-01", "2022-06-03", tmp_path)
 
 
-# ── 수집 캐시 ──────────────────────────────────────────────────────
 class _CountingDart:
     """OpenDartReader 대역 — API 호출 횟수를 센다."""
 
@@ -177,7 +168,6 @@ def test_dart_fetch_is_cached_per_fiscal_year(monkeypatch: pytest.MonkeyPatch) -
     assert "price" not in b
 
 
-# ── 일별 피처 추출 ─────────────────────────────────────────────────
 def _daily_signal(**over) -> dict:
     base = {
         "ticker": "005930", "date": "2022-06-15", "company_name": "삼성전자",

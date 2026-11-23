@@ -1,15 +1,8 @@
-"""데이터 수집기 (무료 소스 우선).
-
-뉴스   : 빅카인즈 엑셀(data/, preprocess) → NewsAPI.ai(워크북 미보유 날짜)
-시세   : FinanceDataReader                   (키 불필요)
-재무제표: OpenDartReader / Open DART API      (무료 키 필요)
+"""데이터 수집기.
 
 재무는 폴백이 없다. 밸류에이션이 종합점수의 60%를 차지하므로 재무를 못 구하면
 FinancialsUnavailableError로 중단한다 — 결측을 중립값으로 메워 그럴듯한 시그널을
 만들어내는 것이 아무 시그널도 없는 것보다 나쁘기 때문이다(가짜 SELL 방지).
-
-소셜(SNS/종목토론) 수집은 데이터 확보 난이도로 파이프라인에서 제외되었다
-(News + Financial 2개 에이전트만 오케스트레이션).
 """
 from __future__ import annotations
 
@@ -38,7 +31,7 @@ _DartReader = OpenDartReader
 
 
 def OpenDartReader(api_key: str, tries: int = 3, wait: float = 60):  # type: ignore[no-redef]  # noqa: N802
-    """생성자가 corpCode.xml을 timeout 없이 받는다. DART 접속 타임아웃(10/12 재무 예약 실패)은 잠깐 뒤 다시 하면 붙는다."""
+    """생성자가 corpCode.xml을 timeout 없이 받는다. DART 접속 타임아웃은 잠깐 뒤 다시 하면 붙는다."""
     import time
 
     import requests
@@ -52,9 +45,6 @@ def OpenDartReader(api_key: str, tries: int = 3, wait: float = 60):  # type: ign
             time.sleep(wait * attempt)
 
 
-# 빅카인즈 전처리 파이프라인(preprocess.py)의 point-in-time 로더 재사용.
-# `python -m value_pipeline.run`(top-level)와 `analysis.text.value_pipeline`
-# (namespace 패키지) 두 실행 방식을 모두 지원한다.
 try:  # 패키지로 임포트된 경우
     from .. import preprocess
 except (ImportError, ValueError):  # text/ 디렉터리에서 top-level 실행된 경우
@@ -75,25 +65,18 @@ def _load_sample(name: str):
     return None
 
 
-# ── 공통: 날짜 필터 ──────────────────────────────────────────────
 def _filter_by_date(items: list[dict], date: str) -> list[dict]:
-    """게시일이 해당 날짜(YYYY-MM-DD)인 항목만 남긴다 (point-in-time)."""
     return [it for it in items if str(it.get("date", "")).startswith(date)]
 
 
-# ── 뉴스 ────────────────────────────────────────────────────────
 def collect_news(ticker: str, company_name: str, date: str) -> tuple[list[dict], str]:
-    """해당 날짜 '하루치' 기사 전량과 출처 반환.
-    각 항목: {news_id, title, summary, url, press, date}.
+    """해당 날짜 하루치 기사 전량과 출처 반환. 각 항목: {news_id, title, summary, url, press, date}.
 
-    빅카인즈 엑셀(data/, preprocess)이 정본이다. 워크북을 찾았는데 그날 기사가
-    없으면 그대로 빈 리스트를 준다 — 다른 소스로 폴백하지 않는다.
+    워크북이 그날을 커버하면 0건이어도 다른 소스로 폴백하지 않는다 — 백테스트 행마다 소스가
+    다르면 피처가 비교 불가능해진다. 워크북이 아예 없을 때(최근 뉴스 용도)만 NewsAPI.ai를 쓴다.
 
-    백테스트 행마다 소스가 다르면 피처가 비교 불가능해진다. 그래서 워크북이
-    아예 없을 때(=오늘 날짜 조회 같은 최근 뉴스 용도)만 NewsAPI.ai로 폴백한다.
-
-    빅카인즈 경로는 상한 없이(limit=None) 전량을 돌려준다 — 상한은 관련성 필터
-    뒤에 news_agent가 적용한다. news_id 정렬순 상위 N건은 임의 표본이기 때문이다.
+    빅카인즈 경로는 상한 없이 전량을 돌려준다. news_id 정렬순 상위 N건은 임의 표본이라
+    상한은 관련성 필터 뒤에 news_agent가 적용한다.
     """
     query = company_name or ticker
     workbook = None
@@ -107,8 +90,6 @@ def collect_news(ticker: str, company_name: str, date: str) -> tuple[list[dict],
             items = preprocess.load_daily_news(
                 query, date, DATA_DIR, limit=None, ticker=ticker
             )
-            # 워크북이 이 날짜를 커버하므로, 0건이어도 그것이 사실이다.
-            # 여기서 다른 소스로 폴백하면 point-in-time이 깨진다.
             return items, "bigkinds"
         except Exception as e:
             warnings.warn(
@@ -178,7 +159,6 @@ def collect_prior_news(
         except Exception as e:
             warnings.warn(f"직전 뉴스 로드 실패({prev_day}): {e}", stacklevel=2)
             continue
-        # 그날 안에서 최신순으로 정렬한 뒤 누적 (날짜는 이미 최신 → 과거 순회)
         out.extend(sorted(items, key=_published_at, reverse=True))
         if len(out) >= count:
             break
@@ -232,7 +212,7 @@ def _fetch_naver_news_api(query: str, date: str, limit: int = 10) -> list[dict]:
                 if len(items) >= limit:
                     return items
         if page_days and all(d < date for d in page_days):
-            break  # 최신순이라 이 페이지부터 전부 과거 → 해당 날짜 없음
+            break
     if not items:
         raise RuntimeError("OpenAPI: 해당 날짜 뉴스 없음")
     return items
@@ -243,13 +223,13 @@ def _crawl_naver_news(query: str, date: str, limit: int = 10) -> list[dict]:
     import requests
     from bs4 import BeautifulSoup
 
-    d_dot = date.replace("-", ".")   # 2026.05.17
-    d_num = date.replace("-", "")    # 20260517
+    d_dot = date.replace("-", ".")
+    d_num = date.replace("-", "")
     r = requests.get(
         "https://search.naver.com/search.naver",
         params={
             "where": "news", "query": query, "sort": "1",
-            "pd": "3", "ds": d_dot, "de": d_dot,          # 기간: 해당 날짜 하루
+            "pd": "3", "ds": d_dot, "de": d_dot,
             "nso": f"so:r,p:from{d_num}to{d_num},a:all",
         },
         headers={"User-Agent": "Mozilla/5.0"},
@@ -268,7 +248,6 @@ def _crawl_naver_news(query: str, date: str, limit: int = 10) -> list[dict]:
     return items
 
 
-# ── 재무제표 + 시세 ─────────────────────────────────────────────
 def collect_financials(ticker: str, date: str) -> tuple[dict, str]:
     """표준화 재무 dict와 출처('dart'/'sample') 반환. 시세는 가능하면 FDR로 덮어쓴다.
 
@@ -294,7 +273,7 @@ def collect_financials(ticker: str, date: str) -> tuple[dict, str]:
                 f"{ticker} {date}: DART 조회 실패/키 없음이며 샘플 재무도 없습니다. "
                 f"밸류에이션이 종합점수의 60%를 차지하므로 재무 없이 시그널을 만들지 않습니다."
             )
-        data = dict(sample)  # 복사
+        data = dict(sample)
         source = "sample"
 
     price = _fetch_price(ticker, date)
@@ -341,7 +320,6 @@ def _price_history(ticker: str):
 
 
 def _fetch_price(ticker: str, date: str) -> float | None:
-    """date 이전(120일 창 안) 마지막 종가 (FinanceDataReader, 키 불필요)."""
     observation = _fetch_price_observation(ticker, date)
     return observation[0] if observation is not None else None
 
@@ -369,7 +347,6 @@ def _fetch_price_observation(ticker: str, date: str) -> tuple[float, str] | None
         return None
 
 
-# DART 표준계정 → 표준 키 매핑 (best-effort)
 _DART_MAP = {
     "매출액": "revenue", "수익(매출액)": "revenue", "영업수익": "revenue",
     "영업이익": "operating_profit", "영업이익(손실)": "operating_profit",
@@ -390,7 +367,7 @@ def _fetch_dart_financials(ticker: str, date: str) -> dict:
     호출자가 dict를 변형하므로(price 주입) 캐시 원본은 얕은 복사로 분리한다
     — 값이 전부 스칼라라는 전제이며, 중첩 값을 넣게 되면 deepcopy로 바꿀 것.
     """
-    year = select_fiscal_year(date)  # 기준일 시점 공시된 사업연도 (look-ahead 방지)
+    year = select_fiscal_year(date)
     return dict(_fetch_dart_by_fiscal_year(ticker, year))
 
 
@@ -444,7 +421,7 @@ def _fetch_dart_by_fiscal_year(ticker: str, year: int) -> dict:
     # 실사고). 최신 주식수는 수정주가와 같은 분할 기준이므로 정합적이다.
     # 주식수는 시그널이 아니라 단위 환산자라 point-in-time 원칙과 충돌하지 않는다.
     # 한계: 이후 자사주 소각·증자분만큼 오차가 남는다(삼성 2017~18 구간 ±20% 수준
-    # — 기존 5,000% 왜곡 대비 허용 가능. VALIDATION 문서 '알려진 한계' 참조).
+    # — 기존 5,000% 왜곡 대비 허용 가능).
     shares = _fetch_latest_shares(ticker)
     if shares is not None:
         out["shares_outstanding"] = shares
@@ -453,7 +430,7 @@ def _fetch_dart_by_fiscal_year(ticker: str, year: int) -> dict:
     sample = _load_sample(f"{ticker}_financials.json") or {}
     out.setdefault("sector_per", sample.get("sector_per"))
     out.setdefault("sector_pbr", sample.get("sector_pbr"))
-    out["fiscal_year"] = year  # 감사용: 어느 사업연도를 썼는지 출력에 남긴다
+    out["fiscal_year"] = year
     return out
 
 
@@ -490,11 +467,9 @@ def _parse_common_shares(frame) -> float | None:
 def _fetch_latest_shares(ticker: str) -> float | None:
     """스냅샷 기준연도(SHARES_ASOF_YEAR)부터 6개 연도를 거슬러 찾은 발행주식수(보통주).
 
-    최신 기준을 쓰는 이유는 _fetch_dart_by_fiscal_year의 주석 참조(수정주가 정합).
-    기준연도를 today()가 아니라 고정 상수로 두는 이유: 실행 연도에 따라 같은 입력의
-    per/pbr → valuation → signal이 달라지면 재현성이 깨진다(PR #67 리뷰 지적.
-    같은 계열 사고의 회귀 테스트: test_select_fiscal_year_does_not_depend_on_today).
-    유효값이 하나도 없으면 None → per/pbr/altman_z가 결측으로 남는다(정직한 결측).
+    최신 기준을 쓰는 이유는 FDR 수정주가와 분할 기준을 맞추기 위해서다. 기준연도를 today()가
+    아니라 고정 상수로 두는 이유: 실행 연도에 따라 같은 입력의 per/pbr → signal이 달라지면
+    재현성이 깨진다. 유효값이 하나도 없으면 None → per/pbr/altman_z가 결측으로 남는다.
     """
     start = SETTINGS.shares_asof_year
     stale_by = dt.date.today().year - 1 - start

@@ -1,18 +1,10 @@
-"""기간(월/년) 요약 파이프라인 — 다운스트림 모델용 기간 피처 1건.
+"""기간(월/년) 요약 파이프라인 — (ticker, period)에 대해 기간 전체를 요약한 한 건을 만든다.
 
-일별 파이프라인(graph.run_pipeline)이 (ticker, date) 하루치 행을 만든다면, 이 모듈은
-(ticker, period)에 대해 기간 전체를 요약한 한 건을 만든다:
-
-- 뉴스: 기간 내 날짜를 순회하며 빅카인즈 엑셀 → 관련성 필터(규칙) → 감성 점수를
-  일별로 산출하고, 기간 감성은 '관련 기사 전체'의 기사 단위 평균으로 집계한다
-  (= 기사수 가중 — 기사 많은 날이 그만큼 기간 심리에 더 기여한다).
-  기간 모드는 엑셀 전용이다. 네이버 폴백은 과거 날짜 조회가 불가능하고, 기간 중
+- 뉴스: 기간 감성은 '관련 기사 전체'의 기사 단위 평균(= 기사수 가중)이다.
+  기간 모드는 빅카인즈 엑셀 전용이다. 네이버 폴백은 과거 날짜 조회가 불가능하고, 기간 중
   일부만 다른 소스로 채우면 기간 간 피처가 비교 불가능해지기 때문이다.
-- 재무: '기간 종료일' 기준 point-in-time. collect_financials(ticker, period_end)를
-  재사용하므로 종료일에 이미 공시된 사업보고서만 쓴다(look-ahead 방지 동일 적용).
-- 점수: composite/signal/confidence 공식은 일별과 동일(schema.ValueSignal 참조).
-  LLM은 기간 경로에서 아예 호출되지 않는다 — 핵심 이벤트도 규칙(감성 절댓값
-  상위 헤드라인)으로 뽑아 100% 결정론을 유지한다.
+- 재무: '기간 종료일' 기준 point-in-time — 종료일에 이미 공시된 사업보고서만 쓴다.
+- LLM은 기간 경로에서 호출하지 않는다 — 핵심 이벤트도 감성 절댓값 상위 헤드라인으로 뽑는다.
 """
 from __future__ import annotations
 
@@ -64,7 +56,6 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
     """
     start, end = parse_period(period)
 
-    # 재무: 기간 종료일 기준 point-in-time (일별 파이프라인과 동일 경로 재사용).
     fin, fin_src = collectors.collect_financials(ticker, end)
     name = company_name or fin.get("company_name") or ticker
     fin_result = financial_agent(
@@ -81,7 +72,7 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
     ]
 
     daily: list[DailyNewsMetrics] = []
-    scored_items: list[tuple[float, dict]] = []  # (감성점수, 기사) — 집계·핵심 이벤트용
+    scored_items: list[tuple[float, dict]] = []
     days_covered = 0
     total_raw = 0
     total_dropped = 0
@@ -97,7 +88,7 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
         )
         if workbook is None:
             # 워크북이 없는 날은 '기사 0건'이 아니라 '관측하지 않음'이다 — daily_metrics에
-            # 0건으로 넣으면 수집 누락이 조용한 날로 학습된다 (PR #67 리뷰 0Cracker 3).
+            # 0건으로 넣으면 수집 누락이 조용한 날로 학습된다.
             continue
         days_covered += 1
         items = collectors.preprocess.load_daily_news(
@@ -135,9 +126,8 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
         prior_texts = [_text_of(it) for it in newest_first] + prior_texts
         del prior_texts[SETTINGS.staleness_lookback_articles :]
 
-    # ── 기간 집계 ────────────────────────────────────────────────
     all_scores = [s for s, _ in scored_items]
-    p_mean, p_std = aggregate(all_scores)  # 기사 단위 = 기사수 가중
+    p_mean, p_std = aggregate(all_scores)
     active = [dm for dm in daily if dm.article_count > 0]
     p_impact = (
         round(sum(dm.news_impact_score for dm in active) / len(active)) if active else 5
@@ -146,8 +136,7 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
         round(sum(dm.staleness for dm in active) / len(active), 4) if active else 0.0
     )
 
-    # 핵심 이벤트: 감성 절댓값 상위 헤드라인 (규칙 기반 — LLM 미사용, 출처 포함).
-    # 제목 필터를 슬라이스보다 먼저 적용해 5건을 채운다 (PR #67 리뷰 3).
+    # 제목 필터를 슬라이스보다 먼저 적용해 5건을 채운다.
     ranked = sorted(scored_items, key=lambda x: abs(x[0]), reverse=True)
     titled = [it for _, it in ranked if it.get("title")]
     key_events = [
@@ -155,7 +144,6 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
         for it in titled[:5]
     ]
 
-    # ── 종합 — 공식은 agents.synthesize_scores 한 곳에만 존재한다 ──
     valuation = fin_result["valuation_score"]
     health = fin_result["financial_health_score"]
     news_source = "bigkinds" if days_covered else "none"
@@ -164,13 +152,13 @@ def run_period_pipeline(ticker: str, period: str, company_name: str = "") -> dic
         valuation, health, p_mean, p_impact, p_std, real_sources
     )
 
-    # ── 검증: 일별 validation_agent의 재무·건수 규칙을 그대로 재사용하고,
+    # 일별 validation_agent의 재무·건수 규칙을 그대로 재사용하고,
     #    기간 고유 항목(워크북 커버리지)만 추가한다. date=기간 종료일이므로
     #    룩어헤드 검사도 point-in-time 기준과 일치한다.
     v_state = {
         "date": end,
         "ticker": ticker,
-        "raw_news": [],  # 일별 '기준일 정렬' 검사는 기간 모드에 해당 없음
+        "raw_news": [],
         "news_result": {
             "article_count": len(all_scores),
             "article_count_raw": total_raw,

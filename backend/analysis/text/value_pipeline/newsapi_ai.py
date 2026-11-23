@@ -23,8 +23,6 @@ KST = ZoneInfo("Asia/Seoul")
 
 @dataclass(frozen=True)
 class ArticleBatch:
-    """한 번의 공급자 호출 결과와 완전성 메타데이터."""
-
     articles: list[dict[str, str]]
     total_results: int | None
     returned_count: int
@@ -218,7 +216,6 @@ def fetch_articles(
     session: Any = requests,
     timeout: int = 20,
 ) -> list[dict[str, str]]:
-    """기존 수집기 호환용: 기사 목록만 반환한다."""
     return fetch_article_batch(
         keywords,
         date_start,

@@ -1,23 +1,14 @@
-"""Gemini 무료 티어 LLM 래퍼 (선택적) + 결정론 보장 캐시.
+"""Gemini LLM 래퍼(선택적) + 결정론 보장 캐시.
 
-GEMINI_API_KEY 가 있으면 langchain-google-genai로 구조화 출력을 받고,
-없으면 None을 반환해 각 에이전트가 규칙 기반 폴백으로 동작하게 한다.
-
-LLM이 담당하는 부분: 뉴스 관련성·이벤트 라벨링(추출), 자연어 근거 생성.
-점수(감성·재무점수·영향력·시그널·신뢰도)는 결정론 모듈이 책임진다.
-
-## 왜 캐시가 필수인가
+GEMINI_API_KEY가 없으면 None을 반환해 각 에이전트가 규칙 기반 폴백으로 동작하게 한다.
 
 LLM은 temperature=0으로도 결정론이 아니다 — 서버가 함께 배치하는 요청 수에 따라
 커널 결과가 달라지기 때문(batch invariance)이며, 이는 우리 통제 밖이다.
-그래서 결정론을 '모델'이 아니라 '인터페이스 경계'에서 확보한다: LLM은 한 번만 돌고
-출력은 content-hash 키로 동결되며, 재실행은 파일을 읽는다.
+그래서 LLM은 한 번만 돌고 출력은 content-hash 키로 동결되며, 재실행은 파일을 읽는다.
 
 캐시 키에 프롬프트·모델·스키마·파라미터를 전부 넣어야 한다. 프롬프트가 빠지면
-프롬프트를 고쳐도 옛 답이 나오는 조용한 staleness가 생긴다(가장 흔한 버그).
-
-부수 효과: 독점 모델은 은퇴하고, 은퇴한 모델의 출력은 복구 불가능하다. 캐시가
-완전하면 모델이 사라져도 결과를 재현할 수 있다(robust reproducibility).
+프롬프트를 고쳐도 옛 답이 나오는 조용한 staleness가 생긴다.
+캐시가 완전하면 모델이 은퇴해도 결과를 재현할 수 있다.
 """
 from __future__ import annotations
 
@@ -45,15 +36,10 @@ _FORCE_DISABLED = False
 
 
 def set_llm_enabled(enabled: bool) -> None:
-    """LLM API 호출을 런타임에 켜고 끈다 (CLI --no-llm 진입점).
-
-    끄면 '키 없음'과 동일한 의미론이다: 새 API 호출은 안 하지만, 이미 있는
-    캐시는 읽는다(캐시 재생은 결정론적이고 비용이 없다). 숫자는 어차피
-    LLM과 무관하므로 켜든 끄든 동일하다.
-    """
+    """끄면 새 API 호출은 안 하지만 이미 있는 캐시는 읽는다(캐시 재생은 결정론적이고 비용이 없다)."""
     global _FORCE_DISABLED
     _FORCE_DISABLED = not enabled
-    get_llm.cache_clear()  # lru_cache에 이전 상태가 남지 않게
+    get_llm.cache_clear()
 
 
 class LLMCacheMissError(RuntimeError):
@@ -62,7 +48,6 @@ class LLMCacheMissError(RuntimeError):
 
 @lru_cache(maxsize=1)
 def get_llm():
-    """Gemini chat 모델 또는 None."""
     if _FORCE_DISABLED or not SETTINGS.has_gemini:
         return None
     try:
@@ -78,7 +63,6 @@ def get_llm():
 
 
 def _cache_key(prompt: str, schema: type[BaseModel]) -> str:
-    """프롬프트·스키마·모델·파라미터 전부를 키에 넣는다 (staleness 방지)."""
     payload = "\x1f".join(
         [
             prompt,
@@ -97,11 +81,7 @@ def _cache_path(key: str) -> Path:
 
 
 def structured(prompt: str, schema: type[T]) -> T | None:
-    """프롬프트 → 구조화(schema) 결과. LLM 미사용/실패 시 None.
-
-    캐시 히트면 LLM을 호출하지 않는다 → 같은 입력 재실행 시 완전 결정론.
-    LLM_REPLAY_ONLY=1 이면 캐시 미스가 LLMCacheMissError (백테스트 재생용).
-    """
+    """LLM 미사용/실패 시 None. LLM_REPLAY_ONLY=1이면 캐시 미스가 LLMCacheMissError."""
     key = _cache_key(prompt, schema)
     path = _cache_path(key)
 

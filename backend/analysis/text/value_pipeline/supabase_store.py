@@ -1,4 +1,3 @@
-"""Supabase PostgREST 적재와 분석 트랙→테이블 행 매핑."""
 from __future__ import annotations
 
 import os
@@ -17,8 +16,6 @@ class SupabaseConfigurationError(RuntimeError):
 
 
 class SupabaseWriteError(RuntimeError):
-    """Supabase 적재 계약 또는 HTTP 요청이 실패한 경우."""
-
     def __init__(self, message: str, *, code: str = "supabase_write_error") -> None:
         super().__init__(message)
         self.code = code
@@ -277,7 +274,7 @@ def persist_news_track(client: SupabaseRestClient, track: Mapping[str, Any]) -> 
     dates = [_iso_date(point.get("date"), field="timeline.date") for point in track.get("timeline", [])]
     if track_name == "live" and dates:
         # Live는 매일 직전 24시간 중 최신 100건만 받는다. 그 창의 날짜별 값으로 덮으면 전날 행이
-        # 다음 날 오전 일부만 남는다(10/05~10/08 일별 0~3건). 날짜별 값은 저장된 기사 전체로 다시 낸다.
+        # 다음 날 오전 일부만 남는다. 날짜별 값은 저장된 기사 전체로 다시 낸다.
         daily_rows = live_daily_rows(client, stock_code, dates)
     else:
         daily_rows = [

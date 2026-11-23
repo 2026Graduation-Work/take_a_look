@@ -1,5 +1,5 @@
 """가장 최근 사업보고서(연간) 기준 재무 스냅샷을 만들어 적재한다(주 1회, 같은 보고서도 가격 기준 갱신).
-분기·반기 누적을 ×4·×2로 연환산하면 일회성 이익이 두 배가 돼 비율이 튄다(#292, SK하이닉스 2026 반기
+분기·반기 누적을 ×4·×2로 연환산하면 일회성 이익이 두 배가 돼 비율이 튄다(SK하이닉스 2026 반기
 금융수익 82.9조 → ROE 102%). 그래서 비율은 연간 보고서 하나로만 만든다.
 - ROE = 지배주주 순이익 ÷ 평균 지배주주지분((당기말 + 전기말) ÷ 2, 같은 보고서의 당기·전기 값)
 - 매출 증가율 = 같은 보고서의 당기 매출 ÷ 전기 매출 − 1
@@ -47,7 +47,7 @@ def parse_report(frame: Any) -> dict[str, Any]:
         key = _ACCOUNT_ID.get(str(row.get("account_id", "")))
         if part == "BS" and (key or (key := _BALANCE.get(name))) and key not in out:
             out[key] = _amount(row.get("thstrm_amount"))
-            out[f"{key}_prev"] = _amount(row.get("frmtrm_amount"))  # 전기말(평균 자본용)
+            out[f"{key}_prev"] = _amount(row.get("frmtrm_amount"))
         elif part in ("IS", "CIS") and (
             key or (key := _INCOME.get(name)) or (key := "net_income" if _NET_INCOME_NAME.match(name) else None)
         ) and key not in out:
@@ -107,10 +107,10 @@ def sync(client: supabase_store.SupabaseRestClient, targets: dict[str, str], tod
                 statement=statement, receipt_no=receipt_no,
                 filed_at=f"{receipt_no[:4]}-{receipt_no[4:6]}-{receipt_no[6:8]}", validation_errors=[])
             track["filing"]["report_code"] = ANNUAL_REPORT
-            track["filing"]["shares_basis"] = "최근 공시 보통주"  # 발행주식수는 _fetch_latest_shares(최근 공시)
+            track["filing"]["shares_basis"] = "최근 공시 보통주"
             supabase_store.persist_financial_track(client, track)
             result[ticker] = f"{year} 연간"
-        except Exception as exc:  # 한 종목 실패가 나머지를 막지 않게
+        except Exception as exc:
             result[ticker] = f"failed ({type(exc).__name__})"
     print(json.dumps({"event": "financial_latest", "results": result}, ensure_ascii=False))
     return result

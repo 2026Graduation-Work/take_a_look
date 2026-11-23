@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 from functools import lru_cache
 
-# 사전 기반 폴백용 최소 금융 감성 어휘
 _POS = {
     "상승", "급등", "호재", "수주", "흑자", "성장", "개선", "최대", "돌파", "증가",
     "상향", "기대", "순항", "신고가", "호실적", "반등", "강세", "확대", "수익",
@@ -27,7 +26,6 @@ class SentimentBackendError(RuntimeError):
 
 @lru_cache(maxsize=1)
 def _load_finbert():
-    """KR-FinBERT 파이프라인 로드. 실패 시 None (폴백 신호)."""
     try:
         from transformers import pipeline
 

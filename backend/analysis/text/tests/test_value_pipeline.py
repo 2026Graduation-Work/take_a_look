@@ -1,10 +1,8 @@
 """value_pipeline 오케스트레이션 검증.
 
 - 빅카인즈 point-in-time 뉴스 로더(preprocess.load_daily_news)
-- 소셜 제거 후 News + Financial 2-에이전트 + 규칙 기반 validation LangGraph
-- AGENTS.md 계약: 점수 산출 100% 결정론, LLM은 라벨·추출·설명만
-
-검증 기준 전문: backend/analysis/text/VALUE_PIPELINE_VALIDATION.md
+- News + Financial 2-에이전트 + 규칙 기반 validation LangGraph
+- 점수 산출 100% 결정론, LLM은 추출·설명만
 """
 from __future__ import annotations
 
@@ -97,7 +95,6 @@ def test_require_finbert_raises_instead_of_using_lexicon(
         sentiment_mod.score_texts(["상승 호재"], require_finbert=True)
 
 
-# ── Point-in-time 뉴스 로더 ────────────────────────────────────────
 def test_load_daily_news_filters_date_dedup_and_exclusion(tmp_path: Path) -> None:
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -294,7 +291,6 @@ def test_parse_workbook_name_new_and_legacy() -> None:
     assert pp._parse_workbook_name("아무거나.xlsx") is None
 
 
-# ── Point-in-time 재무 (look-ahead 방지) ──────────────────────────
 def test_select_fiscal_year_is_point_in_time() -> None:
     """사업보고서는 사업연도 종료 후 90일(익년 3/31) 내 제출 → 4/1부터 공시."""
     f = collectors_mod.select_fiscal_year
@@ -306,7 +302,7 @@ def test_select_fiscal_year_is_point_in_time() -> None:
 
 
 def test_select_fiscal_year_does_not_depend_on_today() -> None:
-    """회귀 못박기: 과거엔 today().year-1 을 써서 4년 룩어헤드가 났다."""
+    """과거 today().year-1을 쓰면 4년 룩어헤드가 난다 — 기준일만으로 사업연도를 고른다."""
     assert collectors_mod.select_fiscal_year("2022-06-15") == 2021
     assert collectors_mod.select_fiscal_year("2022-06-15") != dt.date.today().year - 1
 
@@ -317,7 +313,7 @@ def test_opendartreader_exposes_callable_client() -> None:
 
 
 def test_opendartreader_retries_connect_timeout(monkeypatch) -> None:
-    """10/12 재무 예약: corpCode.xml 접속 타임아웃 한 번에 전체가 죽지 않게 다시 시도한다."""
+    """corpCode.xml 접속 타임아웃 한 번에 전체가 죽지 않게 다시 시도한다."""
     import requests
 
     calls = []
@@ -466,7 +462,7 @@ def test_latest_shares_searches_back_past_empty_years(
 def test_latest_shares_do_not_depend_on_today(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """회귀 못박기(PR #67 리뷰 1): 기준연도가 today()에 묶이면 실행 연도에 따라
+    """기준연도가 today()에 묶이면 실행 연도에 따라
     같은 입력의 per/pbr → signal이 달라져 재현성이 깨진다. 탐색 시작 연도는
     SHARES_ASOF_YEAR 고정값이어야 한다."""
     _SharesDart.seen, _SharesDart.empty_years = [], set()
@@ -523,11 +519,10 @@ def test_collect_financials_raises_when_no_data(monkeypatch: pytest.MonkeyPatch)
         collectors_mod.collect_financials("005930", "2022-06-15")
 
 
-# ── 결정론 계약 (AGENTS.md '정량/정성 분리') ───────────────────────
 def test_llm_schemas_have_no_score_or_selection_field() -> None:
     """LLM 출력 계약에 점수도 '채점 대상 선택'도 없어야 한다.
 
-    라벨이 채점 대상을 정하면 그건 곧 점수를 정하는 것이다(PR #22 블로커).
+    라벨이 채점 대상을 정하면 그건 곧 점수를 정하는 것이다.
     남은 필드는 전부 사람이 읽는 텍스트여야 한다.
     """
     assert set(agents_mod._NewsExtract.model_fields) == {"key_events"}
@@ -557,7 +552,7 @@ def test_relevance_is_deterministic_without_llm(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_llm_text_cannot_change_any_score(monkeypatch: pytest.MonkeyPatch) -> None:
-    """AGENTS.md 계약 테스트: LLM 텍스트가 어떤 숫자도 바꾸지 못한다."""
+    """LLM 텍스트가 어떤 숫자도 바꾸지 못한다."""
     news = [{"news_id": "n1", "title": "삼성전자 흑자 확대", "summary": "",
              "url": "", "press": "", "date": "2022-06-15"}]
     _patch_collectors(monkeypatch, news, _fin())
@@ -682,7 +677,6 @@ def test_run_pipeline_is_deterministic(monkeypatch: pytest.MonkeyPatch) -> None:
     assert a == b  # 결정론(같은 입력 → 같은 출력)
 
 
-# ── 그래프 구조 ────────────────────────────────────────────────────
 def test_graph_has_news_financial_validation_agents() -> None:
     nodes = set(graph_mod.build_graph().get_graph().nodes)
     assert {"news_agent", "financial_agent", "validation_agent", "synthesis_agent"} <= nodes
@@ -701,7 +695,6 @@ def test_schema_has_no_social_analysis_or_fields() -> None:
     assert "sentiment_divergence" not in fields
 
 
-# ── 출력 계약 ──────────────────────────────────────────────────────
 _EXPECTED_FIELDS = {
     "ticker", "date", "company_name",
     "news_sentiment", "news_impact_score", "news_sentiment_std", "news_staleness",
@@ -721,7 +714,7 @@ def test_value_signal_field_contract() -> None:
 
 
 def test_row_is_self_auditing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """행 하나만 보고 composite·signal을 재계산할 수 있어야 한다(화이트박스)."""
+    """행 하나만 보고 composite·signal을 재계산할 수 있어야 한다."""
     news = [{"news_id": "n1", "title": "삼성전자 흑자 확대", "summary": "",
              "url": "", "press": "", "date": "2022-06-15"}]
     _patch_collectors(monkeypatch, news, _fin())
@@ -764,7 +757,6 @@ def test_run_pipeline_news_and_financial_only(monkeypatch: pytest.MonkeyPatch) -
     assert out["financial_fiscal_year"] == 2021
 
 
-# ── 관련성 필터 (결정론 규칙) ──────────────────────────────────────
 def test_relevance_key_override_for_group_named_coverage() -> None:
     """접미사 규칙으로 안 잡히는 종목은 override 테이블로 명시한다.
 
@@ -838,7 +830,7 @@ def test_relevance_filter_keeps_all_when_company_unknown() -> None:
 def test_zero_relevant_articles_fails_validation_not_restored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """전부 걸러지면 전량 복원하지 말 것 — 오염된 행이 정상처럼 보인다 (PR #22 블로커3)."""
+    """전부 걸러지면 전량 복원하지 말 것 — 오염된 행이 정상처럼 보인다."""
     news = [{"news_id": "n1", "title": "두산 반도체 투자", "summary": "1조원",
              "url": "", "press": "", "date": "2022-06-15"}]
     _patch_collectors(monkeypatch, news, _fin())
@@ -851,7 +843,7 @@ def test_zero_relevant_articles_fails_validation_not_restored(
 
 
 def test_key_events_carry_source_news_ids(monkeypatch: pytest.MonkeyPatch) -> None:
-    """HITL '근거·출처 항상 표시' + 환각 탐지."""
+    """핵심 이벤트는 출처 news_id를 달고, 출처 없는 이벤트는 빈 목록으로 남아 환각 의심으로 드러난다."""
     news = [{"news_id": "n1", "title": "삼성전자 ASML 협력 논의", "summary": "반도체 장비",
              "url": "", "press": "", "date": "2022-06-15"}]
     monkeypatch.setattr(
@@ -869,7 +861,7 @@ def test_key_events_carry_source_news_ids(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_grounding_requires_two_token_overlap() -> None:
-    """회사명 하나만 겹쳐도 매칭되면 사실상 모든 기사가 후보가 된다 (Gemini #5).
+    """회사명 하나만 겹쳐도 매칭되면 사실상 모든 기사가 후보가 된다.
 
     실측: 이벤트 1개가 73건 중 38건과 1토큰 겹침 → >=2면 13건.
     """
@@ -881,7 +873,6 @@ def test_grounding_requires_two_token_overlap() -> None:
     assert ev.news_ids == ["n1"]  # n2는 1토큰만 겹쳐 제외
 
 
-# ── validation_agent (규칙 기반) ───────────────────────────────────
 def _validate(news_result: dict, fin_result: dict, raw_fin: dict, **over) -> dict:
     state = {
         "date": "2022-06-15", "ticker": "005930",
@@ -992,12 +983,10 @@ def test_validation_result_reaches_output(monkeypatch: pytest.MonkeyPatch) -> No
     assert out["validation"]["ok"], out["validation"]["errors"]
 
 
-# ── metrics: 적자 vs 결측 ──────────────────────────────────────────
 def test_valuation_missing_data_is_not_treated_as_loss() -> None:
     """per 결측이 곧 적자는 아니다 — 데이터가 없을 뿐일 수 있다.
 
-    과거엔 `elif per is None: parts.append(3.0)` 이라 주가·발행주식수 누락만으로도
-    적자 페널티를 먹고 valuation 3.0 → 종합 3.8 → 가짜 SELL이 나왔다.
+    주가·발행주식수 누락만으로 적자 페널티를 주면 valuation 3.0 → 종합 3.8 → 가짜 SELL이 나온다.
     """
     # 주가·발행주식수 결측 → per/pbr 모두 None, roe도 None → 판단 근거 없음
     missing = metrics_mod.compute_metrics({"revenue": 1.0e14})
@@ -1012,7 +1001,6 @@ def test_valuation_missing_data_is_not_treated_as_loss() -> None:
     assert metrics_mod.valuation_score(loss) == 3.0
 
 
-# ── 직전 기사 수집 (PR #22 추가 지적) ──────────────────────────────
 def test_published_at_sorts_by_time_not_press_code() -> None:
     """news_id는 '{언론사코드}.{YYYYMMDDHHMMSS}{일련}'.
 
@@ -1052,7 +1040,6 @@ def test_collect_prior_news_returns_latest_first(
     assert [it["title"] for it in out] == ["오후 기사"]  # 최신 1건
 
 
-# ── 경로 규약 통일 (PR #22 블로커1) ────────────────────────────────
 def test_corpus_and_daily_loader_share_path_contract(tmp_path: Path) -> None:
     """build_news_corpus와 load_daily_news가 같은 파일을 본다.
 
@@ -1098,7 +1085,6 @@ def test_corpus_workbooks_still_accept_legacy_newsresult(tmp_path: Path) -> None
     assert len(pp.find_corpus_workbooks(raw, "005930")) == 1
 
 
-# ── LLM 런타임 스위치 (--no-llm) ───────────────────────────────────
 @pytest.fixture()
 def _llm_switch_reset():
     """스위치는 모듈 전역이라 테스트 간 누수 방지를 위해 반드시 원복한다."""
@@ -1146,7 +1132,6 @@ def test_cli_no_llm_flag_wires_the_switch(
     capsys.readouterr()  # 결과 JSON stdout 출력 소거
 
 
-# ── staleness (Tetlock 2011) ───────────────────────────────────────
 def test_staleness_identical_article_is_fully_stale() -> None:
     text = ["삼성전자 반도체 실적 개선 전망 메모리 가격 반등"]
     assert staleness_mod.staleness_score(text, text) == 1.0

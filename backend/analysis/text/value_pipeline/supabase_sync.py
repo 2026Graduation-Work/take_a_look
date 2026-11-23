@@ -1,4 +1,3 @@
-"""뉴스·재무 분석 트랙을 Supabase에 적재하는 명령행 진입점."""
 from __future__ import annotations
 
 import argparse
@@ -26,7 +25,7 @@ DEFAULT_TARGETS: dict[str, str] = {
 }
 
 
-NEWSAPI_DAILY_CALLS = 20  # 하루 총 호출 상한(docs/ops/free-tier-budget.md). 종목당 1회 + 남는 몫으로 잘린 종목만 2페이지
+NEWSAPI_DAILY_CALLS = 20  # 하루 총 호출 상한. 종목당 1회 + 남는 몫으로 잘린 종목만 2페이지
 
 
 def dynamic_targets(client: Any, today: date | None = None) -> dict[str, str]:

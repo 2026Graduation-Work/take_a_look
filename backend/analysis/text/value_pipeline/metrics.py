@@ -1,7 +1,4 @@
-"""재무 지표 계산 (결정론적·검증가능).
-
-LLM이 점수를 '추측'하게 두지 않고, 표준화된 재무 dict에서 공식으로 계산한다.
-→ 재현성, 설명가능성, 디버깅 용이.
+"""재무 지표 계산.
 
 입력 financials dict의 표준 키(단위: 원, 비율은 그대로):
     revenue, revenue_prev, operating_profit, operating_profit_prev,
@@ -46,16 +43,15 @@ def _altman_z(f: dict, mktcap: float | None) -> float | None:
     re = _num(f, "retained_earnings") or 0.0
     ebit = _num(f, "operating_profit") or 0.0
     sales = _num(f, "revenue") or 0.0
-    x1 = (ca - cl) / ta          # 운전자본/총자산
-    x2 = re / ta                 # 이익잉여금/총자산
-    x3 = ebit / ta               # EBIT/총자산
-    x4 = mktcap / tl             # 시가총액/총부채
-    x5 = sales / ta              # 매출/총자산
+    x1 = (ca - cl) / ta
+    x2 = re / ta
+    x3 = ebit / ta
+    x4 = mktcap / tl
+    x5 = sales / ta
     return 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
 
 
 def compute_metrics(f: dict) -> dict:
-    """표준화 재무 dict → FinancialMetrics 필드 dict."""
     shares = _num(f, "shares_outstanding")
     price = _num(f, "price")
     ni = _num(f, "net_income")
@@ -69,7 +65,7 @@ def compute_metrics(f: dict) -> dict:
     inv = _num(f, "inventories") or 0.0
     int_exp = _num(f, "interest_expense")
     cash = _num(f, "cash") or 0.0
-    ebitda = _num(f, "ebitda") or op  # EBITDA 없으면 영업이익으로 근사
+    ebitda = _num(f, "ebitda") or op
 
     eps = _div(ni, shares)
     bps = _div(eq, shares)
@@ -77,7 +73,6 @@ def compute_metrics(f: dict) -> dict:
 
     ni_growth = _growth(ni, _num(f, "net_income_prev"))
     per = _div(price, eps) if (eps is not None and eps > 0) else None
-    # PEG: PER / 이익성장률(%). 성장률 0 이하면 의미 없음 → 결측
     peg = (per / (ni_growth * 100)) if (per is not None and ni_growth and ni_growth > 0) else None
     ev = (mktcap + tl - cash) if (mktcap is not None and tl is not None) else None
 
@@ -87,7 +82,7 @@ def compute_metrics(f: dict) -> dict:
         "psr": _div(mktcap, rev),
         "peg": peg,
         "ev_ebitda": _div(ev, ebitda) if (ebitda and ebitda > 0) else None,
-        # 연간 보고서 경로(latest_financials)는 지배주주 순이익 ÷ 평균 지배주주지분을 넘긴다(#292). 없으면 기존식
+        # 연간 보고서 경로(latest_financials)는 지배주주 순이익 ÷ 평균 지배주주지분을 넘긴다. 없으면 기존식
         "roe": _div(_num(f, "roe_net_income"), _num(f, "roe_equity_avg")) if f.get("roe_equity_avg") else _div(ni, eq),
         "roa": _div(ni, ta),
         "operating_margin": _div(op, rev),
@@ -103,7 +98,6 @@ def compute_metrics(f: dict) -> dict:
     }
 
 
-# ── 점수화 헬퍼 ────────────────────────────────────────────────
 def _band(
     value: float | None,
     thresholds: list[float],
@@ -128,13 +122,10 @@ def health_score(m: dict) -> float:
     parts = []
     # 부채비율(낮을수록 좋음): 0.5배 이하 우수 ~ 2배 초과 위험
     parts.append(_band(m.get("debt_ratio"), [0.5, 1.0, 2.0], [10, 7, 4], higher_better=False))
-    # 유동비율(높을수록 좋음)
     parts.append(_band(m.get("current_ratio"), [2.0, 1.5, 1.0], [10, 7, 4]))
     # 이자보상배율(높을수록 좋음): 5배↑ 안전, 1배 미만 위험
     parts.append(_band(m.get("interest_coverage"), [5.0, 2.0, 1.0], [10, 7, 4]))
-    # ROE(높을수록 좋음)
     parts.append(_band(m.get("roe"), [0.15, 0.08, 0.0], [10, 7, 4]))
-    # Altman Z(높을수록 안전)
     parts.append(_band(m.get("altman_z"), [2.99, 1.81, 0.0], [10, 6, 2]))
     vals = [p for p in parts if p is not None]
     return round(sum(vals) / len(vals), 2) if vals else 5.0
@@ -148,9 +139,9 @@ def valuation_score(
     per, pbr = m.get("per"), m.get("pbr")
     if per is not None and per > 0:
         if sector_per and sector_per > 0:
-            disc = sector_per / per  # >1 이면 업계보다 쌈
+            disc = sector_per / per
             parts.append(_band(disc, [1.3, 1.0, 0.7], [10, 6, 3]))
-        else:  # 절대 기준
+        else:
             parts.append(_band(per, [8, 15, 25], [10, 6, 3], higher_better=False))
     elif m.get("roe") is not None and m["roe"] <= 0:
         # 적자(ROE<=0) → 밸류에이션 매력 낮음.

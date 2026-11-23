@@ -125,11 +125,10 @@ def _read_workbook_cached(path: Path, mtime: float, size: int) -> pd.DataFrame:
 
 
 def _read_workbook(path: Path) -> pd.DataFrame:
-    """빅카인즈 워크북 → 정규화 프레임. 같은 파일 재읽기는 캐시로 피한다."""
     try:
         stat = path.stat()
         return _read_workbook_cached(path, stat.st_mtime, stat.st_size).copy()
-    except OSError:  # stat 실패 시 캐시 없이 직접
+    except OSError:
         return _read_workbook_uncached(path)
 
 
@@ -175,7 +174,6 @@ def _read_workbook_uncached(path: Path) -> pd.DataFrame:
                 _clean_text
             )
 
-    # 선택 컬럼: URL과 분석제외 여부(있으면 활용, 없으면 기본값).
     url_column = columns["url"]
     normalized["url"] = (
         frame[url_column].map(_clean_text) if url_column is not None else ""
@@ -225,7 +223,6 @@ def _resolve_output_path(out: Path) -> Path:
 
 
 def _iter_ticker_directories(base_dir: Path) -> list[Path]:
-    """기준 디렉터리 바로 아래의 <6자리 종목코드>/ 폴더 목록."""
     if not base_dir.is_dir():
         return []
     return [
@@ -277,7 +274,7 @@ def find_corpus_workbooks(
       레거시: NewsResult_*.xlsx (파일명에 회사·기간 정보가 없어 종목 필터 불가)
     """
     input_dir = _resolve_ticker_dir(raw_dir, ticker, strict=True)
-    scoped_by_dir = input_dir != raw_dir  # 종목 폴더로 스코프됨
+    scoped_by_dir = input_dir != raw_dir
     wanted_company = _normalize_company(company_name)
     wanted_code = (ticker or "").strip()
     found: list[Path] = []
@@ -307,12 +304,7 @@ def build_news_corpus(
     raw_dir: Path = DEFAULT_NEWS_DIR,
     company_name: str = "",
 ) -> PreprocessReport:
-    """Build the deterministic FinBERT input CSV and return its coverage report.
-
-    기본 입력 위치는 value_pipeline과 동일한 저장소 루트 data/ 다 — 두 소비자가
-    <기준>/<종목코드>/ 종목 분리 규약을 공유해야 한 쪽만 파일을 못 찾고 조용히
-    폴백하는 사고가 없다. 종목 폴더가 있으면 그 종목만, 없으면 평면 구조를 읽는다.
-    """
+    """Build the deterministic FinBERT input CSV and return its coverage report."""
     ticker = ticker.strip()
     if not ticker:
         raise ValueError("ticker는 빈 문자열일 수 없습니다.")
@@ -378,13 +370,6 @@ def print_report(report: PreprocessReport) -> None:
     print(f"산출물: {report.output_path}")
 
 
-# ── Point-in-time 뉴스 로더 ────────────────────────────────────────
-# value_pipeline(News Agent)이 "특정 회사·특정 날짜 하루치" 뉴스를 빅카인즈
-# 원본에서 바로 뽑아 쓰기 위한 공개 API. build_news_corpus와 동일한 컬럼
-# 정규화(_read_workbook)·중복 제거(_deduplicate) 로직을 재사용해 전처리 규칙을
-# 한 곳에서 관리한다.
-
-
 def _normalize_company(name: str) -> str:
     return unicodedata.normalize("NFC", (name or "").strip())
 
@@ -425,7 +410,6 @@ def find_news_workbook(
     search_dir = _resolve_ticker_dir(base_dir, ticker, strict=False)
     scoped_by_dir = search_dir != base_dir
     # 종목 폴더 안은 재귀 탐색(분할 파일이 하위 폴더에 있을 수 있음), 평면은 최상위만
-    # (평면 폴백은 종목 폴더가 없을 때만 일어나므로 재귀해도 안전하지만, 기존 동작을 유지).
     pattern = "**/*.xlsx" if scoped_by_dir else "*.xlsx"
     target_day = date.replace("-", "")
     wanted_company = _normalize_company(company_name)

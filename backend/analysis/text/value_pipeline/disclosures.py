@@ -1,7 +1,7 @@
 """DART 공시 목록을 하루 단위로 일괄 수집해 종목 마스터(stocks)에 맞추고 제목으로 유형을 나눈다.
 
 회사를 지정하지 않은 list.json은 하루 전체 공시를 100건씩 준다(하루 약 500건 → 5~6회 호출, 일 한도 20,000회).
-제목·날짜·유형만 저장하고 원문 본문은 저장하지 않는다. 유형표는 docs/disclosure-kinds.md.
+제목·날짜·유형만 저장하고 원문 본문은 저장하지 않는다.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from .config import SETTINGS
 LIST_URL = "https://opendart.fss.or.kr/api/list.json"
 LOOKBACK_DAYS = 3  # 늦게 올라온 공시까지 겹쳐 받는다(같은 접수번호는 덮어씀)
 
-# (유형, 제목 규칙). 위에서부터 처음 맞는 것. 화면 이름·풀이는 frontend/lib/copy-glossary.ts DISCLOSURE_KIND
+# (유형, 제목 규칙). 위에서부터 처음 맞는 것.
 KIND_RULES: tuple[tuple[str, str], ...] = (
     ("market_action", r"관리종목|상장폐지|불성실공시|투자주의|투자경고|투자위험|매매거래정지"),
     ("business_risk", r"횡령|배임|자본잠식|생산중단|회생절차|부도"),
@@ -49,7 +49,7 @@ def classify(title: str) -> str:
 
 
 def _get(url: str, attempts: int = 3) -> dict:
-    # 10/09 Actions에서 DART 연결 타임아웃 1회로 공시 전체가 빠졌다. 일시 오류만 짧게 다시 시도한다.
+    # DART 연결 타임아웃은 일시 오류라 짧게 다시 시도한다.
     for attempt in range(attempts):
         try:
             with urlopen(url, timeout=30) as response:
