@@ -1,8 +1,4 @@
-"""8축 문항 정의(frontend/lib/profiling/style-questions.json)와 스키마의 계약 검사.
-
-채점은 TS(frontend/lib/profiling/style-scoring.ts) 한 벌이다. 여기서는 문항 JSON이
-schema/profiling_output.schema.json의 style_axes 계약과 어긋나지 않는지만 본다.
-"""
+"""채점은 TS(style-scoring.ts) 한 벌이라 Python은 문항 JSON과 스키마 계약만 검사한다."""
 
 from __future__ import annotations
 
