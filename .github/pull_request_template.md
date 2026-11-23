@@ -11,36 +11,34 @@
 - **무엇을**:
 - **왜**:
 
-## 영향 블록
+## 블록
 
-<!-- 이 PR이 건드린 블록에 체크. 여러 블록이면 PR 분리를 먼저 고려했는지 확인합니다. -->
+<!-- PR 하나에 블록 하나. 두 개 이상 체크했다면 아래에 묶은 이유를 한 줄 적습니다(AGENTS.md "PR 규칙"). -->
 
-- [ ] 🟡 yellow (심리 설문 / 프로파일링)
-- [ ] 🟢 green_cv (차트 / 기술적 분석)
-- [ ] 🟢 green_llm (뉴스 / 재무 / SNS)
-- [ ] 🔵 blue (API / 대시보드 / 인프라)
-- [ ] schema (블록 간 공유 인터페이스)
+- [ ] web (`frontend/`)
+- [ ] profiling (`backend/profiling/`)
+- [ ] chart (`backend/analysis/chart/`)
+- [ ] text (`backend/analysis/text/`)
+- [ ] db (`supabase/`)
+- [ ] schema (`schema/`) — 제목에 `[schema]`, 전원 멘션
+- [ ] ci (`.github/`)
+- [ ] harness (훅·권한 설정) — Claude Code와 Codex 양쪽 확인 결과 첨부
 - [ ] docs
 
-## 테스트 여부
+묶은 이유:
 
-<!-- 로컬에서 어떻게 동작 확인했는지 구체적으로 적습니다. -->
+## 확인한 방법
 
-- [ ] 웹(blue): `npm run dev` / `npm run build` 로컬 확인
-- [ ] Python 모델: 스크립트/노트북이 에러 없이 실행됨
-- [ ] schema 변경 시: 관련 블록 담당자와 합의 + 예시 JSON(`*.example.json`) 갱신
-- [ ] (해당 시) 수동 시나리오 테스트
-- [ ] (해당 시) 자동 테스트 추가/수정
+<!-- 로컬에서 어떻게 동작을 확인했는지 구체적으로 적습니다. -->
 
-## 리뷰어가 봐줬으면 하는 부분
-
-<!-- 특별히 의견이 필요한 부분, 고민했던 트레이드오프 등 -->
+- [ ] web: `cd frontend && pnpm build`
+- [ ] Python: 해당 블록에서 `ruff check .` · `pytest`
+- [ ] (해당 시) 화면 확인 주소 또는 전후 스크린샷
+- [ ] (해당 시) 운영 경로 변경: `/security-review`, 정기 작업은 `dry_run`
 
 ## 체크리스트
 
-- [ ] 빌드/실행이 로컬에서 통과한다
 - [ ] `.env` · API 키 · 비밀번호 등 비밀 정보를 포함하지 않는다
-- [ ] 커밋 메시지가 `타입: 설명` 컨벤션을 따른다 (feat / fix / docs / chore / refactor / test)
-- [ ] 담당 블록 디렉터리 안에서만 변경했다 (불가피한 교차 변경이면 이유를 적었다)
+- [ ] 커밋 메시지가 `타입(블록): 설명` 형식이다
 - [ ] 화면에 표시되는 수치는 실제 데이터·실제 수식 기반이다 (더미 값이 아니다)
-- [ ] (해당 시) 관련 문서(README, AGENTS.md, CONTRIBUTING.md, schema)를 업데이트했다
+- [ ] (해당 시) 관련 문서를 함께 고쳤다
