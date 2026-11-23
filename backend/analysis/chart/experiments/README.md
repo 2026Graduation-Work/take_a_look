@@ -52,25 +52,25 @@ H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼�
 
 처리 설정의 정본은 `shared/settings.py`다. 기본 데이터셋 YAML의 `preprocessing: shared_v3`가 이를 참조한다. Sigma는 20행·최소 10개 관측, 입력 배리어는 상방 1.5·하방 1.2배다. 연구 라벨과 표본 선택은 별도 실험 설정이다.
 
-## 검증된 기존 v3 결과 내보내기
+## v3 실험 결과를 pack으로 내보내기
 
-현재 활성 모델은 기본 161개 + 수급 9개 입력의 H5/H20이다. 기존 기본 모델 export 명령도 유지한다. 수급 모델은 아래의 `--with-flows` 명령을 사용한다.
+현재 활성 모델은 기본 161개 + 수급 9개 입력의 H5/H20이다. 현재 처리 계약과 새 폴더 구조로 완료한 H5·H20 run의 디렉터리를 지정한다. 수급 모델을 내보낼 때는 `--with-flows`를 붙인다.
 
 ```bash
 python -m experiments.export.refresh_pack \
-  --h5-result workspace/experiments/runs/sliding_2016_2026_h5_kospi_739166ce0d474177 \
-  --h20-result workspace/experiments/runs/sliding_2016_2026_h20_kospi_1734679be11d0369 \
+  --h5-result "workspace/experiments/runs/<H5 run 이름>" \
+  --h20-result "workspace/experiments/runs/<H20 run 이름>" \
   --pack-id YOUR_NEW_PACK_ID --activate
 ```
 
-동일 pack ID를 덮어쓰지 않는다. 원본 run manifest의 과거 경로는 이 명시적 export에서만 `docs/migration.json`의 이동 기록으로 해석한다. 모델·OOS 예측·raw/processed·학습 피처의 출처, 파일 SHA-256, 전체 가격·피처 일치를 검증한다. 실패 시 활성 설정을 바꾸지 않는다.
+동일 pack ID를 덮어쓰지 않는다. 모델·OOS 예측·raw/processed·학습 피처의 출처, 파일 SHA-256, 전체 가격·피처 일치를 검증한다. 실패 시 활성 설정을 바꾸지 않는다.
 
 pack은 `workspace/serving/packs/`에 생성한다. `--activate`는 `serving/config.local.yaml`만 갱신하고 이전 설정을 pack 옆에 보존한다. 프리뷰용 삼성전자 입력도 출처와 해시를 기록해 `workspace/serving/inputs/`로 명시적으로 복사한다. 원격 Release 업로드·Supabase 발행은 실행하지 않는다.
 
 ```bash
 python -m experiments.export.refresh_pack \
-  --h5-result workspace/experiments/runs/sliding_2016_2026_h5_flow_kospi_ecb00d84b00063ca \
-  --h20-result workspace/experiments/runs/sliding_2016_2026_h20_flow_kospi_b3bdd182d898e80f \
+  --h5-result "workspace/experiments/runs/<수급 H5 run 이름>" \
+  --h20-result "workspace/experiments/runs/<수급 H20 run 이름>" \
   --with-flows --pack-id YOUR_NEW_FLOW_PACK_ID --activate
 ```
 
