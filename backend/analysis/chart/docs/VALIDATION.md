@@ -6,7 +6,7 @@
 
 이동 직전 48,034개 파일, 33,073,679,216바이트를 기록했다. 이동 직후 전체 SHA-256이 일치했다. Git에서 제외된 데이터·모델도 로컬 workspace에 그대로 남겼다. 삭제로 보이는 Git diff는 추적 해제이며 물리적 데이터 삭제가 아니다.
 
-요약·경로 매핑은 [migration.json](migration.json), 추가 연구 테스트 이동은 [test-migration.json](test-migration.json)에 기록했다. 전체 파일별 이전/이후 경로·크기·해시는 `workspace/archive/pre-refactor/migration-files.json`에 있다. 전체 기록 SHA-256은 요약에 고정했다. 원본 source·문서와 사용자 diff는 `workspace/archive/pre-refactor/originals/`, `tracked.patch`에 보존했다. 이미 작업 트리에서 삭제돼 있던 processed 삼성전자 샘플은 `deleted-tracked/`에 Git 원본도 복구해 보관했다.
+추가 연구 테스트 이동은 [test-migration.json](test-migration.json)에 기록했다. 파일별 이전/이후 경로·크기·해시는 `workspace/archive/pre-refactor/migration-files.json`에 있다. 전체 기록의 SHA-256은 `fbab580d1dbc4751344aad37a88cf82a4b9f58bba46990a93683a2c03ed3d16c`다. 원본 source·문서와 사용자 diff는 `workspace/archive/pre-refactor/originals/`, `tracked.patch`에 보존했다. 이미 작업 트리에서 삭제돼 있던 processed 삼성전자 샘플은 `deleted-tracked/`에 Git 원본도 복구해 보관했다.
 
 ## 기준과 검증
 
