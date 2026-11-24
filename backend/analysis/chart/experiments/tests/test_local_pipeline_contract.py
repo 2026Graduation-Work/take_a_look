@@ -124,6 +124,27 @@ def test_local_features_are_causal_and_161_explicit(local_dataset):
     assert "Individual_BuyAmount" not in BASE_FEATURES
 
 
+@pytest.mark.parametrize("legacy_fields", [
+    {"price_basis": "krx_raw_base_price_events_v1"},
+    {"price_basis": "krx_raw_ohlc_uniform_close_ratio_v1"},
+    {"price_policy": "immutable_krx_raw_with_events_as_of_dataset_end"},
+    {"price_policy": "krx_raw_ohlc_uniform_close_ratio_snapshot_not_point_in_time_archive"},
+])
+def test_previous_price_policy_requires_collection_before_using_processed_data(local_dataset, legacy_fields):
+    from experiments.dataset.pipeline import validate_processed_inputs
+
+    _, settings, dataset_path, _ = local_dataset
+    manifest_path = Path(settings["root"]) / "dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    atomic_json(manifest_path, {**manifest, **legacy_fields})
+
+    for allow_partial in (False, True):
+        with pytest.raises(ValueError, match="rerun collection"):
+            preprocess_dataset(dataset_path, allow_partial=allow_partial)
+    with pytest.raises(ValueError, match="rerun collection"):
+        validate_processed_inputs(settings)
+
+
 def test_partial_collection_uses_only_verified_files(local_dataset):
     from experiments.dataset.pipeline import validate_processed_inputs
 
@@ -506,6 +527,7 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
         module.collect_dataset(path, rebuild=True)
     root = Path(settings["root"])
     assert not (root / "raw/005930.parquet").exists()
+    assert not (root / "krx_raw_prices/005930.parquet").exists()
     monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw)
     module.collect_dataset(path)
     stored = pd.read_parquet(root / "raw/005930.parquet")
@@ -566,6 +588,58 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
     assert failed_manifest["price_events"]["sha256"] == sha256(failed_events)
     assert pd.read_parquet(failed_events).empty
     assert sha256(events_path) == event_hash
+
+
+def test_failed_event_adjustment_preserves_verified_raw_without_refetching(local_dataset, tmp_path, monkeypatch):
+    from experiments.dataset import pipeline as module
+
+    _, settings, _, _ = local_dataset
+    fixture = CHART_ROOT / "shared/tests/fixtures/004920_2020.csv"
+    raw = pd.read_csv(fixture, comment="#", parse_dates=["Date"])
+    root = tmp_path / "unconfirmed_event"
+    end = str(raw.Date.iloc[-1].date())
+    settings["root"] = str(root)
+    settings["collection"].update(
+        start_date=str(raw.Date.iloc[0].date()), end_date=end, investor_flows=False, tickers=["123456"]
+    )
+    path = tmp_path / "unconfirmed_event.yaml"
+    path.write_text(yaml.safe_dump(settings))
+    atomic_json(root / "calendar.json", {
+        "validation_version": 3, "observed_end": end, "requested_end": end,
+        "trading_days": raw.Date.astype(str).tolist(),
+    })
+    pd.DataFrame({
+        "Code": ["123456"], "Name": ["Synthetic"], "Market": ["KOSPI"],
+        "ListingDate": [raw.Date.iloc[0]], "DelistingDate": [pd.NaT], "IsDelisted": [False],
+    }).to_csv(root / "ticker_metadata.csv", index=False)
+    monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
+    monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw)
+
+    def assert_failed_collection(raw_hash):
+        manifest = json.loads((root / "dataset_manifest.json").read_text())
+        assert manifest["krx_raw_files"] == {"123456.parquet": raw_hash}
+        assert not manifest["prices_complete"]
+        assert manifest["raw_files"] == {}
+        assert not (root / "raw/123456.parquet").exists()
+        report = json.loads((root / "collection_report.json").read_text())
+        assert report["prices"][0]["status"] == "failed"
+        assert "123456 2020-03-20" in report["prices"][0]["reason"]
+
+    with pytest.raises(RuntimeError, match="incomplete"):
+        module.collect_dataset(path)
+    original_path = root / "krx_raw_prices/123456.parquet"
+    raw_hash = sha256(original_path)
+    pd.testing.assert_frame_equal(pd.read_parquet(original_path), raw)
+    assert_failed_collection(raw_hash)
+
+    def no_repeat(*_, **kwargs):
+        pytest.fail("Verified KRX source must not be requested again after an adjustment failure")
+
+    monkeypatch.setattr(module, "fetch_raw_window", no_repeat)
+    with pytest.raises(RuntimeError, match="incomplete"):
+        module.collect_dataset(path)
+    assert sha256(original_path) == raw_hash
+    assert_failed_collection(raw_hash)
 
 
 def test_mature_h20_and_observation_boundary():
