@@ -44,8 +44,8 @@ def fetch(tmp_path, monkeypatch):
         monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: set(raw.index.date))
         monkeypatch.setattr(shared_prices, "supplement_raw_ohlc", lambda *_: raw)
         monkeypatch.setattr(serving_prices, "_fetch_krx_adjusted", _adapter(krx_adjusted, calls, "krx"))
-        monkeypatch.setattr(providers, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
-        monkeypatch.setattr(providers, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
+        monkeypatch.setattr(shared_prices, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
+        monkeypatch.setattr(shared_prices, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
         result = fetch_prices("005930", str(raw.index[0].date()), str(raw.index[-1].date()))
         return result, calls
     return run

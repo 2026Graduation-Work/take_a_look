@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -179,18 +180,19 @@ def configured_benchmark(config, index, price_df):
 
 def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) -> pd.Series:
     index = pd.DatetimeIndex(index).tz_localize(None)
+    downloaded = False
     if csv_path:
         closes = pd.read_csv(csv_path, parse_dates=["Date"]).set_index("Date")["Close"]
         source = csv_path
     else:
-        cache_path = os.path.join(os.path.dirname(_benchmark_cache_paths()[0]), "kospi_index_close.parquet")
+        cache_path = os.path.join(os.path.dirname(_benchmark_cache_paths()[0]), "kospi_krx_index_close.parquet")
         if os.path.exists(cache_path):
             closes = pd.read_parquet(cache_path).set_index("Date")["Close"]
         else:
             from shared.data.metadata import fetch_index_prices
 
             raw = fetch_index_prices(
-                "KS11",
+                "1001",
                 (index.min() - pd.Timedelta(10, unit="D")).strftime("%Y-%m-%d"),
                 (index.max() + pd.Timedelta(1, unit="D")).strftime("%Y-%m-%d"),
             )
@@ -198,21 +200,35 @@ def kospi_index_returns(index: pd.DatetimeIndex, csv_path: str | None = None) ->
             if closes.empty:
                 raise ValueError("KOSPI index download returned no closes")
             closes.index = pd.DatetimeIndex(closes.index).tz_localize(None)
-            closes.rename("Close").rename_axis("Date").reset_index().to_parquet(cache_path, index=False)
-        source = "FinanceDataReader KS11"
+            downloaded = True
+        source = "pykrx KOSPI 1001"
 
     closes.index = pd.DatetimeIndex(closes.index).tz_localize(None)
     closes = pd.to_numeric(closes, errors="coerce").sort_index()
-    if closes.index.has_duplicates or closes.empty or (closes <= 0).any():
+    if closes.index.has_duplicates or closes.empty or not np.isfinite(closes).all() or (closes <= 0).any():
         raise ValueError("KOSPI index closes contain duplicate dates or invalid prices")
     if closes.index.min() >= index.min():
         raise ValueError("KOSPI index needs a close before the first evaluation date")
+    from shared.data.calendar import scheduled_sessions
+
+    calendar_start = max(index.min() - pd.Timedelta(14, unit="D"), pd.Timestamp("2016-01-01"))
+    sessions = scheduled_sessions(calendar_start, index.max())
+    preceding = sessions[sessions < index.min()]
+    if preceding.empty:
+        raise ValueError("KOSPI index needs a verified trading close before evaluation")
+    missing_sessions = sessions[sessions >= preceding[-1]].difference(closes.index)
+    if len(missing_sessions):
+        raise ValueError(f"KOSPI index missing trading sessions: {missing_sessions[:5].tolist()}")
     # Portfolio dates may include KRX holidays; holding the index is flat then.
     aligned_close = closes.reindex(closes.index.union(index)).sort_index().ffill()
     returns = aligned_close.pct_change(fill_method=None).reindex(index)
     if returns.isna().any() or not np.isfinite(returns).all():
         missing = index[returns.isna()]
         raise ValueError(f"KOSPI index missing evaluation dates: {missing[:5].tolist()}")
+    if downloaded:
+        from shared.io import atomic_parquet
+
+        atomic_parquet(Path(cache_path), closes.rename("Close").rename_axis("Date").reset_index())
     result = returns.rename("Benchmark_KOSPI")
     result.attrs["benchmark_source"] = source
     return result

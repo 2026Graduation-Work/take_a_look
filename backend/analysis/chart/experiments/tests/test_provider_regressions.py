@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-from experiments.dataset.pipeline import flow_coverage, supplement_raw_ohlc, validate_prices
+from experiments.dataset.pipeline import flow_coverage
 from experiments.features.flow import build_flow_features
 from shared.data import providers as source
+from shared.data.prices import supplement_raw_ohlc
+from shared.data.validation import validate_prices
 from shared.features.builder import normalize_trading_halts
 
 CAPTURE = json.loads((Path(__file__).parent / "fixtures/provider_failures.json").read_text())
@@ -21,7 +23,6 @@ def test_actual_turnover_without_regular_session_bar_is_preserved_and_excluded(c
     adjusted = pd.DataFrame({"Close": raw["종가"] / 2, "Volume": raw["거래량"]})
     attached = source._attach_actual_vwap(adjusted, raw).rename_axis("Date").reset_index()
     verified = validate_prices(attached, days)
-    assert source._has_complete_actual_vwap(verified)
     assert verified.RegularSessionUnavailable.all()
     assert not verified.Trading_Halt.any()  # No inference of an official suspension.
     assert verified.RawVolume.iloc[0] == case["raw"]["거래량"]

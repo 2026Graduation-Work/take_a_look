@@ -419,14 +419,11 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
 
 def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
-    from shared.data import providers as price_collector
     from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05")
     frame = pd.DataFrame({"Close": 100.0}, index=dates)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: frame)
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: frame)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: frame)
     monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: frame)
     collection = {"start_date": "2024-01-02", "end_date": "2024-01-07"}
     calendar = build_calendar(tmp_path, collection)
@@ -439,8 +436,6 @@ def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch
         build_calendar(tmp_path, collection)
     old = frame.iloc[:1]
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: old)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: old)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: old)
     monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: old)
     collection["end_date"] = "2024-01-19"
     with pytest.raises(ValueError, match="boundary coverage"):
@@ -724,35 +719,38 @@ def test_short_selected_features_do_not_force_sixty_day_warmup(local_dataset):
     assert config["feature_columns"] == ["kmid", "roc_5"]
 
 
-def test_stale_calendar_cache_retries_direct_index(tmp_path, monkeypatch):
+def test_calendar_uses_krx_indexes_and_rejects_incomplete_kosdaq(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
     from shared.data import providers as price_collector
-    from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-12")
-    full = pd.DataFrame({"Close": 100.0}, index=dates)
-    stale = full.iloc[:-2]
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: stale)
-    monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: full)
+    kospi = pd.DataFrame({"Close": 2500.0}, index=dates)
+    kosdaq = pd.DataFrame({"Close": 800.0}, index=dates)
     calls = []
 
-    def fdr(symbol, *_):
-        calls.append(symbol)
-        return stale if symbol == "KQ11" else full
+    def fetch(start, end, ticker, *, name_display):
+        assert (start, end, name_display) == ("20240102", "20240112", False)
+        calls.append(ticker)
+        return {"1001": kospi, "2001": kosdaq}[ticker]
 
-    monkeypatch.setattr(price_collector.fdr, "DataReader", fdr)
-    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: full)
-    monkeypatch.setattr(price_collector.krx, "get_index_ohlcv_by_date", lambda *_: full)
-    result = build_calendar(tmp_path, {"start_date": "2024-01-02", "end_date": "2024-01-12"})
+    monkeypatch.setattr(price_collector.krx, "get_index_ohlcv_by_date", fetch)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: kospi)
+    collection = {"start_date": "2024-01-02", "end_date": "2024-01-12"}
+    result = build_calendar(tmp_path, collection)
     assert result["verified_end"] == "2024-01-12"
-    assert calls == ["KQ11"]
-    assert len(result["fallbacks"]) == 2
-    assert result["providers"][0] == "KRX authenticated MDCSTAT00301"
-    assert result["providers"][2] == "pykrx KOSDAQ 2001"
-    assert len(pd.read_parquet(tmp_path / "benchmarks/KOSDAQ.parquet")) == len(dates)
+    assert calls == ["1001", "2001"]
+    assert result["providers"] == ["pykrx KOSPI 1001", "KRX authenticated MDCSTAT00301", "pykrx KOSDAQ 2001"]
+    assert result["fallbacks"] == []
+    assert pd.read_parquet(tmp_path / "benchmarks/KOSDAQ.parquet").Close.tolist() == [800.0] * len(dates)
+
+    kosdaq = kosdaq.iloc[:-1]
+    with pytest.raises(ValueError, match="KOSDAQ index has missing sessions"):
+        build_calendar(tmp_path / "incomplete", collection)
+    assert not (tmp_path / "incomplete/calendar.json").exists()
 
 
-def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypatch):
+@pytest.mark.parametrize("ticker", ["1001", "2001"])
+def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypatch, ticker):
     from experiments.dataset.pipeline import fetch_authenticated_index
     from shared.data import providers as price_collector
 
@@ -773,23 +771,22 @@ def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypat
             return Response()
 
     monkeypatch.setattr(price_collector, "get_krx_session", Session)
-    result = fetch_authenticated_index(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-03"))
+    result = fetch_authenticated_index(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-03"), ticker)
     assert [(c["strtDd"], c["endDd"]) for c in calls] == [
         ("20200101", "20211231"), ("20220101", "20231231"), ("20240101", "20240103")
     ]
+    assert {(c["indIdx"], c["indIdx2"]) for c in calls} == {(ticker[0], ticker[1:])}
     assert result.Close.tolist() == [2500.5] * 3
 
 
 def test_calendar_rejects_missing_day_shared_by_price_providers(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
-    from shared.data import providers as price_collector
     from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05").delete(1)
     incomplete = pd.DataFrame({"Close": 100.0}, index=dates)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: incomplete)
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: incomplete)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: incomplete)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: incomplete)
     with pytest.raises(ValueError, match="missing_sessions=.*2024-01-03"):
         build_calendar(tmp_path, {"start_date": "2024-01-02", "end_date": "2024-01-05"})
     assert not (tmp_path / "calendar.json").exists()
@@ -809,7 +806,7 @@ def test_independent_schedule_announced_closures_and_end_boundary():
         verify_calendar_schedule(payload)
 
 
-def test_active_listing_dates_are_per_security_including_preferred_and_global(monkeypatch):
+def test_krx_active_listings_keep_equities_with_own_dates_and_kosdaq_global(monkeypatch):
     from experiments.dataset.pipeline import fetch_active_listing_intervals
     from shared.data import providers as price_collector
 
@@ -822,6 +819,10 @@ def test_active_listing_dates_are_per_security_including_preferred_and_global(mo
          "LIST_DD": "1997/11/10", "SECUGRP_NM": "주권"},
         {"ISU_SRT_CD": "123456", "ISU_ABBRV": "Fund", "MKT_TP_NM": "KOSPI",
          "LIST_DD": "2020/01/02", "SECUGRP_NM": "투자회사"},
+        {"ISU_SRT_CD": "234567", "ISU_ABBRV": "DR", "MKT_TP_NM": "KOSPI",
+         "LIST_DD": "2020/01/03", "SECUGRP_NM": "주식예탁증권"},
+        {"ISU_SRT_CD": "345678", "ISU_ABBRV": "Foreign", "MKT_TP_NM": "KOSDAQ",
+         "LIST_DD": "2020/01/06", "SECUGRP_NM": "외국주권"},
     ]
 
     class Response:
@@ -839,27 +840,27 @@ def test_active_listing_dates_are_per_security_including_preferred_and_global(mo
 
     monkeypatch.setattr(price_collector, "get_krx_session", Session)
     kospi = fetch_active_listing_intervals("KOSPI").set_index("Code")
-    assert len(kospi) == 2
+    assert set(kospi.index) == {"001040", "00104K"}
     assert kospi.loc["00104K", "ListingDate"] == pd.Timestamp("2019-08-09")
     assert kospi.loc["001040", "ListingDate"] == pd.Timestamp("1973-06-29")
     kosdaq = fetch_active_listing_intervals("KOSDAQ")
     assert kosdaq.Code.tolist() == ["009520"]
-    assert kosdaq.Market.tolist() == ["KOSDAQ"]
+    assert kosdaq.Market.eq("KOSDAQ").all()
 
 
-def test_incomplete_fdr_listing_response_falls_back_to_security_metadata(monkeypatch):
+def test_load_metadata_records_krx_listing_source_and_rejects_missing_date(monkeypatch):
     from experiments.dataset import pipeline as module
-    from shared.data import providers as price_collector
-
-    incomplete = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [None]})
-    complete = incomplete.assign(ListingDate=pd.Timestamp("2019-08-09"))
-    monkeypatch.setattr(price_collector.fdr, "StockListing", lambda *_: incomplete)
     from shared.data import metadata as shared_metadata
-    monkeypatch.setattr(shared_metadata, "fetch_active_listing_intervals", lambda *_: complete)
-    result = module.load_metadata({"start_date": "2016-01-01", "markets": ["KOSPI"],
-                                   "include_delisted": False}, "2026-10-06")
+
+    frame = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [pd.Timestamp("2019-08-09")]})
+    monkeypatch.setattr(shared_metadata, "fetch_active_listing_intervals", lambda *_: frame)
+    collection = {"start_date": "2016-01-01", "markets": ["KOSPI"], "include_delisted": False}
+    result = module.load_metadata(collection, "2026-10-06")
     assert result.ListingDate.iloc[0] == pd.Timestamp("2019-08-09")
     assert result.Source.iloc[0] == "KRX individual securities MDCSTAT01901"
+    frame["ListingDate"] = pd.NaT
+    with pytest.raises(ValueError, match="Unknown listing interval"):
+        module.load_metadata(collection, "2026-10-06")
 
 
 def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_path, monkeypatch):

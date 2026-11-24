@@ -186,7 +186,6 @@ def test_kospi_preferred_alphanumeric_code_is_supported(monkeypatch, verified_li
                           index=pd.to_datetime(["2026-10-06"]))
     monkeypatch.setattr(stock, "get_market_ohlcv_by_date", lambda *args, **kwargs: source.copy())
     from shared.data import providers
-    monkeypatch.setattr(providers.fdr, "DataReader", lambda *_: pd.DataFrame())
     monkeypatch.setattr(providers.time, "sleep", lambda *_: None)
     assert fetch_prices("00088K", "2026-10-06", "2026-10-06").Close.iloc[0] == 100
 

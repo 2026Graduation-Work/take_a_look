@@ -45,7 +45,7 @@ def build_kospi_snapshot(
         "DelistingDate",
     }
     if missing := sorted(active_required - set(active.columns)):
-        raise HandoffContractError(f"KOSPI-DESC 필수 컬럼 누락: {missing}")
+        raise HandoffContractError(f"KRX individual securities MDCSTAT01901 필수 컬럼 누락: {missing}")
     if missing := sorted(delisted_required - set(delisted.columns)):
         raise HandoffContractError(f"KRX-DELISTING 필수 컬럼 누락: {missing}")
 
@@ -57,7 +57,7 @@ def build_kospi_snapshot(
     active["Code"] = _codes(active["Code"])
     active = active[["Code", "Name", "ListingDate"]]
     active["DelistingDate"] = pd.NaT
-    active["Source"] = "KOSPI-DESC"
+    active["Source"] = "KRX individual securities MDCSTAT01901"
 
     delisted = delisted.copy()
     delisted["ListingDate"] = pd.to_datetime(delisted["ListingDate"], errors="coerce")
@@ -103,17 +103,17 @@ def build_kospi_history(
         "Symbol", "Name", "Market", "SecuGroup", "ListingDate", "DelistingDate"
     }
     if missing := sorted(active_required - set(active.columns)):
-        raise HandoffContractError(f"KOSPI-DESC 필수 컬럼 누락: {missing}")
+        raise HandoffContractError(f"KRX individual securities MDCSTAT01901 필수 컬럼 누락: {missing}")
     if missing := sorted(delisted_required - set(delisted.columns)):
         raise HandoffContractError(f"KRX-DELISTING 필수 컬럼 누락: {missing}")
 
     active = active.loc[active.Market.eq("KOSPI")].copy()
     active["ListingDate"] = pd.to_datetime(active.ListingDate, errors="coerce")
     if active.ListingDate.isna().any():
-        raise HandoffContractError("KOSPI-DESC에 ListingDate가 없는 종목이 있습니다.")
+        raise HandoffContractError("KRX individual securities MDCSTAT01901에 ListingDate가 없는 종목이 있습니다.")
     active["Code"] = _codes(active.Code)
     active["DelistingDate"] = pd.NaT
-    active["Source"] = "KOSPI-DESC"
+    active["Source"] = "KRX individual securities MDCSTAT01901"
 
     delisted = delisted.loc[
         delisted.Market.eq("KOSPI") & delisted.SecuGroup.eq("주권")
