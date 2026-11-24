@@ -65,13 +65,3 @@
 | [product/beginner-gap.md](product/beginner-gap.md) | 초보 투자자가 어려워하는 점 |
 | [decisions/bigkinds-acquisition.md](decisions/bigkinds-acquisition.md) | BigKinds 뉴스 수집 방식 |
 | [decisions/tool-reviews.md](decisions/tool-reviews.md) | 스킬, 플러그인, 외부 도구 검토 판정 |
-
-## 담당자 확인 대기
-
-지금도 정본인지 담당자가 정합니다. 정본이 아니면 지웁니다.
-
-| 문서 | 담당 | 질문 |
-|---|---|---|
-| [qa/2026-10-27-model-reasons/README.md](qa/2026-10-27-model-reasons/README.md) | chart, web | 피처 설명 문구의 정본이 `frontend/lib/featureLabels.ts`인가 |
-| [qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS.md](qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS.md) | chart, web | 위와 같음 |
-| [qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS-170.md](qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS-170.md) | chart, web | 위와 같음 |
