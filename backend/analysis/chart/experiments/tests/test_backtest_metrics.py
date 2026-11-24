@@ -29,6 +29,12 @@ def test_cagr_is_undefined_below_one_year_and_equals_total_return_at_one_year() 
     assert metrics["cagr"] == pytest.approx(1.001**252 - 1)
 
 
+def test_constant_returns_have_no_volatility_and_no_sharpe() -> None:
+    metrics = calculate_trading_metrics(pd.Series([0.001] * 252))
+    assert metrics["annualized_volatility"] == 0.0
+    assert math.isnan(metrics["sharpe_ratio"])
+
+
 def test_max_drawdown_includes_loss_from_initial_equity() -> None:
     assert calculate_trading_metrics(pd.Series([-0.10, 0.05]))["max_drawdown"] == pytest.approx(-0.10)
 
