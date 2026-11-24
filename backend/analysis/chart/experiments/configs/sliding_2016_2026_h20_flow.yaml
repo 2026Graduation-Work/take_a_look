@@ -68,7 +68,7 @@ backtest:
   slippage_bps: 10
   max_participation: 0.025
   hard_sl_mult: 2.0
-  initial_cash: 10000000
+  initial_cash: 100000000
   max_holding_days: 20
   signal_lag_days: 1
   up_mult: 3.75

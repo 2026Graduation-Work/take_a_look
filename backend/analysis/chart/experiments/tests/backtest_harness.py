@@ -32,7 +32,7 @@ def signals(prices, entry_days):
 
 def config(**backtest):
     return {"strategy": {"top_n": backtest.pop("top_n", 1)}, "backtest": {
-        "initial_cash": 1000.0, "fee": 0.0, "slippage_bps": 0, "max_participation": None,
+        "initial_cash": 3000.0, "fee": 0.0, "slippage_bps": 0, "max_participation": None,
         "max_holding_days": 3, "signal_lag_days": 1,
         "up_mult": 1.0, "down_mult": 1.0, "hard_sl_mult": 1.5, **backtest}}
 

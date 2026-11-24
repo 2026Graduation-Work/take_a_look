@@ -2,7 +2,8 @@
 
 Signal day 0 closes at 100 with Sigma 0.1, so every position entered on day 1 has
 profit line 110 (up 1.0), soft stop 90 (down 1.0) and hard stop 85 (hard 1.5).
-Cash 1000 at open 101 buys 9 shares.
+Cash 3000 with top_n 1 and a 3-session horizon gives each signal a 1000 slot:
+9 shares at open 101.
 """
 import pandas as pd
 import pytest
@@ -77,7 +78,7 @@ def test_forced_exit_then_same_open_reentry_uses_new_signal_anchor():
 def test_fees_charge_both_sides_and_size_includes_entry_fee():
     result = run([SIGNAL, FLAT, FLAT, FLAT, FLAT], fee=0.01)
     assert result.trades.quantity.tolist() == [9]
-    assert result.value().iloc[-1] == pytest.approx(1000 - 9 * 101 * 1.01 + 9 * 101 * 0.99)
+    assert result.value().iloc[-1] == pytest.approx(3000 - 9 * 101 * 1.01 + 9 * 101 * 0.99)
 
 
 def test_slippage_worsens_both_fills_and_sizes_on_the_slipped_price():
@@ -86,14 +87,14 @@ def test_slippage_worsens_both_fills_and_sizes_on_the_slipped_price():
     assert result.trades.quantity.tolist() == [9]
     assert result.trades.entry_price.iloc[0] == pytest.approx(buy)
     assert result.trades.exit_price.iloc[0] == pytest.approx(sell)
-    assert result.value().iloc[-1] == pytest.approx(1000 - 9 * buy + 9 * sell)
+    assert result.value().iloc[-1] == pytest.approx(3000 - 9 * buy + 9 * sell)
 
 
 def test_locked_lower_limit_on_the_final_day_leaves_the_position_open():
     result = run([SIGNAL, FLAT, (70.7, 70.7, 70.7, 70.7)], max_holding_days=10)
     assert result.trades.empty
     assert [position["code"] for position in result.open_positions] == ["000001"]
-    assert result.value().iloc[-1] == pytest.approx(1000 - 9 * 101 + 9 * 70.7)
+    assert result.value().iloc[-1] == pytest.approx(3000 - 2 * 101 + 2 * 70.7)  # 300 slot: 2 shares.
 
 
 def test_order_is_capped_at_share_of_prior_average_traded_value():
@@ -105,9 +106,22 @@ def test_order_is_capped_at_share_of_prior_average_traded_value():
     assert result.exclusions == [{"date": "2024-01-03", "code": "000001", "reason": "liquidity_capped"}]
 
 
+def test_every_signal_gets_an_equal_slot_of_equity_while_earlier_ones_are_held():
+    # Signals on days 1-3 overlap within the 3-session horizon. Each gets equity / (1 × 3),
+    # so the third buy is as large as the first instead of whatever cash is left.
+    path = [SIGNAL, FLAT, FLAT, FLAT, FLAT, FLAT, FLAT]
+    prices = pd.concat([bars(path, code) for code in ("000001", "000002", "000003")])
+    cfg = config()
+    entries = signals(prices, [(1, "000001"), (2, "000002"), (3, "000003")])
+    result = simulate(cfg, entries, prices)
+    check_ledger(result, cfg, prices)
+    buys = result.events.loc[result.events.side.eq("buy")]
+    assert buys.quantity.tolist() == [9, 9, 9]
+
+
 def test_turnover_is_half_traded_notional_over_mean_equity_annualized():
     result = run([SIGNAL, FLAT, FLAT, FLAT, FLAT])
-    assert result.turnover() == pytest.approx((9 * 101 * 2 / 2) / 1000 * 252 / 5)
+    assert result.turnover() == pytest.approx((9 * 101 * 2 / 2) / 3000 * 252 / 5)
 
 
 @pytest.mark.parametrize("cash", [100, 2.3283064365386963e-10])
@@ -123,7 +137,7 @@ def delisted_inputs(tmp_path, delisting_day):
     prices = prices.loc[prices.Date.ne(DAYS[3])]
     pd.DataFrame({"Code": ["000001"], "DelistingDate": [delisting_day]}).to_csv(
         tmp_path / "ticker_metadata.csv", index=False)
-    cfg = config(max_holding_days=10, fee=0.01)
+    cfg = config(fee=0.01)
     cfg["dataset"] = {"root": str(tmp_path)}
     entries = signals(bars([SIGNAL, FLAT, FLAT, FLAT]), [(1, "000001")])
     return cfg, entries, prices
@@ -134,7 +148,7 @@ def test_confirmed_delisting_writes_off_without_cash_or_fake_sale(tmp_path):
     result = simulate(cfg, entries, prices)
     check_ledger(result, cfg, prices)
     cost = 9 * 101 * 1.01
-    assert result.value().tolist() == pytest.approx([1000, 1000 - cost + 909, 1000 - cost + 909, 1000 - cost])
+    assert result.value().tolist() == pytest.approx([3000, 3000 - cost + 909, 3000 - cost + 909, 3000 - cost])
     assert result.events.side.tolist() == ["buy", "writeoff"]
     trade = result.trades.iloc[0]
     assert trade.exit_reason == "delisting_zero_recovery"

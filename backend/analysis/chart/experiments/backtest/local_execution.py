@@ -190,8 +190,12 @@ def simulate(config, entries, price_df):
             elif open_price >= profit:
                 sell(code, rows[0], open_price, "profit_gap")
 
-        # 10:00 opening entries. Budget is snapshotted so ticker order cannot change sizes.
-        budget = cash / top_n
+        # 10:00 opening entries. Each signal gets one of top_n × horizon equal slots of equity,
+        # so every day's picks are held side by side; cash / top_n keeps the day within cash.
+        # Both are snapshotted so ticker order cannot change sizes.
+        equity_at_open = cash + sum(
+            pos["quantity"] * fields["Open"].loc[day, code] for code, pos in positions.items())
+        budget = min(equity_at_open / (top_n * horizon), cash / top_n)
         selected = [code for code in codes if entries.loc[day, code] and code not in positions]
         if len(selected) > top_n:
             raise ValueError("Entry count exceeds top_n")
