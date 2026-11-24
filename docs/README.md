@@ -65,12 +65,3 @@
 | [product/beginner-gap.md](product/beginner-gap.md) | 초보 투자자가 어려워하는 점 |
 | [decisions/bigkinds-acquisition.md](decisions/bigkinds-acquisition.md) | BigKinds 뉴스 수집 방식 |
 | [decisions/tool-reviews.md](decisions/tool-reviews.md) | 스킬, 플러그인, 외부 도구 검토 판정 |
-
-## 담당자 확인 대기
-
-지금도 정본인지 담당자가 정합니다. 정본이 아니면 지웁니다.
-
-| 문서 | 담당 | 질문 |
-|---|---|---|
-| [validation/2026-10-14-news-relevance-policy.md](validation/2026-10-14-news-relevance-policy.md) | text | Live 뉴스 정책의 정본인가 |
-| [validation/2026-10-14-live-policy-implementation.md](validation/2026-10-14-live-policy-implementation.md) | text | 위 정책의 구현 기록을 남길 필요가 있는가 |
