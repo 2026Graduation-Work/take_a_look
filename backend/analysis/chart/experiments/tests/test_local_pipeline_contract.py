@@ -989,3 +989,16 @@ def test_participation_cap_setting_is_validated(local_dataset, value, message):
     config_path.write_text(yaml.safe_dump(invalid))
     with pytest.raises(ValueError, match=message):
         load_experiment_config(config_path)
+
+
+@pytest.mark.parametrize("value", [True, -1, "missing"])
+def test_random_baseline_runs_must_be_set_explicitly(local_dataset, value):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    if value == "missing":
+        invalid["evaluation"].pop("random_baseline_runs", None)
+    else:
+        invalid["evaluation"]["random_baseline_runs"] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match="random_baseline_runs"):
+        load_experiment_config(config_path)

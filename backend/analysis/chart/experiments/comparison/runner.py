@@ -352,70 +352,6 @@ def _delta_table(metrics: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _build_backtest_config(
-    config: dict[str, Any], profile: str, variant: str, profile_config: dict[str, Any]
-) -> dict[str, Any]:
-    data = profile_config["data"]
-    labels = dict(profile_config["labels"])
-    horizon = int(labels["horizon"])
-    experiment_prefix = str(config.get("experiment_name", "psychology_ab"))
-    strategy = {
-        "score_column": "prob_up",
-        "selection": "top_k",
-        "top_n": 5,
-        "prob_threshold": 0.65,
-        "position_weighting": "equal_weight",
-        **config.get("strategy", {}),
-    }
-    backtest = {
-        "initial_cash": 100_000_000,
-        "signal_lag_days": 1,
-        "entry_price": "open",
-        "exit_price": "open",
-        "fee": 0.00105,
-        "slippage_bps": 10,
-        "max_participation": 0.025,
-        "up_mult": 1.8,
-        "down_mult": 1.2,
-        "hard_sl_mult": 1.5,
-        **config.get("backtest", {}),
-        "max_holding_days": horizon,
-    }
-    return {
-        "experiment_name": f"{experiment_prefix}_{profile}_{variant.lower()}",
-        "description": f"A/B comparison canonical backtest: {profile} variant {variant}",
-        "data": {
-            "tickers": data.get("tickers", []),
-            "price_dir": str(data["baseline_price_dir"]),
-            "version": data.get("version", f"comparison_{profile}"),
-            "start_date": str(data["train_start"]),
-            "end_date": str(data["test_end"]),
-            "split_strategy": "single",
-            "embargo_days": int(data.get("embargo_days", 7)),
-            "splits": [
-                {
-                    "fold_id": 0,
-                    "name": f"{profile} A/B test",
-                    "train_start": str(data["train_start"]),
-                    "train_end": str(data["train_end"]),
-                    "test_start": str(data["test_start"]),
-                    "test_end": str(data["test_end"]),
-                }
-            ],
-        },
-        "features": {"comparison_profile": profile, "comparison_variant": variant},
-        "labels": labels,
-        "model": config.get("model", {}),
-        "strategy": strategy,
-        "backtest": backtest,
-        "evaluation": {
-            "random_baseline_runs": int(
-                config.get("evaluation", {}).get("random_baseline_runs", 30)
-            )
-        },
-    }
-
-
 def run_comparison(
     config: dict[str, Any], *, config_dir: Path, output_override: Path | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any]]:
@@ -431,8 +367,6 @@ def run_comparison(
     output.mkdir(parents=True, exist_ok=True)
     prediction_dir = output / "predictions"
     prediction_dir.mkdir(exist_ok=True)
-    backtest_config_dir = output / "backtest_configs"
-    backtest_config_dir.mkdir(exist_ok=True)
 
     metric_rows: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
@@ -477,19 +411,6 @@ def run_comparison(
                 prediction_dir / f"{profile}_{variant.lower()}_predictions.parquet"
             )
             predictions.to_parquet(prediction_path, index=False)
-            backtest_config = _build_backtest_config(
-                config, profile, variant, profile_config
-            )
-            backtest_config["data"]["price_dir"] = str(
-                _resolve_path(profile_config["data"]["baseline_price_dir"], config_dir)
-            )
-            backtest_config_path = backtest_config_dir / f"{profile}_{variant.lower()}.yaml"
-            with backtest_config_path.open("w", encoding="utf-8") as file:
-                yaml.safe_dump(backtest_config, file, allow_unicode=True, sort_keys=False)
-            backtest_command = (
-                f"python -m experiments.run_backtest --config {backtest_config_path} "
-                f"--predictions-path {prediction_path}"
-            )
             runs.append(
                 {
                     "profile": profile,
@@ -500,8 +421,6 @@ def run_comparison(
                     "train_key_label_hash": metadata["train_key_label_hash"],
                     "test_key_label_hash": metadata["test_key_label_hash"],
                     "prediction_file": str(prediction_path),
-                    "backtest_config_file": str(backtest_config_path),
-                    "backtest_command": backtest_command,
                 }
             )
             samples = {
@@ -542,7 +461,7 @@ def run_comparison(
             "volatile_fraction": fraction,
             "market_volatility_definition": "daily cross-sectional mean of trailing Sigma",
             "trading_metrics": (
-                "not produced here; execute each runs[].backtest_command with canonical run_backtest"
+                "not produced here; run experiments.run_backtest with a contract_version 3 config"
             ),
         },
         "invariants": {
@@ -602,9 +521,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"4런 ML 지표 행 수: {len(four_runs)}")
     print(f"급변구간 ML 지표 행 수: {len(volatile)}")
     print(f"A/B 비교 행 수: {len(deltas)}")
-    print("공용 backtest 실행 명령:")
-    for run in manifest["runs"]:
-        print(f"  {run['backtest_command']}")
     return 0
 
 

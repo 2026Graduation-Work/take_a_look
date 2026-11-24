@@ -55,31 +55,10 @@ model:
     subsample_freq: 1
     class_weight: balanced
 
-# runner가 네 prediction별 공용 run_backtest config를 자동 생성할 때 사용한다.
-strategy:
-  score_column: prob_up
-  selection: top_k
-  top_n: 5
-  prob_threshold: 0.65
-  position_weighting: equal_weight
-
-backtest:
-  initial_cash: 100000000
-  signal_lag_days: 1
-  entry_price: open
-  exit_price: open
-  fee: 0.00105
-  slippage_bps: 10
-  max_participation: 0.025
-  up_mult: 1.8
-  down_mult: 1.2
-  hard_sl_mult: 1.5
-
 evaluation:
   # ML 평가는 기존 chart 의미론대로 class 2(Up) vs rest로 계산한다.
   classification_threshold: 0.5
   calibration_bins: 10
   volatile_fraction: 0.2
-  random_baseline_runs: 30
 
 output_dir: ../results/psychology_ab

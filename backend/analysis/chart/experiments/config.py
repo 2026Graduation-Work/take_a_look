@@ -288,9 +288,9 @@ def load_experiment_config(path):
     evaluation = config.setdefault("evaluation", {})
     keys(evaluation, "probability_bins benchmark_file benchmark_strategies random_baseline_runs",
          "evaluation")
-    runs = evaluation.setdefault("random_baseline_runs", 0)
+    runs = evaluation.get("random_baseline_runs")
     if isinstance(runs, bool) or not isinstance(runs, int) or runs < 0:
-        raise ValueError("evaluation.random_baseline_runs must be a non-negative integer")
+        raise ValueError("evaluation.random_baseline_runs must be set explicitly: integer >= 0")
     if evaluation.get("benchmark_strategies", []) not in ([], ["market_index"]):
         raise ValueError("Local evaluation supports only the fixed market_index benchmark")
     bins = evaluation.get("probability_bins", [0, 0.2, 0.4, 0.6, 0.8, 1])
