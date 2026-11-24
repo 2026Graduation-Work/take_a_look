@@ -248,6 +248,7 @@ def execution_config():
         "backtest": {
             "initial_cash": 1000.0,
             "fee": 0.01,
+            "slippage_bps": 0,
             "max_holding_days": 5,
             "up_mult": 1.0,
             "down_mult": 1.0,
@@ -916,7 +917,7 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     config = {"contract_version": 3, "data": {"embargo_days": 0},
               "strategy": {"score_column": "prob_up", "top_n": 1, "prob_threshold": 0.5},
               "backtest": {"capital_mode": "independent_year", "initial_cash": 1000,
-                           "fee": 0.0, "signal_lag_days": 1, "max_holding_days": 20,
+                           "fee": 0.0, "slippage_bps": 0, "signal_lag_days": 1, "max_holding_days": 20,
                            "up_mult": None, "down_mult": None, "hard_sl_mult": None}}
     splits = [{"fold_id": i, "train_start": f"{year-3}-01-01", "train_end": f"{year-1}-12-31",
                "test_start": f"{year}-01-01", "test_end": f"{year}-12-31"}

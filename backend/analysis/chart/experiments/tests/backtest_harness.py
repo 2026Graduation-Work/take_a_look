@@ -32,13 +32,14 @@ def signals(prices, entry_days):
 
 def config(**backtest):
     return {"strategy": {"top_n": backtest.pop("top_n", 1)}, "backtest": {
-        "initial_cash": 1000.0, "fee": 0.0, "max_holding_days": 3, "signal_lag_days": 1,
+        "initial_cash": 1000.0, "fee": 0.0, "slippage_bps": 0, "max_holding_days": 3, "signal_lag_days": 1,
         "up_mult": 1.0, "down_mult": 1.0, "hard_sl_mult": 1.5, **backtest}}
 
 
 def check_ledger(result, cfg, prices):
     bt = cfg["backtest"]
     fee = bt["fee"]
+    slippage = bt["slippage_bps"] / 10_000
     bar = prices.assign(Date=pd.to_datetime(prices.Date)).set_index(["Date", "Code"])
     cash, held = float(bt["initial_cash"]), {}
     events = result.events
@@ -52,14 +53,16 @@ def check_ledger(result, cfg, prices):
             if event.side == "buy":
                 assert event.code not in held, "bought a held code"
                 assert row.Trading_Halt == 0, "filled on a halted session"
-                assert event.price == row.Open, "entry must fill at the open"
+                assert event.reference_price == row.Open, "entry must fill at the open"
+                assert event.price == pytest.approx(event.reference_price * (1 + slippage))
                 cash -= notional + event.fee
                 held[event.code] = event.quantity
             else:
                 assert held.pop(event.code) == event.quantity, "sold a different quantity"
                 if event.side == "sell":
                     assert row.Trading_Halt == 0, "filled on a halted session"
-                    assert row.Low <= event.price <= row.High, "fill outside the day's range"
+                    assert row.Low <= event.reference_price <= row.High, "fill outside the day's range"
+                    assert event.price == pytest.approx(event.reference_price * (1 - slippage))
                     cash += notional - event.fee
                 else:
                     assert event.price == 0.0

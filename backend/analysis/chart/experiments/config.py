@@ -253,7 +253,7 @@ def load_experiment_config(path):
     bt = config["backtest"]
     keys(
         bt,
-        "initial_cash signal_lag_days entry_price exit_price fee max_holding_days up_mult down_mult hard_sl_mult capital_mode",
+        "initial_cash signal_lag_days entry_price exit_price fee slippage_bps max_holding_days up_mult down_mult hard_sl_mult capital_mode",
         "backtest",
     )
     bt.setdefault("capital_mode", "continuous")
@@ -270,6 +270,8 @@ def load_experiment_config(path):
         or not 0 <= bt["fee"] < 1
     ):
         raise ValueError("Invalid initial_cash/fee")
+    if not isinstance(bt.get("slippage_bps"), (int, float)) or not 0 <= bt["slippage_bps"] < 10_000:
+        raise ValueError("backtest.slippage_bps must be set explicitly in [0, 10000)")
     for name in ("up_mult", "down_mult", "hard_sl_mult"):
         if bt.get(name) is not None and bt[name] <= 0:
             raise ValueError(f"backtest.{name} must be positive or null")

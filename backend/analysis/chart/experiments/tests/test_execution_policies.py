@@ -73,6 +73,15 @@ def test_fees_charge_both_sides_and_size_includes_entry_fee():
     assert result.value().iloc[-1] == pytest.approx(1000 - 9 * 101 * 1.01 + 9 * 101 * 0.99)
 
 
+def test_slippage_worsens_both_fills_and_sizes_on_the_slipped_price():
+    result = run([SIGNAL, FLAT, FLAT, FLAT, FLAT], slippage_bps=10)
+    buy, sell = 101 * 1.001, 101 * 0.999
+    assert result.trades.quantity.tolist() == [9]
+    assert result.trades.entry_price.iloc[0] == pytest.approx(buy)
+    assert result.trades.exit_price.iloc[0] == pytest.approx(sell)
+    assert result.value().iloc[-1] == pytest.approx(1000 - 9 * buy + 9 * sell)
+
+
 def test_turnover_is_half_traded_notional_over_mean_equity_annualized():
     result = run([SIGNAL, FLAT, FLAT, FLAT, FLAT])
     assert result.turnover() == pytest.approx((9 * 101 * 2 / 2) / 1000 * 252 / 5)
