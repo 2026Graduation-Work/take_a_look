@@ -3,9 +3,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from shared.io import sha256_file
 
 
-def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None):
+def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None, price_files=None):
     if horizon not in (5, 20):
         raise ValueError("Only H5/H20 supported")
     predictions = pd.read_parquet(prediction_file)
@@ -25,9 +26,13 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
     official = set(pd.to_datetime(list(calendar_days))) if calendar_days is not None else None
     for code, group in predictions.groupby("Code", sort=True):
         path = Path(processed_dir) / f"{code}.parquet"
+        if price_files is not None and path.name not in price_files:
+            raise ValueError(f"Prediction refers to a ticker absent from the verified processed manifest: {code}")
         if not path.is_file():
             excluded["missing_price_file"] += len(group)
             continue
+        if price_files is not None and sha256_file(path) != price_files[path.name]:
+            raise ValueError(f"Export processed input changed: {code}")
         prices = pd.read_parquet(path, columns=["Date", "Close", "Trading_Halt", "Sigma"])
         prices.Date = pd.to_datetime(prices.Date)
         prices = prices.sort_values("Date").reset_index(drop=True)

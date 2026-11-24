@@ -9,6 +9,7 @@ import pandas as pd
 from experiments.comparison.metrics import expected_calibration_error, select_volatile_dates
 from experiments.evaluation.metrics import calculate_classification_metrics
 from experiments.features.psychology.market_psychology import RAW_FEATURES
+from shared.data.actions import require_price_provenance
 from shared.io import sha256
 from shared.settings import BASE_FEATURES, FLOW_FEATURES
 
@@ -123,6 +124,9 @@ def export(suite, output, input_evidence):
     # Sigma comes from the actual, hashed B inputs, not recomputed current prices.
     feature_root = Path(runs["h5_B"][2]["config"]["data"]["price_dir"])
     feature_manifest = checked_manifest(feature_root / "feature_manifest.json", pinned["sigma_feature_manifest_sha256"])
+    official_actions = require_price_provenance(feature_manifest)
+    if any(require_price_provenance(run[2]) != official_actions for run in runs.values()):
+        raise ValueError("Performance runs use different official action snapshots")
     if feature_manifest["feature_columns"] != runs["h5_B"][2]["feature_columns"]:
         raise ValueError("Sigma input feature contract differs")
     sigma_parts = []
@@ -190,6 +194,7 @@ def export(suite, output, input_evidence):
     output.with_name("performance-provenance.json").write_text(json.dumps(
         {"run_id": status["run_id"], "artifact_sha256": sha256(output), "exporter_sha256": sha256(Path(__file__)),
          "input_evidence_sha256": sha256(input_evidence),
+         "price_policy": feature_manifest["price_policy"], "official_actions": official_actions,
          "status_sha256": sha256(suite / "status.json"), "prepared_sha256": sha256(suite / "prepared.json"),
          "source_artifacts": evidence}, ensure_ascii=False, indent=2) + "\n")
     return artifact

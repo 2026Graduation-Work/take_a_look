@@ -146,6 +146,8 @@ def test_full_history_is_one_request_and_old_chunks_are_reused(tmp_path):
 
 
 def test_missing_ranking_investor_is_retained_and_windows_excluded(tmp_path):
+    from shared.io import sha256
+
     case = CAPTURE["flow_case"]
     assert not case["present_in_ranking"] and case["detail_buy_volume"] == 0
     days = pd.bdate_range(case["date"], periods=25)
@@ -159,7 +161,7 @@ def test_missing_ranking_investor_is_retained_and_windows_excluded(tmp_path):
     for window in (1, 5, 20):
         assert flow[f"flow_institution_{window}"].iloc[:window].isna().all()
         assert flow[f"flow_institution_{window}"].iloc[window] == 0
-    report = flow_coverage(tmp_path, source._INVESTORS, source._FLOW_COLUMNS, days)
+    report = flow_coverage(tmp_path, source._INVESTORS, source._FLOW_COLUMNS, days, price_files={"101930.parquet": sha256(tmp_path / "raw/101930.parquet")})
     institution = next(row for row in report if row["investor"] == "Institution")
     assert institution["not_returned_rows"] == institution["missing_traded_rows"] == 1
     assert institution["amount_window_coverage"]["20"]["excluded_rows"] == 20

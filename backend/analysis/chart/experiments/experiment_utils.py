@@ -272,17 +272,21 @@ def data_fingerprint(config: dict) -> dict:
     if source_dir is None:
         return {"status": "missing", "configured_version": configured_version}
 
+    if config.get("contract_version") == 3:
+        from shared.io import sha256
+
+        path = source_dir / "feature_manifest.json"
+        if not path.exists():
+            return {"status": "missing_feature_manifest", "configured_version": configured_version}
+        _, manifest = verified_feature_manifest(config, verify_files=False)
+        return {"status": "available", "configured_version": configured_version,
+                "file_count": len(manifest["file_hashes"]), "manifest_sha256": sha256(path)}
     digest = hashlib.sha256()
     count = 0
     for file_path in sorted(source_dir.rglob("*.parquet")):
         stat = file_path.stat()
         digest.update(str(file_path.relative_to(source_dir)).encode())
-        if config.get("contract_version") == 3:
-            from shared.io import sha256
-
-            digest.update(sha256(file_path).encode())
-        else:
-            digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+        digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
         count += 1
     return {
         "status": "available",
@@ -358,23 +362,43 @@ def chart_root(anchor_file: str) -> str:
     return os.path.dirname(experiments_dir(anchor_file))
 
 
-def find_processed_dir(config: dict, anchor_file: str) -> str:
-    path = _candidate_price_dirs(config)[0]
-    if config.get("contract_version") == 3:
-        from shared.io import sha256
+def verified_feature_manifest(config, *, verify_files=True):
+    from shared.data.actions import require_price_provenance
+    from shared.io import sha256
 
-        manifest_path = path / "feature_manifest.json"
-        if not manifest_path.exists():
-            raise FileNotFoundError(
-                "Run python -m experiments.features.build_feature_panel --config first"
-            )
-        manifest = json.loads(manifest_path.read_text())
-        if manifest["feature_columns"] != config["feature_columns"]:
-            raise ValueError("Feature list changed; prepare features again")
+    path = _candidate_price_dirs(config)[0]
+    manifest_path = path / "feature_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError("Run python -m experiments.features.build_feature_panel --config first")
+    manifest = json.loads(manifest_path.read_text())
+    evidence = require_price_provenance(manifest)
+    if manifest["feature_columns"] != config["feature_columns"]:
+        raise ValueError("Feature list changed; prepare features again")
+    root = Path(config["dataset"]["root"])
+    processed_path = root / "processed_manifest.json"
+    if not processed_path.is_file() or sha256(processed_path) != manifest.get("processed_manifest_sha256"):
+        raise ValueError("Processed official action provenance differs from feature store")
+    processed = json.loads(processed_path.read_text())
+    dataset_path = root / "dataset_manifest.json"
+    if (not dataset_path.is_file() or sha256(dataset_path) != processed.get("dataset_manifest_sha256")
+            or evidence != require_price_provenance(processed)):
+        raise ValueError("Dataset or processed official action provenance differs from feature store")
+    if evidence != require_price_provenance(json.loads(dataset_path.read_text())):
+        raise ValueError("Processed official action provenance differs from feature store")
+    snapshot_path = root / "official_actions" / f"{evidence['sha256']}.json"
+    if not snapshot_path.exists() or sha256(snapshot_path) != evidence["sha256"]:
+        raise ValueError("Feature store's official action snapshot is missing or modified")
+    if verify_files:
         for name, digest in manifest["file_hashes"].items():
             if not (path / name).exists() or sha256(path / name) != digest:
                 raise ValueError(f"Modified/missing feature input {name}; prepare features again")
-    return str(path)
+    return path, manifest
+
+
+def find_processed_dir(config: dict, anchor_file: str) -> str:
+    if config.get("contract_version") == 3:
+        return str(verified_feature_manifest(config)[0])
+    return str(_candidate_price_dirs(config)[0])
 
 
 def cache_dir(anchor_file: str) -> str:
@@ -403,10 +427,13 @@ def result_dir(config: dict, anchor_file: str) -> str:
     if config.get("contract_version") == 3:
         from shared.io import atomic_json
 
+        _, features = verified_feature_manifest(config, verify_files=False)
         atomic_json(
             Path(path) / "run_manifest.json",
             {
                 "config": config,
+                "price_policy": features["price_policy"],
+                "official_actions": features["official_actions"],
                 "predictions_hash": generate_predictions_hash(config, resolve_splits(config)),
                 "feature_columns": config["feature_columns"],
                 "processing_contract": config["processing_contract"],

@@ -138,6 +138,9 @@ def prepare_local_panel(config):
     atomic_parquet(destination / "sample_keys.parquet", pd.concat(sample_keys, ignore_index=True))
     manifest = {
         "input_identity": fingerprint,
+        "price_policy": contract["price_policy"],
+        "official_actions": contract["official_actions"],
+        "processed_manifest_sha256": sha256(root / "processed_manifest.json"),
         "feature_version": FEATURE_VERSION,
         "feature_columns": selected,
         "dataset_id": config["dataset"]["dataset_id"],

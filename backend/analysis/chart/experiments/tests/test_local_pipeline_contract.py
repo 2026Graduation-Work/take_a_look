@@ -17,6 +17,8 @@ from experiments.train_src.labels import (
 )
 from experiments.train_src.loaders import load_parquet_data
 from shared.features.builder import build_feature_frame, normalize_trading_halts
+from shared.settings import TRAINING_PRICE_BASIS
+from shared.tests.official_fixtures import fake_isin, fake_split, fixture_snapshot, price_provenance
 
 
 @pytest.fixture
@@ -74,7 +76,8 @@ def local_dataset(tmp_path):
     atomic_parquet(path, frame)
     atomic_json(
         root / "dataset_manifest.json",
-        {"contract_version": 3, "prices_complete": True, "raw_files": {path.name: sha256(path)}},
+        {"contract_version": 3, "prices_complete": True, "raw_files": {path.name: sha256(path)},
+         "price_basis": TRAINING_PRICE_BASIS, **price_provenance(root, ["005930"], days)},
     )
     atomic_json(
         root / "calendar.json",
@@ -350,7 +353,8 @@ def test_flow_ab_matching_preserves_price_paths(local_dataset):
     atomic_parquet(raw_path, raw)
     atomic_json(
         Path(settings["root"]) / "dataset_manifest.json",
-        {"prices_complete": True, "raw_files": {raw_path.name: sha256(raw_path)}},
+        {**json.loads((Path(settings["root"]) / "dataset_manifest.json").read_text()),
+         "prices_complete": True, "raw_files": {raw_path.name: sha256(raw_path)}},
     )
     preprocess_dataset(dataset_path, rebuild=True)
     cfg = yaml.safe_load(config_path.read_text())
@@ -463,6 +467,13 @@ def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch
         build_calendar(tmp_path, collection)
 
 
+def _test_source_snapshot(module, monkeypatch, tmp_path, codes, dates, actions=()):
+    read = module.read_snapshot
+    monkeypatch.setattr(module, "read_snapshot", lambda path, **kwargs: read(path))
+    monkeypatch.setattr(module, "resolve_krx_isin", lambda code, **kwargs: fake_isin(code))
+    return fixture_snapshot(tmp_path / "remote", codes, pd.DatetimeIndex(dates), actions)
+
+
 def _synthetic_krx_raw(frame):
     raw = frame[["Date", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]].copy()
     fields = ["RawOpen", "RawHigh", "RawLow", "RawClose"]
@@ -518,8 +529,10 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
         ),
     )
     monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw.iloc[1:])
+    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["005930"], raw.Date,
+                                    [fake_split(raw.Date.iloc[2].date(), 1, 2, (100_000, 200_000))])
     with pytest.raises(RuntimeError, match="incomplete"):
-        module.collect_dataset(path, rebuild=True)
+        module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     root = Path(settings["root"])
     assert not (root / "raw/005930.parquet").exists()
     assert not (root / "krx_raw_prices/005930.parquet").exists()
@@ -542,6 +555,9 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
     event_bytes = events_path.read_bytes()
     assert manifest["price_events"]["sha256"] == event_hash
     assert pd.read_parquet(events_path).PriceFactor.tolist() == [0.5]
+    from experiments.dataset.verify_training_prices import verify
+
+    assert verify(root) == [{"code": "005930", "raw_rows": 3, "applied_events": 1}]
     assert stored.AdjustmentFactor.tolist() == [0.5, 0.5, 1.0]
     np.testing.assert_array_equal(stored.Volume, raw.RawVolume * [2, 2, 1])
 
@@ -620,8 +636,9 @@ def test_failed_event_adjustment_preserves_verified_raw_without_refetching(local
         assert report["prices"][0]["status"] == "failed"
         assert "123456 2020-03-20" in report["prices"][0]["reason"]
 
+    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["123456"], raw.Date)
     with pytest.raises(RuntimeError, match="incomplete"):
-        module.collect_dataset(path)
+        module.collect_dataset(path, action_snapshot=snapshot)
     original_path = root / "krx_raw_prices/123456.parquet"
     raw_hash = sha256(original_path)
     pd.testing.assert_frame_equal(pd.read_parquet(original_path), raw)
@@ -758,11 +775,12 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
 
     monkeypatch.setattr(module, "atomic_parquet", tracked_write)
     monkeypatch.setattr(price_collector, "_fetch_investor_day", fetch)
+    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["005930"], raw.Date)
     if flow_status == "interrupted":
         with pytest.raises(KeyboardInterrupt):
-            module.collect_dataset(path, rebuild=True)
+            module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     else:
-        module.collect_dataset(path, rebuild=True)
+        module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     root = Path(settings["root"])
     manifest = json.loads((root / "dataset_manifest.json").read_text())
     assert manifest["prices_complete"] and not manifest["flows_complete"]
@@ -983,7 +1001,8 @@ def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_pa
     monkeypatch.setattr(bulk_prices, "request_day", daily)
     monkeypatch.setattr(bulk_prices.time, "sleep", lambda _: None)
     monkeypatch.setattr(training_prices, "request_history", individual)
-    module.collect_dataset(config)
+    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, codes, days)
+    module.collect_dataset(config, action_snapshot=snapshot)
     assert daily_calls == days.strftime("%Y%m%d").tolist()
     assert fallback_calls == [codes[-1]]
     root = Path(settings["root"])
@@ -1080,3 +1099,25 @@ def test_previous_builder_processed_data_is_preserved(local_dataset):
     with pytest.raises(ValueError, match="new dataset root"):
         preprocess_dataset(dataset_path)
     assert {path: sha256(path) for path in before} == before
+
+
+def test_direct_training_fails_when_current_dataset_no_longer_allows_feature_input(local_dataset):
+    from experiments.comparison.runner import ComparisonConfigError, _load_split
+    from experiments.experiment_utils import find_processed_dir
+
+    _, settings, _, config_path = local_dataset
+    config = load_experiment_config(config_path)
+    panel = prepare_local_panel(config)
+    store = Path(find_processed_dir(config, __file__))
+    stale = store / "000000.parquet"
+    stale.write_bytes(b"previous build")
+    assert set(panel["file_hashes"]) == {"005930.parquet"}
+    assert load_parquet_data(str(store)).Code.unique().tolist() == ["005930"]
+    data_path = Path(settings["root"]) / "dataset_manifest.json"
+    data = json.loads(data_path.read_text())
+    atomic_json(data_path, {**data, "prices_complete": False, "raw_files": {}})
+    with pytest.raises(ValueError, match="Dataset or processed official action provenance differs"):
+        find_processed_dir(config, __file__)
+    with pytest.raises(ComparisonConfigError, match="Dataset or processed official action provenance differs"):
+        _load_split(store, start="2023-01-02", end="2023-12-01", label_observation_end=None,
+                    tickers=None, label_params={}, features=[])
