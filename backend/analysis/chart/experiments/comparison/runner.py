@@ -409,8 +409,8 @@ def _build_backtest_config(
         "strategy": strategy,
         "backtest": backtest,
         "evaluation": {
-            "random_baseline_seeds": int(
-                config.get("evaluation", {}).get("random_baseline_seeds", 5)
+            "random_baseline_runs": int(
+                config.get("evaluation", {}).get("random_baseline_runs", 30)
             )
         },
     }

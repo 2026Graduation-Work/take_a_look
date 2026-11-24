@@ -80,6 +80,6 @@ evaluation:
   classification_threshold: 0.5
   calibration_bins: 10
   volatile_fraction: 0.2
-  random_baseline_seeds: 5
+  random_baseline_runs: 30
 
 output_dir: ../results/psychology_ab
