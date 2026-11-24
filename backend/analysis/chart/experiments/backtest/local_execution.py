@@ -8,6 +8,12 @@ import vectorbt as vbt
 from shared.io import atomic_json
 
 TRADING_DAYS_PER_YEAR = 252
+# KRX daily price limit is ±30% of the base price since 2015-06-15. Rounding the limit to a
+# tick moves it by at most ~0.5%, so these ratios to the previous adjusted close detect it.
+PRICE_LIMIT_START = pd.Timestamp("2015-06-15")
+LIMIT_UP_RATIO = 1.29
+LIMIT_DOWN_RATIO = 0.71
+LIQUIDITY_WINDOW = 20
 # Four ordered events per session: opening exits, opening entries, intraday exits, closing exits.
 EVENT_HOURS = (9, 10, 12, 16)
 TRADE_COLUMNS = [
@@ -50,9 +56,14 @@ def simulate(config, entries, price_df):
     horizon = bt["max_holding_days"]
     fee = bt["fee"]
     slippage = bt["slippage_bps"] / 10_000
+    participation = bt["max_participation"]
     top_n = config["strategy"]["top_n"]
     codes = list(entries.columns)
     days = pd.DatetimeIndex(entries.index)
+    if days.min() < PRICE_LIMIT_START:
+        raise ValueError("Price-limit rules assume the ±30% regime from 2015-06-15")
+    if participation is not None and "Amount" not in price_df:
+        raise ValueError("backtest.max_participation requires the Amount (traded value) column")
     price_df = price_df.copy()
     price_df["Date"] = pd.to_datetime(price_df.Date).dt.normalize()
     if price_df.duplicated(["Date", "Code"]).any():
@@ -61,7 +72,8 @@ def simulate(config, entries, price_df):
         column: price_df.pivot(index="Date", columns="Code", values=column).reindex(
             index=days, columns=codes
         )
-        for column in ("Open", "High", "Low", "Close", "Trading_Halt", "Sigma")
+        for column in ("Open", "High", "Low", "Close", "Trading_Halt", "Sigma", "Amount")
+        if column in price_df
     }
     eligible = (
         price_df.pivot(index="Date", columns="Code", values="UniverseEligible")
@@ -73,6 +85,15 @@ def simulate(config, entries, price_df):
     # Barriers are anchored where the label is: the signal day's close and Sigma.
     signal_close = fields["Close"].shift(lag)
     signal_sigma = fields["Sigma"].shift(lag)
+    previous_close = fields["Close"].shift(1)
+    # A session traded only at the lower limit leaves no buyer for our sell order.
+    locked_down = (fields["High"] == fields["Low"]) & (
+        fields["Close"] / previous_close <= LIMIT_DOWN_RATIO)
+    limit_up_open = fields["Open"] / previous_close >= LIMIT_UP_RATIO
+    average_value = (
+        fields["Amount"].shift(1).rolling(LIQUIDITY_WINDOW, min_periods=1).mean()
+        if participation is not None else None
+    )
 
     delisting_dates = {}
     if config.get("dataset", {}).get("root"):
@@ -119,6 +140,9 @@ def simulate(config, entries, price_df):
 
     def sell(code, row, reference, reason):
         nonlocal cash
+        if locked_down.loc[row.normalize(), code]:
+            positions[code]["pending"] = "limit_down_locked"
+            return
         quantity = positions[code]["quantity"]
         price = reference * (1 - slippage)
         proceeds = quantity * price
@@ -160,7 +184,7 @@ def simulate(config, entries, price_df):
             open_price = fields["Open"].loc[day, code]
             stop, profit, _ = lines(pos)
             if pos["pending"]:
-                sell(code, rows[0], open_price, "close_stop_next_open")
+                sell(code, rows[0], open_price, pos["pending"])
             elif open_price <= stop:
                 sell(code, rows[0], open_price, "stop_gap")
             elif open_price >= profit:
@@ -187,19 +211,31 @@ def simulate(config, entries, price_df):
             open_price = fields["Open"].loc[day, code]
             candidate = {"anchor": anchor, "sigma": sigma}
             stop, profit, _ = lines(candidate)
+            if limit_up_open.loc[day, code]:
+                # Buy orders queue at an upper-limit open; assume ours is not filled.
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "limit_up_open"})
+                continue
             if open_price <= stop or open_price >= profit:
                 # An open beyond a barrier exits at that same open: a forced fee-only round trip.
                 exclusions.append({"date": str(day.date()), "code": code, "reason": "open_beyond_barrier"})
                 continue
             price = open_price * (1 + slippage)
             quantity = floor(max(0.0, budget) / (price * (1 + fee)))
+            capped = False
+            if participation is not None and pd.notna(average_value.loc[day, code]):
+                cap = floor(participation * average_value.loc[day, code] / price)
+                capped = cap < quantity
+                quantity = min(quantity, cap)
             cost = quantity * price * (1 + fee)
             if quantity < 1 or cost > cash:
-                exclusions.append({"date": str(day.date()), "code": code, "reason": "insufficient_cash"})
+                reason = "liquidity_capped" if capped else "insufficient_cash"
+                exclusions.append({"date": str(day.date()), "code": code, "reason": reason})
                 continue
+            if capped:
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "liquidity_capped"})
             cash -= cost
             positions[code] = {**candidate, "quantity": quantity, "price": price,
-                               "fee": quantity * price * fee, "sessions": 0, "pending": False,
+                               "fee": quantity * price * fee, "sessions": 0, "pending": None,
                                "entry_date": day}
             sizes.loc[rows[1], code] = quantity
             order_prices.loc[rows[1], code] = price
@@ -230,8 +266,8 @@ def simulate(config, entries, price_df):
                 sell(code, rows[3], close_price, "holding_expiry")
             elif last_day:
                 sell(code, rows[3], close_price, "period_end")
-            elif close_price <= lines(pos)[2]:
-                pos["pending"] = True
+            elif not pos["pending"] and close_price <= lines(pos)[2]:
+                pos["pending"] = "close_stop_next_open"
 
         equity_at_close.append(
             cash + sum(pos["quantity"] * fields["Close"].loc[day, code] for code, pos in positions.items())

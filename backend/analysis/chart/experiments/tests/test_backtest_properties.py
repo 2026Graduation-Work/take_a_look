@@ -9,7 +9,7 @@ from experiments.train_src.labels import barrier_labels
 CODES = ["000001", "000002", "000003", "000004", "000005"]
 
 
-def random_market(rng, codes=CODES, n_days=30, halt_rate=0.05):
+def random_market(rng, codes=CODES, n_days=30, halt_rate=0.05, limit_rate=0.0):
     days = pd.bdate_range("2024-01-02", periods=n_days)
     rows = []
     for code in codes:
@@ -18,14 +18,20 @@ def random_market(rng, codes=CODES, n_days=30, halt_rate=0.05):
             previous = close
             if rng.random() < halt_rate:
                 rows.append({"Date": day, "Code": code, "Open": close, "High": close, "Low": close,
-                             "Close": close, "Sigma": 0.03, "Trading_Halt": 1})
+                             "Close": close, "Sigma": 0.03, "Trading_Halt": 1, "Amount": 0.0})
+                continue
+            if rng.random() < limit_rate:
+                close = previous * 0.7
+                rows.append({"Date": day, "Code": code, "Open": close, "High": close, "Low": close,
+                             "Close": close, "Sigma": 0.03, "Trading_Halt": 0, "Amount": 1e6})
                 continue
             open_ = previous * np.exp(rng.normal(0, 0.015))
             close = previous * np.exp(rng.normal(0, 0.03))
             high = max(open_, close) * np.exp(abs(rng.normal(0, 0.01)))
             low = min(open_, close) * np.exp(-abs(rng.normal(0, 0.01)))
             rows.append({"Date": day, "Code": code, "Open": open_, "High": high, "Low": low,
-                         "Close": close, "Sigma": rng.uniform(0.02, 0.05), "Trading_Halt": 0})
+                         "Close": close, "Sigma": rng.uniform(0.02, 0.05), "Trading_Halt": 0,
+                         "Amount": rng.uniform(1e5, 1e9)})
     return pd.DataFrame(rows)
 
 
@@ -35,6 +41,7 @@ def random_config(rng):
     return config(top_n=3, initial_cash=float(rng.uniform(1e3, 1e7)),
                   fee=float(rng.choice([0.0, 0.00105, 0.0025])),
                   slippage_bps=float(rng.choice([0, 10, 30])),
+                  max_participation=None if rng.random() < 0.5 else 0.025,
                   max_holding_days=int(rng.integers(1, 7)),
                   up_mult=multiplier(), down_mult=multiplier(), hard_sl_mult=multiplier())
 
@@ -51,7 +58,7 @@ def random_entries(rng, prices, top_n=3):
 @pytest.mark.parametrize("seed", range(25))
 def test_random_markets_keep_an_exact_ledger(seed):
     rng = np.random.default_rng(seed)
-    prices = random_market(rng)
+    prices = random_market(rng, limit_rate=0.03)
     cfg = random_config(rng)
     entries = random_entries(rng, prices)
     result = simulate(cfg, entries, prices)
