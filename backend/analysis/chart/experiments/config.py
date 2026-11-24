@@ -273,7 +273,8 @@ def load_experiment_config(path):
         or not 0 <= bt["fee"] < 1
     ):
         raise ValueError("Invalid initial_cash/fee")
-    if not isinstance(bt.get("slippage_bps"), (int, float)) or not 0 <= bt["slippage_bps"] < 10_000:
+    slippage = bt.get("slippage_bps")
+    if isinstance(slippage, bool) or not isinstance(slippage, (int, float)) or not 0 <= slippage < 10_000:
         raise ValueError("backtest.slippage_bps must be set explicitly in [0, 10000)")
     for name in ("up_mult", "down_mult", "hard_sl_mult"):
         if bt.get(name) is not None and bt[name] <= 0:
