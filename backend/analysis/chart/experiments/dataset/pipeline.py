@@ -40,6 +40,8 @@ from shared.features.builder import build_feature_frame
 from shared.io import sha256
 from shared.settings import TRAINING_PRICE_BASIS, VALIDATION_VERSION, processing_contract
 
+_TRAINING_PRICE_POLICY = "immutable_krx_raw_preserve_market_moves"
+
 
 def flow_coverage(root, investors, columns, market_days):
     """Missing ranking rows are unknown observations, never inferred zero trades."""
@@ -198,43 +200,49 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         try:
             previous = pd.read_parquet(path) if path.exists() else None
             saved = load_training_raw(original_path, expected, krx_raw_files.get(path.name))
-            raw_parts, price_parts, event_parts = [], [], []
+            windows = []
             for row in intervals.itertuples():
                 days = expected[
                     (expected >= row.ListingDate)
                     & (expected < row.DelistingDate if pd.notna(row.DelistingDate) else True)
                 ]
-                if days.empty:
-                    continue
-                if saved is not None:
-                    raw = saved.loc[saved.Date.isin(days)].reset_index(drop=True)
-                else:
+                if not days.empty:
+                    windows.append((row, days))
+
+            needs_source = saved is None
+            if needs_source:
+                raw_parts = []
+                for row, days in windows:
                     raw = stock_raw(bulk, code, days) if bulk is not None else None
                     if raw is None:
                         raw = fetch_raw_window(code, days, is_delisted=row.IsDelisted, source=source,
                             progress=lambda event: append_collection_event(root, event))
-                    raw = validate_krx_raw(raw, days)
-                    raw_parts.append(raw)
+                    raw_parts.append(validate_krx_raw(raw, days))
+                saved = validate_krx_raw(pd.concat(raw_parts, ignore_index=True), expected)
+            if previous is not None:
+                previous["Date"] = pd.to_datetime(previous.Date).dt.normalize()
+                check_raw_overlap(previous, saved)
+            if needs_source:
+                preserve_training_raw(original_path, saved)
+            krx_raw_files[path.name] = sha256(original_path)
+
+            price_parts, event_parts = [], []
+            for row, days in windows:
+                raw = saved.loc[saved.Date.isin(days)].reset_index(drop=True)
                 prices, events = adjust_training_window(code, raw, days, as_of)
                 price_parts.append(prices.assign(Code=code, Name=row.Name, IsDelisted=row.IsDelisted))
                 if not events.empty:
                     event_parts.append(events)
             frame = validate_prices(pd.concat(price_parts, ignore_index=True), expected, event_adjusted=True)
             if previous is not None:
-                previous["Date"] = pd.to_datetime(previous.Date).dt.normalize()
-                check_raw_overlap(previous, frame)
                 flows = [col for col in source._FLOW_COLUMNS if col in previous]
                 if flows:
                     frame = frame.merge(
                         previous[["Date", *flows]], on="Date", how="left", validate="one_to_one"
                     )
-            if saved is None:
-                original = validate_krx_raw(pd.concat(raw_parts, ignore_index=True), expected)
-                preserve_training_raw(original_path, original)
             resumed = previous is not None and previous.equals(frame)
             if not resumed:
                 atomic_parquet(path, frame)
-            krx_raw_files[path.name] = sha256(original_path)
             price_files[path.name] = sha256(path)
             price_events.extend(event_parts)
             report["prices"].append(
@@ -285,7 +293,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": "immutable_krx_raw_with_events_as_of_dataset_end",
+        "price_policy": _TRAINING_PRICE_POLICY,
         "end_date": calendar["observed_end"],
         "raw_files": price_files,
         "krx_raw_files": krx_raw_files,
@@ -411,7 +419,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": "immutable_krx_raw_with_events_as_of_dataset_end",
+        "price_policy": _TRAINING_PRICE_POLICY,
         "end_date": calendar["observed_end"],
         "raw_files": checkpoint["raw_files"],
         "krx_raw_files": krx_raw_files,
@@ -440,6 +448,14 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
     print(f"Verified dataset: {root}; frozen end: {calendar['observed_end']}")
 
 
+def _require_current_training_prices(manifest):
+    if ("price_basis" in manifest or "price_policy" in manifest) and (
+        manifest.get("price_basis") != TRAINING_PRICE_BASIS
+        or manifest.get("price_policy") != _TRAINING_PRICE_POLICY
+    ):
+        raise ValueError("Unsupported dataset price basis or policy; rerun collection before preprocessing")
+
+
 def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
@@ -447,6 +463,7 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     if not manifest_path.exists():
         raise FileNotFoundError("Run price_collector.py --config first")
     manifest = json.loads(manifest_path.read_text())
+    _require_current_training_prices(manifest)
     if not manifest.get("prices_complete") and not allow_partial:
         raise ValueError("Price collection incomplete; resume collection first")
     calendar = json.loads((root / "calendar.json").read_text())
@@ -540,6 +557,7 @@ def validate_processed_inputs(config):
         raise FileNotFoundError("Run preprocess_data.py --config first")
     processed = json.loads(path.read_text())
     dataset = json.loads((root / "dataset_manifest.json").read_text())
+    _require_current_training_prices(dataset)
     if (
         (not dataset.get("prices_complete") and not processed.get("allow_partial"))
         or processed.get("contract_version") != VALIDATION_VERSION

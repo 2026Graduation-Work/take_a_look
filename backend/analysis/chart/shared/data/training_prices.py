@@ -3,7 +3,6 @@ import tempfile
 import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from shared.io import atomic_parquet, sha256
@@ -110,9 +109,7 @@ def adjust_training_window(code, raw, days, as_of):
         raise ValueError("KRX raw price dates exceed the dataset as_of")
     events = derive_events(code, raw, days)
     adjusted = apply_events(raw, events, as_of=as_of)
-    adjusted["Change"] = 100 * raw.RawChange / (raw.RawClose - raw.RawChange)
+    adjusted["ExchangeChange"] = 100 * raw.RawChange / (raw.RawClose - raw.RawChange)
+    adjusted["Change"] = adjusted.Close.pct_change(fill_method=None) * 100
     adjusted["PriceProvider"] = PRICE_SOURCE
-    returns = adjusted.Close.pct_change().iloc[1:]
-    if not np.allclose(returns, adjusted.Change.iloc[1:] / 100, rtol=1e-10, atol=1e-12):
-        raise ValueError("Adjusted daily return disagrees with KRX base-price change")
     return validate_prices(adjusted, days, event_adjusted=True), events

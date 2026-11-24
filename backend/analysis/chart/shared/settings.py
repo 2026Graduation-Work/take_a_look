@@ -7,7 +7,7 @@ from .io import canonical_hash, sha256
 CHART_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_VERSION = VALIDATION_VERSION = 3
 PRICE_BASIS = "krx_raw_ohlc_uniform_close_ratio_v1"
-TRAINING_PRICE_BASIS = "krx_raw_base_price_events_v1"
+TRAINING_PRICE_BASIS = "krx_raw_unit_events_v2"
 BUILDER_ID = "shared_v3_uniform_ohlc_flow_v1"
 PREPROCESSING = {"sigma_window": 20, "sigma_min_periods": 10,
                  "barrier_feature_up_mult": 1.5, "barrier_feature_down_mult": 1.2}
