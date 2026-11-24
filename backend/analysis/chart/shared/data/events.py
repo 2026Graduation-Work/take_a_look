@@ -1,14 +1,21 @@
-"""Corporate-action events derived from immutable KRX raw bars and a vendor adjusted close.
+"""Corporate-action events derived from immutable KRX raw bars.
 
 RawBars: one stock, columns Date (normalized, unique, sorted), RawOpen, RawHigh, RawLow,
-RawClose, RawVolume, Amount, ListedShares. Halt rows keep RawVolume 0 and 0 as RawOpen/High/Low.
+RawClose, RawChange, RawVolume, Amount, ListedShares. RawChange is KRX's CMPPREVDD_PRC, the
+close minus the day's base price. Halt rows repeat the previous close with RawChange 0,
+RawVolume 0 and 0 as RawOpen/High/Low.
+
+KRX sets each day's base price, the reference for its change rate and the ±30% price limit, to
+the previous close unless a corporate action resets it. A base price that differs from the
+previous close is therefore an event, and base / previous close is its exact price factor.
 
 Events: one row per basis change, sorted by ExDate (the first trading day on the new basis).
 PriceFactor multiplies every bar dated before ExDate; VolumeFactor is 1/PriceFactor for a
 share-count change and 1.0 otherwise.
 
-KRX's own adjusted series (adjStkPrc=2) leaves Samsung's 2018-05-04 50:1 split unadjusted,
-so it is never an event source.
+KRX's own adjusted series (adjStkPrc=2) leaves Samsung's 2018-05-04 50:1 split unadjusted, and
+Naver's adjusted close drifts from the regular-session close after 2026-09-14, so neither is
+an event source.
 """
 import math
 from enum import StrEnum
@@ -16,10 +23,10 @@ from enum import StrEnum
 import numpy as np
 import pandas as pd
 
-SOURCE = "naver_close_ratio"
+SOURCE = "krx_base_price"
 SHARE_TOLERANCE = 1e-3
 EVENT_COLUMNS = ["Code", "ExDate", "PriceFactor", "VolumeFactor", "Kind", "Source",
-                 "FactorBefore", "FactorAfter", "SharesBefore", "SharesAfter"]
+                 "PrevClose", "BasePrice", "SharesBefore", "SharesAfter"]
 
 
 class EventKind(StrEnum):
@@ -35,36 +42,22 @@ def _classify(price_factor: float, shares_before: float, shares_after: float) ->
     return EventKind.PRICE_ONLY
 
 
-def derive_events(code: str, raw: pd.DataFrame, vendor_close: pd.Series) -> pd.DataFrame:
-    """Find where vendor_close / RawClose steps beyond integer rounding.
-
-    vendor_close is indexed by date and must cover exactly the dates in raw.Date.
-    """
-    vendor = vendor_close.copy()
-    vendor.index = pd.to_datetime(vendor.index).normalize()
-    vendor = vendor.sort_index()
-    if not vendor.index.equals(pd.DatetimeIndex(raw.Date)):
-        raise ValueError("Vendor close dates differ from raw bar dates")
-    if not (vendor > 0).all():
-        raise ValueError("Vendor close must be positive")
-
-    priced = (raw.RawClose > 0).to_numpy()
-    bars = raw.loc[priced].reset_index(drop=True)
-    close = pd.Series(vendor.to_numpy()[priced], dtype=float)
-    factor = close / bars.RawClose.astype(float)
-    tolerance = 0.5 / close + 0.5 / close.shift() + 1e-3
-    starts = (factor / factor.shift() - 1).abs() > tolerance
-    segment_factor = factor.groupby(starts.cumsum()).median()
+def derive_events(code: str, raw: pd.DataFrame) -> pd.DataFrame:
+    """Record every day whose KRX base price differs from the previous close."""
+    base = raw.RawClose - raw.RawChange
+    if not (base > 0).all():
+        raise ValueError("KRX base price must be positive")
+    prev = raw.RawClose.shift()
+    moved = (base - prev).abs() > 0.5
 
     rows = []
-    for segment, at in enumerate(starts[starts].index, start=1):
-        before, after = segment_factor[segment - 1], segment_factor[segment]
-        price_factor = before / after
-        shares_before, shares_after = bars.ListedShares[at - 1], bars.ListedShares[at]
+    for at in moved[moved].index:
+        price_factor = base[at] / prev[at]
+        shares_before, shares_after = raw.ListedShares[at - 1], raw.ListedShares[at]
         kind = _classify(price_factor, shares_before, shares_after)
-        rows.append({"Code": code, "ExDate": bars.Date[at], "PriceFactor": price_factor,
+        rows.append({"Code": code, "ExDate": raw.Date[at], "PriceFactor": price_factor,
                      "VolumeFactor": 1 / price_factor if kind is EventKind.SHARE_CHANGE else 1.0,
-                     "Kind": kind.value, "Source": SOURCE, "FactorBefore": before, "FactorAfter": after,
+                     "Kind": kind.value, "Source": SOURCE, "PrevClose": prev[at], "BasePrice": base[at],
                      "SharesBefore": shares_before, "SharesAfter": shares_after})
     events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
     events["ExDate"] = pd.to_datetime(events.ExDate)
