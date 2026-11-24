@@ -1,11 +1,15 @@
+import json
+
 import numpy as np
 import pandas as pd
+import pytest
 from serving.stock_master import classify, grade_for, is_preferred, parse_managed_names
 
 
 def _prices(code, closes, amount):
     dates = pd.bdate_range("2026-01-01", periods=len(closes))
-    return pd.DataFrame({"Code": code, "Date": dates, "Close": closes, "Amount": amount})
+    return pd.DataFrame({"Code": code, "Date": dates, "Close": closes, "RawClose": closes,
+                         "AdjustmentFactor": 1., "Amount": amount})
 
 
 def test_rules():
@@ -53,3 +57,45 @@ def test_absolute_grade_with_large_cap_relief():
     assert grade_for(0.691, True) == 3 and grade_for(0.2, True) == 5
     assert grade_for(float("nan"), True) == 1
     assert type(grade_for(np.float64(0.5), False)) is int  # JSON으로 보낸다
+
+
+@pytest.mark.parametrize(
+    ("boundary", "factor_before", "factor_after", "normal_split", "excluded"),
+    [
+        (150, 0.2, 1., True, False),
+        (150, 1., 0.98, False, True),
+        (149, 1., 0.98, False, False),
+        (150, 1., np.exp(0.0085), False, False),
+    ],
+    ids=["split", "mixed-basis", "outside-sample", "within-return-margin"],
+)
+def test_volatility_excludes_suspicious_basis_boundary(
+    boundary, factor_before, factor_after, normal_split, excluded, capsys,
+):
+    code = "000010"
+    smooth = 50_000 * np.exp(0.004 * np.sin(np.arange(400) * np.pi / 2))
+    candidate = _prices(code, smooth, 9e10)
+    candidate["AdjustmentFactor"] = np.where(candidate.index < boundary, factor_before, factor_after)
+    if normal_split:
+        candidate["RawClose"] = candidate.Close / candidate.AdjustmentFactor
+    else:
+        candidate["Close"] = candidate.RawClose * candidate.AdjustmentFactor
+    other = _prices("000020", smooth * 2, 9e10)
+    universe = pd.DataFrame({"Code": [code, "000020"], "Name": ["종목 A", "종목 B"]})
+    rows = classify(universe, pd.concat([candidate, other]), set())
+    result, baseline = rows
+    logs = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+
+    if excluded:
+        assert result["volatility_annual"] is None
+        assert result["volatility_percentile"] is None
+        assert result["risk_grade"] == 1
+        assert "high_volatility" not in result["risk_flags"]
+        assert baseline["volatility_percentile"] == 1.
+        assert logs == [{"event": "stock_master_volatility", "code": code, "status": "unavailable",
+                         "reason": "price_adjustment_basis_inconsistent",
+                         "dates": [candidate.Date.iloc[boundary].date().isoformat()]}]
+    else:
+        assert result["volatility_annual"] is not None
+        assert result["volatility_percentile"] is not None
+        assert not logs

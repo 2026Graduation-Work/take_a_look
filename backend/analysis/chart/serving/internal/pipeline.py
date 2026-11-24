@@ -22,12 +22,19 @@ from .flows import collect_flows
 from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
 from .pack import config_path, load_pack
-from .prices import fetch_prices, price_snapshot
+from .prices import (
+    PRICE_BASIS_INCONSISTENT,
+    PriceBasisError,
+    fetch_prices,
+    merge_price_history,
+    price_snapshot,
+)
 from .progress import report
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
+PRICE_REBASE_PENDING = "price_rebase_pending"
 
 
 def official_day(requested=None):
@@ -120,7 +127,9 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 listing = pd.to_datetime(getattr(row, "ListingDate", None))
                 if pd.isna(listing):
                     raise ValueError(f"Verified listing interval absent for {code}")
-                previous = None if historical_test else store.load_price_history(code)
+                stored_history = None if historical_test else store.load_price_history(code)
+                pending = stored_history is not None and stored_history.attrs.get(PRICE_REBASE_PENDING) is True
+                previous = stored_history
                 if previous is not None:
                     previous = previous.loc[pd.to_datetime(previous.Date).ge(listing)].copy()
                     if previous.empty:
@@ -128,25 +137,39 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 first = max(pd.Timestamp(start), listing).date().isoformat()
                 request_start = first if previous is None else max(pd.Timestamp(recent_start), listing).date().isoformat()
                 fresh = _retry_fetch(code, request_start, as_of)
-                if previous is not None:
-                    previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
-                    # Daily serving updates only the recent input window. Keep the
-                    # saved prefix for the existing feature calculation; source
-                    # revisions must never trigger a 2016~ history requery.
-                    fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
-                if fresh.Date.max().date().isoformat() != as_of:
+                if fresh.empty or fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
-                # Requery the entire feature window: adjusted past prices can change.
-                store.upsert_prices(code, fresh.loc[pd.to_datetime(fresh.Date).ge(pd.Timestamp(recent_start))])
+                ratio = None
+                if previous is not None:
+                    previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
+                    try:
+                        fresh, ratio = merge_price_history(previous, fresh)
+                    except PriceBasisError as exc:
+                        unavailable[code] = PRICE_BASIS_INCONSISTENT
+                        report("price_adjustment_basis", code=code, status="unavailable",
+                               reason=PRICE_BASIS_INCONSISTENT, detail=str(exc))
+                        continue
+                full_upsert = ratio is not None or pending
+                if full_upsert and not pending:
+                    # A partial DB write needs a full retry even if the provider returns to the stored basis.
+                    pending_history = stored_history.copy(deep=False)
+                    pending_history.attrs[PRICE_REBASE_PENDING] = True
+                    store.save_price_history(code, pending_history)
+                prices = fresh if full_upsert else fresh.loc[fresh.Date.ge(pd.Timestamp(recent_start))]
+                store.upsert_prices(code, prices)
                 raw = fresh
                 raw["Code"] = code
                 raw = raw.drop(columns=[c for c in raw if c.startswith(("Individual_", "Institution_", "Foreign_"))], errors="ignore")
                 if not flow.empty:
                     raw = raw.merge(flow.loc[flow.Code.eq(code)].drop(columns="Code"),
                                     on="Date", how="left", validate="one_to_one")
+                raw.attrs.pop(PRICE_REBASE_PENDING, None)
                 if not historical_test:
                     store.save_price_history(code, raw)
+                if full_upsert:
+                    report("price_adjustment_basis", code=code, status="rebased", ratio=ratio if ratio is not None else 1.,
+                           upsert_rows=len(prices), upsert_requests=(len(prices) + 499) // 500)
             raw = raw.sort_values("Date").reset_index(drop=True)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"

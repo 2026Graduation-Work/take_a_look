@@ -16,6 +16,8 @@ from shared.data.metadata import (  # noqa: F401
     parse_managed_names,
 )
 
+from serving.internal.prices import PRICE_BASIS_INCONSISTENT, adjustment_tolerance
+from serving.internal.progress import report
 from serving.internal.storage import SupabaseStore
 
 PENNY_CLOSE = 1_000  # 종가(원) 미만 → penny_stock
@@ -28,7 +30,7 @@ HIGH_VOLATILITY_QUANTILE = 0.90
 # 대형주(시가총액 상위 LARGE_CAP_RANK)는 한 단계 완화. 변동성 미확인·spac·managed_stock은 1.
 GRADE_VOLATILITY_CUTS = (0.25, 0.40, 0.60, 0.90)  # → 5, 4, 3, 2
 LARGE_CAP_RANK = 100  # KRX 대형주 기준(시가총액 상위 100)
-KOSDAQ_CODES = {"247540"}  # serving/internal/pipeline.py EXTRA_CODES (코스피 밖 서비스 종목)
+KOSDAQ_CODES = {"247540"}
 PREFERRED_NAME = re.compile(r"\d?우[B-C]?(\(전환\))?$")
 
 
@@ -52,15 +54,25 @@ def fetch_large_caps():
 
 
 def classify(universe, prices, managed_names, large_caps=frozenset(), as_of=None):
-    """universe: Code·Name, prices: Code·Date·Close·Amount → stocks 행 목록."""
-    prices = prices.sort_values(["Code", "Date"])
+    prices = prices.sort_values(["Code", "Date"]).reset_index(drop=True)
     by_code = prices.groupby("Code")
     close = by_code["Close"].last()
     liquidity = by_code["Amount"].apply(lambda s: s.tail(LIQUIDITY_DAYS).mean())
     returns = np.log(prices["Close"]).groupby(prices["Code"]).diff()
-    tail = returns.groupby(prices["Code"]).tail(VOLATILITY_DAYS).groupby(prices["Code"])
+    sample = returns.groupby(prices["Code"]).tail(VOLATILITY_DAYS)
+    tail = sample.groupby(prices["Code"])
     # 가격이 한 번도 안 움직였으면(거래정지 등) 변동성을 모르는 것으로 본다.
     volatility = (tail.std() * np.sqrt(252)).where((tail.count() >= MIN_VOLATILITY_DAYS) & (tail.std() > 0))
+
+    tolerance = adjustment_tolerance(prices["Close"], by_code["Close"].shift())
+    factor_step = prices["AdjustmentFactor"] / by_code["AdjustmentFactor"].shift() - 1
+    raw_close = prices["RawClose"].where(prices["RawClose"].gt(0))
+    raw_returns = np.log(raw_close).groupby(prices["Code"]).diff()
+    suspect = factor_step.abs().gt(tolerance) & returns.abs().gt(raw_returns.abs() + np.log1p(tolerance))
+    for code, affected in prices.loc[suspect & prices.index.isin(sample.index)].groupby("Code"):
+        volatility.loc[code] = np.nan
+        report("stock_master_volatility", code=code, status="unavailable", reason=PRICE_BASIS_INCONSISTENT,
+               dates=pd.to_datetime(affected["Date"]).dt.strftime("%Y-%m-%d").tolist())
 
     liquidity_cut = liquidity.quantile(LOW_LIQUIDITY_QUANTILE)
     volatility_cut = volatility.quantile(HIGH_VOLATILITY_QUANTILE)
