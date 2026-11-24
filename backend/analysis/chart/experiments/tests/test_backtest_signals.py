@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from experiments.train_src.swing_strategy import SwingStrategy
 
@@ -30,3 +31,24 @@ def test_strategy_keeps_embargo_market_dates_so_shift_cannot_cross_fold_boundary
     assert not entries.loc[dates[2], "000001"]
     assert not entries.loc[dates[3], "000001"]
     assert not entries.loc[dates[4], "000001"]
+
+
+def test_rank_only_selection_ignores_how_large_a_model_writes_its_scores() -> None:
+    # Two models with the same ordering but different score scales must buy the same stocks.
+    # An absolute threshold (0.65) would instead reward the model that writes larger numbers.
+    dates = pd.date_range("2024-01-02", periods=6, freq="B")
+    codes = [f"00000{i}" for i in range(1, 7)]
+    market = pd.DataFrame([{"Date": day, "Code": code, "Open": 100.0, "Trading_Halt": 0,
+                            "Sigma": 0.1} for day in dates for code in codes])
+    rng = np.random.default_rng(0)
+    modest = pd.DataFrame([{"Date": day, "Code": code, "prob_up": rng.uniform(0.2, 0.6)}
+                           for day in dates for code in codes])
+    confident = modest.assign(prob_up=modest.prob_up * 0.5 + 0.45)  # Same order, larger numbers.
+
+    def picks(predictions, threshold):
+        strategy = {"score_column": "prob_up", "prob_threshold": threshold, "top_n": 2}
+        return SwingStrategy({"strategy": strategy}).generate_signals(predictions, market)
+
+    pd.testing.assert_frame_equal(picks(modest, 0.0), picks(confident, 0.0))
+    assert picks(modest, 0.65).sum().sum() == 0
+    assert picks(confident, 0.65).sum().sum() > 0

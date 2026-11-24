@@ -363,7 +363,7 @@ def _build_backtest_config(
         "score_column": "prob_up",
         "selection": "top_k",
         "top_n": 5,
-        "prob_threshold": 0.65,
+        "prob_threshold": 0.0,
         "position_weighting": "equal_weight",
         **config.get("strategy", {}),
     }
