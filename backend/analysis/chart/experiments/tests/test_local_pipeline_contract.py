@@ -960,3 +960,45 @@ def test_previous_builder_processed_data_is_preserved(local_dataset):
     with pytest.raises(ValueError, match="new dataset root"):
         preprocess_dataset(dataset_path)
     assert {path: sha256(path) for path in before} == before
+
+
+@pytest.mark.parametrize("key,value,message", [
+    ("slippage_bps", True, "slippage_bps"),
+    ("slippage_bps", -1, "slippage_bps"),
+    ("signal_lag_days", 2, "signal_lag_days must be 1"),
+])
+def test_backtest_cost_and_lag_settings_are_validated(local_dataset, key, value, message):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    invalid["backtest"][key] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match=message):
+        load_experiment_config(config_path)
+
+
+@pytest.mark.parametrize("value,message", [
+    (True, "max_participation"), (0, "max_participation"), ("missing", "max_participation"),
+])
+def test_participation_cap_setting_is_validated(local_dataset, value, message):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    if value == "missing":
+        del invalid["backtest"]["max_participation"]
+    else:
+        invalid["backtest"]["max_participation"] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match=message):
+        load_experiment_config(config_path)
+
+
+@pytest.mark.parametrize("value", [True, -1, "missing"])
+def test_random_baseline_runs_must_be_set_explicitly(local_dataset, value):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    if value == "missing":
+        invalid["evaluation"].pop("random_baseline_runs", None)
+    else:
+        invalid["evaluation"]["random_baseline_runs"] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match="random_baseline_runs"):
+        load_experiment_config(config_path)

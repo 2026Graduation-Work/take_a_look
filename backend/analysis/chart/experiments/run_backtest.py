@@ -43,7 +43,7 @@ def _run_local_period(config, predictions, prices, out):
     metrics["unclosed_positions"] = len(result.open_positions)
     runs = config.get("evaluation", {}).get("random_baseline_runs", 0)
     if runs:
-        summary, distribution = compare_with_random(config, predictions, prices, entries, metrics, runs)
+        summary, distribution = compare_with_random(config, predictions, prices, result, metrics, runs)
         metrics.update(summary)
         distribution.to_csv(Path(out) / "random_baseline.csv", index=False)
     atomic_json(Path(out) / "backtest_metrics.json", metrics)

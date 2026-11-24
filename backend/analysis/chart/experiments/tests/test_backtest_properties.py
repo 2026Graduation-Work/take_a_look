@@ -69,6 +69,7 @@ def test_random_markets_keep_an_exact_ledger(seed):
 
 LABEL = {"horizon": 5, "up_mult": 1.75, "down_mult": 1.5}
 UP_EXITS = {"intraday_profit", "profit_gap"}
+HARD_STOP_EXITS = {"intraday_stop", "stop_gap"}
 
 
 def executed_class(trade, anchor, sigma):
@@ -80,19 +81,21 @@ def executed_class(trade, anchor, sigma):
     return -1 if trade.exit_price <= anchor * (1 - LABEL["down_mult"] * sigma) else 0
 
 
+@pytest.mark.parametrize("hard_sl_mult", [None, 1.2])
 @pytest.mark.parametrize("seed", range(8))
-def test_execution_resolves_the_same_barrier_event_as_the_label(seed):
+def test_execution_resolves_the_same_barrier_event_as_the_label(seed, hard_sl_mult):
     """A trade entered on a signal must end where barrier_labels says that signal ended.
 
-    The one allowed difference: a session that touches the profit line intraday and
-    closes below the soft stop. The label calls it down; a resting order sells at profit.
+    Allowed differences, both execution-only rules the label does not have:
+    a session that touches the profit line intraday and closes below the soft stop (the label
+    calls it down; a resting order sells at profit), and the hard stop on the intraday low.
     """
     rng = np.random.default_rng(seed)
     prices = random_market(rng, codes=["000001"], n_days=45)
     labels = barrier_labels(prices, LABEL["horizon"], up_mult=LABEL["up_mult"],
                             down_mult=LABEL["down_mult"])
     cfg = config(max_holding_days=LABEL["horizon"], up_mult=LABEL["up_mult"],
-                 down_mult=LABEL["down_mult"], hard_sl_mult=None)
+                 down_mult=LABEL["down_mult"], hard_sl_mult=hard_sl_mult)
     days = pd.DatetimeIndex(prices.Date)
     compared = 0
     for t in range(len(days) - 1):
@@ -106,6 +109,10 @@ def test_execution_resolves_the_same_barrier_event_as_the_label(seed):
             continue
         trade = result.trades.iloc[0]
         if trade.exit_reason == "period_end":
+            continue
+        if trade.exit_reason in HARD_STOP_EXITS:
+            assert hard_sl_mult is not None
+            compared += 1
             continue
         anchor, sigma = prices.Close.iloc[t], prices.Sigma.iloc[t]
         executed = executed_class(trade, anchor, sigma)

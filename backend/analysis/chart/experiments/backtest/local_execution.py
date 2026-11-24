@@ -23,8 +23,10 @@ TRADE_COLUMNS = [
 
 
 class ExecutionResult:
-    def __init__(self, portfolio, initial_cash, events, trades, exclusions, open_positions):
+    def __init__(self, portfolio, initial_cash, events, trades, exclusions, open_positions,
+                 unfilled_buys=0):
         self.portfolio = portfolio
+        self.unfilled_buys = unfilled_buys
         self.initial_cash = initial_cash
         self.events = events
         self.trades = trades
@@ -50,7 +52,9 @@ class ExecutionResult:
         return traded / float(equity.mean()) * TRADING_DAYS_PER_YEAR / len(equity)
 
 
-def simulate(config, entries, price_df):
+def simulate(config, entries, price_df, priority=None, daily_buys=None):
+    """entries: candidate stocks per day. With priority and daily_buys, candidates are tried in
+    priority order until that day's buy count is reached (the random baseline uses this)."""
     bt = config["backtest"]
     lag = bt.get("signal_lag_days", 1)
     horizon = bt["max_holding_days"]
@@ -86,7 +90,9 @@ def simulate(config, entries, price_df):
     signal_close = fields["Close"].shift(lag)
     signal_sigma = fields["Sigma"].shift(lag)
     previous_close = fields["Close"].shift(1)
-    # A session traded only at the lower limit leaves no buyer for our sell order.
+    # Near the lower limit, sell orders may find no buyer. At the open only the open is known;
+    # later in the day a session that traded at one lower-limit price is treated as locked.
+    open_at_lower = fields["Open"] / previous_close <= LIMIT_DOWN_RATIO
     locked_down = (fields["High"] == fields["Low"]) & (
         fields["Close"] / previous_close <= LIMIT_DOWN_RATIO)
     limit_up_open = fields["Open"] / previous_close >= LIMIT_UP_RATIO
@@ -109,6 +115,7 @@ def simulate(config, entries, price_df):
     order_prices = pd.DataFrame(np.nan, index=event_index, columns=codes)
     marks = pd.DataFrame(np.nan, index=event_index, columns=codes)
     cash = float(bt["initial_cash"])
+    unfilled_buys = 0
     positions, events, trades, exclusions, written_off = {}, [], [], [], set()
     equity_at_close = []
 
@@ -140,7 +147,8 @@ def simulate(config, entries, price_df):
 
     def sell(code, row, reference, reason):
         nonlocal cash
-        if locked_down.loc[row.normalize(), code]:
+        blocked = open_at_lower if row.hour == EVENT_HOURS[0] else locked_down
+        if blocked.loc[row.normalize(), code]:
             positions[code]["pending"] = "limit_down_locked"
             return
         quantity = positions[code]["quantity"]
@@ -197,9 +205,18 @@ def simulate(config, entries, price_df):
             pos["quantity"] * fields["Open"].loc[day, code] for code, pos in positions.items())
         budget = min(equity_at_open / (top_n * horizon), cash / top_n)
         selected = [code for code in codes if entries.loc[day, code] and code not in positions]
-        if len(selected) > top_n:
+        target = top_n
+        if priority is not None:
+            selected.sort(key=lambda code: -priority.loc[day, code])
+            target = int(daily_buys.get(day, 0))
+            if target > top_n:
+                raise ValueError("Daily buy target exceeds top_n")
+        elif len(selected) > top_n:
             raise ValueError("Entry count exceeds top_n")
+        bought = 0
         for code in selected:
+            if bought == target:
+                break
             if not available[code] or halted[code] or not eligible.loc[day, code]:
                 exclusions.append({"date": str(day.date()), "code": code, "reason": "entry_ineligible"})
                 continue
@@ -226,7 +243,10 @@ def simulate(config, entries, price_df):
             price = open_price * (1 + slippage)
             quantity = floor(max(0.0, budget) / (price * (1 + fee)))
             capped = False
-            if participation is not None and pd.notna(average_value.loc[day, code]):
+            if participation is not None and pd.isna(average_value.loc[day, code]):
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "liquidity_unknown"})
+                continue
+            if participation is not None:
                 cap = floor(participation * average_value.loc[day, code] / price)
                 capped = cap < quantity
                 quantity = min(quantity, cap)
@@ -238,6 +258,7 @@ def simulate(config, entries, price_df):
             if capped:
                 exclusions.append({"date": str(day.date()), "code": code, "reason": "liquidity_capped"})
             cash -= cost
+            bought += 1
             positions[code] = {**candidate, "quantity": quantity, "price": price,
                                "fee": quantity * price * fee, "sessions": 0, "pending": None,
                                "entry_date": day}
@@ -246,6 +267,9 @@ def simulate(config, entries, price_df):
             events.append({"date": rows[1], "code": code, "side": "buy", "quantity": quantity,
                            "price": price, "reference_price": open_price,
                            "fee": quantity * price * fee, "reason": "top_n"})
+
+        if priority is not None:
+            unfilled_buys += target - bought
 
         # 12:00 intraday barriers. Ambiguous dual touch is downside first.
         for code in list(positions):
@@ -288,7 +312,7 @@ def simulate(config, entries, price_df):
     ]
     result = ExecutionResult(
         portfolio, bt["initial_cash"], pd.DataFrame(events),
-        pd.DataFrame(trades, columns=TRADE_COLUMNS), exclusions, open_positions,
+        pd.DataFrame(trades, columns=TRADE_COLUMNS), exclusions, open_positions, unfilled_buys,
     )
     # VectorBT replays the same orders as an independent ledger; every close must agree.
     if not np.allclose(result.value().to_numpy(), equity_at_close, rtol=1e-9, atol=1e-6):
