@@ -264,3 +264,63 @@ def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, ch
     pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected.reset_index(drop=True))
     assert len(actual) == 400
     assert not result[2]
+
+
+def test_corporate_action_rebases_saved_history_and_chart_prices(monkeypatch):
+    code = "005930"
+    dates = pd.bdate_range("2023-01-02", periods=400)
+    cutoff = dates[-1] - pd.Timedelta(days=240)
+    close = pd.Series(np.arange(len(dates)) + 100., index=dates)
+    factor = pd.Series(0.2, index=dates)
+    factor.iloc[-1] = 1.
+    volume = np.arange(len(dates)) + 10.
+    expected = pd.DataFrame({
+        "Open": close - 0.5,
+        "High": close + 1.,
+        "Low": close - 1.,
+        "Close": close,
+        "VWAP": close + 0.5,
+        "Volume": volume,
+        "RawVolume": volume,
+        "Change": close.pct_change() * 100,
+        "AdjustmentFactor": factor,
+    }, index=dates.rename("Date"))
+    expected.index.freq = None
+    for column in ("Open", "High", "Low", "Close"):
+        expected[f"Raw{column}"] = expected[column] / factor
+    expected["Amount"] = expected.VWAP / factor * expected.Volume
+
+    adjusted_columns = ["Open", "High", "Low", "Close", "VWAP"]
+    stored = expected.iloc[:-1].copy()
+    stored[adjusted_columns] = stored[adjusted_columns].div(stored.AdjustmentFactor, axis=0)
+    stored["AdjustmentFactor"] = 1.
+    fresh = expected.loc[cutoff:].reset_index()
+    saved, upserted = {}, {}
+
+    class Store:
+        def save_calendar(self, *args): pass
+        def save_universe(self, *args): pass
+        def load_price_history(self, code): return stored.reset_index()
+        def save_price_history(self, code, frame): saved[code] = frame.copy()
+        def upsert_prices(self, code, frame): upserted[code] = frame.copy()
+        def save_raw_prices(self, *args): pass
+        def upload_features(self, *args): pass
+
+    universe = pd.DataFrame({"Code": [code], "Name": ["삼성전자"], "ListingDate": [dates[0]]})
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (pd.DataFrame(), {}))
+    monkeypatch.setattr(pipeline, "_retry_fetch", lambda *args: fresh.copy())
+
+    pipeline.collect(dates[-1].date().isoformat(), Store())
+
+    history = saved[code].set_index("Date").sort_index()
+    pd.testing.assert_series_equal(history.AdjustmentFactor, expected.AdjustmentFactor)
+    pd.testing.assert_series_equal(history.Close.pct_change(), expected.Close.pct_change())
+    raw_columns = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount", "Volume"]
+    pd.testing.assert_frame_equal(history[raw_columns], expected[raw_columns])
+    pd.testing.assert_frame_equal(history[adjusted_columns], expected[adjusted_columns])
+
+    chart_prices = upserted[code].set_index("Date").sort_index()
+    basis_columns = [*adjusted_columns, "AdjustmentFactor"]
+    pd.testing.assert_frame_equal(chart_prices[basis_columns], expected[basis_columns])
