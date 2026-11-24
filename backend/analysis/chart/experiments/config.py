@@ -263,6 +263,9 @@ def load_experiment_config(path):
         raise ValueError("Only entry_price: open / exit_price: rule supported")
     for name in ("signal_lag_days", "max_holding_days"):
         positive_int(bt[name], name)
+    if bt["signal_lag_days"] != 1:
+        # Labels observe T+1..T+H; any other lag would trade a window the label never saw.
+        raise ValueError("backtest.signal_lag_days must be 1 to match the label window")
     if (
         not math.isfinite(bt["initial_cash"])
         or not math.isfinite(bt["fee"])
@@ -270,7 +273,8 @@ def load_experiment_config(path):
         or not 0 <= bt["fee"] < 1
     ):
         raise ValueError("Invalid initial_cash/fee")
-    if not isinstance(bt.get("slippage_bps"), (int, float)) or not 0 <= bt["slippage_bps"] < 10_000:
+    slippage = bt.get("slippage_bps")
+    if isinstance(slippage, bool) or not isinstance(slippage, (int, float)) or not 0 <= slippage < 10_000:
         raise ValueError("backtest.slippage_bps must be set explicitly in [0, 10000)")
     if "max_participation" not in bt or (
         bt["max_participation"] is not None and not 0 < bt["max_participation"] <= 1

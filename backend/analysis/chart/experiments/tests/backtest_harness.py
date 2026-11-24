@@ -3,7 +3,6 @@
 check_ledger recomputes cash, holdings and equity from orders alone, without the
 executor or VectorBT, so a test that passes it cannot hide an accounting error.
 """
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -44,7 +43,7 @@ def check_ledger(result, cfg, prices):
     bar = prices.assign(Date=pd.to_datetime(prices.Date)).sort_values("Date")
     bar["PreviousClose"] = bar.groupby("Code").Close.shift(1)
     bar = bar.set_index(["Date", "Code"])
-    cash, held = float(bt["initial_cash"]), {}
+    cash, held, lots, rebuilt = float(bt["initial_cash"]), {}, {}, []
     events = result.events
     days = result.value().index
     for day in days:
@@ -61,8 +60,16 @@ def check_ledger(result, cfg, prices):
                 assert event.price == pytest.approx(event.reference_price * (1 + slippage))
                 cash -= notional + event.fee
                 held[event.code] = event.quantity
+                lots[event.code] = (day, event.price, event.fee)
             else:
                 assert held.pop(event.code) == event.quantity, "sold a different quantity"
+                entry_day, entry_price, entry_fee = lots.pop(event.code)
+                pnl = event.quantity * (event.price - entry_price) - entry_fee - event.fee
+                rebuilt.append({"code": event.code, "entry_date": entry_day, "exit_date": day,
+                                "quantity": event.quantity, "entry_price": entry_price,
+                                "exit_price": event.price, "pnl": pnl,
+                                "return": pnl / (event.quantity * entry_price + entry_fee),
+                                "exit_reason": event.reason})
                 if event.side == "sell":
                     assert row.Trading_Halt == 0, "filled on a halted session"
                     assert not (row.High == row.Low and row.Close <= 0.71 * row.PreviousClose), \
@@ -77,12 +84,16 @@ def check_ledger(result, cfg, prices):
         assert result.value().loc[day] == pytest.approx(equity, rel=1e-12, abs=1e-9)
     assert sorted(held) == sorted(pos["code"] for pos in result.open_positions)
 
+    # The trade ledger must be exactly what the orders alone imply, return included.
     trades = result.trades
+    expected = pd.DataFrame(rebuilt, columns=["code", "entry_date", "exit_date", "quantity",
+                                              "entry_price", "exit_price", "pnl", "return",
+                                              "exit_reason"])
+    pd.testing.assert_frame_equal(
+        trades[expected.columns].reset_index(drop=True), expected,
+        check_dtype=False, check_datetimelike_compat=True, rtol=1e-12)
     if trades.empty:
-        assert result.value().iloc[-1] == pytest.approx(bt["initial_cash"]) or result.open_positions
         return
-    expected_pnl = trades.quantity * (trades.exit_price - trades.entry_price) - trades.entry_fee - trades.exit_fee
-    assert np.allclose(trades.pnl, expected_pnl)
     assert (trades.holding_sessions >= 1).all()
     assert (trades.holding_sessions <= bt["max_holding_days"]).all()
     if not result.open_positions:
