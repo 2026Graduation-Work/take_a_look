@@ -12,12 +12,10 @@ previous close is therefore an event, and base / previous close is its exact pri
 Events: one row per basis change, sorted by ExDate (the first trading day on the new basis).
 PriceFactor multiplies every bar dated before ExDate; VolumeFactor is 1/PriceFactor for a
 share-count change and 1.0 otherwise.
-
-KRX's own adjusted series (adjStkPrc=2) leaves Samsung's 2018-05-04 50:1 split unadjusted, and
-Naver's adjusted close drifts from the regular-session close after 2026-09-14, so neither is
-an event source.
 """
 import math
+from collections.abc import Sequence
+from datetime import date
 from enum import StrEnum
 
 import numpy as np
@@ -35,15 +33,25 @@ class EventKind(StrEnum):
 
 
 def _classify(price_factor: float, shares_before: float, shares_after: float) -> EventKind:
-    """A share-count change moves listed shares by exactly the inverse of the price factor."""
     if shares_before != shares_after and math.isclose(
             price_factor * shares_after / shares_before, 1.0, rel_tol=SHARE_TOLERANCE):
         return EventKind.SHARE_CHANGE
     return EventKind.PRICE_ONLY
 
 
-def derive_events(code: str, raw: pd.DataFrame) -> pd.DataFrame:
-    """Record every day whose KRX base price differs from the previous close."""
+def derive_events(code: str, raw: pd.DataFrame,
+                  expected_dates: pd.DatetimeIndex | Sequence[date | str]) -> pd.DataFrame:
+    """Record base-price changes after checking all KRX sessions in the requested range.
+
+    Supply expected_dates for the full range, including sessions when the stock was halted.
+    """
+    expected = pd.DatetimeIndex(expected_dates)
+    if not expected.is_unique or not expected.is_monotonic_increasing:
+        raise ValueError("Expected KRX trading dates must be unique and sorted")
+    observed = pd.DatetimeIndex(raw.Date)
+    if len(observed) != len(expected) or not (observed == expected).all():
+        raise ValueError("Raw bar dates must match expected KRX trading dates in order")
+
     base = raw.RawClose - raw.RawChange
     if not (base > 0).all():
         raise ValueError("KRX base price must be positive")
@@ -51,13 +59,14 @@ def derive_events(code: str, raw: pd.DataFrame) -> pd.DataFrame:
     moved = (base - prev).abs() > 0.5
 
     rows = []
-    for at in moved[moved].index:
-        price_factor = base[at] / prev[at]
-        shares_before, shares_after = raw.ListedShares[at - 1], raw.ListedShares[at]
+    for at in np.flatnonzero(moved):
+        prev_close, base_price = prev.iloc[at], base.iloc[at]
+        price_factor = base_price / prev_close
+        shares_before, shares_after = raw.ListedShares.iloc[at - 1], raw.ListedShares.iloc[at]
         kind = _classify(price_factor, shares_before, shares_after)
-        rows.append({"Code": code, "ExDate": raw.Date[at], "PriceFactor": price_factor,
+        rows.append({"Code": code, "ExDate": observed[at], "PriceFactor": price_factor,
                      "VolumeFactor": 1 / price_factor if kind is EventKind.SHARE_CHANGE else 1.0,
-                     "Kind": kind.value, "Source": SOURCE, "PrevClose": prev[at], "BasePrice": base[at],
+                     "Kind": kind.value, "Source": SOURCE, "PrevClose": prev_close, "BasePrice": base_price,
                      "SharesBefore": shares_before, "SharesAfter": shares_after})
     events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
     events["ExDate"] = pd.to_datetime(events.ExDate)

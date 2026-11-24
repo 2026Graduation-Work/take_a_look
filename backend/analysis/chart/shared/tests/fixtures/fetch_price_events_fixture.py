@@ -11,8 +11,6 @@ import pandas as pd
 from dotenv import load_dotenv
 
 CHART_DIR = Path(__file__).resolve().parents[3]
-# Samsung's 50:1 split keeps a Naver close as an independent cross-check; Naver drifts from the
-# regular-session close after 2026-09-14, so the 2026 reverse splits carry KRX fields only.
 FIXTURES = [("005930", "20180101", "20181231", True),
             ("004920", "20260102", "20261120", False),
             ("031820", "20260102", "20261120", False)]

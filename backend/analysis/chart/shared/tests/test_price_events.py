@@ -24,7 +24,6 @@ def samsung():
 
 
 def bars(closes, shares, factors=()):
-    """Synthetic KRX bars whose base price is prev close × factor on each {index: factor} day."""
     dates = pd.bdate_range("2024-01-02", periods=len(closes))
     close = pd.Series(closes, dtype=float)
     base = close.shift().fillna(close[0]) * pd.Series(dict(factors), index=close.index).fillna(1.0)
@@ -34,7 +33,7 @@ def bars(closes, shares, factors=()):
 
 
 def test_samsung_2018_has_one_fifty_for_one_split(samsung):
-    events = derive_events("005930", samsung)
+    events = derive_events("005930", samsung, pd.DatetimeIndex(samsung.Date))
 
     assert len(events) == 1
     event = events.iloc[0]
@@ -46,13 +45,14 @@ def test_samsung_2018_has_one_fifty_for_one_split(samsung):
 
 def test_samsung_adjusted_close_matches_independent_naver_close(samsung):
     naver = pd.read_csv(FIXTURES / "005930_2018.csv", comment="#").NaverClose
-    adjusted = apply_events(samsung, derive_events("005930", samsung))
+    adjusted = apply_events(samsung, derive_events("005930", samsung, pd.DatetimeIndex(samsung.Date)))
 
     assert np.abs(adjusted.Close.to_numpy() - naver.to_numpy()).max() <= 1
 
 
 def test_samsung_volume_scales_by_split_ratio_and_halts_stay_zero(samsung):
-    adjusted = apply_events(samsung, derive_events("005930", samsung)).set_index("Date")
+    events = derive_events("005930", samsung, pd.DatetimeIndex(samsung.Date))
+    adjusted = apply_events(samsung, events).set_index("Date")
 
     assert adjusted.Volume["2018-04-27"] == 606_216 * 50
     assert (adjusted.Volume[HALT_DAYS] == 0).all()
@@ -60,7 +60,8 @@ def test_samsung_volume_scales_by_split_ratio_and_halts_stay_zero(samsung):
 
 
 def test_samsung_as_of_before_split_leaves_prices_unadjusted(samsung):
-    adjusted = apply_events(samsung, derive_events("005930", samsung), as_of="2018-05-03")
+    events = derive_events("005930", samsung, pd.DatetimeIndex(samsung.Date))
+    adjusted = apply_events(samsung, events, as_of="2018-05-03")
 
     assert (adjusted.AdjustmentFactor == 1).all()
     assert adjusted.Close.equals(samsung.RawClose.astype(float))
@@ -69,7 +70,8 @@ def test_samsung_as_of_before_split_leaves_prices_unadjusted(samsung):
 
 @pytest.mark.parametrize(("code", "ex_date"), REVERSE_SPLITS)
 def test_2026_ten_to_one_reverse_split_is_the_only_event(code, ex_date):
-    events = derive_events(code, load(f"{code}_2026"))
+    raw = load(f"{code}_2026")
+    events = derive_events(code, raw, pd.DatetimeIndex(raw.Date))
 
     assert len(events) == 1
     event = events.iloc[0]
@@ -80,7 +82,7 @@ def test_2026_ten_to_one_reverse_split_is_the_only_event(code, ex_date):
 @pytest.mark.parametrize("name", ALL_FIXTURES)
 def test_adjusted_returns_are_krx_change_rates_inside_the_price_limit(name):
     raw = load(name)
-    adjusted = apply_events(raw, derive_events(name[:6], raw))
+    adjusted = apply_events(raw, derive_events(name[:6], raw, pd.DatetimeIndex(raw.Date)))
 
     krx_rate = raw.RawChange / (raw.RawClose - raw.RawChange)
     returns = adjusted.Close.pct_change()
@@ -91,7 +93,7 @@ def test_adjusted_returns_are_krx_change_rates_inside_the_price_limit(name):
 
 def test_price_only_event_keeps_volume_when_shares_do_not_match():
     raw = bars([10_000, 10_000, 9_700, 9_700], [1_000_000, 1_000_000, 1_200_000, 1_200_000], {2: 0.97})
-    events = derive_events("000006", raw)
+    events = derive_events("000006", raw, pd.DatetimeIndex(raw.Date))
 
     event = events.iloc[0]
     assert (event.Kind, event.PriceFactor, event.VolumeFactor) == (EventKind.PRICE_ONLY, 0.97, 1.0)
@@ -103,7 +105,7 @@ def test_price_only_event_keeps_volume_when_shares_do_not_match():
 def test_two_events_compose_multiplicatively():
     raw = bars([20_000, 20_000, 10_000, 10_000, 9_800, 9_800],
                [500_000, 500_000, 1_000_000, 1_000_000, 1_000_000, 1_000_000], {2: 0.5, 4: 0.98})
-    events = derive_events("000003", raw)
+    events = derive_events("000003", raw, pd.DatetimeIndex(raw.Date))
 
     assert events.Kind.tolist() == [EventKind.SHARE_CHANGE, EventKind.PRICE_ONLY]
     adjusted = apply_events(raw, events)
@@ -115,7 +117,7 @@ def test_two_events_compose_multiplicatively():
 def test_apply_events_leaves_raw_bars_untouched(samsung):
     snapshot = samsung.copy()
 
-    apply_events(samsung, derive_events("005930", samsung))
+    apply_events(samsung, derive_events("005930", samsung, pd.DatetimeIndex(samsung.Date)))
 
     pd.testing.assert_frame_equal(samsung, snapshot)
 
@@ -125,4 +127,45 @@ def test_derive_events_rejects_nonpositive_base_price():
     raw.loc[2, "RawChange"] = 9_900
 
     with pytest.raises(ValueError):
-        derive_events("000005", raw)
+        derive_events("000005", raw, pd.DatetimeIndex(raw.Date))
+
+
+def test_derive_events_rejects_missing_samsung_trading_day(samsung):
+    raw = samsung[samsung.Date != pd.Timestamp("2018-07-10")].reset_index(drop=True)
+
+    with pytest.raises(ValueError):
+        derive_events("005930", raw, pd.DatetimeIndex(samsung.Date))
+
+
+@pytest.mark.parametrize("positions", [
+    pytest.param([1, 2], id="missing-first"),
+    pytest.param([0, 1], id="missing-last"),
+    pytest.param([0, 1, 1, 2], id="duplicate"),
+    pytest.param([1, 0, 2], id="out-of-order"),
+    pytest.param([0, 1, 3], id="unexpected"),
+])
+def test_derive_events_rejects_raw_dates_that_disagree_with_calendar(positions):
+    raw = bars([10_000] * 4, 1_000_000)
+    expected_dates = pd.DatetimeIndex(raw.Date.iloc[:3])
+
+    with pytest.raises(ValueError):
+        derive_events("000005", raw.iloc[positions], expected_dates)
+
+
+@pytest.mark.parametrize("positions", [[0, 0, 1], [1, 0, 2]], ids=["duplicate", "out-of-order"])
+def test_derive_events_rejects_invalid_calendar_even_if_raw_dates_match(positions):
+    raw = bars([10_000] * 3, 1_000_000).iloc[positions]
+
+    with pytest.raises(ValueError):
+        derive_events("000005", raw, pd.DatetimeIndex(raw.Date))
+
+
+def test_derive_events_accepts_krx_sessions_with_halts_and_nontrading_days(samsung):
+    expected_dates = ["2018-04-27", "2018-04-30", "2018-05-02", "2018-05-03", "2018-05-04", "2018-05-08"]
+    raw = samsung[samsung.Date.between(expected_dates[0], expected_dates[-1])].copy()
+    raw.index *= 2
+
+    events = derive_events("005930", raw, expected_dates)
+
+    assert events.ExDate.tolist() == [SPLIT_DAY]
+    assert events.PriceFactor.tolist() == [0.02]
