@@ -256,62 +256,44 @@ def execution_config():
     }
 
 
-def test_execution_equal_budgets_signal_sigma_same_day_and_open_mark():
-    days = pd.bdate_range("2024-01-02", periods=2)
-    entries = pd.DataFrame({"000001": [True, False], "000002": [True, False]}, index=days)
-    entries.attrs["signal_sigma"] = pd.DataFrame(0.1, index=days, columns=entries.columns)
-    prices = pd.DataFrame(
-        [
-            {
-                "Date": day,
-                "Code": code,
-                "Open": 100.0,
-                "High": 120.0 if code == "000001" else 101.0,
-                "Low": 80.0 if code == "000001" else 99.0,
-                "Close": 105.0 if day == days[-1] else 100.0,
-                "Sigma": 0.9,
-                "Trading_Halt": 0,
-            }
-            for day in days
-            for code in entries.columns
-        ]
-    )
-    result = simulate(execution_config(), entries, entries.astype(float) / 2, prices)
+def test_execution_equal_budgets_and_signal_time_barriers():
+    days = pd.bdate_range("2024-01-02", periods=3)
+    entries = pd.DataFrame({"000001": [False, True, False], "000002": [False, True, False]},
+                           index=days)
+
+    def bar(day, code):
+        if day == days[0]:
+            return dict(Open=100.0, High=100.0, Low=100.0, Close=100.0, Sigma=0.1)
+        if day == days[1]:
+            wide = code == "000001"
+            return dict(Open=100.0, High=120.0 if wide else 101.0, Low=80.0 if wide else 99.0,
+                        Close=100.0, Sigma=0.9)
+        return dict(Open=100.0, High=105.0, Low=99.0, Close=105.0, Sigma=0.9)
+
+    prices = pd.DataFrame([{"Date": day, "Code": code, "Trading_Halt": 0, **bar(day, code)}
+                           for day in days for code in entries.columns])
+    result = simulate(execution_config(), entries, prices)
     orders = result.events
     buys = orders.loc[orders.side.eq("buy")]
-    assert buys.quantity.nunique() == 1
-    sold = orders.loc[orders.side.eq("sell")]
-    assert sold.iloc[0].price == 90.0 and sold.iloc[0].reason == "intraday_stop"
-    assert len(result.open_positions) == 1
-    q = 4
-    expected = 1000 - 2 * q * 101 + q * 90 * 0.99 + q * 105
+    assert buys.quantity.tolist() == [4, 4]
+    # Signal-day Sigma 0.1 puts the stop at 90; same-day Sigma 0.9 would put it at 10.
+    sold = result.trades.set_index("code")
+    assert sold.loc["000001", "exit_price"] == 90.0
+    assert sold.loc["000001", "exit_reason"] == "intraday_stop"
+    assert sold.loc["000002", "exit_reason"] == "period_end"
+    expected = 1000 - 2 * 4 * 101 + 4 * 90 * 0.99 + 4 * 105 * 0.99
     assert result.value().iloc[-1] == pytest.approx(expected)
-    reversed_entries = entries[entries.columns[::-1]].copy()
-    reversed_entries.attrs["signal_sigma"] = entries.attrs["signal_sigma"]
-    again = simulate(
-        execution_config(), reversed_entries, reversed_entries.astype(float) / 2, prices
-    )
+    again = simulate(execution_config(), entries[entries.columns[::-1]], prices)
     assert again.value().iloc[-1] == pytest.approx(expected)
 
 
 def test_execution_never_fills_missing_held_price():
-    days = pd.bdate_range("2024-01-02", periods=2)
-    entries = pd.DataFrame({"000001": [True, False]}, index=days)
-    entries.attrs["signal_sigma"] = pd.DataFrame(0.1, index=days, columns=entries.columns)
-    prices = pd.DataFrame(
-        {
-            "Date": [days[0]],
-            "Code": ["000001"],
-            "Open": [100.0],
-            "High": [101.0],
-            "Low": [99.0],
-            "Close": [100.0],
-            "Sigma": [0.1],
-            "Trading_Halt": [0],
-        }
-    )
+    days = pd.bdate_range("2024-01-02", periods=3)
+    entries = pd.DataFrame({"000001": [False, True, False]}, index=days)
+    prices = pd.DataFrame({"Date": days[:2], "Code": "000001", "Open": 100.0, "High": 101.0,
+                           "Low": 99.0, "Close": 100.0, "Sigma": 0.1, "Trading_Halt": 0})
     with pytest.raises(ValueError, match="lost valuation"):
-        simulate(execution_config(), entries, entries.astype(float), prices)
+        simulate(execution_config(), entries, prices)
 
 
 def test_loader_fails_for_missing_requested_ticker(local_dataset):
@@ -954,10 +936,12 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     assert summary["years"][1]["initial_cash"] == 1000
     assert summary["years"][1]["final_equity"] == pytest.approx(1000)
     orders = pd.read_csv(tmp_path / "years/2020/orders.csv")
-    assert orders.quantity.tolist() == [5.0]
-    assert pd.to_datetime(orders.date).dt.normalize().tolist() == [days[-1]]
-    assert summary["years"][0]["unclosed_positions"] == 1
-    assert summary["years"][1]["unclosed_positions"] == 1
+    assert orders.side.tolist() == ["buy", "sell"]
+    assert orders.quantity.tolist() == [5.0, 5.0]
+    assert pd.to_datetime(orders.date).dt.normalize().tolist() == [days[-1], days[-1]]
+    assert orders.reason.tolist() == ["top_n", "period_end"]
+    assert summary["years"][0]["unclosed_positions"] == 0
+    assert summary["years"][1]["unclosed_positions"] == 0
     equity = pd.read_csv(tmp_path / "equity_curve.csv")
     assert equity.loc[equity.year.eq(2020), "Equity"].iloc[0] == 1000
 

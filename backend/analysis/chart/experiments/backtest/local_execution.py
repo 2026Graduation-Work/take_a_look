@@ -1,3 +1,4 @@
+"""Daily long-only executor. Rules live in backtest/EXECUTION_SPEC.md."""
 from math import floor
 from pathlib import Path
 
@@ -6,13 +7,23 @@ import pandas as pd
 import vectorbt as vbt
 from shared.io import atomic_json
 
+TRADING_DAYS_PER_YEAR = 252
+# Four ordered events per session: opening exits, opening entries, intraday exits, closing exits.
+EVENT_HOURS = (9, 10, 12, 16)
+TRADE_COLUMNS = [
+    "code", "entry_date", "exit_date", "quantity", "entry_price", "exit_price",
+    "entry_fee", "exit_fee", "pnl", "return", "holding_sessions", "exit_reason",
+]
 
-class DailyPortfolio:
-    def __init__(self, portfolio, initial_cash, exclusions):
+
+class ExecutionResult:
+    def __init__(self, portfolio, initial_cash, events, trades, exclusions, open_positions):
         self.portfolio = portfolio
         self.initial_cash = initial_cash
+        self.events = events
+        self.trades = trades
         self.exclusions = exclusions
-        self.trades = portfolio.trades
+        self.open_positions = open_positions
 
     def value(self):
         return self.portfolio.value().groupby(lambda date: date.normalize()).last()
@@ -23,39 +34,34 @@ class DailyPortfolio:
         returns.iloc[0] = values.iloc[0] / self.initial_cash - 1
         return returns
 
-    def stats(self):
-        return self.portfolio.stats()
-
-    def plot(self):
-        return self.value().vbt.plot()
-
-    def trade_records(self):
-        records = self.trades.records_readable.copy()
-        for loss in self.writeoffs:
-            mask = records.Column.eq(loss["code"]) & records.Status.eq("Open")
-            if mask.sum() != 1:
-                raise ValueError("Delisting loss disagrees with VectorBT position")
-            records.loc[mask, "Status"] = "Closed"
-            records.loc[mask, "Exit Timestamp"] = loss["date"]
-            records.loc[mask, "Avg Exit Price"] = 0.0
-            records.loc[mask, "Exit Fees"] = 0.0
-            records.loc[mask, "Exit Reason"] = "delisting_zero_recovery"
-        return records
+    def turnover(self):
+        """Annualized one-way turnover: half of traded notional over mean equity."""
+        if self.events.empty:
+            return 0.0
+        fills = self.events.loc[self.events.side.isin(["buy", "sell"])]
+        traded = float((fills.quantity * fills.price).sum()) / 2
+        equity = self.value()
+        return traded / float(equity.mean()) * TRADING_DAYS_PER_YEAR / len(equity)
 
 
-def simulate(config, entries, weights, price_df):
+def simulate(config, entries, price_df):
     bt = config["backtest"]
+    lag = bt.get("signal_lag_days", 1)
+    horizon = bt["max_holding_days"]
+    fee = bt["fee"]
+    top_n = config["strategy"]["top_n"]
     codes = list(entries.columns)
     days = pd.DatetimeIndex(entries.index)
     price_df = price_df.copy()
     price_df["Date"] = pd.to_datetime(price_df.Date).dt.normalize()
     if price_df.duplicated(["Date", "Code"]).any():
         raise ValueError("Duplicate execution price rows")
-    fields = {}
-    for column in ("Open", "High", "Low", "Close", "Trading_Halt", "Sigma"):
-        fields[column] = price_df.pivot(index="Date", columns="Code", values=column).reindex(
+    fields = {
+        column: price_df.pivot(index="Date", columns="Code", values=column).reindex(
             index=days, columns=codes
         )
+        for column in ("Open", "High", "Low", "Close", "Trading_Halt", "Sigma")
+    }
     eligible = (
         price_df.pivot(index="Date", columns="Code", values="UniverseEligible")
         .reindex(index=days, columns=codes)
@@ -63,240 +69,206 @@ def simulate(config, entries, weights, price_df):
         if "UniverseEligible" in price_df
         else fields["Open"].notna()
     )
-    signal_sigma = entries.attrs.get("signal_sigma")
-    if signal_sigma is None:
-        raise ValueError("Signal-time Sigma required; regenerate strategy signals")
-    cash = float(bt["initial_cash"])
-    fee = bt["fee"]
-    positions = {}
-    exclusions, events, writeoffs = [], [], []
+    # Barriers are anchored where the label is: the signal day's close and Sigma.
+    signal_close = fields["Close"].shift(lag)
+    signal_sigma = fields["Sigma"].shift(lag)
+
     delisting_dates = {}
     if config.get("dataset", {}).get("root"):
         metadata = pd.read_csv(Path(config["dataset"]["root"]) / "ticker_metadata.csv",
                                dtype={"Code": str}, parse_dates=["DelistingDate"])
         for code, rows in metadata.dropna(subset=["DelistingDate"]).groupby("Code"):
             delisting_dates[code] = rows.DelistingDate.tolist()
-    # Four ordered events: opening exits, opening entries, intraday exits, closing marks.
+
     event_index = pd.DatetimeIndex(
-        [day + pd.Timedelta(hours=hour) for day in days for hour in (9, 10, 12, 16)]
+        [day + pd.Timedelta(hours=hour) for day in days for hour in EVENT_HOURS]
     )
     sizes = pd.DataFrame(0.0, index=event_index, columns=codes)
     order_prices = pd.DataFrame(np.nan, index=event_index, columns=codes)
     marks = pd.DataFrame(np.nan, index=event_index, columns=codes)
-    top_n = config["strategy"]["top_n"]
+    cash = float(bt["initial_cash"])
+    positions, events, trades, exclusions, written_off = {}, [], [], [], set()
+    equity_at_close = []
+
+    def lines(pos):
+        hard = bt.get("hard_sl_mult")
+        up = bt.get("up_mult")
+        down = bt.get("down_mult")
+        anchor, sigma = pos["anchor"], pos["sigma"]
+        return (
+            anchor * (1 - hard * sigma) if hard is not None else -np.inf,
+            anchor * (1 + up * sigma) if up is not None else np.inf,
+            anchor * (1 - down * sigma) if down is not None else -np.inf,
+        )
+
+    def close_trade(code, row, price, exit_fee, reason, side):
+        pos = positions.pop(code)
+        quantity = pos["quantity"]
+        pnl = quantity * (price - pos["price"]) - pos["fee"] - exit_fee
+        trades.append({
+            "code": code, "entry_date": pos["entry_date"], "exit_date": row.normalize(),
+            "quantity": quantity, "entry_price": pos["price"], "exit_price": price,
+            "entry_fee": pos["fee"], "exit_fee": exit_fee, "pnl": pnl,
+            "return": pnl / (quantity * pos["price"] + pos["fee"]),
+            "holding_sessions": pos["sessions"], "exit_reason": reason,
+        })
+        events.append({"date": row, "code": code, "side": side, "quantity": quantity,
+                       "price": price, "fee": exit_fee, "reason": reason})
 
     def sell(code, row, price, reason):
         nonlocal cash
-        position = positions.pop(code)
-        proceeds = position["quantity"] * price
+        quantity = positions[code]["quantity"]
+        proceeds = quantity * price
         cash += proceeds * (1 - fee)
-        sizes.loc[row, code] = -position["quantity"]
+        sizes.loc[row, code] = -quantity
         order_prices.loc[row, code] = price
-        events.append(
-            {
-                "date": row,
-                "code": code,
-                "side": "sell",
-                "quantity": position["quantity"],
-                "price": price,
-                "fee": proceeds * fee,
-                "reason": reason,
-            }
-        )
+        close_trade(code, row, price, proceeds * fee, reason, "sell")
 
-    for day in days:
-        event_rows = [day + pd.Timedelta(hours=hour) for hour in (9, 10, 12, 16)]
+    for day_number, day in enumerate(days):
+        rows = [day + pd.Timedelta(hours=hour) for hour in EVENT_HOURS]
+        last_day = day_number == len(days) - 1
         available = fields["Open"].loc[day].notna() & fields["Close"].loc[day].notna()
+        halted = fields["Trading_Halt"].loc[day] != 0
         for code in list(positions):
-            pos = positions[code]
-            if any(pd.Timestamp(pos["entry_date"]) < date <= day
+            if any(pd.Timestamp(positions[code]["entry_date"]) < date <= day
                    for date in delisting_dates.get(code, [])):
                 if available[code]:
                     raise ValueError(f"Price exists after confirmed delisting: {code} {day}")
-                loss = {"date": event_rows[0], "code": code, "side": "writeoff",
-                        "quantity": pos["quantity"], "price": 0.0, "fee": 0.0,
-                        "reason": "delisting_zero_recovery",
-                        "loss_including_entry_fee": pos["quantity"] * pos["price"] * (1 + fee)}
-                writeoffs.append(loss)
-                events.append(loss)
-                del positions[code]
+                close_trade(code, rows[0], 0.0, 0.0, "delisting_zero_recovery", "writeoff")
+                written_off.add(code)
                 continue
             if not available[code]:
                 raise ValueError(
                     f"Held position lost valuation price: {code} {day}; position={positions[code]}"
                 )
-        for row in event_rows[:3]:
+        for row in rows[:3]:
             marks.loc[row] = fields["Open"].loc[day]
-        marks.loc[event_rows[-1]] = fields["Close"].loc[day]
-        for loss in writeoffs:
-            code = loss["code"]
+        marks.loc[rows[3]] = fields["Close"].loc[day]
+        for code in written_off:
             if available[code]:
                 raise ValueError(f"New price path after writeoff requires corporate-event mapping: {code}")
-            marks.loc[event_rows, code] = 0.0
+            marks.loc[rows, code] = 0.0
+
+        # 09:00 opening exits.
         for code in list(positions):
-            if fields["Trading_Halt"].loc[day, code] != 0:
+            if halted[code]:
                 continue
             pos = positions[code]
             open_price = fields["Open"].loc[day, code]
-            pos["age"] += 1
-            sigma = pos["sigma"]
-            hard_stop = (
-                pos["price"] * (1 - bt["hard_sl_mult"] * sigma)
-                if bt.get("hard_sl_mult") is not None
-                else -np.inf
-            )
-            profit = (
-                pos["price"] * (1 + bt["up_mult"] * sigma)
-                if bt.get("up_mult") is not None
-                else np.inf
-            )
-            reason = None
+            stop, profit, _ = lines(pos)
             if pos["pending"]:
-                reason = "close_stop_next_open"
-            elif pos["age"] >= bt["max_holding_days"]:
-                reason = "holding_expiry"
-            elif open_price <= hard_stop:
-                reason = "stop_gap"
+                sell(code, rows[0], open_price, "close_stop_next_open")
+            elif open_price <= stop:
+                sell(code, rows[0], open_price, "stop_gap")
             elif open_price >= profit:
-                reason = "profit_gap"
-            if reason:
-                sell(code, event_rows[0], open_price, reason)
-        # Snapshot budget once: order of tickers cannot change equal allocation.
+                sell(code, rows[0], open_price, "profit_gap")
+
+        # 10:00 opening entries. Budget is snapshotted so ticker order cannot change sizes.
         budget = cash / top_n
         selected = [code for code in codes if entries.loc[day, code] and code not in positions]
         if len(selected) > top_n:
             raise ValueError("Entry count exceeds top_n")
         for code in selected:
-            if (
-                not available[code]
-                or fields["Trading_Halt"].loc[day, code] != 0
-                or not eligible.loc[day, code]
-            ):
-                exclusions.append(
-                    {"date": str(day.date()), "code": code, "reason": "entry_ineligible"}
-                )
+            if not available[code] or halted[code] or not eligible.loc[day, code]:
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "entry_ineligible"})
                 continue
-            sigma = signal_sigma.loc[day, code]
+            sigma, anchor = signal_sigma.loc[day, code], signal_close.loc[day, code]
             if np.isinf(sigma):
                 raise ValueError("Non-finite signal Sigma")
-            if pd.isna(sigma) or sigma <= 0:
-                exclusions.append(
-                    {"date": str(day.date()), "code": code, "reason": "signal_sigma_warmup" if pd.isna(sigma) else "constant_volatility"}
-                )
+            if pd.isna(sigma) or sigma <= 0 or pd.isna(anchor):
+                reason = "constant_volatility" if sigma == 0 else "signal_sigma_warmup"
+                exclusions.append({"date": str(day.date()), "code": code, "reason": reason})
                 continue
             if bt.get("hard_sl_mult") is not None and bt["hard_sl_mult"] * sigma >= 1:
                 raise ValueError("Hard stop lies at a non-positive price")
             price = fields["Open"].loc[day, code]
+            candidate = {"anchor": anchor, "sigma": sigma}
+            stop, profit, _ = lines(candidate)
+            if price <= stop or price >= profit:
+                # An open beyond a barrier exits at that same open: a forced fee-only round trip.
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "open_beyond_barrier"})
+                continue
             quantity = floor(max(0.0, budget) / (price * (1 + fee)))
-            cost = quantity * price + quantity * price * fee
+            cost = quantity * price * (1 + fee)
             if quantity < 1 or cost > cash:
-                exclusions.append(
-                    {"date": str(day.date()), "code": code, "reason": "insufficient_cash"}
-                )
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "insufficient_cash"})
                 continue
             cash -= cost
-            positions[code] = {
-                "quantity": quantity,
-                "price": price,
-                "sigma": sigma,
-                "age": 0,
-                "pending": False,
-                "entry_date": str(day.date()),
-            }
-            sizes.loc[event_rows[1], code] = quantity
-            order_prices.loc[event_rows[1], code] = price
-            events.append(
-                {
-                    "date": event_rows[1],
-                    "code": code,
-                    "side": "buy",
-                    "quantity": quantity,
-                    "price": price,
-                    "fee": quantity * price * fee,
-                    "reason": "top_n",
-                }
-            )
-        # New entries participate in intraday stops. Ambiguous dual touch is downside first.
+            positions[code] = {**candidate, "quantity": quantity, "price": price,
+                               "fee": quantity * price * fee, "sessions": 0, "pending": False,
+                               "entry_date": day}
+            sizes.loc[rows[1], code] = quantity
+            order_prices.loc[rows[1], code] = price
+            events.append({"date": rows[1], "code": code, "side": "buy", "quantity": quantity,
+                           "price": price, "fee": quantity * price * fee, "reason": "top_n"})
+
+        # 12:00 intraday barriers. Ambiguous dual touch is downside first.
         for code in list(positions):
-            if fields["Trading_Halt"].loc[day, code] != 0:
+            if halted[code]:
                 continue
             pos = positions[code]
-            stop = (
-                pos["price"] * (1 - bt["hard_sl_mult"] * pos["sigma"])
-                if bt.get("hard_sl_mult") is not None
-                else -np.inf
-            )
-            profit = (
-                pos["price"] * (1 + bt["up_mult"] * pos["sigma"])
-                if bt.get("up_mult") is not None
-                else np.inf
-            )
+            pos["sessions"] += 1
+            stop, profit, _ = lines(pos)
+            open_price = fields["Open"].loc[day, code]
             if fields["Low"].loc[day, code] <= stop:
-                sell(code, event_rows[2], min(fields["Open"].loc[day, code], stop), "intraday_stop")
+                sell(code, rows[2], min(open_price, stop), "intraday_stop")
             elif fields["High"].loc[day, code] >= profit:
-                sell(
-                    code,
-                    event_rows[2],
-                    max(fields["Open"].loc[day, code], profit),
-                    "intraday_profit",
-                )
-            elif bt.get("down_mult") is not None and fields["Close"].loc[day, code] <= pos[
-                "price"
-            ] * (1 - bt["down_mult"] * pos["sigma"]):
+                sell(code, rows[2], max(open_price, profit), "intraday_profit")
+
+        # 16:00 closing exits: horizon expiry and period end sell at the close.
+        for code in list(positions):
+            if halted[code]:
+                continue
+            pos = positions[code]
+            close_price = fields["Close"].loc[day, code]
+            if pos["sessions"] >= horizon:
+                sell(code, rows[3], close_price, "holding_expiry")
+            elif last_day:
+                sell(code, rows[3], close_price, "period_end")
+            elif close_price <= lines(pos)[2]:
                 pos["pending"] = True
+
+        equity_at_close.append(
+            cash + sum(pos["quantity"] * fields["Close"].loc[day, code] for code, pos in positions.items())
+        )
+
     portfolio = vbt.Portfolio.from_orders(
-        close=marks,
-        size=sizes,
-        price=order_prices,
-        size_type="amount",
-        fees=fee,
-        init_cash=bt["initial_cash"],
-        cash_sharing=True,
-        group_by=True,
-        freq="6h",
-        allow_partial=False,
-        raise_reject=True,
+        close=marks, size=sizes, price=order_prices, size_type="amount", fees=fee,
+        init_cash=bt["initial_cash"], cash_sharing=True, group_by=True, freq="6h",
+        allow_partial=False, raise_reject=True,
     )
-    daily = DailyPortfolio(portfolio, bt["initial_cash"], exclusions)
-    daily.writeoffs = writeoffs
-    daily.events = pd.DataFrame(events)
-    daily.open_positions = [
-        {
-            "code": code,
-            **pos,
-            "valuation_price": fields["Close"].iloc[-1][code],
-            "unrealized_pnl_before_exit_fee": pos["quantity"]
-            * (fields["Close"].iloc[-1][code] - pos["price"])
-            - pos["quantity"] * pos["price"] * fee,
-        }
+    open_positions = [
+        {"code": code, **pos, "valuation_price": fields["Close"].iloc[-1][code]}
         for code, pos in positions.items()
     ]
-    expected_value = cash + sum(
-        pos["quantity"] * fields["Close"].iloc[-1][code] for code, pos in positions.items()
+    result = ExecutionResult(
+        portfolio, bt["initial_cash"], pd.DataFrame(events),
+        pd.DataFrame(trades, columns=TRADE_COLUMNS), exclusions, open_positions,
     )
-    if (not np.isclose(daily.value().iloc[-1], expected_value, rtol=1e-9)
-            or not np.isclose(portfolio.cash().iloc[-1], cash, rtol=1e-9, atol=1e-7)):
-        raise ValueError("VectorBT accounting disagrees with actual execution cash/positions")
-    return daily
+    # VectorBT replays the same orders as an independent ledger; every close must agree.
+    if not np.allclose(result.value().to_numpy(), equity_at_close, rtol=1e-9, atol=1e-6):
+        raise ValueError("VectorBT daily equity disagrees with the execution ledger")
+    if not np.isclose(portfolio.cash().iloc[-1], cash, rtol=1e-9, atol=1e-6):
+        raise ValueError("VectorBT cash disagrees with the execution ledger")
+    return result
 
 
-def save_execution(portfolio, out_dir):
+def save_execution(result, out_dir):
     out = Path(out_dir)
-    portfolio.events.to_csv(out / "orders.csv", index=False)
-    records = portfolio.trade_records()
-    records.to_csv(out / "trades.csv", index=False)
-    portfolio.value().rename("Equity").to_csv(out / "equity_curve.csv")
-    portfolio.returns().rename("Portfolio").to_csv(out / "daily_returns.csv")
+    result.events.to_csv(out / "orders.csv", index=False)
+    result.trades.to_csv(out / "trades.csv", index=False)
+    result.value().rename("Equity").to_csv(out / "equity_curve.csv")
     atomic_json(
         out / "execution_report.json",
         {
-            "exclusions": portfolio.exclusions,
-            "open_positions": portfolio.open_positions,
-            "closed_trades": int(records.Status.eq("Closed").sum()),
-            "unclosed_positions": len(portfolio.open_positions),
-            "writeoffs": portfolio.writeoffs,
+            "exclusions": result.exclusions,
+            "open_positions": result.open_positions,
+            "closed_trades": len(result.trades),
+            "unclosed_positions": len(result.open_positions),
             "execution_policy": {"quantity": "integer_floor_on_existing_adjusted_price_basis",
-                                 "delisting": "zero_valuation_zero_cash_recovery"},
-            "end_valuation": "final close",
+                                 "delisting": "zero_valuation_zero_cash_recovery",
+                                 "barrier_anchor": "signal_close_and_sigma",
+                                 "expiry": "close_of_max_holding_session",
+                                 "period_end": "liquidate_at_final_close"},
         },
     )

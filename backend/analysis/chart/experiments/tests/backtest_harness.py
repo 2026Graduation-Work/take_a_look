@@ -1,0 +1,80 @@
+"""Builders and an independent ledger replay for executor tests.
+
+check_ledger recomputes cash, holdings and equity from orders alone, without the
+executor or VectorBT, so a test that passes it cannot hide an accounting error.
+"""
+import numpy as np
+import pandas as pd
+import pytest
+
+DAYS = pd.bdate_range("2024-01-02", periods=12)
+
+
+def bars(path, code="000001", days=DAYS):
+    """path: list of (open, high, low, close) or dicts with optional halt/sigma per day."""
+    rows = []
+    for day, bar in zip(days, path, strict=False):
+        bar = bar if isinstance(bar, dict) else dict(zip("OHLC", bar, strict=True))
+        rows.append({"Date": day, "Code": code, "Open": bar["O"], "High": bar["H"],
+                     "Low": bar["L"], "Close": bar["C"], "Sigma": bar.get("sigma", 0.1),
+                     "Trading_Halt": bar.get("halt", 0)})
+    return pd.DataFrame(rows)
+
+
+def signals(prices, entry_days):
+    days = pd.DatetimeIndex(sorted(prices.Date.unique()))
+    codes = sorted(prices.Code.unique())
+    entries = pd.DataFrame(False, index=days, columns=codes)
+    for day, code in entry_days:
+        entries.iloc[day, codes.index(code)] = True
+    return entries
+
+
+def config(**backtest):
+    return {"strategy": {"top_n": backtest.pop("top_n", 1)}, "backtest": {
+        "initial_cash": 1000.0, "fee": 0.0, "max_holding_days": 3, "signal_lag_days": 1,
+        "up_mult": 1.0, "down_mult": 1.0, "hard_sl_mult": 1.5, **backtest}}
+
+
+def check_ledger(result, cfg, prices):
+    bt = cfg["backtest"]
+    fee = bt["fee"]
+    bar = prices.assign(Date=pd.to_datetime(prices.Date)).set_index(["Date", "Code"])
+    cash, held = float(bt["initial_cash"]), {}
+    events = result.events
+    days = result.value().index
+    for day in days:
+        todays = events.loc[pd.to_datetime(events.date).dt.normalize().eq(day)] if len(events) else []
+        for event in (todays.itertuples() if len(todays) else []):
+            row = None if event.side == "writeoff" else bar.loc[(day, event.code)]
+            notional = event.quantity * event.price
+            assert event.fee == pytest.approx(notional * fee if event.side != "writeoff" else 0)
+            if event.side == "buy":
+                assert event.code not in held, "bought a held code"
+                assert row.Trading_Halt == 0, "filled on a halted session"
+                assert event.price == row.Open, "entry must fill at the open"
+                cash -= notional + event.fee
+                held[event.code] = event.quantity
+            else:
+                assert held.pop(event.code) == event.quantity, "sold a different quantity"
+                if event.side == "sell":
+                    assert row.Trading_Halt == 0, "filled on a halted session"
+                    assert row.Low <= event.price <= row.High, "fill outside the day's range"
+                    cash += notional - event.fee
+                else:
+                    assert event.price == 0.0
+            assert cash >= -1e-9, "cash went negative"
+        equity = cash + sum(qty * bar.loc[(day, code)].Close for code, qty in held.items())
+        assert result.value().loc[day] == pytest.approx(equity, rel=1e-12, abs=1e-9)
+    assert sorted(held) == sorted(pos["code"] for pos in result.open_positions)
+
+    trades = result.trades
+    if trades.empty:
+        assert result.value().iloc[-1] == pytest.approx(bt["initial_cash"]) or result.open_positions
+        return
+    expected_pnl = trades.quantity * (trades.exit_price - trades.entry_price) - trades.entry_fee - trades.exit_fee
+    assert np.allclose(trades.pnl, expected_pnl)
+    assert (trades.holding_sessions >= 1).all()
+    assert (trades.holding_sessions <= bt["max_holding_days"]).all()
+    if not result.open_positions:
+        assert trades.pnl.sum() == pytest.approx(result.value().iloc[-1] - bt["initial_cash"])
