@@ -7,7 +7,8 @@ from pathlib import Path
 import pandas as pd
 import yaml
 from shared.io import append_collection_event, atomic_json, atomic_parquet, identity  # noqa: F401
-from shared.settings import CONTRACT_VERSION, PREPROCESSING, processing_contract
+from shared.processing import QLIB_PREPROCESSING, processing_contract
+from shared.settings import CONTRACT_VERSION, PREPROCESSING
 
 CHART_ROOT = Path(__file__).resolve().parents[1]
 
@@ -80,11 +81,15 @@ def load_dataset_config(path):
     pre = config["preprocessing"]
     if pre == "shared_v3":
         pre = config["preprocessing"] = dict(PREPROCESSING)
+    elif pre == "qlib_alpha158":
+        pre = config["preprocessing"] = dict(QLIB_PREPROCESSING)
     keys(
         pre,
-        "sigma_window sigma_min_periods barrier_feature_up_mult barrier_feature_down_mult",
+        "sigma_window sigma_min_periods barrier_feature_up_mult barrier_feature_down_mult feature_engine",
         "preprocessing",
     )
+    if "feature_engine" in pre and pre["feature_engine"] != QLIB_PREPROCESSING["feature_engine"]:
+        raise ValueError("Unsupported preprocessing.feature_engine")
     for name in ("sigma_window", "sigma_min_periods"):
         positive_int(pre[name], name)
     if pre["sigma_min_periods"] > pre["sigma_window"]:
