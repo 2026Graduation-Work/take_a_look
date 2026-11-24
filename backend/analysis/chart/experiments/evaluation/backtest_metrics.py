@@ -23,7 +23,9 @@ def calculate_trading_metrics(daily_returns: pd.Series, trades: pd.DataFrame | N
         else np.nan
     )
     annual_mean = returns.mean() * TRADING_DAYS_PER_YEAR
-    volatility = returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
+    # A constant series has zero spread; std() would return rounding noise (~1e-18) instead.
+    constant = returns.max() - returns.min() == 0
+    volatility = 0.0 if constant else returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)
     # Downside deviation against a zero target over every day, not the std of losing days.
     downside = np.sqrt((np.minimum(returns, 0.0) ** 2).mean()) * np.sqrt(TRADING_DAYS_PER_YEAR)
     # Include the initial equity (1.0) so a first-day loss counts as drawdown.

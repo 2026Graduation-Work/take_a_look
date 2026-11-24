@@ -3,7 +3,6 @@
 check_ledger recomputes cash, holdings and equity from orders alone, without the
 executor or VectorBT, so a test that passes it cannot hide an accounting error.
 """
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -40,11 +39,15 @@ def config(**backtest):
 def check_ledger(result, cfg, prices):
     bt = cfg["backtest"]
     fee = bt["fee"]
+    participation = bt.get("max_participation")
     slippage = bt["slippage_bps"] / 10_000
     bar = prices.assign(Date=pd.to_datetime(prices.Date)).sort_values("Date")
     bar["PreviousClose"] = bar.groupby("Code").Close.shift(1)
+    # Traded value known before the session: mean of up to 20 prior sessions, never today's.
+    bar["PriorValue"] = bar.groupby("Code").Amount.transform(
+        lambda values: values.shift(1).rolling(20, min_periods=1).mean())
     bar = bar.set_index(["Date", "Code"])
-    cash, held = float(bt["initial_cash"]), {}
+    cash, held, lots, rebuilt = float(bt["initial_cash"]), {}, {}, []
     events = result.events
     days = result.value().index
     for day in days:
@@ -58,15 +61,28 @@ def check_ledger(result, cfg, prices):
                 assert row.Trading_Halt == 0, "filled on a halted session"
                 assert event.reference_price == row.Open, "entry must fill at the open"
                 assert not row.Open >= 1.29 * row.PreviousClose, "bought an upper-limit open"
+                if participation is not None:
+                    assert notional <= participation * row.PriorValue + 1e-9, "liquidity cap exceeded"
                 assert event.price == pytest.approx(event.reference_price * (1 + slippage))
                 cash -= notional + event.fee
                 held[event.code] = event.quantity
+                lots[event.code] = (day, event.price, event.fee)
             else:
                 assert held.pop(event.code) == event.quantity, "sold a different quantity"
+                entry_day, entry_price, entry_fee = lots.pop(event.code)
+                pnl = event.quantity * (event.price - entry_price) - entry_fee - event.fee
+                rebuilt.append({"code": event.code, "entry_date": entry_day, "exit_date": day,
+                                "quantity": event.quantity, "entry_price": entry_price,
+                                "exit_price": event.price, "pnl": pnl,
+                                "return": pnl / (event.quantity * entry_price + entry_fee),
+                                "exit_reason": event.reason})
                 if event.side == "sell":
                     assert row.Trading_Halt == 0, "filled on a halted session"
                     assert not (row.High == row.Low and row.Close <= 0.71 * row.PreviousClose), \
                         "sold into a locked lower limit"
+                    opening = pd.Timestamp(event.date).hour == 9
+                    assert not (opening and row.Open <= 0.71 * row.PreviousClose), \
+                        "sold at an open already at the lower limit"
                     assert row.Low <= event.reference_price <= row.High, "fill outside the day's range"
                     assert event.price == pytest.approx(event.reference_price * (1 - slippage))
                     cash += notional - event.fee
@@ -77,13 +93,19 @@ def check_ledger(result, cfg, prices):
         assert result.value().loc[day] == pytest.approx(equity, rel=1e-12, abs=1e-9)
     assert sorted(held) == sorted(pos["code"] for pos in result.open_positions)
 
+    # The trade ledger must be exactly what the orders alone imply, return included.
     trades = result.trades
+    expected = pd.DataFrame(rebuilt, columns=["code", "entry_date", "exit_date", "quantity",
+                                              "entry_price", "exit_price", "pnl", "return",
+                                              "exit_reason"])
+    pd.testing.assert_frame_equal(
+        trades[expected.columns].reset_index(drop=True), expected,
+        check_dtype=False, check_datetimelike_compat=True, rtol=1e-12)
     if trades.empty:
-        assert result.value().iloc[-1] == pytest.approx(bt["initial_cash"]) or result.open_positions
         return
-    expected_pnl = trades.quantity * (trades.exit_price - trades.entry_price) - trades.entry_fee - trades.exit_fee
-    assert np.allclose(trades.pnl, expected_pnl)
     assert (trades.holding_sessions >= 1).all()
-    assert (trades.holding_sessions <= bt["max_holding_days"]).all()
+    # Only a sale deferred by a lower-limit lock may outlive the horizon.
+    overdue = trades.holding_sessions > bt["max_holding_days"]
+    assert trades.loc[overdue, "exit_reason"].eq("limit_down_locked").all()
     if not result.open_positions:
         assert trades.pnl.sum() == pytest.approx(result.value().iloc[-1] - bt["initial_cash"])
