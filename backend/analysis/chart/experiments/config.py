@@ -276,8 +276,10 @@ def load_experiment_config(path):
     slippage = bt.get("slippage_bps")
     if isinstance(slippage, bool) or not isinstance(slippage, (int, float)) or not 0 <= slippage < 10_000:
         raise ValueError("backtest.slippage_bps must be set explicitly in [0, 10000)")
-    if "max_participation" not in bt or (
-        bt["max_participation"] is not None and not 0 < bt["max_participation"] <= 1
+    participation = bt.get("max_participation", "missing")
+    if participation is not None and (
+        isinstance(participation, bool) or not isinstance(participation, (int, float))
+        or not 0 < participation <= 1
     ):
         raise ValueError("backtest.max_participation must be set explicitly: (0, 1] or null")
     for name in ("up_mult", "down_mult", "hard_sl_mult"):

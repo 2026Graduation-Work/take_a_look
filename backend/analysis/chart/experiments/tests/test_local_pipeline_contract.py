@@ -974,3 +974,18 @@ def test_backtest_cost_and_lag_settings_are_validated(local_dataset, key, value,
     config_path.write_text(yaml.safe_dump(invalid))
     with pytest.raises(ValueError, match=message):
         load_experiment_config(config_path)
+
+
+@pytest.mark.parametrize("value,message", [
+    (True, "max_participation"), (0, "max_participation"), ("missing", "max_participation"),
+])
+def test_participation_cap_setting_is_validated(local_dataset, value, message):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    if value == "missing":
+        del invalid["backtest"]["max_participation"]
+    else:
+        invalid["backtest"]["max_participation"] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match=message):
+        load_experiment_config(config_path)

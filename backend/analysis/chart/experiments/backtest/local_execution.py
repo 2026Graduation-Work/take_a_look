@@ -86,7 +86,9 @@ def simulate(config, entries, price_df):
     signal_close = fields["Close"].shift(lag)
     signal_sigma = fields["Sigma"].shift(lag)
     previous_close = fields["Close"].shift(1)
-    # A session traded only at the lower limit leaves no buyer for our sell order.
+    # Near the lower limit, sell orders may find no buyer. At the open only the open is known;
+    # later in the day a session that traded at one lower-limit price is treated as locked.
+    open_at_lower = fields["Open"] / previous_close <= LIMIT_DOWN_RATIO
     locked_down = (fields["High"] == fields["Low"]) & (
         fields["Close"] / previous_close <= LIMIT_DOWN_RATIO)
     limit_up_open = fields["Open"] / previous_close >= LIMIT_UP_RATIO
@@ -140,7 +142,8 @@ def simulate(config, entries, price_df):
 
     def sell(code, row, reference, reason):
         nonlocal cash
-        if locked_down.loc[row.normalize(), code]:
+        blocked = open_at_lower if row.hour == EVENT_HOURS[0] else locked_down
+        if blocked.loc[row.normalize(), code]:
             positions[code]["pending"] = "limit_down_locked"
             return
         quantity = positions[code]["quantity"]
@@ -222,7 +225,10 @@ def simulate(config, entries, price_df):
             price = open_price * (1 + slippage)
             quantity = floor(max(0.0, budget) / (price * (1 + fee)))
             capped = False
-            if participation is not None and pd.notna(average_value.loc[day, code]):
+            if participation is not None and pd.isna(average_value.loc[day, code]):
+                exclusions.append({"date": str(day.date()), "code": code, "reason": "liquidity_unknown"})
+                continue
+            if participation is not None:
                 cap = floor(participation * average_value.loc[day, code] / price)
                 capped = cap < quantity
                 quantity = min(quantity, cap)

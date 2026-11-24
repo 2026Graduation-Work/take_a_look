@@ -41,6 +41,8 @@ SCENARIOS = {
     "locked_lower_limit_defers_the_stop_to_next_open": (
         [SIGNAL, FLAT, (70.7, 70.7, 70.7, 70.7), (72, 75, 70, 74), FLAT], {},
         [(1, 3, 72, "limit_down_locked", 2)]),
+    "open_at_lower_limit_defers_the_opening_sell_even_if_it_unlocks": (
+        [SIGNAL, FLAT, (70.7, 71.5, 70.7, 70.7), FLAT], {}, [(1, 2, 70.7, "intraday_stop", 2)]),
     "unlocked_lower_limit_day_still_sells": (
         [SIGNAL, FLAT, (75, 76, 70.7, 70.7), FLAT], {}, [(1, 2, 75, "stop_gap", 1)]),
 }
@@ -103,6 +105,30 @@ def test_order_is_capped_at_share_of_prior_average_traded_value():
     result = run(path, max_participation=0.01)
     assert result.trades.quantity.tolist() == [4]
     assert result.exclusions == [{"date": "2024-01-03", "code": "000001", "reason": "liquidity_capped"}]
+
+
+def test_opening_decision_does_not_depend_on_the_rest_of_the_day():
+    # Same open (at the lower limit) and low; only the day's high differs. Nothing may sell at 09:00.
+    for high in (70.7, 71.5):
+        result = run([SIGNAL, FLAT, (70.7, high, 70.7, 70.7), FLAT])
+        opening = result.events.loc[pd.to_datetime(result.events.date).eq(DAYS[2] + pd.Timedelta(hours=9))]
+        assert opening.empty
+
+
+def test_cap_uses_prior_traded_value_not_the_same_day():
+    # Prior value 4,000 × 2.5% = 100 won: 1 share at 100, although today's value is 400,000.
+    path = [{"O": 100, "H": 100, "L": 100, "C": 100, "amount": 4_000},
+            {"O": 100, "H": 100, "L": 100, "C": 100, "amount": 400_000}, FLAT]
+    result = run(path, max_participation=0.025)
+    assert result.trades.quantity.tolist() == [1]
+
+
+def test_unknown_traded_value_blocks_entry_when_the_cap_is_on():
+    path = [{"O": 100, "H": 100, "L": 100, "C": 100, "amount": float("nan")}] + [
+        {"O": 101, "H": 101, "L": 101, "C": 101, "amount": float("nan")}] * 3
+    result = run(path, max_participation=0.025)
+    assert result.events.empty
+    assert result.exclusions[0]["reason"] == "liquidity_unknown"
 
 
 def test_turnover_is_half_traded_notional_over_mean_equity_annualized():
