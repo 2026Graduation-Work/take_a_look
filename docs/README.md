@@ -74,6 +74,3 @@
 |---|---|---|
 | [validation/2026-10-14-news-relevance-policy.md](validation/2026-10-14-news-relevance-policy.md) | text | Live 뉴스 정책의 정본인가 |
 | [validation/2026-10-14-live-policy-implementation.md](validation/2026-10-14-live-policy-implementation.md) | text | 위 정책의 구현 기록을 남길 필요가 있는가 |
-| [qa/2026-10-27-model-reasons/README.md](qa/2026-10-27-model-reasons/README.md) | chart, web | 피처 설명 문구의 정본이 `frontend/lib/featureLabels.ts`인가 |
-| [qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS.md](qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS.md) | chart, web | 위와 같음 |
-| [qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS-170.md](qa/2026-10-27-model-reasons/FEATURE-DESCRIPTIONS-170.md) | chart, web | 위와 같음 |
