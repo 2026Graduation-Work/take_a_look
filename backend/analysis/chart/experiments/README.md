@@ -52,6 +52,24 @@ H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼�
 
 처리 설정의 정본은 `shared/settings.py`다. 기본 데이터셋 YAML의 `preprocessing: shared_v3`가 이를 참조한다. Sigma는 20행·최소 10개 관측, 입력 배리어는 상방 1.5·하방 1.2배다. 연구 라벨과 표본 선택은 별도 실험 설정이다.
 
+## 학습 가격 원본과 권리 이벤트
+
+학습 수집기는 KRX 원주가를 `krx_raw_prices/{code}.parquet`에 한 번 저장한다. 열은 `Date`, `RawOpen`, `RawHigh`, `RawLow`, `RawClose`, `RawChange`, `RawVolume`, `Amount`, `ListedShares`다. `RawChange`는 KRX `CMPPREVDD_PRC`이며 등락률이 아니다. 원본 해시가 바뀌거나 기존 원주가와 재조회 결과가 다르면 중단한다.
+
+각 상장 기간의 KRX 영업일을 모두 확인한 뒤 기준가 `RawClose - RawChange`로 이벤트를 계산한다. `dataset_manifest.json`의 `price_events.path`가 가리키는 이벤트 파일과 이벤트·원본 해시가 감사 기록이다. 데이터셋 종료일까지만 이벤트를 적용한 가격·수급 파일은 기존 `raw/`에 저장한다. 거래량은 주식수 변경 비율로 조정하므로 이전 경로의 원거래량과 달라진다. 현금배당은 포함하지 않는다.
+
+학습 가격 기준은 `krx_raw_base_price_events_v1`이다. 기존 서빙 가격 기준과 구분한다. 이전 dataset의 파생 가격은 원주가가 같으면 다시 계산할 수 있다. 처리 코드가 달라진 기존 processed 자료는 보존하고 새 root에서 전처리한다.
+
+실제 분할·병합·거래정지·신규상장·상장폐지 5종목 검증은 다음 명령으로 재현한다. 원주가·이벤트·파생 파일의 해시, 영업일, KRX 대비/기준가와 일간 수익률, ±30% 범위, 이전 VWAP 계산과의 일치를 확인한다. 이미 있는 원본은 재조회하지 않는다.
+
+```bash
+python -m experiments.dataset.verify_training_prices --env .env --root workspace/experiments/datasets/krx_price_check
+```
+
+2026-11-24 검증에서 005930·004920·031820·373220·003410의 9,320행과 이벤트 9개를 확인했다. 같은 root에서 `experiments.dataset.preprocess`도 5개 파일 모두 완료했다. 이 결과는 공개 KRX 가격 이력이며 개인 보유 자료가 아니다. 004920의 2020년 감자는 가격 비율과 주식 교환 비율이 달라 거래량 규칙을 확인 중이다. 이 사례의 거래량 검증은 아직 완료하지 않았다.
+
+`shared/` 변경은 `processing_contract`와 pack 해시를 바꾼다. 기존 활성 pack을 이 checkout에서 그대로 실행할 수 없다. 이 작업은 pack 재생성·활성화·운영 게시를 수행하지 않는다. 서빙 전환과 재학습은 후속 작업이다.
+
 ## v3 실험 결과를 pack으로 내보내기
 
 현재 활성 모델은 기본 161개 + 수급 9개 입력의 H5/H20이다. 현재 처리 계약과 새 폴더 구조로 완료한 H5·H20 run의 디렉터리를 지정한다. 수급 모델을 내보낼 때는 `--with-flows`를 붙인다.
