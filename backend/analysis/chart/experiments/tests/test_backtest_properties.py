@@ -104,6 +104,7 @@ def test_execution_resolves_the_same_barrier_event_as_the_label(seed, hard_sl_mu
             continue
         if trade.exit_reason in HARD_STOP_EXITS:
             assert hard_sl_mult is not None
+            compared += 1
             continue
         anchor, sigma = prices.Close.iloc[t], prices.Sigma.iloc[t]
         executed = executed_class(trade, anchor, sigma)
