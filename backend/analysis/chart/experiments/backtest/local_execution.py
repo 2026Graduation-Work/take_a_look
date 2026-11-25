@@ -256,6 +256,8 @@ def simulate(config, entries, price_df):
                 continue
             pos = positions[code]
             pos["sessions"] += 1
+            if pos["pending"]:
+                continue  # A deferred sale waits for the next open; it is not re-judged today.
             stop, profit, _ = lines(pos)
             open_price = fields["Open"].loc[day, code]
             low, high = fields["Low"].loc[day, code], fields["High"].loc[day, code]
@@ -270,12 +272,14 @@ def simulate(config, entries, price_df):
             if halted[code]:
                 continue
             pos = positions[code]
+            if pos["pending"]:
+                continue
             close_price = fields["Close"].loc[day, code]
             if pos["sessions"] >= horizon:
                 sell(code, rows[3], close_price, "holding_expiry")
             elif last_day:
                 sell(code, rows[3], close_price, "period_end")
-            elif not pos["pending"] and reached_down(close_price, lines(pos)[2]):
+            elif reached_down(close_price, lines(pos)[2]):
                 pos["pending"] = "close_stop_next_open"
 
         equity_at_close.append(
