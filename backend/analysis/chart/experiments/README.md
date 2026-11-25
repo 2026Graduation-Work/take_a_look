@@ -83,15 +83,15 @@ python -m experiments.dataset.collect_actions \
 ```bash
 python -m experiments.dataset.census_actions \
   --start 2016-01-01 --end 2026-11-20 \
-  --published-start 2015-12-28 --published-end 2026-11-23 \
+  --published-start 2015-09-01 --published-end 2026-11-24 \
   --krx-days "$KRX_DAYS" --active-master "$KRX_ACTIVE_MASTER" \
   --delisted-master "$KRX_DELISTED_MASTER" --kind-root "$KIND_ARCHIVE" \
   --kind-daily-cache "$KIND_DAILY_CACHE" --output "$CENSUS_RUN" --preview
 ```
 
-기본 요청 예산은 0이다. `--kind-daily-cache`로 가져오는 파일은 날짜별 HTML과 동일 이름의 JSON 수신기록이다. 수신기록의 응답 SHA-256, 수신 시각, 인코딩, URL 및 요청 양식이 응답과 일치해야 한다. `--kind-archive`는 `응답_저장소=실행_폴더` 형식으로 이전 수집 영수증을 가져온다. `--action-snapshot`으로 현행 구현에서 검증한 DART·KIND 단위 변경 사건표도 넣을 수 있다. KIND 온라인 수집 전에 남은 한도를 확인한다. `--request-budget`만큼 새 요청을 허용하며, KIND 요청 사이에 0.6초 이상 기다리고 HTTP 403 또는 429에서 새 요청을 멈춘다. 재실행할 때 저장소는 재사용하고 출력 경로를 새로 지정한다. [무료 운영 한도](../../../../docs/ops/free-tier-budget.md)
+기본 요청 예산은 0이다. 무상증자·주식배당 배정 조건은 시행일 전 120일까지 선택하므로 게시일 조회 범위에도 그 기간을 포함한다. `--kind-daily-cache`로 가져오는 파일은 날짜별 HTML과 동일 이름의 JSON 수신기록이다. 수신기록의 응답 SHA-256, 수신 시각, 인코딩, URL 및 요청 양식이 응답과 일치해야 한다. `--kind-archive`는 `응답_저장소=실행_폴더` 형식으로 이전 수집 영수증을 가져온다. `--action-snapshot`으로 현행 구현에서 검증한 DART·KIND 단위 변경 사건표도 넣을 수 있다. KIND 온라인 수집 전에 남은 한도를 확인한다. `--request-budget`만큼 새 요청을 허용하며, KIND 요청 사이에 0.6초 이상 기다린다. HTTP 403·429 또는 연속 연결 오류 3회에서 새 요청을 멈춘다. 정상 응답 본문을 모두 받으면 연속 연결 오류 횟수를 초기화한다. 중단 뒤에도 캐시는 읽을 수 있다. 재실행할 때 저장소는 재사용하고 출력 경로를 새로 지정한다. [무료 운영 한도](../../../../docs/ops/free-tier-budget.md)
 
-`candidates.csv`는 원주가 관측을, `notices.csv`는 KIND에서 확인한 증권별 시행 사실을 담는다. `resolutions.csv`는 시행일별 판정과 근거, 유리수 가격·거래량 계수를 담는다. 가격 후보가 없어도 공식 인적분할, 합병 및 스팩 합병 시행일을 기록한다. 거래정지 중 주식수만 바뀐 판정이나 구간 판정의 계수는 비워 둔다. `coverage.json`은 미완료 조회, 검토 대상 공시, 증권 식별 실패를 남긴다. 후보가 없던 상장 구간도 실제 거래일 범위, 거래대금을 포함한 원주가 지문, 스팩 소속부 공시 근거를 기록한다. `manifest.json`에는 각 표와 가격 입력의 해시, 시장 전체와 학습 대상 시장의 집계가 있다.
+`candidates.csv`는 원주가 관측과 공시 때문에 추가된 검토 후보를, `notices.csv`는 KIND에서 확인한 증권별 시행 사실을 담는다. `resolutions.csv`는 시행일별 판정과 근거, 유리수 가격·거래량 계수를 담는다. 가격 후보가 없어도 공식 인적분할, 합병 및 스팩 합병 시행일을 기록한다. 거래정지 중 주식수만 바뀐 판정이나 구간 판정의 계수는 비워 둔다. `coverage.json`은 미완료 조회, 검토 대상 공시, 증권 식별 실패를 남긴다. 후보가 없던 상장 구간도 실제 거래일 범위, 거래대금을 포함한 원주가 지문, 스팩 소속부 공시 근거를 기록한다. `manifest.json`에는 각 표와 가격 입력의 해시, 시장 전체와 학습 대상 시장의 집계가 있다. 원주가에 관측된 후보와 공시에서만 추가한 검토 후보의 수는 구분한다.
 
 완료한 조회에서 근거를 확인할 수 없으면 검토가 필요한 `segment_break`를 기록한다. 누락된 KIND 목록이나 본문은 미완료 조회로 남긴다. `--preview`, `--code`, `--sample`은 부분 검증에 쓴다. 전체 범위를 조회했을 때 장부가 미완료면 명령은 종료 코드 2를 반환한다. 이 명령은 학습 입력과 라벨을 바꾸지 않는다.
 
