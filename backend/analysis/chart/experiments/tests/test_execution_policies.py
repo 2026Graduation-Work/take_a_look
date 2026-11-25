@@ -18,6 +18,10 @@ SCENARIOS = {
     # name: (path from day 0, backtest overrides, [(entry, exit, exit price, reason, sessions)])
     "expiry_sells_at_close_of_last_session": (
         [SIGNAL, FLAT, FLAT, FLAT, FLAT], {}, [(1, 3, 101, "holding_expiry", 3)]),
+    "high_exactly_at_the_profit_line_takes_profit": (
+        [SIGNAL, (100, 110, 100, 100), FLAT, FLAT], {}, [(1, 1, 110, "intraday_profit", 1)]),
+    "high_just_below_the_profit_line_does_not": (
+        [SIGNAL, (100, 109.99, 100, 100), FLAT, FLAT, FLAT], {}, [(1, 3, 101, "holding_expiry", 3)]),
     "intraday_profit_fills_at_line": (
         [SIGNAL, FLAT, (101, 112, 100, 105), FLAT], {}, [(1, 2, 110, "intraday_profit", 2)]),
     "dual_touch_takes_the_stop": (
@@ -43,7 +47,7 @@ SCENARIOS = {
         [SIGNAL, FLAT, (70.7, 70.7, 70.7, 70.7), (72, 75, 70, 74), FLAT], {},
         [(1, 3, 72, "limit_down_locked", 2)]),
     "open_at_lower_limit_defers_the_opening_sell_even_if_it_unlocks": (
-        [SIGNAL, FLAT, (70.7, 71.5, 70.7, 70.7), FLAT], {}, [(1, 2, 70.7, "intraday_stop", 2)]),
+        [SIGNAL, FLAT, (70.7, 71.5, 70.7, 70.7), FLAT], {}, [(1, 3, 101, "limit_down_locked", 2)]),
     "unlocked_lower_limit_day_still_sells": (
         [SIGNAL, FLAT, (75, 76, 70.7, 70.7), FLAT], {}, [(1, 2, 75, "stop_gap", 1)]),
 }
@@ -127,6 +131,13 @@ def test_opening_decision_does_not_depend_on_the_rest_of_the_day():
         result = run([SIGNAL, FLAT, (70.7, high, 70.7, 70.7), FLAT])
         opening = result.events.loc[pd.to_datetime(result.events.date).eq(DAYS[2] + pd.Timedelta(hours=9))]
         assert opening.empty
+
+
+def test_a_sale_deferred_at_the_open_waits_for_the_next_open():
+    # Day 2 opens at the lower limit (gap stop blocked). It later trades above the profit line,
+    # but the deferred sale is not re-judged intraday: it sells at day 3's open.
+    path = [SIGNAL, FLAT, (70.7, 111, 70.7, 100), (98, 99, 97, 98), FLAT]
+    assert as_rows(run(path).trades) == [(1, 3, 98, "limit_down_locked", 2)]
 
 
 def test_cap_uses_prior_traded_value_not_the_same_day():
