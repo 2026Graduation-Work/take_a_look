@@ -164,7 +164,7 @@ class KindMarket:
         self.session = requests.Session() if session is None else session
         self.remaining = budget
         self.calls = 0
-        self._last_request = -float("inf")
+        self._last_request_started = -float("inf")
         self._stopped = False
         self._transport_failures = 0
 
@@ -241,7 +241,9 @@ class KindMarket:
     def _request(self, request):
         if self._stopped or self.remaining == 0:
             raise KindUnavailable("KIND requests stopped or budget exhausted; resume collection")
-        time.sleep(max(0, 0.6 - (time.monotonic() - self._last_request)))
+        wait = 0.6 - (time.monotonic() - self._last_request_started)
+        if wait > 0:
+            time.sleep(wait)
         self.remaining -= 1
         self.calls += 1
         url, form, referer = (request[key] for key in ("url", "form", "referer"))
@@ -250,6 +252,7 @@ class KindMarket:
             headers["X-Requested-With"] = "XMLHttpRequest"
         call = {**request, "status": None}
         try:
+            self._last_request_started = time.monotonic()
             with self.session.request("POST" if form else "GET", url, data=form, headers=headers,
                                       timeout=(10, 40), stream=True, allow_redirects=False) as response:
                 status = response.status_code
@@ -274,7 +277,6 @@ class KindMarket:
         else:
             self._transport_failures = 0
         finally:
-            self._last_request = time.monotonic()
             self.root.mkdir(parents=True, exist_ok=True)
             at = datetime.now(UTC).isoformat()
             with (self.root / "calls.jsonl").open("a") as log:

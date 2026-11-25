@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date
 from fractions import Fraction
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import pandas as pd
@@ -336,17 +337,47 @@ def test_kind_access_rejection_stops_further_live_requests(tmp_path, status):
 
 
 def test_kind_transport_failure_limit_keeps_cache_and_allows_a_new_run(tmp_path, monkeypatch):
-    monkeypatch.setattr("shared.data.kind_market.time.sleep", lambda _: None)
+    now, starts, sleeps = 0.0, [], []
+
+    def advance(seconds):
+        nonlocal now
+        now += seconds
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        advance(seconds)
+
+    monkeypatch.setattr("shared.data.kind_market.time", SimpleNamespace(monotonic=lambda: now, sleep=sleep))
     complete = MagicMock(status_code=200, headers={})
     complete.__enter__.return_value = complete
-    complete.iter_content.return_value = ["조회된 결과값이 없습니다. 전체 <em>0</em>건 : <strong>1</strong>/1".encode()]
     partial = MagicMock(status_code=200, headers={})
     partial.__enter__.return_value = partial
-    partial.iter_content.side_effect = ChunkedEncodingError("fake secret in partial response")
-    request = Mock(side_effect=[
-        ReadTimeout("fake secret in timeout"), ConnectionError("fake secret in connection"), complete,
-        ReadTimeout(), partial, ConnectionError(), complete,
+    body_delays = iter([0.8, 0.1, 0])
+
+    def full_body(_chunk_size):
+        advance(next(body_delays))
+        return ["조회된 결과값이 없습니다. 전체 <em>0</em>건 : <strong>1</strong>/1".encode()]
+
+    def broken_body(_chunk_size):
+        advance(0.2)
+        raise ChunkedEncodingError("fake secret in partial response")
+
+    complete.iter_content.side_effect = full_body
+    partial.iter_content.side_effect = broken_body
+    results = iter([
+        (0.1, ReadTimeout("fake secret in timeout")), (0.8, ConnectionError("fake secret in connection")),
+        (0, complete), (0, complete), (0.1, ReadTimeout()), (0, partial), (0, ConnectionError()), (0, complete),
     ])
+
+    def respond(*_args, **_kwargs):
+        starts.append(now)
+        seconds, result = next(results)
+        advance(seconds)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    request = Mock(side_effect=respond)
     session = Mock(request=request)
     client = KindMarket(tmp_path, budget=10, session=session)
     for day in (1, 2):
@@ -354,31 +385,36 @@ def test_kind_transport_failure_limit_keeps_cache_and_allows_a_new_run(tmp_path,
             client.day(date(2016, 1, day))
     cached_day = date(2016, 1, 3)
     saved = client.day(cached_day)
-    for day in (4, 5):
+    assert client.day(date(2016, 1, 4))[0] == []
+    for day in (5, 6):
         with pytest.raises(KindUnavailable, match="network request failed"):
             client.day(date(2016, 1, day))
     assert client.day(cached_day) == saved
     with pytest.raises(KindUnavailable, match="network request failed"):
-        client.day(date(2016, 1, 6))
+        client.day(date(2016, 1, 7))
 
     with pytest.raises(KindUnavailable, match="stopped"):
-        client.day(date(2016, 1, 7))
+        client.day(date(2016, 1, 8))
     assert client.day(cached_day) == saved
-    assert request.call_count == client.calls == 6 and client.remaining == 4
+    assert request.call_count == client.calls == 7 and client.remaining == 3
+    assert starts == pytest.approx([0, 0.6, 1.4, 2.2, 2.8, 3.4, 4.0])
+    assert sleeps == pytest.approx([0.5, 0.5, 0.5, 0.4])
 
     resumed = KindMarket(tmp_path, budget=1, session=session)
     assert resumed.day(cached_day) == saved
-    assert resumed.day(date(2016, 1, 7))[0] == []
+    assert resumed.day(date(2016, 1, 8))[0] == []
     with pytest.raises(KindUnavailable, match="budget exhausted"):
-        resumed.day(date(2016, 1, 8))
-    assert request.call_count == 7 and resumed.calls == 1 and resumed.remaining == 0
+        resumed.day(date(2016, 1, 9))
+    assert request.call_count == 8 and resumed.calls == 1 and resumed.remaining == 0
+    assert starts[-1] == pytest.approx(4.0)
+    assert sleeps == pytest.approx([0.5, 0.5, 0.5, 0.4])
 
     log = (tmp_path / "calls.jsonl").read_text()
     assert "fake secret" not in log
     calls = [json.loads(line) for line in log.splitlines()]
-    assert [call["status"] for call in calls] == [None, None, 200, None, 200, None, 200]
+    assert [call["status"] for call in calls] == [None, None, 200, 200, None, 200, None, 200]
     assert [call.get("error_type") for call in calls] == [
-        "ReadTimeout", "ConnectionError", None, "ReadTimeout", "ChunkedEncodingError", "ConnectionError", None,
+        "ReadTimeout", "ConnectionError", None, None, "ReadTimeout", "ChunkedEncodingError", "ConnectionError", None,
     ]
 
 
