@@ -64,7 +64,7 @@ strategy:
   position_weighting: equal_weight
 
 backtest:
-  initial_cash: 10000000
+  initial_cash: 100000000
   signal_lag_days: 1
   entry_price: open
   exit_price: open

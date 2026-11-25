@@ -368,7 +368,7 @@ def _build_backtest_config(
         **config.get("strategy", {}),
     }
     backtest = {
-        "initial_cash": 10_000_000,
+        "initial_cash": 100_000_000,
         "signal_lag_days": 1,
         "entry_price": "open",
         "exit_price": "open",

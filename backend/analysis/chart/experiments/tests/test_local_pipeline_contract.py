@@ -246,7 +246,7 @@ def execution_config():
     return {
         "strategy": {"top_n": 2},
         "backtest": {
-            "initial_cash": 1000.0,
+            "initial_cash": 10_000.0,
             "fee": 0.01,
             "slippage_bps": 0,
             "max_participation": None,
@@ -277,13 +277,13 @@ def test_execution_equal_budgets_and_signal_time_barriers():
     result = simulate(execution_config(), entries, prices)
     orders = result.events
     buys = orders.loc[orders.side.eq("buy")]
-    assert buys.quantity.tolist() == [4, 4]
+    assert buys.quantity.tolist() == [9, 9]  # Slot 10,000 / (2 × 5) at 101 with fee.
     # Signal-day Sigma 0.1 puts the stop at 90; same-day Sigma 0.9 would put it at 10.
     sold = result.trades.set_index("code")
     assert sold.loc["000001", "exit_price"] == 90.0
     assert sold.loc["000001", "exit_reason"] == "intraday_stop"
     assert sold.loc["000002", "exit_reason"] == "period_end"
-    expected = 1000 - 2 * 4 * 101 + 4 * 90 * 0.99 + 4 * 105 * 0.99
+    expected = 10_000 - 2 * 9 * 101 + 9 * 90 * 0.99 + 9 * 105 * 0.99
     assert result.value().iloc[-1] == pytest.approx(expected)
     again = simulate(execution_config(), entries[entries.columns[::-1]], prices)
     assert again.value().iloc[-1] == pytest.approx(expected)
@@ -917,7 +917,7 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
                                 "fold_id": [0, 0, 1, 1]})
     config = {"contract_version": 3, "data": {"embargo_days": 0},
               "strategy": {"score_column": "prob_up", "top_n": 1, "prob_threshold": 0.5},
-              "backtest": {"capital_mode": "independent_year", "initial_cash": 1000,
+              "backtest": {"capital_mode": "independent_year", "initial_cash": 20_000,
                            "fee": 0.0, "slippage_bps": 0, "max_participation": None,
                            "signal_lag_days": 1, "max_holding_days": 20,
                            "up_mult": None, "down_mult": None, "hard_sl_mult": None}}
@@ -935,9 +935,9 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     module.run_local_backtest(config)
     summary = json.loads((tmp_path / "backtest_metrics.json").read_text())
     assert summary["cash_and_positions_carried"] is False
-    assert summary["years"][0]["final_equity"] == pytest.approx(1100)
-    assert summary["years"][1]["initial_cash"] == 1000
-    assert summary["years"][1]["final_equity"] == pytest.approx(1000)
+    assert summary["years"][0]["final_equity"] == pytest.approx(20_100)
+    assert summary["years"][1]["initial_cash"] == 20_000
+    assert summary["years"][1]["final_equity"] == pytest.approx(20_000)
     orders = pd.read_csv(tmp_path / "years/2020/orders.csv")
     assert orders.side.tolist() == ["buy", "sell"]
     assert orders.quantity.tolist() == [5.0, 5.0]
@@ -946,7 +946,7 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     assert summary["years"][0]["unclosed_positions"] == 0
     assert summary["years"][1]["unclosed_positions"] == 0
     equity = pd.read_csv(tmp_path / "equity_curve.csv")
-    assert equity.loc[equity.year.eq(2020), "Equity"].iloc[0] == 1000
+    assert equity.loc[equity.year.eq(2020), "Equity"].iloc[0] == 20_000
 
 
 def test_previous_builder_processed_data_is_preserved(local_dataset):
