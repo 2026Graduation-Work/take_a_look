@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 import pytest
-from backtest_harness import check_ledger, config
+from backtest_harness import bars, check_ledger, config, signals
 from experiments.backtest.local_execution import simulate
 from experiments.train_src.labels import barrier_labels
 
@@ -83,13 +83,33 @@ UP_EXITS = {"intraday_profit", "profit_gap"}
 HARD_STOP_EXITS = {"intraday_stop", "stop_gap"}
 
 
+def touches_soft_stop(close, anchor, sigma):
+    line = anchor * (1 - LABEL["down_mult"] * sigma)
+    return close <= line or np.isclose(close, line, rtol=1e-9, atol=0.0)
+
+
 def executed_class(trade, anchor, sigma):
     if trade.exit_reason in UP_EXITS:
         return 1
     if trade.exit_reason == "close_stop_next_open":
         return -1
     assert trade.exit_reason == "holding_expiry", trade.exit_reason
-    return -1 if trade.exit_price <= anchor * (1 - LABEL["down_mult"] * sigma) else 0
+    return -1 if touches_soft_stop(trade.exit_price, anchor, sigma) else 0
+
+
+@pytest.mark.parametrize("soft_line,expected", [(9849.9999995, -1), (9849.99, 0)])
+def test_expiry_classification_respects_soft_stop_tolerance(soft_line, expected):
+    anchor = 10_000
+    sigma = (1 - soft_line / anchor) / LABEL["down_mult"]
+    prices = bars([(anchor,) * 4] * 5 + [(anchor, anchor, 9850, 9850)])
+    prices.loc[0, "Sigma"] = sigma
+    cfg = config(initial_cash=1_000_000, max_holding_days=LABEL["horizon"], up_mult=LABEL["up_mult"],
+                 down_mult=LABEL["down_mult"], hard_sl_mult=None)
+    result = simulate(cfg, signals(prices, [(1, "000001")]), prices)
+    trade, = result.trades.itertuples()
+    assert trade.exit_reason == "holding_expiry"
+    assert barrier_labels(prices, **LABEL).iloc[0] == expected
+    assert executed_class(trade, anchor, sigma) == expected
 
 
 @pytest.mark.parametrize("hard_sl_mult", [None, 1.2])
@@ -98,7 +118,7 @@ def test_execution_resolves_the_same_barrier_event_as_the_label(seed, hard_sl_mu
     """A trade entered on a signal must end where barrier_labels says that signal ended.
 
     Allowed differences, both execution-only rules the label does not have:
-    a session that touches the profit line intraday and closes below the soft stop (the label
+    a session that touches the profit line intraday and closes at or below the soft stop (the label
     calls it down; a resting order sells at profit), and the hard stop on the intraday low.
     """
     rng = np.random.default_rng(seed)
@@ -130,6 +150,6 @@ def test_execution_resolves_the_same_barrier_event_as_the_label(seed, hard_sl_mu
         if executed != labels.iloc[t]:
             exit_bar = prices.loc[prices.Date.eq(trade.exit_date)].iloc[0]
             assert (executed, labels.iloc[t]) == (1, -1)
-            assert exit_bar.Close <= anchor * (1 - LABEL["down_mult"] * sigma)
+            assert touches_soft_stop(exit_bar.Close, anchor, sigma)
         compared += 1
     assert compared >= 10
