@@ -76,6 +76,29 @@ python -m experiments.dataset.collect_actions \
 
 공식 수집 root 아래 `archive/objects`와 `archive/receipts`에는 응답 본문과 수신기록을 해시별로 보관한다. 같은 접수번호로 내용이 바뀌면 별도 판본이 쌓인다. `runs/<run>/status.json`은 조회 실패와 검토 대기를 구분한다. 다 읽은 기간의 페이지 증거와 공식 문서 판본을 `snapshots/<sha256>.json`에 고정한다. 수집 root를 보존해야 사건표가 가리키는 공식 원문과 수신기록을 다시 검증할 수 있다. [OpenDART 공시 목록](https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019001) · [KIND 시장조치](https://kind.krx.co.kr/disclosure/detailsExt.do?ext=y&method=searchDetailsMktactMainExt)
 
+### KIND 시장조치 판정 장부
+
+차트 디렉터리에서 보존한 KRX 일별 전 종목 원주가로 판정 장부를 만든다. `KRX_ACTIVE_MASTER`는 KRX 전 종목 기본정보 파일이다. `KRX_DELISTED_MASTER`에는 공식 상장폐지 이력과 단축코드·시장별로 확인한 ISIN이 필요하다. 파일에서 확인한 증권 종류, 시장 및 상장일을 판정 키로 사용한다.
+
+```bash
+python -m experiments.dataset.census_actions \
+  --start 2016-01-01 --end 2026-11-20 \
+  --published-start 2016-01-01 --published-end 2026-11-20 \
+  --krx-days "$KRX_DAYS" --active-master "$KRX_ACTIVE_MASTER" \
+  --delisted-master "$KRX_DELISTED_MASTER" --kind-root "$KIND_ARCHIVE" \
+  --kind-daily-cache "$KIND_DAILY_CACHE" --output "$CENSUS_RUN" --preview
+```
+
+기본 요청 예산은 0이다. `--kind-daily-cache`로 가져오는 파일은 날짜별 HTML과 동일 이름의 JSON 수신기록이다. 수신기록의 응답 SHA-256, 수신 시각, 인코딩, URL 및 요청 양식이 응답과 일치해야 한다. `--kind-archive`는 `응답_저장소=실행_폴더` 형식으로 이전 수집 영수증을 가져온다. `--action-snapshot`으로 현행 구현에서 검증한 DART·KIND 단위 변경 사건표도 넣을 수 있다. KIND 온라인 수집 전에 남은 한도를 확인한다. `--request-budget`만큼 새 요청을 허용하며, KIND 요청 사이에 0.6초 이상 기다리고 HTTP 403 또는 429에서 새 요청을 멈춘다. 재실행할 때 저장소는 재사용하고 출력 경로를 새로 지정한다. [무료 운영 한도](../../../../docs/ops/free-tier-budget.md)
+
+`candidates.csv`는 원주가 관측을, `notices.csv`는 KIND에서 확인한 증권별 시행 사실을 담는다. `resolutions.csv`는 시행일별 판정과 근거, 유리수 가격·거래량 계수를 담는다. 가격 후보가 없어도 공식 인적분할, 합병 및 스팩 합병 시행일을 기록한다. 거래정지 중 주식수만 바뀐 판정이나 구간 판정의 계수는 비워 둔다. `coverage.json`은 미완료 조회, 검토 대상 공시, 증권 식별 실패를 남긴다. 후보가 없던 상장 구간도 실제 거래일 범위, 거래대금을 포함한 원주가 지문, 스팩 소속부 공시 근거를 기록한다. `manifest.json`에는 각 표와 가격 입력의 해시, 시장 전체와 학습 대상 시장의 집계가 있다.
+
+완료한 조회에서 근거를 확인할 수 없으면 검토가 필요한 `segment_break`를 기록한다. 누락된 KIND 목록이나 본문은 미완료 조회로 남긴다. `--preview`, `--code`, `--sample`은 부분 검증에 쓴다. 전체 범위를 조회했을 때 장부가 미완료면 명령은 종료 코드 2를 반환한다. 이 명령은 학습 입력과 라벨을 바꾸지 않는다.
+
+`notices.csv`의 `Published`는 KIND 목록에 표시된 날짜다. 접수번호는 원문 조회 키로 보존한다. 당시 공개 자료만 쓴 분석에는 최초 공개 시점을 별도로 확인해야 한다.
+
+주주배정 유상증자는 거래소가 확인한 권리락 기준가를 사용한다. 무상증자와 주식배당은 공식 공시의 1주당 배정 비율로 조정한다. 2023-01-25 전후의 거래소 호가표를 적용하며, 공시가 가격 차이를 설명하지 않는 경우에 호가 올림을 확인한다. [KRX 기준가격](https://regulation.krx.co.kr/contents/RGL/03/03010100/RGL03010100T6.jsp) · [KRX 권리락](https://regulation.krx.co.kr/contents/RGL/03/03010401/RGL03010401.jsp) · [KRX 과거 호가표](https://global.krx.co.kr/contents/GLB/01/0109/0109000000/guide_to_trading_in_the_korean_stock_market.pdf) · [KRX 개정 호가표](https://regulation.krx.co.kr/contents/RGL/03/03020100/RGL03020100.jsp)
+
 새 데이터셋은 시작할 때 사건표를 `official_actions/`에 복사하고 해당 해시를 가격·전처리·피처·학습·내보내기 manifest에 전달한다. 이후 같은 데이터셋은 고정된 사건표로 재개한다. 새 사건표를 쓰려면 새 데이터셋 root를 사용한다. 가격 범위는 사건표의 가격 범위 안에 있어야 한다.
 
 가격 수집기는 KRX 원주가를 `krx_raw_prices/{code}.parquet`에 먼저 보존한다. 원본과 영업일을 검증한 뒤 공식 사건을 적용한다. 승인한 분할·병합·무상증자의 가격과 비교용 거래량은 공시의 교환비율로 각각 환산한다. 무상증자는 권리락일 전 가격과 거래량을 환산하고 후속 신주 상장일에는 같은 비율을 다시 적용하지 않는다. Raw OHLC, `RawVolume`, `RawChange`, `Amount`는 그대로 보존한다. 실제 거래량은 `RawVolume`이다.
