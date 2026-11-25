@@ -61,7 +61,7 @@ backtest:
   slippage_bps: 10
   max_participation: 0.025
   max_holding_days: 5
-  up_mult: 1.8
+  up_mult: 1.5
   down_mult: 1.2
   hard_sl_mult: 1.5
 evaluation:
