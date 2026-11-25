@@ -25,26 +25,21 @@ def _run_local_period(config, predictions, prices, out):
     if predictions.empty or prices.empty:
         raise ValueError("Backtest period has no predictions/prices")
     Path(out).mkdir(parents=True, exist_ok=True)
-    entries, weights = SwingStrategy(config).generate_signals(predictions, prices)
+    entries = SwingStrategy(config).generate_signals(predictions, prices)
     try:
-        portfolio = simulate(config, entries, weights, prices)
+        result = simulate(config, entries, prices)
     except Exception as exc:
         atomic_json(Path(out) / "execution_error.json", {"reason": str(exc), "config": config})
         raise
-    save_execution(portfolio, out)
-    closed = portfolio.trade_records().loc[lambda frame: frame.Status.eq("Closed")]
-    returns = portfolio.returns()
-    metrics = calculate_trading_metrics(returns, closed)
+    save_execution(result, out)
+    returns = result.returns()
+    metrics = calculate_trading_metrics(returns, result.trades)
+    metrics["turnover"] = result.turnover()
     benchmark = configured_benchmark(config, returns.index, prices)
     metrics["benchmark"] = calculate_trading_metrics(benchmark)
     metrics["initial_cash"] = config["backtest"]["initial_cash"]
-    metrics["final_equity"] = float(portfolio.value().iloc[-1])
-    metrics["unclosed_positions"] = len(portfolio.open_positions)
-    metrics["execution_policy"] = {"quantity": "integer_floor_on_existing_adjusted_price_basis",
-                                   "delisting": "zero_valuation_zero_cash_recovery"}
-    metrics["unrealized_pnl"] = sum(
-        row["unrealized_pnl_before_exit_fee"] for row in portfolio.open_positions
-    )
+    metrics["final_equity"] = float(result.value().iloc[-1])
+    metrics["unclosed_positions"] = len(result.open_positions)
     atomic_json(Path(out) / "backtest_metrics.json", metrics)
     (Path(out) / "execution_error.json").unlink(missing_ok=True)
     pd.DataFrame({"Portfolio": returns, "Benchmark": benchmark}).to_csv(

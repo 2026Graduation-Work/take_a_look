@@ -23,7 +23,7 @@ def test_strategy_keeps_embargo_market_dates_so_shift_cannot_cross_fold_boundary
         }
     )
 
-    entries, _ = SwingStrategy({"strategy": {"prob_threshold": 0.8, "top_n": 1}}).generate_signals(
+    entries = SwingStrategy({"strategy": {"prob_threshold": 0.8, "top_n": 1}}).generate_signals(
         predictions, market
     )
 

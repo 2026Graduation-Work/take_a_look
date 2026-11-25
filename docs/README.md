@@ -39,6 +39,7 @@
 | [data-inventory.md](data-inventory.md) | 화면 수치의 출처와 실데이터 여부(2026-09-24 기준, 갱신 필요) |
 | [../backend/analysis/chart/serving/README.md](../backend/analysis/chart/serving/README.md) | H5, H20 serving 구조, 공개 계약, 검증 상태 |
 | [../backend/analysis/chart/serving/OPERATIONS.md](../backend/analysis/chart/serving/OPERATIONS.md) | H5, H20 실행과 DB 발행 절차 |
+| [../backend/analysis/chart/experiments/backtest/EXECUTION_SPEC.md](../backend/analysis/chart/experiments/backtest/EXECUTION_SPEC.md) | 백테스트 체결 순서, 장벽 기준, 비용, 회귀 방지 테스트 |
 | [../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md](../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md) | 가치투자 파이프라인 출력 검증 절차 |
 
 ## 화면과 브랜드
