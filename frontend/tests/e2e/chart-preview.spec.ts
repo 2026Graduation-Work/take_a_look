@@ -16,7 +16,6 @@ test("public predictions retain the original detail UI and both model directions
     return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
-  // 과거 비슷한 경우: pack의 실제 기간과 횟수, 범위 끝은 오늘 종가 기준 원
   await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 오늘 종가 기준이에요\.$/);
   await expect(page.locator('section[aria-labelledby="glance-title"]')).toContainText(/%\s*\(약 [\d,]+원\)/);
   await page.getByRole("button", { name: "모델 신호 설명 보기" }).click();
@@ -31,13 +30,12 @@ test("public predictions retain the original detail UI and both model directions
   await expect(model.getByText("계산 근거", { exact: true })).toBeVisible();
   await expect(model.getByText(expected[0].contribution.toFixed(4), { exact: true })).not.toBeVisible();
   await model.locator("summary", { hasText: "계산 근거" }).click();
-  // 비중을 모르면(전체 합 없음) 상위 3개를 막대로, 계산 근거에는 모두
   await expect(model.locator("[data-model-feature]")).toHaveCount(Math.min(3, expected.length));
   for (const [index, feature] of expected.entries()) {
     if (index < 3) {
       const row = model.locator(`[data-model-feature="${feature.name}"]`);
       await expect(row).toContainText(featureLabel(feature.name, feature.label_ko));
-      await expect(row).toContainText(contributionWord(feature.contribution, "상승")); // 미리보기 표본은 class_2(상승). 전체 합이 없으면 방향만
+      await expect(row).toContainText(contributionWord(feature.contribution, "상승")); // 미리보기 표본은 class_2(상승)
     }
     await expect(model.locator("dd").nth(index)).toContainText("미제공");
   }
@@ -77,7 +75,6 @@ test("feature shares use the whole-model denominator and raw values are collapse
   await page.getByRole("tab", { name: "모델이 본 이유" }).click();
   const model = page.getByRole("tabpanel");
   const features = wholeModel.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features;
-  // 비중은 전체 피처 합 기준으로 표시하고, 나머지 제공 항목은 계산 근거로 이동한다.
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
   for (const feature of visible) {
@@ -116,7 +113,6 @@ test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
   await page.locator("summary", { hasText: "더 알아보기" }).click();
   const histogram = page.getByRole("img", { name: /과거 유사 신호 .*건의 실현 수익률 분포/ });
-  // 빈 칸은 1~99% 구간 밖이라 버려지고, 건수가 있는 한 칸만 폭을 채운다
   await expect(histogram.locator("path")).toHaveCount(1);
   expect(await histogram.locator("path").evaluateAll(paths => paths.every(path => {
     const d = path.getAttribute("d")!;
@@ -177,7 +173,6 @@ for (const [space, target, scores, color] of [
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 점수를 크게 높였어요.`);
     await expect(panel.locator("[data-model-feature]").nth(1)).toContainText(`${target} 점수를 크게 낮췄어요.`);
-    // 방향 색은 막대가 맡는다(DESIGN.md 2-1)
     expect(await panel.locator("[data-model-feature]").nth(0).locator("span[style]").first().getAttribute("style")).toContain(`background-color: ${color}`);
     expect(await panel.locator("[data-model-feature]").nth(1).locator("span[style]").first().getAttribute("style")).toContain("background-color: var(--color-muted)");
     await page.setViewportSize({ width: 390, height: 844 });

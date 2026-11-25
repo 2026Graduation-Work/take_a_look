@@ -26,7 +26,6 @@ async function openHeatmap(page: Page, weights = [86, 14], secondName = "삼성�
   return map;
 }
 
-// #326 후속: 이름이 안 보이는 칸이 없게 — 모든 칸 44px 이상 + 이름, 넘치면 "그 밖의 N종목"
 const CODES = ["000660", "005930", "005380", "035720", "068270", "000270", "051910", "006400", "035420", "105560", "055550", "012330"];
 async function openMany(page: Page, weights: number[]) {
   const holdings = weights.map((quantity, index) => ({ code: CODES[index], name: `종목${index + 1}`, quantity, avgBuyPrice: 100_000 }));
@@ -58,11 +57,9 @@ test.describe("작은 비중 여러 종목(390)", () => {
       await expect(name).toBeVisible();
       const nameBox = (await name.boundingBox())!;
       expect(nameBox.x + 2).toBeGreaterThanOrEqual(box.x);
-      // 이름 줄이 찌그러지지 않고(한 줄 높이) 칸 안에 온전히 있다
       expect(nameBox.height).toBeGreaterThanOrEqual(16);
       expect(nameBox.y).toBeGreaterThanOrEqual(box.y);
       expect(nameBox.y + nameBox.height).toBeLessThanOrEqual(box.y + box.height + 0.5);
-      // 아래 줄이 보이면 이름과 겹치지 않는다
       const signal = tile.getByText(/상승\s쪽/);
       if (await signal.isVisible()) expect((await signal.boundingBox())!.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 0.5);
     }
@@ -77,7 +74,7 @@ test.describe("작은 비중 여러 종목(390)", () => {
     await expect(list).toHaveCount(0);
     await others.click();
     await expect(others).toHaveAttribute("aria-expanded", "true");
-    await expect(list.getByRole("link")).toHaveText([/종목11/, /종목10/, /종목12/]); // 같은 금액은 코드 순
+    await expect(list.getByRole("link")).toHaveText([/종목11/, /종목10/, /종목12/]);
     await others.focus();
     await page.keyboard.press("Enter");
     await expect(list).toHaveCount(0);
@@ -93,7 +90,6 @@ test("치우친 비중에서도 작은 칸은 최소 폭으로 이름을 보이�
   await expect(map.getByRole("listitem", { name: /SK하이닉스/ }).getByText("SK하이닉스", { exact: true })).toBeVisible();
   const box = (await small.boundingBox())!;
   const large = (await map.getByRole("listitem", { name: /SK하이닉스/ }).boundingBox())!;
-  // 14%지만 이름이 보이게 열 최소 폭(30%)으로 그린다
   expect(box.width / (box.width + large.width)).toBeCloseTo(0.3, 1);
   const point = { x: box.x + box.width / 2, y: box.y + box.height * 0.9 };
   await page.mouse.move(point.x, point.y);
@@ -159,7 +155,6 @@ test("타일 공간이 줄었다 넓어져도 이름은 늘 보이고, 좁으면
   const map = await openHeatmap(page, [60, 40]);
   const small = map.getByRole("listitem", { name: /삼성전자/ });
   await expect(small.getByText("삼성전자", { exact: true })).toBeVisible();
-  // 칸 안에는 신호 단어 없이 이름과 '평가금액 (비중)'만(10/20)
   await expect(small.getByText("상승", { exact: true })).toHaveCount(0);
   await expect(small.getByText(/만원 \(40%\)$/)).toBeVisible();
   await page.setViewportSize({ width: 320, height: 844 });

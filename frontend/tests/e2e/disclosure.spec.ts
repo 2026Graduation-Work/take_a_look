@@ -1,6 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// 데모 응답(제외 항목: SPAC·관리종목)으로 대시보드까지
 async function readyDashboard(page: Page) {
   await page.goto("/login");
   await page.getByRole("button", { name: "데모로 둘러보기" }).click();
@@ -28,11 +27,10 @@ test("키보드만으로 시장 흔들림 설명과 제외 항목을 열고 닫�
 
   await expect(trigger).toBeVisible();
   await tabTo(page, () => document.activeElement?.textContent?.includes("시장 흔들림") ?? false);
-  await expect(tooltip).toBeHidden(); // 포커스만으로는 열리지 않는다
+  await expect(tooltip).toBeHidden();
   await page.keyboard.press("Enter");
   await expect(tooltip).toBeVisible();
   await expect(tooltip).toContainText("지난 1년 중");
-  // 트리거 바로 아래에 붙는다
   const [t, p] = [await trigger.boundingBox(), await tooltip.boundingBox()];
   expect(p!.y).toBeGreaterThanOrEqual(t!.y + t!.height);
   expect(p!.y - (t!.y + t!.height)).toBeLessThan(24);

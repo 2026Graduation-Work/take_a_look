@@ -1,4 +1,3 @@
-"""Read-only operational diagnostics using the shared KRX authentication policy."""
 import json
 import os
 from datetime import datetime, timedelta

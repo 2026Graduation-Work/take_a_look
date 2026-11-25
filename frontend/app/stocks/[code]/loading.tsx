@@ -1,6 +1,5 @@
 import { Bone, SkeletonPage } from "@/app/components/skeleton";
 
-// 종목 상세 뼈대: 헤더(이름, 가격) → 한눈에 보기(차트) → 판단 근거 탭
 export default function Loading() {
   return (
     <SkeletonPage label="종목 정보를 불러오는 중이에요." width="wide">

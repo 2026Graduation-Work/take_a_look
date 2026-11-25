@@ -5,22 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
-// 최근 60거래일 실제 주가 실선. 미래 영역에는 H10 시점의 수익률 분포 범위를
-// 나타내는 세로 구간 하나만 둔다.
-//
-// 표현 규칙(미래 주가 곡선 금지)과의 경계:
 // 오늘 종가와 범위 양 끝을 잇는 보조선은 두지 않는다. 범위는 과거 비슷한 경우의
-// 수익률 분포인데, 오늘 점에서 뻗는 선이 있으면 모델이 예측한 경로처럼 읽힌다(10/15 QA).
+// 수익률 분포인데, 오늘 점에서 뻗는 선이 있으면 모델이 예측한 경로처럼 읽힌다.
 
 const VB_W = 860;
 const VB_H = 264;
 const PAD = { top: 20, bottom: 34 };
-const X0 = 14; // 실선 시작
-const X1 = 668; // 실선 끝 = 오늘
-const XH = 780; // H10 세로 구간 중심
-const XAXIS = X1 + 10; // 가격 눈금: 오늘 선 오른쪽 빈 칸(실선과 겹치지 않게, 10/20 사용자 피드백)
+const X0 = 14;
+const X1 = 668;
+const XH = 780;
+const XAXIS = X1 + 10;
 
-// 눈금 간격을 1/2/2.5/5 × 10^n 으로 스냅
 function niceStep(rough: number) {
   if (!Number.isFinite(rough) || rough <= 0) return 1;
   const power = 10 ** Math.floor(Math.log10(rough));
@@ -36,9 +31,9 @@ interface PriceHistoryChartProps {
   prices: number[];
   band?: ReturnBand;
   signal: SignalMeta;
-  asOfLabel: string; // 예: 07.07
-  horizonLabel: string; // 예: 2주 뒤
-  avgBuyPrice?: number; // 보유 종목의 평균 매입가: 지난 가격 영역에 가로 실선 하나(미래 쪽에는 그리지 않는다)
+  asOfLabel: string;
+  horizonLabel: string;
+  avgBuyPrice?: number;
 }
 
 export default function PriceHistoryChart({
@@ -86,7 +81,6 @@ export default function PriceHistoryChart({
   for (let v = Math.ceil(vMin / step) * step; v <= vMax; v += step) ticks.push(v);
 
   const points = prices.map((p, i) => `${xAt(i).toFixed(1)},${y(p).toFixed(1)}`).join(" ");
-  // 최고가, 최저가, 오늘 가격은 늘 보인다(10/20 사용자 피드백). 오늘 가격은 눈금 칸의 가격표
   const maxIndex = prices.indexOf(Math.max(...prices));
   const minIndex = prices.indexOf(Math.min(...prices));
   const clampX = (x: number) => Math.min(Math.max(x, X0 + 40), X1 - 40);
@@ -119,7 +113,6 @@ export default function PriceHistoryChart({
         onMouseMove={handleMove}
         onMouseLeave={() => setHovered(null)}
       >
-        {/* 수평 그리드 + 가격 라벨 */}
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={X0} y1={y(tick)} x2={VB_W - 10} y2={y(tick)} style={{ stroke: "var(--color-line-soft)" }} />
@@ -131,7 +124,6 @@ export default function PriceHistoryChart({
           </g>
         ))}
 
-        {/* 오늘 경계선 — 오른쪽 미래 영역에는 H10 세로 구간 외에 아무것도 그리지 않는다 */}
         <line x1={X1} y1={PAD.top} x2={X1} y2={baseline} style={{ stroke: "var(--color-line)" }} />
         <text x={X0} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }}>
           3개월 전
@@ -149,7 +141,6 @@ export default function PriceHistoryChart({
           </g>
         )}
 
-        {/* 실제 주가 실선 */}
         <polyline
           points={points}
           fill="none"
@@ -173,7 +164,6 @@ export default function PriceHistoryChart({
         )}
 
         {band && <>
-        {/* H10 세로 구간: 분포 범위(경로 아님)를 캡슐 하나로 */}
         <rect
           x={XH - 8}
           y={yHigh}
@@ -227,7 +217,6 @@ export default function PriceHistoryChart({
         </text>
         </>}
 
-        {/* 호버 크로스헤어 */}
         {hovered !== null && (
           <g pointerEvents="none">
             <line

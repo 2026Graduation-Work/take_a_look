@@ -1,10 +1,5 @@
 "use client";
 
-// 관심 종목과 내 판단 메모. 사용자가 직접 남긴 표시일 뿐 주문·종목 제거와 무관하다(HITL).
-// 화면은 늘 이 브라우저의 저장값(localStorage)을 읽는다. 데모는 그것이 원본이고,
-// 로그인 사용자는 Supabase(watchlist, stock_notes)에 쓰고 읽어 온 값을 여기에 비춰 둔다.
-// stock_notes 마이그레이션(0006)이 아직 적용되지 않은 DB에서는 메모만 브라우저에 둔다.
-
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useMemo, useSyncExternalStore } from "react";
 import { assertOk, getSupabaseClient } from "./supabase";
@@ -39,7 +34,7 @@ function write(key: string, value: unknown): void {
 const readWatchlist = (): WatchedStock[] => read(STORAGE_KEYS.watchlist, []);
 const readNotes = (): Record<string, StockNote> => read(STORAGE_KEYS.stockNotes, {});
 
-// useSyncExternalStore용: 두 키의 문자열을 그대로 스냅숏으로 쓴다(같은 값이면 같은 문자열).
+// useSyncExternalStore는 같은 값에 같은 스냅숏을 요구해서 두 키의 문자열을 그대로 쓴다.
 function getMarksSnapshot(): string {
   if (typeof window === "undefined") return "";
   return `${window.localStorage.getItem(STORAGE_KEYS.watchlist)}|${window.localStorage.getItem(STORAGE_KEYS.stockNotes)}`;
@@ -74,7 +69,6 @@ async function appUser(mode: Mode): Promise<{ client: SupabaseClient; userId: st
   return row ? { client, userId: (row as { id: string }).id } : null;
 }
 
-// 로그인 사용자: Supabase 값을 브라우저에 비춘다. 종목 이름은 화면이 아는 목록(names)에서 찾는다.
 export async function syncMarks(mode: Mode, names: Record<string, string>): Promise<void> {
   const user = await appUser(mode);
   if (!user) return;
@@ -91,7 +85,7 @@ export async function syncMarks(mode: Mode, names: Record<string, string>): Prom
       name: names[stock_code] ?? stock_code,
     })),
   );
-  if (missingTable(noteResult.error)) return; // 0006 적용 전: 브라우저 메모 유지
+  if (missingTable(noteResult.error)) return;
   assertOk(noteResult.error, "판단 메모 조회");
   write(
     STORAGE_KEYS.stockNotes,

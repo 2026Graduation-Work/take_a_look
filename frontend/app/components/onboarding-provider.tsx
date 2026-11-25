@@ -108,7 +108,6 @@ export default function OnboardingProvider({
   );
 }
 
-// 데모 계정으로 들어오면 모든 화면 맨 위에 둔다. 실제 계정과 헷갈리지 않게 하는 표시다.
 function DemoAccountBanner() {
   return (
     <div
@@ -135,7 +134,7 @@ function onboardingDestination(
 ): string | null {
   if (status === "loading" || status === "error") return null;
   if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
-  if (pathname === "/guide" || pathname === "/privacy") return null; // 이용 안내, 처리방침은 로그인 없이 연다
+  if (pathname === "/guide" || pathname === "/privacy") return null;
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";

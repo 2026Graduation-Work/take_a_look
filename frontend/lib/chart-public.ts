@@ -19,7 +19,6 @@ export interface ChartSnapshot {
     reason: string | null;
     contribution_space: "class_0_raw_margin" | "class_1_raw_margin" | "class_2_raw_margin";
     scores: { down: number; neutral: number; up: number } | null;
-    // 계약에는 있고 parse가 검사하지 않는 값. 계산 근거 문장에만 쓰고, 값이 이상하면 문장을 빼고 보인다.
     close?: number;
     sigma?: number | null;
     barriers?: { up: number; down: number } | null;
@@ -118,7 +117,6 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
       > inference.contribution_abs_sum + 1e-8
   )) throw new Error("전체 피처 기여도 기준값이 올바르지 않아요.");
   const snapshot = p as unknown as ChartSnapshot;
-  // 화면 표시 이름만 쉬운 말로(#257). 원본 피처명(name)은 그대로 둔다.
   return { ...snapshot, inference: { ...snapshot.inference, features: snapshot.inference.features.map((feature) =>
     ({ ...feature, label_ko: featureLabel(feature.name, feature.label_ko) })) } };
 }

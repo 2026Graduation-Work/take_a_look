@@ -48,13 +48,7 @@ def _validation_window(train_end: str, embargo_days: int) -> tuple[str, str, str
 def _training_windows(
     split_info: dict, embargo_days: int, skip_validation: bool
 ) -> tuple[str, str, str, str, str | None]:
-    """Resolve leakage-safe train/validation label observation boundaries.
-
-    Final holdout runs may deliberately skip the internal six-month validation
-    window.  In that case the configured training period is used in full, but
-    labels are never allowed to observe beyond ``train_end`` (and therefore
-    never into the holdout year).
-    """
+    """Labels never observe past ``train_end``, even when skip_validation uses it all."""
     train_end = split_info["train_end"]
     if skip_validation:
         return train_end, train_end, train_end, train_end, None
@@ -289,7 +283,6 @@ def main(config_path):
     exp_name = config.get("experiment_name", "default_exp")
     print(f"\n🚀 [*] Starting Quant Experiment: {exp_name}")
 
-    # 데이터 분할 전략에 따른 fold 목록 결정
     splits = resolve_splits(config)
     if not splits:
         raise ValueError("분할 폴드(Splits) 목록이 비어 있습니다. 설정을 확인하세요.")
@@ -302,13 +295,11 @@ def main(config_path):
             f"    - [Fold {idx + 1}] Train: {split_info['train_start']} ~ {split_info['train_end']} | Test: {split_info['test_start']} ~ {split_info['test_end']}"
         )
 
-    # 캐시용 해시 생성
     dataset_hash = generate_dataset_hash(config, splits)
     predictions_hash = generate_predictions_hash(config, splits)
     print(f"[*] Dataset Cache Hash: {dataset_hash} | Predictions Cache Hash: {predictions_hash}")
     out_dir = result_dir(config, __file__)
 
-    # 데이터 경로 자동 탐색
     processed_dir = find_processed_dir(config, __file__)
     print(f"[*] 데이터 소스 디렉토리: {processed_dir}")
     if not os.path.exists(processed_dir) or not os.listdir(processed_dir):
@@ -320,7 +311,6 @@ def main(config_path):
     universe_intervals = load_universe_intervals(config)
     skip_validation = bool(config.get("training", {}).get("skip_validation", False))
 
-    # OOS 예측 확률 캐시 확인
     exp_cache_dir = cache_dir(__file__)
     predictions_cache_path = os.path.join(exp_cache_dir, f"{predictions_hash}_predictions.parquet")
 
@@ -420,9 +410,6 @@ def main(config_path):
                 model_wrapper.load_cached_model(model_save_path)
                 feature_cols = model_wrapper.model.feature_name()
             else:
-                # ---------------------------------------------------------
-                # 1. 학습 데이터 (Train) 준비 및 라벨링
-                # ---------------------------------------------------------
                 print("\n[2] 모델 학습 준비 (LGBM Wrapper)...")
                 fold_data_hash = f"{dataset_hash}_fold{idx}"
 
@@ -440,7 +427,6 @@ def main(config_path):
                 else:
                     print("\n[1] Train 데이터 로딩 및 동적 라벨(Y) 생성...")
 
-                    # 순수 Alpha158 학습 (노이즈 필터링 배제)
                     train_df = load_parquet_data(
                         processed_dir,
                         train_start,
@@ -461,9 +447,6 @@ def main(config_path):
                     del train_df, X_train, y_train
                     gc.collect()
 
-                # ---------------------------------------------------------
-                # 2.5. 검증 데이터 (Val) 준비 및 라벨링
-                # ---------------------------------------------------------
                 if skip_validation:
                     print("\n[2.5] Validation 생략: config training.skip_validation=true")
                     val_df = None
@@ -497,15 +480,11 @@ def main(config_path):
                         free_raw_data=False,
                     )
 
-                    # 모델 학습
                     model_wrapper.fit(train_data, valid_data, cache_hash=fold_pred_hash)
 
                     del X_val, y_val, valid_data
                     gc.collect()
 
-            # ---------------------------------------------------------
-            # 2.6. 검증 데이터에 대한 통계적 검정 (OOS 과적합 통제)
-            # ---------------------------------------------------------
             if skip_validation:
                 print("\n[2.6] Validation 검정 생략: 최종 holdout 평가로 검증합니다.")
             else:
@@ -543,9 +522,6 @@ def main(config_path):
                 del val_df
             gc.collect()
 
-            # ---------------------------------------------------------
-            # 3. 테스트(OOS) 추론
-            # ---------------------------------------------------------
             print("\n[3] Test(Out-of-Sample) 데이터 로딩 및 추론...")
             test_df = load_parquet_data(
                 processed_dir,

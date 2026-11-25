@@ -8,7 +8,6 @@ def main(config_path, predictions_path=None):
     print("🚀 Starting Experiment Analysis Wrapper")
     print("=========================================================================")
 
-    # 1. Run ML Evaluation
     print("\n📊 [Step 1/2] Running ML Evaluation...")
     from experiments import run_ml_evaluation
     try:
@@ -17,7 +16,6 @@ def main(config_path, predictions_path=None):
         print(f"❌ ML Evaluation failed: {e}")
         sys.exit(1)
 
-    # 2. Run Backtest
     print("\n📈 [Step 2/2] Running Backtest Simulation...")
     from experiments import run_backtest
     try:

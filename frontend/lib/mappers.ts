@@ -83,7 +83,7 @@ export interface PredictionFeatureRow {
 export interface PortfolioHoldingRow {
   stock_code: string;
   quantity: number;
-  avg_buy_price: number | null; // 0004부터 비워 둘 수 있음
+  avg_buy_price: number | null;
   display_order: number;
 }
 
@@ -127,8 +127,6 @@ const FINANCIAL_FEATURE_TOKENS = [
   "debt",
 ];
 
-// Supabase 테이블은 지금 supabase/seed.sql 데모 시드로만 채워진다(백엔드 적재 경로 없음).
-// 실데이터 적재가 생기면 행에 출처 컬럼을 두고 여기서 읽는다. 그 전까지는 예시로 표시한다.
 const SUPABASE_DEMO: DataProvenance = { kind: "mock", source: "데모 시드" };
 
 export function mapRecommendedStock(
@@ -179,7 +177,6 @@ export function mapStockDetail(
   };
 }
 
-// 종목 마스터의 1년 변동성·백분위(0014). 없으면 넣지 않는다.
 export function masterVolatility(stock: StockRow): Pick<StockDetail, "volatilityAnnual" | "volatilityPercentile" | "riskAsOf"> {
   return stock.volatility_annual != null && stock.volatility_percentile != null
     ? { volatilityAnnual: stock.volatility_annual, volatilityPercentile: stock.volatility_percentile, riskAsOf: stock.risk_as_of ?? undefined }
@@ -304,7 +301,6 @@ function includes<T extends string>(values: readonly T[], value: unknown): value
   return typeof value === "string" && values.includes(value as T);
 }
 
-// 최신 종가가 있으면 평가금액, 없으면 매입금액으로 비중을 센다.
 function weightPrice(holding: PortfolioHoldingRow, closes: LatestCloses): Pick<PortfolioHolding, "avgBuyPrice" | "priceBasis" | "priceAsOf"> {
   const latest = closes.get(holding.stock_code);
   const { price, basis } = costBasis(holding.avg_buy_price, latest?.close);

@@ -1,6 +1,5 @@
 import { Bone, SkeletonPage } from "../components/skeleton";
 
-// 모델 성적표 뼈대: 제목과 결론 → 표 → 실험 설계
 export default function Loading() {
   return (
     <SkeletonPage label="모델 성적표를 불러오는 중이에요." width="narrow">

@@ -8,7 +8,6 @@ import { SIGNAL_META } from "@/lib/display";
 import { DIRECTION_WORD, SIGNAL_WORD, topPercentLabel } from "@/lib/copy-glossary";
 import type { RecommendedStock } from "@/lib/types";
 
-// 한 줄 이유. 모델 근거 문장이 있으면 그것을, 없으면 기간별 방향으로 만든 결정론 문장을 쓴다.
 export function oneLineReason(stock: RecommendedStock): string {
   if (stock.reason) return stock.reason;
   const { h5, h10, h20 } = stock.horizonAgreement;
@@ -17,7 +16,6 @@ export function oneLineReason(stock: RecommendedStock): string {
     : `1주 뒤 ${DIRECTION_WORD[h5]}, 4주 뒤 ${DIRECTION_WORD[h20]}`;
 }
 
-// 주식 앱처럼 한 줄: 종목명 · 한 줄 이유 · 신호. 밴드·상승 비율·기간별 일치는 상세로 보낸다.
 export default function StockRow({ stock, horizon = 20 }: { stock: RecommendedStock; horizon?: 5 | 20 }) {
   const preview = isChartPreview(stock.code);
   const { charts, loading, error } = usePublicCharts(preview ? [stock.code] : []);

@@ -1,10 +1,3 @@
-"""투자자별 순매수 수집(차트 서빙 뒤 별도 step, python -m serving.supply). KRX 로그인 세션은 서빙과 같다.
-
-영업일 하루치를 pykrx get_market_net_purchases_of_equities_by_ticker(day, day, "ALL", 투자자)로
-시장 전체 종목을 한 번에 받는다(개인·외국인·기관합계 3회). 종목 마스터(stocks)에 있는 종목만 저장하고,
-비어 있는 최근 영업일을 채운 뒤 KEEP_DAYS영업일보다 오래된 날은 지운다.
-"""
-
 import json
 from urllib.parse import quote
 

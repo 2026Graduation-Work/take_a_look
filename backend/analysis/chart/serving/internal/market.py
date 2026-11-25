@@ -1,9 +1,3 @@
-"""Header market bar row: three index closes plus KOSPI volatility/turnover percentiles.
-
-Same formulas as frontend/scripts/build_demo_snapshot.py (20-day window, 252-day lookback),
-read from the KRX index OHLCV that daily serving already uses for its calendar.
-"""
-
 from datetime import date, timedelta
 
 import numpy as np

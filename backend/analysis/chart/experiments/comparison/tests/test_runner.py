@@ -12,7 +12,6 @@ from experiments.comparison.runner import (
     resolve_feature_sets,
     run_comparison,
 )
-from experiments.experiment_utils import load_predictions, resolve_splits
 
 CHART_DIR = Path(__file__).resolve().parents[3]
 
@@ -125,22 +124,8 @@ def test_runs_multiclass_four_models_with_profile_scoped_alignment(tmp_path: Pat
     results = json.loads((output / "comparison_results.json").read_text())
     assert len(results["four_run_metrics"]) == 4
     for run in manifest["runs"]:
-        config_path = Path(run["backtest_config_file"])
-        prediction_path = Path(run["prediction_file"])
-        backtest_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        assert resolve_splits(backtest_config)[0]["test_start"] == "2023-06-12"
-        assert backtest_config["data"]["price_dir"] == str(base)
-        assert backtest_config["backtest"]["max_holding_days"] in {5, 20}
-        assert backtest_config["strategy"]["top_n"] == 5
-        loaded = load_predictions(
-            backtest_config,
-            resolve_splits(backtest_config),
-            str(CHART_DIR / "experiments" / "run_backtest.py"),
-            str(prediction_path),
-        )
-        assert len(loaded) > 0
-        assert str(config_path) in run["backtest_command"]
-        assert str(prediction_path) in run["backtest_command"]
+        assert Path(run["prediction_file"]).exists()
+        assert "backtest_command" not in run
 
 
 def test_repeated_runs_are_deterministic(tmp_path: Path) -> None:

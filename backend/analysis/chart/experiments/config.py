@@ -1,5 +1,3 @@
-"""Validated local research configuration; all relative paths are chart-relative."""
-
 from __future__ import annotations
 
 import json
@@ -42,6 +40,20 @@ def positive_int(value, name):
         raise ValueError(f"{name} must be a positive integer")
 
 
+def validate_backtest_label_alignment(backtest: dict, labels: dict) -> None:
+    if labels.get("type") == "dynamic_sigma":
+        for label_key, backtest_key in (
+            ("horizon", "max_holding_days"),
+            ("up_mult", "up_mult"),
+            ("down_mult", "down_mult"),
+        ):
+            actual, expected = backtest.get(backtest_key), labels[label_key]
+            if actual != expected:
+                raise ValueError(
+                    f"backtest.{backtest_key} ({actual}) must equal labels.{label_key} ({expected})"
+                )
+
+
 def load_dataset_config(path):
     config = read_yaml(path)
     keys(config, "contract_version dataset_id root collection preprocessing", "dataset")
@@ -51,7 +63,6 @@ def load_dataset_config(path):
         if name not in config:
             raise ValueError(f"Missing dataset.{name}")
     root = chart_path(config["root"])
-    # Rebuild must never touch the historical serving/source dataset.
     if (
         root == CHART_ROOT / "workspace/serving"
         or CHART_ROOT / "workspace/serving" in root.parents
@@ -256,7 +267,7 @@ def load_experiment_config(path):
     bt = config["backtest"]
     keys(
         bt,
-        "initial_cash signal_lag_days entry_price exit_price fee max_holding_days up_mult down_mult hard_sl_mult capital_mode",
+        "initial_cash signal_lag_days entry_price exit_price fee slippage_bps max_participation max_holding_days up_mult down_mult hard_sl_mult capital_mode",
         "backtest",
     )
     bt.setdefault("capital_mode", "continuous")
@@ -266,6 +277,10 @@ def load_experiment_config(path):
         raise ValueError("Only entry_price: open / exit_price: rule supported")
     for name in ("signal_lag_days", "max_holding_days"):
         positive_int(bt[name], name)
+    if bt["signal_lag_days"] != 1:
+        # Labels observe T+1..T+H; any other lag would trade a window the label never saw.
+        raise ValueError("backtest.signal_lag_days must be 1 to match the label window")
+    validate_backtest_label_alignment(bt, labels)
     if (
         not math.isfinite(bt["initial_cash"])
         or not math.isfinite(bt["fee"])
@@ -273,11 +288,24 @@ def load_experiment_config(path):
         or not 0 <= bt["fee"] < 1
     ):
         raise ValueError("Invalid initial_cash/fee")
+    slippage = bt.get("slippage_bps")
+    if isinstance(slippage, bool) or not isinstance(slippage, (int, float)) or not 0 <= slippage < 10_000:
+        raise ValueError("backtest.slippage_bps must be set explicitly in [0, 10000)")
+    participation = bt.get("max_participation", "missing")
+    if participation is not None and (
+        isinstance(participation, bool) or not isinstance(participation, (int, float))
+        or not 0 < participation <= 1
+    ):
+        raise ValueError("backtest.max_participation must be set explicitly: (0, 1] or null")
     for name in ("up_mult", "down_mult", "hard_sl_mult"):
         if bt.get(name) is not None and bt[name] <= 0:
             raise ValueError(f"backtest.{name} must be positive or null")
     evaluation = config.setdefault("evaluation", {})
-    keys(evaluation, "probability_bins benchmark_file benchmark_strategies", "evaluation")
+    keys(evaluation, "probability_bins benchmark_file benchmark_strategies random_baseline_runs",
+         "evaluation")
+    runs = evaluation.get("random_baseline_runs")
+    if isinstance(runs, bool) or not isinstance(runs, int) or runs < 0:
+        raise ValueError("evaluation.random_baseline_runs must be set explicitly: integer >= 0")
     if evaluation.get("benchmark_strategies", []) not in ([], ["market_index"]):
         raise ValueError("Local evaluation supports only the fixed market_index benchmark")
     bins = evaluation.get("probability_bins", [0, 0.2, 0.4, 0.6, 0.8, 1])

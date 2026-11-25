@@ -1,25 +1,15 @@
 """일별 대량 생성 배치 러너 — LangGraph 파이프라인을 날짜 루프로 호출.
 
-학습 데이터셋(수천~수만 행)을 뽑는 전용 진입점. 한 프로세스 안에서 도는 이유:
-- FinBERT 로드 1회 (CLI를 날짜마다 새로 띄우면 실행마다 수 초씩 낭비)
-- 빅카인즈 연간 워크북 파싱 캐시 재사용 (20MB 파싱 1회)
-- DART/FDR 프로세스 캐시 재사용 (호출이 (종목×사업연도)·(종목)당 1회로 축소)
+한 프로세스 안에서 도는 이유: FinBERT 로드 1회, 빅카인즈 연간 워크북(20MB) 파싱 캐시와
+DART/FDR 프로세스 캐시 재사용.
 
-LLM은 **강제로 끈다** — 대량 생성 중 무료 한도를 태우는 실수를 구조적으로 차단.
-숫자는 LLM 유무와 무관하다(test_scores_identical_with_and_without_llm이 보증).
+LLM은 강제로 끈다 — 대량 생성 중 무료 한도를 태우지 않게. 숫자는 LLM 유무와 무관하다.
 
-하루 실패가 배치를 죽이지 않는다: 예외는 기록하고 다음 날짜로 넘어가며,
-결과 요약(manifest)에 성공/검증실패/에러 건수를 남긴다. 단, 재무 확보 실패
-(FinancialsUnavailableError)는 구조적 문제(키 없음 등)이므로 즉시 중단한다.
+하루 실패는 기록하고 다음 날짜로 넘어가지만, FinancialsUnavailableError(키 없음 등)는
+구조적 문제라 계속 돌아봤자 전부 실패하므로 즉시 중단한다.
 
-사용:
-    python -m value_pipeline.batch --ticker 005930 --name 삼성전자 \\
-        --start 2016-01-01 --end 2025-12-31 --out-dir out/005930
-    # 중단 후 재개: --skip-existing (이미 생성된 날짜는 건너뜀)
-
-재개(--skip-existing)는 기존 산출물의 생성 조건(provenance)이 지금과 같을 때만
-허용한다 — 코드·FinBERT 모델·설정이 다른 JSON이 한 데이터셋에 섞이면 안 된다
-(PR #67 리뷰 0Cracker 4). 조건은 out_dir/_provenance.json에 기록된다.
+--skip-existing 재개는 기존 산출물의 생성 조건(out_dir/_provenance.json)이 지금과 같을 때만
+허용한다 — 코드·FinBERT 모델·설정이 다른 JSON이 한 데이터셋에 섞이면 안 된다.
 """
 from __future__ import annotations
 
@@ -46,14 +36,12 @@ def _iter_days(start: str, end: str):
 
 
 def _write_json_atomic(path: Path, payload: dict) -> None:
-    """임시 파일에 쓴 뒤 교체 — 중단돼도 반쪽짜리 JSON이 남지 않는다."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, path)
 
 
 def _code_version() -> str:
-    """value_pipeline 디렉터리의 마지막 커밋 해시 (+dirty). git이 없으면 'unknown'."""
     pkg = Path(__file__).resolve().parent
     try:
         head = subprocess.run(
@@ -86,7 +74,6 @@ def provenance() -> dict:
 
 
 def _check_resumable(out_dir: Path, ticker: str, current: dict) -> None:
-    """기존 산출물이 있는데 생성 조건이 없거나 다르면 재개를 거부한다."""
     if not any(out_dir.glob(f"{ticker}_*.json")):
         return
     path = out_dir / "_provenance.json"
@@ -118,8 +105,7 @@ def run_batch(
     out_dir: Path,
     skip_existing: bool = False,
 ) -> dict:
-    """기간 내 모든 날짜에 대해 일별 파이프라인 실행 → manifest dict 반환."""
-    set_llm_enabled(False)  # 대량 생성 경로는 LLM 0콜 (숫자 불변)
+    set_llm_enabled(False)
     out_dir.mkdir(parents=True, exist_ok=True)
     prov = provenance()
     if skip_existing:
@@ -138,8 +124,8 @@ def run_batch(
         try:
             result = run_pipeline(ticker, d, name)
         except FinancialsUnavailableError:
-            raise  # 구조적 실패(키 없음 등) — 계속 돌아봤자 전부 실패한다
-        except Exception as e:  # 그날 하루만 실패로 기록하고 계속
+            raise
+        except Exception as e:
             errors.append({"date": d, "error": repr(e)})
             continue
 
@@ -167,7 +153,6 @@ def run_batch(
         "errors": errors,
         "skipped_existing": skipped,
         "llm": "disabled",
-        # 재현 조건 기록: 이 값이 다르면 같은 명령이라도 per/pbr가 다를 수 있다
         "shares_asof_year": SETTINGS.shares_asof_year,
         "provenance": prov,
     }

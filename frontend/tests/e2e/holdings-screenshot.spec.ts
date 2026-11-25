@@ -2,9 +2,8 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { finishDemo } from "./demo-steps";
 
-// 스크린샷으로 보유 종목 불러오기: 업로드 → 확인 표 → 수정 → 목록에 넣기 → 저장.
-// CI에서 모델(약 24MB)을 돌리지 않도록, 글자 인식 워커(/ocr/v1/worker-entry)만 시험 화면의 인식 고정값(tests/fixtures/holdings-ocr/ocr)을
-// 돌려주는 가짜 워커로 바꾼다. 해석 규칙과 화면은 실제 코드 그대로다.
+// CI에서 모델을 돌리지 않도록 글자 인식 워커(/ocr/v1/worker-entry)만 시험 화면의 인식 고정값(tests/fixtures/holdings-ocr/ocr)을
+// 돌려주는 가짜 워커로 바꾼다.
 const FIXTURE = "tests/fixtures/holdings-ocr";
 const lines: { text: string; score: number; x0: number; y0: number; x1: number; y1: number }[] =
   JSON.parse(readFileSync(`${FIXTURE}/ocr/B-dark-390.json`, "utf8"));
@@ -34,7 +33,6 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   await expect(review.getByLabel("두산에너빌리티 평균 매입가")).toHaveValue("19,870");
   await expect(review.getByText("계산한 값").first()).toBeVisible();
   await expect(page.getByText(/다루지 않는 종목\(ETF, 해외 주식 등\): .*KODEX 200/)).toBeVisible();
-  // 저장 전에는 아무것도 저장하지 않는다
   const before = await page.evaluate(() => localStorage.getItem("takealook.holdings.v1"));
 
   await review.getByLabel("현대차 수량").fill("-1");
@@ -62,7 +60,7 @@ test("스크린샷: 읽은 값을 확인하고 고친 뒤 목록에 넣고 저�
   expect(saved.find((row: { code: string }) => row.code === "005380").quantity).toBe(9);
 });
 
-// 화면 CSP는 처음 연 문서 것이 화면 이동 내내 쓰인다. 대시보드에서 메뉴로 들어와도 워커가 막히지 않아야 한다(#393)
+// 화면 CSP는 처음 연 문서 것이 화면 이동 내내 쓰인다. 대시보드에서 메뉴로 들어와도 워커가 막히지 않아야 한다
 test("스크린샷: 대시보드 → 계정 메뉴 → 보유 종목으로 이동해도 읽는다", async ({ page, context }) => {
   await context.route(/\/ocr\/v1\/worker-entry/, (route) => route.fulfill({ contentType: "text/javascript", body: fakeWorker }));
   await page.route(/\/rest\/v1\/stocks\?select=code%2Cname/, (route) => route.fulfill({ json: MASTER }));
@@ -92,7 +90,7 @@ test("스크린샷: 글자를 거의 못 읽으면 또렷한 캡처를, 글자�
   await expect(page.getByRole("alert").filter({ hasText: "글자를" })).toHaveText("글자를 거의 읽지 못했어요. 글자가 또렷하게 보이는 캡처로 다시 올리거나 직접 입력해 주세요.");
 
   items = JSON.stringify(["계좌 요약", "총 평가금액", "주문 가능 금액", "입출금"].map((text, i) => ({ text, score: 0.99, poly: [[0, i * 40], [200, i * 40], [200, i * 40 + 30], [0, i * 40 + 30]] })));
-  await page.reload(); // 워커를 새로 받게
+  await page.reload();
   await page.getByLabel("보유 종목 화면 캡처 파일").setInputFiles(`${FIXTURE}/B-dark-390.png`);
   await expect(page.getByRole("alert").filter({ hasText: "종목을 찾지 못했어요" })).toHaveText("종목을 찾지 못했어요. 보유 종목이 보이는 화면을 다시 올리거나 직접 입력해 주세요.");
 });
@@ -114,9 +112,8 @@ test("스크린샷: ETF만 읽히면 다루지 않는 종목이라고 이름과 
   await expect(raw.getByText("SOL 조선TO", { exact: true })).toBeVisible(); // 표형은 긴 이름이 두 줄로 나뉘어 읽힌다
 });
 
-// 기다림 표시: 처음엔 1/3(받은 바이트 % 막대), 두 번째부터는 읽는 도구를 다시 받지 않고 1단계를 건너뛴다
 test("스크린샷: 처음 불러오기는 1/3 준비 막대를 보이고, 두 번째 불러오기는 1단계를 건너뛴다", async ({ page, context }) => {
-  // 받기를 1.5초 늦춰 300ms 안에 끝나지 않게 한다(300ms 안이면 표시하지 않는다)
+  // 300ms 안에 끝나면 표시하지 않으므로 받기를 1.5초 늦춘다
   await context.route(/\/ocr\/v1\/worker-entry/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.fulfill({ contentType: "text/javascript", body: fakeWorker });
@@ -129,7 +126,6 @@ test("스크린샷: 처음 불러오기는 1/3 준비 막대를 보이고, 두 �
   await expect(page.getByRole("heading", { name: "읽은 내용을 확인해 주세요" })).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("takealook.ocr-assets.v1"))).not.toBeNull();
 
-  // 새 탭(같은 브라우저): 1단계 글자가 한 번도 나오지 않는다
   const second = await context.newPage();
   await second.route(/\/rest\/v1\/stocks\?select=code%2Cname/, (route) => route.fulfill({ json: MASTER }));
   await second.goto("/portfolio");
@@ -144,7 +140,6 @@ test("스크린샷: 처음 불러오기는 1/3 준비 막대를 보이고, 두 �
 });
 
 test("스크린샷: 10초가 넘으면 '조금 더 걸리고 있어요'와 취소, 취소하면 직접 입력을 그대로 쓴다", async ({ page, context }) => {
-  // 글자 찾기 요청에 답하지 않는 워커
   const stuck = fakeWorker.replace('const payload = data.type === "predict"', 'if (data.type === "predict") return;\n  const payload = data.type === "predict"');
   await context.route(/\/ocr\/v1\/worker-entry/, (route) => route.fulfill({ contentType: "text/javascript", body: stuck }));
   await page.clock.install();

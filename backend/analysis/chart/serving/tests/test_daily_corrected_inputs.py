@@ -1,5 +1,3 @@
-"""Corrected prices, archived flows, and model-specific missing-data behavior."""
-
 import numpy as np
 import pandas as pd
 import pytest

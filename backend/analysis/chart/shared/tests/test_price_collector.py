@@ -100,7 +100,7 @@ def test_get_krx_trading_days_uses_only_cache_covering_entire_range(
 
 
 def test_get_krx_trading_days_prefers_covering_cache_without_network(tmp_path, monkeypatch):
-    # #107: 종목별 추론이 호출마다 지수를 조회하지 않도록, 범위를 덮는 캐시가 있으면 네트워크를 쓰지 않는다
+    # 종목별 추론이 호출마다 지수를 조회하지 않도록, 범위를 덮는 캐시가 있으면 네트워크를 쓰지 않는다
     cache_path = tmp_path / "krx_trading_calendar.json"
     _write_calendar_cache(cache_path, "2026-08-29", "2026-09-02", ["2026-08-31", "2026-09-01"])
     monkeypatch.setattr(trading_calendar, "TRADING_CALENDAR_CACHE_PATH", str(cache_path))

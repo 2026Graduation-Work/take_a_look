@@ -1,12 +1,3 @@
-// 보유 화면 캡처에서 읽은 글자(글자 + 위치)를 보유 종목으로 바꾸는 규칙. 결정론이고 LLM을 쓰지 않는다.
-// 같은 입력이면 늘 같은 결과다. 규칙 번호는 PR 설명과 같다.
-//  1) 종목명: 종목 마스터와 맞춘다(공백 무시, 6자리 코드, 비슷한 글자 허용). 줄바꿈된 긴 이름은 아래 줄과 합쳐 본다
-//  2) 한 종목 이름부터 다음 종목 이름 전까지의 숫자를 그 종목 것으로 본다
-//  3) 표 머리(보유수량, 평가금액, 평가손익, 평균단가 등)가 있으면 열 위치로, 없으면 'N주'와 '원', '±손익(수익률%)' 모양으로 읽는다
-//  4) 수량은 정수만(소수면 해외 소수점 주식으로 보고 뺀다). 평균 매입가 열이 없으면 (평가금액 − 평가손익) ÷ 수량을 원 단위로 반올림
-//  5) 마스터에 없는 이름(ETF, ETN, 해외 주식)은 '다루지 않는 종목'으로 따로 둔다. 지수, 합계 줄은 버린다
-//  6) 여러 장은 종목 코드로 합친다(수량을 더하지 않는다). 같은 종목의 숫자가 다르면 '확인 필요'
-
 import type { OcrLine } from "./recognize";
 
 export interface StockRef {
@@ -21,8 +12,8 @@ export interface ParsedHolding {
   name: string;
   quantity: number | null;
   avgBuyPrice: number | null;
-  avgComputed: boolean; // 평균 매입가를 평가금액과 평가손익으로 계산했다
-  check: CheckField[]; // 자신 없는 칸(사용자 확인 필요)
+  avgComputed: boolean;
+  check: CheckField[];
 }
 
 export interface ParseResult {
@@ -30,7 +21,7 @@ export interface ParseResult {
   unsupported: string[];
 }
 
-const LOW_SCORE = 0.9; // 인식 확신이 이보다 낮은 숫자는 '확인 필요'
+const LOW_SCORE = 0.9;
 const ETF_PREFIX = /^(KODEX|TIGER|KBSTAR|RISE|ACE|SOL|ARIRANG|HANARO|KOSEF|PLUS|KIWOOM|TIMEFOLIO|WOORI|BNK|TREX|FOCUS|마이티|파워|히어로즈|1Q)(?![a-z])|ETN|ETF/i;
 const NOT_A_NAME = /^(합계|총합계|소계|총평가|평가손익|종목명|KOSPI|KOSDAQ|코스피|코스닥|국내주식|해외주식|장종료|장마감|S&P)/i;
 const HEADERS: [keyof Columns, RegExp][] = [
@@ -68,7 +59,6 @@ function editDistance(a: string, b: string): number {
   return row[b.length];
 }
 
-// 규칙 1: 정확히 같은 이름 → 6자리 코드 → 비슷한 이름(3자 이상, 짧으면 1자, 6자 이상이면 2자까지 다름, 가장 가까운 것이 하나일 때만)
 function matchName(text: string, byName: Map<string, StockRef>, byCode: Map<string, StockRef>, names: string[]): { ref: StockRef; fuzzy: boolean } | null {
   const key = text.toUpperCase();
   const exact = byName.get(key);
@@ -89,11 +79,11 @@ function matchName(text: string, byName: Map<string, StockRef>, byCode: Map<stri
   return best && !tie ? { ref: byName.get(best)!, fuzzy: true } : null;
 }
 
-// 주를 추로 읽는 일이 있어 받아 준다(낮은 확신이면 확인 필요로 남는다)
+// 인식이 '주'를 '추'·'쥬'로 읽기도 한다(낮은 확신이면 확인 필요로 남는다)
 const QTY = /^([\d,.]+)[주추쥬]$/;
 const WITH_RATE = /^([+\-−]?[\d,]+)원?\(([+\-−]?[\d.]+)%\)$/;
 
-// 금액(원 단위 정수). '1.205.000'처럼 쉼표를 점으로 읽은 것도 받는다
+// 인식이 쉼표를 점으로 읽기도 한다('1.205.000')
 function parseAmount(text: string): number | null {
   const body = text.replace(/원$/, "").replace(/−/g, "-");
   if (!/^[+-]?\d{1,3}([.,]\d{3})*$|^[+-]?\d+$/.test(body)) return null;
@@ -107,7 +97,7 @@ function headerKey(text: string): Key | null {
   return null;
 }
 
-// 표 머리를 잘못 읽어도(평간손일) 한 글자씩 다르게 읽은 것까지는 가장 가까운 머리로 본다. 비기면 버린다
+// 인식이 표 머리를 한 글자씩 틀리게 읽기도 해서(평간손일) 가장 가까운 머리로 본다. 비기면 버린다
 function fuzzyHeaderKey(text: string): Key | null {
   const exact = headerKey(text);
   if (exact || text.length < 3) return exact;
@@ -124,14 +114,13 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
   lines.sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
   const h = median(lines.map((line) => line.y1 - line.y0)) || 1;
 
-  // 규칙 1: 이름 줄 찾기(아래 줄과 합쳐 보기 포함)
   const used = new Set<Line>();
   const anchors: Anchor[] = [];
   for (const line of lines) {
     if (used.has(line) || headerKey(line.compact) || NOT_A_NAME.test(line.compact) || !/[가-힣A-Za-z]/.test(line.compact)) continue;
     const near = (next: Line) =>
       next !== line && !used.has(next) && next.y0 > line.y0 + h * 0.5 && next.y0 < line.y1 + h * 0.8 && Math.abs(next.x0 - line.x0) < h * 0.6;
-    // 줄바꿈된 이름의 뒷부분: 바로 아래, 같은 왼쪽 끝. 'N주'나 금액은 아니다('KODEX 20' + '0'처럼 한두 자리 숫자는 이름 조각)
+    // 'KODEX 20' + '0'처럼 줄바꿈된 이름의 한두 자리 숫자는 이름 조각이다
     const below = lines.find((next) => near(next) && !QTY.test(next.compact) && (parseAmount(next.compact) === null || /^\d{1,2}$/.test(next.compact)) && !matchName(next.compact, byName, byCode, names));
     const single = matchName(line.compact, byName, byCode, names);
     const joined = below ? matchName(line.compact + below.compact, byName, byCode, names) : null;
@@ -141,7 +130,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
       anchors.push({ lines: pick.lines, ref: pick.ref, label: pick.ref.name, fuzzy: pick.fuzzy, y0: line.y0, x0: line.x0 });
       continue;
     }
-    // 규칙 5: 마스터에 없는 종목 줄(ETF 이름 모양이거나 바로 아래에 'N주'가 있는 이름)
     const qtyBelow = lines.find((next) => QTY.test(next.compact) && next.y0 > line.y0 && next.y0 < line.y1 + h * 0.8 && Math.abs(next.x0 - line.x0) < h * 0.6);
     if (ETF_PREFIX.test(line.compact) || qtyBelow) {
       const parts = below && (ETF_PREFIX.test(line.compact) || /^\d{1,2}$/.test(below.compact)) ? [line, below] : [line];
@@ -159,8 +147,7 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
     }
   }
 
-  // 표 머리 열(겹쳐 쓴 2줄 머리는 한 열로 묶는다)
-  // 한두 글자씩 끊어 읽은 머리('보유' '수' '량')는 같은 열끼리 위에서 아래로 이어 붙인다
+  // 인식이 머리를 한두 글자씩 끊어 읽으면('보유' '수' '량') 같은 열끼리 위에서 아래로 이어 붙인다
   const columns: { x0: number; x1: number; keys: Key[] }[] = [];
   const firstAnchor = anchors[0]?.y0 ?? Infinity;
   const band: Line[] = [];
@@ -171,7 +158,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
   }
   for (const header of band.filter((line) => fuzzyHeaderKey(line.compact))) {
     const key = fuzzyHeaderKey(header.compact)!;
-    // 위아래로 겹쳐 쓴 머리(평가손익 / 수익률)만 한 열: 가로로 겹치는 머리끼리
     const column = columns.find((col) => Math.min(col.x1, header.x1) - Math.max(col.x0, header.x0) > 0);
     if (column) column.keys.push(key);
     else columns.push({ x0: header.x0, x1: header.x1, keys: [key] });
@@ -187,7 +173,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
       if (!unsupported.includes(label)) unsupported.push(label);
       return;
     }
-    // 규칙 2: 이 이름부터 다음 이름 전까지
     const top = anchor.y0 - h * 0.5;
     const bottom = Math.min(anchors[index + 1]?.y0 ?? Infinity, anchor.y0 + spacing) - h * 0.5;
     const region = lines.filter((line) => !used.has(line) && line.y0 >= top && line.y0 < bottom && !headerKey(line.compact));
@@ -196,7 +181,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
     const set = (key: Key, value: number, score: number) => {
       if (!(key in values)) values[key] = { value, score };
     };
-    // 규칙 3-a: 모양으로 아는 값
     for (const line of region) {
       const qty = line.compact.match(QTY);
       if (qty) {
@@ -207,10 +191,9 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
       const withRate = line.compact.match(WITH_RATE);
       if (withRate) set("pnl", parseAmount(withRate[1]) ?? Number.NaN, line.score);
       else if (columns.length === 0 && /원$/.test(line.compact) && parseAmount(line.compact) !== null) set("value", parseAmount(line.compact)!, line.score);
-      // 부호 붙은 금액은 손익이다(수량, 가격, 평가금액에는 부호가 없다). '+537,600' '(22.6%)'처럼 두 조각으로 읽히거나 표 머리를 못 읽어도 쓴다
+      // '+537,600' '(22.6%)'처럼 두 조각으로 읽히거나 표 머리를 못 읽어도 부호 붙은 금액은 손익으로 본다
       else if (/^[+\-−]/.test(line.compact) && parseAmount(line.compact) !== null) set("pnl", parseAmount(line.compact)!, line.score);
     }
-    // 규칙 3-b: 표 머리 열로 아는 값(같은 열에 머리가 2줄이면 위아래 순서로)
     for (const column of columns) {
       const cells = region
         .filter((line) => parseAmount(line.compact) !== null && (Math.abs(midX(line) - (column.x0 + column.x1) / 2) < h * 1.5 || Math.abs(line.x1 - column.x1) < h))
@@ -226,7 +209,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
     const check: CheckField[] = anchor.fuzzy || anchor.lines.some((line) => line.score < LOW_SCORE) ? ["name"] : [];
     const quantity = values.qty && values.qty.value > 0 ? values.qty.value : null;
     if (!quantity || values.qty!.score < LOW_SCORE) check.push("quantity");
-    // 규칙 4: 평균 매입가
     let avgBuyPrice: number | null = null;
     let avgComputed = false;
     let avgScore = 1;
@@ -243,7 +225,6 @@ export function parseHoldings(ocr: OcrLine[], master: StockRef[]): ParseResult {
   return mergeResults([{ holdings, unsupported }]);
 }
 
-// 규칙 6: 여러 장을 종목 코드로 합친다. 수량을 더하지 않고, 숫자가 다르면 그 칸을 '확인 필요'로
 export function mergeResults(results: ParseResult[]): ParseResult {
   const byCode = new Map<string, ParsedHolding>();
   for (const holding of results.flatMap((result) => result.holdings)) {

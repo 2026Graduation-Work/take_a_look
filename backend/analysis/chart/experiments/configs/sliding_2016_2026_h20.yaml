@@ -64,13 +64,16 @@ backtest:
   entry_price: open
   exit_price: rule
   fee: 0.00105
+  slippage_bps: 10
+  max_participation: 0.025
   hard_sl_mult: 2.0
-  initial_cash: 10000000
+  initial_cash: 100000000
   max_holding_days: 20
   signal_lag_days: 1
   up_mult: 3.75
 evaluation:
   benchmark_file: workspace/experiments/datasets/shared_v3_kospi_2016/benchmarks/KOSPI.parquet
+  random_baseline_runs: 30
   benchmark_strategies:
   - market_index
   probability_bins:

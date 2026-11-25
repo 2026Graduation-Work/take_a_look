@@ -7,7 +7,6 @@ const PROFILE_KEY = "takealook.ips-profile.v1";
 const HOLDINGS_KEY = "takealook.holdings.v1";
 const ANSWERS_KEY = "takealook.survey-answers.v1";
 
-// 문항 정의(정본)를 읽어, 모든 축을 +2(축의 positive 쪽 끝)로 답하게 만든다.
 // 김민지 mock(추종형)과 다른 "적극 축적형"이 나와야 대시보드·상세가 설문 결과를 쓰는지 가려진다.
 const BANK = JSON.parse(
   readFileSync(path.resolve(process.cwd(), "lib/profiling/style-questions.json"), "utf8"),
@@ -22,7 +21,6 @@ const ANSWER_LABEL = new Map(
     .map(({ text, direction }) => [text, LIKERT_LABEL.get(3 + 2 * direction)!]),
 );
 
-// 한 화면 한 문항: 고른 뒤 "다음"을 눌러 넘어간다(#278).
 async function answerCurrentQuestion(page: Page): Promise<void> {
   const group = page.locator("fieldset");
   const text = (await group.locator("legend").innerText()).trim();
@@ -37,17 +35,14 @@ async function startDemo(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/login$/);
   await page.getByRole("button", { name: "데모로 둘러보기" }).click();
   await expect(page).toHaveURL(/\/survey$/);
-  // 처음 온 사람: 환영 1장 + 상단 진행 표시
   await expect(page.getByRole("heading", { name: "Take a Look은 이렇게 도와줘요" })).toBeVisible();
   await expect(page.getByRole("list", { name: "시작 단계" })).toContainText("1 성향2 보유 종목3 시작");
 }
 
-// 보유 종목 편집의 미저장 경고(beforeunload)는 늘 수락한다. 지우기·로그아웃 확인은 confirm-button.tsx 창에서 누른다.
 test.beforeEach(({ page }) => page.on("dialog", (dialog) => void dialog.accept()));
 
 test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보드 맵 -> 상세 -> logout", async ({ page }) => {
   const browserErrors = collectBrowserErrors(page);
-  // 보유 맵의 공개 종가·신호를 명시한다. 누락된 응답을 예시 신호·0원으로 채우지 않는다(M04).
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => {
     const select = new URL(route.request().url()).searchParams.get("select") ?? "";
     if (!select.includes("close:payload")) return route.fallback();
@@ -57,7 +52,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Take a Look 시작" })).toBeVisible();
-  // 계정 로그인과 데모 계정이 항상 함께 보인다(환경변수가 없으면 계정 쪽은 안내만)
   await expect(page.getByText(/이메일로 시작|계정 기능이 아직 연결되지 않았어요/).first()).toBeVisible();
   await expect(page.getByText("데모 계정")).toHaveCount(0);
 
@@ -67,12 +61,10 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.getByRole("button", { name: "시작하기" }).click();
 
-  // 짧은 진단 16문항: 한 화면 한 문항, 고르고 "다음"
   for (let number = 1; number <= 16; number += 1) {
     await expect(page.getByText(`질문 ${number}/16`)).toBeVisible();
     await answerCurrentQuestion(page);
     if (number === 3) {
-      // 되돌리기: 이전 문항의 답이 남아 있어야 한다
       await expect(page.getByText("질문 4/16")).toBeVisible();
       await page.getByRole("button", { name: "이전" }).click();
       await expect(page.getByText("질문 3/16")).toBeVisible();
@@ -80,7 +72,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
       await page.getByRole("button", { name: "다음", exact: true }).click();
     }
     if (number === 8) {
-      // 중간 저장: 새로고침해도 같은 문항에서 이어진다
       await expect(page.getByText("질문 9/16")).toBeVisible();
       await page.reload();
       await expect(page.getByText("저장해 둔 응답을 불러왔어요", { exact: false })).toBeVisible();
@@ -97,7 +88,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByText("마무리 3/3")).toBeVisible();
   await page.getByRole("button", { name: "완료" }).click();
 
-  // 결과: "다음"을 눌러야 저장된다 + 남은 문항만 더 묻는 추가 질문
   await expect(page.getByRole("heading", { name: "적극 축적형" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "적극 축적형" })).toBeFocused();
   await expect(page.getByRole("status")).toContainText("투자 성향 진단을 마쳤어요");
@@ -116,7 +106,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   }, PROFILE_KEY);
   expect(storedTypes).toEqual(Array(8).fill([1, 2]));
 
-  // 보유 종목: 데모 예시를 비우고 1종목만 넣는다(평균 매입가는 비워 둠 → 현재가 기준)
   await expect(page.getByText("예시로 넣어 뒀어요, 바꿔도 돼요.")).toBeVisible();
   for (const name of ["삼성전자", "카카오", "셀트리온", "현대차"]) {
     await page.getByRole("button", { name: `${name} 삭제` }).click();
@@ -128,7 +117,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByRole("heading", { name: "넣은 종목 1개" })).toBeVisible();
   await page.getByRole("button", { name: "저장하고 시작" }).click();
 
-  // 대시보드: 두 결과(성향 + 보유 종목)를 합쳐 보여 준다
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("보유 종목 중 하락 신호는 없어요.");
   await expect(page.getByRole("list", { name: "보유 종목별 오늘 모델 신호" }).getByRole("listitem")).toHaveCount(1);
@@ -142,7 +130,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByText("적극 축적형", { exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page, 390, 844);
 
-  // 헤더: 로고 + 검색 + 이름(유형 이름 없음). 화면 이동 탭은 없다. 이름을 누르면 계정 메뉴(10/20 메뉴 정리)
   await page.setViewportSize({ width: 1024, height: 900 });
   const header = page.locator("header");
   await expect(header.getByRole("navigation", { name: "주요 화면" })).toHaveCount(0);
@@ -155,12 +142,10 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(header.getByRole("button", { name: "로그아웃" })).toBeVisible();
   await accountMenu.click();
 
-  // 시험 결과도 기존 상세 UI와 성향별 근거 탭 순서를 사용한다.
   await page.locator("[data-stock-row]").first().click();
   await expect(page).toHaveURL(/\/stocks\/(005930|005380|068270)$/);
   await expect(page.getByText(/과거 비슷한 경우, (2주|4주) 뒤 수익률은 10번 중 \d번 이 범위였어요/)).toBeVisible();
   await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
-  // 판단 근거 탭 순서 = 유형의 카드 순서(연구 문항 ②). 적극 축적형: 모델이 본 이유가 첫 탭
   await expect(page.getByRole("tablist", { name: "판단 근거" })).toHaveAttribute(
     "data-card-order",
     "nudge,contribution,sentiment,supply,risk,financial",
@@ -170,7 +155,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   ).toHaveText("모델이 본 이유");
   await expect(page.getByText("데모 계정")).toBeVisible();
 
-  // 다른 유형이라면?: 이 화면만 바뀌고 저장된 결과는 그대로
   await page.getByText("다른 유형이라면?").click();
   await page.getByRole("button", { name: "자산 보존형" }).click();
   await expect(page.locator('[data-bit-type="PRESERVER"]')).toBeVisible();
@@ -181,7 +165,6 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await page.getByRole("button", { name: "내 성향" }).click();
   await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
 
-  // 모델 성적표는 내비가 아니라 푸터의 작은 링크
   await page.locator("footer").getByRole("link", { name: "모델 성적표" }).click();
   await expect(page).toHaveURL(/\/performance$/);
   await expect(page.getByRole("heading", { name: "A/B 비교" })).toBeVisible();
@@ -199,23 +182,19 @@ test("new user: 보유 종목을 모두 지우고 '보유 없이 시작' -> 대�
   const browserErrors = collectBrowserErrors(page);
   await startDemo(page);
   await page.getByRole("button", { name: "시작하기" }).click();
-  // 문항 화면 헤더(로고·단계·데모 응답·나가기)가 모바일 폭을 넘지 않는다
   await expect(page.getByText("질문 1/16")).toBeVisible();
   await assertNoHorizontalOverflow(page, 390, 844);
   await page.getByRole("button", { name: /데모 응답/ }).click();
   await page.getByRole("button", { name: "완료" }).click();
   await page.getByRole("button", { name: "다음", exact: true }).click();
-  // 데모는 예시 보유 종목이 채워져 열린다 → 모두 삭제하면 '보유 없이 시작'
   for (const name of ["삼성전자", "카카오", "셀트리온", "현대차"]) {
     await page.getByRole("button", { name: `${name} 삭제` }).click();
   }
   await page.getByRole("button", { name: "보유 없이 시작" }).click();
 
   await expect(page).toHaveURL("/");
-  // 스텁 게시 배치: 삼성전자(하락) + SPAC 1종목(상승). 데모 응답은 SPAC 회피를 골라 1개만 남는다
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("오늘 모델 신호가 강한 종목은 1개예요.");
   await expect(page.getByText("관심 가는 종목을 검색해 보세요")).toBeVisible();
-  // 돌아온 사용자는 온보딩을 건너뛴다
   await page.goto("/survey");
   await expect(page.getByRole("heading", { name: "Take a Look은 이렇게 도와줘요" })).toHaveCount(0);
   await expect(page.getByText("질문 1/16")).toBeVisible();
@@ -235,7 +214,6 @@ test("옛 저장 키(signallab.*)로 저장된 데모 상태가 새로고침 후
   await expect(page.getByRole("heading", { level: 1 })).not.toContainText("불러오는 중");
   const heading = await page.getByRole("heading", { level: 1 }).innerText();
 
-  // 새 키에 저장된 값을 옛 키로 되돌려 심는다(이전 전 브라우저 상태 재현)
   const before = await page.evaluate((keys) => {
     const values: Record<string, string | null> = {};
     for (const key of keys) {
@@ -308,7 +286,6 @@ async function expectStoredOnboardingData(
 test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, 결과·보유 종목에서도 이전으로 돌아간다", async ({ page }) => {
   const browserErrors = collectBrowserErrors(page);
   await startDemo(page);
-  // 환영: 안내 문구가 시작하기 위, 시작하기는 오른쪽
   const note = page.getByText("맞고 틀린 답은 없어요", { exact: false });
   const start = page.getByRole("button", { name: "시작하기" });
   expect((await note.boundingBox())!.y).toBeLessThan((await start.boundingBox())!.y);
@@ -320,12 +297,10 @@ test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, �
   await expect(page.getByText("질문 1/16")).toBeVisible();
   await expect(back).toBeDisabled();
   await expect(next).toBeDisabled();
-  // 뒤로는 왼쪽, 앞으로는 오른쪽, 크기는 같다
   const [backBox, nextBox] = [await back.boundingBox(), await next.boundingBox()];
   expect(backBox!.x).toBeLessThan(nextBox!.x);
   expect(backBox!.height).toBe(nextBox!.height);
 
-  // 고르기만 하면 넘어가지 않는다(#278). 답을 바꾼 뒤 "다음"으로 넘어간다
   await page.locator("fieldset input").first().check();
   await page.locator("fieldset input").nth(1).check();
   await expect(page.getByText("질문 1/16")).toBeVisible();
@@ -345,7 +320,6 @@ test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, �
   await expect(page.getByText("질문 3/16")).toBeVisible();
   await expect(next).toBeDisabled();
 
-  // 마지막 문항은 "완료" → 바로 결과
   await page.getByRole("button", { name: /데모 응답/ }).click();
   await expect(page.getByText("마무리 3/3")).toBeVisible();
   await page.getByRole("button", { name: "완료" }).click();
@@ -355,7 +329,6 @@ test("설문 이전/다음 왕복: 답한 문항에서만 다음이 켜지고, �
   await expect(page.getByText("마무리 3/3")).toBeVisible();
   await page.getByRole("button", { name: "완료" }).click();
   await next.click();
-  // 보유 종목 단계(예시가 채워진 입력 화면) → 이전: 결과
   await expect(page.getByRole("heading", { name: "지금 가진 주식이 있나요?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "저장하고 시작" })).toBeVisible();
   await back.click();
@@ -373,14 +346,12 @@ test("다시 진단: 대시보드 성향 한 줄 → 결과 → 다시 진단(�
   await page.getByRole("button", { name: "저장하고 시작" }).click();
   await expect(page).toHaveURL("/");
 
-  // 대시보드 맨 위 성향 한 줄 → 결과 화면. 아래쪽 큰 성향 블록·다시 진단 버튼은 없다
   await expect(page.getByText("목록에서 빼 둔 종목")).toHaveCount(0);
   await page.getByRole("link", { name: /내 투자 성향: 추종형/ }).click();
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByRole("heading", { name: "추종형" })).toBeVisible();
   await page.getByRole("button", { name: "다시 진단" }).click();
 
-  // 환영 없이 1번부터, 지난 답이 채워져 있어 바로 "다음"으로 넘길 수 있다
   await expect(page).toHaveURL(/\/survey$/);
   await expect(page.getByRole("heading", { name: "Take a Look은 이렇게 도와줘요" })).toHaveCount(0);
   await expect(page.getByText("질문 1/16")).toBeVisible();
@@ -393,7 +364,6 @@ test("다시 진단: 대시보드 성향 한 줄 → 결과 → 다시 진단(�
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("heading", { name: "지금 가진 주식이 있나요?" })).toHaveCount(0);
 
-  // 처음부터 새로 하기: 지난 답을 비우고 1번부터
   await page.goto("/survey");
   await page.getByRole("button", { name: "처음부터 새로 하기" }).click();
   await expect(page.getByText("질문 1/16")).toBeVisible();

@@ -146,8 +146,6 @@ test("짧은 진단은 16문항, 축당 정방향 1 + 역방향 1이고 모두 �
   }
 });
 
-// 속성 테스트: 한결같이 답한 페르소나(모든 문항을 축 방향 강도대로 답함)는 16문항과 24문항에서
-// 같은 유형으로 분류된다. 분류 3축의 강도 조합 전부와 나머지 축의 여러 값으로 확인한다.
 test("짧은 진단: 일관되게 답한 페르소나는 빠른 진단과 같은 유형이 나온다", () => {
   const levels = [-2, -1, 0, 1, 2];
   let checked = 0;
@@ -167,7 +165,7 @@ test("짧은 진단: 일관되게 답한 페르소나는 빠른 진단과 같은
           };
           const short = scoreStyleAxes(answersFromPattern(pattern, "short"), "short");
           const quick = scoreStyleAxes(answersFromPattern(pattern, "quick"), "quick");
-          assert.equal(short.assessment_mode, "quick"); // 스키마 enum(freeze)을 지킨다
+          assert.equal(short.assessment_mode, "quick");
           assert.equal(classifyBit(short).type, classifyBit(quick).type, JSON.stringify(pattern));
           assert.ok(short.axes.every(({ question_count }) => question_count === 2));
           checked += 1;

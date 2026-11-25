@@ -1,4 +1,3 @@
-// 시험 화면을 실제 인식 모듈(lib/holdings-ocr/recognize.ts)로 읽어 ocr/<화면>.json에 저장한다.
 // 단위 테스트는 이 고정값을 쓰므로 CI는 모델을 받지 않는다. 모델이나 전처리를 바꾸면 다시 돌린다.
 // 사용: pnpm dev --port 3100 을 띄운 뒤 node tests/fixtures/holdings-ocr/run-ocr.mjs [--mobile]
 //   --mobile: 휴대폰 에뮬레이션(390폭, CPU 4배 느리게)으로 한 장 처리 시간만 잰다
@@ -13,7 +12,6 @@ const files = readdirSync(DIR).filter((name) => name.endsWith(".png")).sort();
 const browser = await chromium.launch();
 const context = await browser.newContext(mobile ? devices["Pixel 7"] : {});
 const page = await context.newPage();
-// 앱의 로그인 확인을 지나가도록 데모 세션과 성향을 넣는다(e2e performance.spec과 같은 방식)
 const profile = JSON.parse(readFileSync(new URL("../../../../schema/profiling_output.v1_1.example.json", import.meta.url), "utf8"));
 await page.addInitScript((value) => {
   localStorage.setItem("takealook.demo-session.v1", JSON.stringify({ userId: "demo-ocr", displayName: "테스트", signedInAt: new Date().toISOString() }));

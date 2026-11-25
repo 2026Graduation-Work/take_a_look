@@ -6,9 +6,7 @@ const ok: SavedHolding = { code: "005930", name: "삼성전자", quantity: 15, a
 
 test("보유 종목 검증: 정상 입력만 통과한다", () => {
   assert.equal(isValidHolding(ok), true);
-  // 무상증자 등으로 평단이 0일 수 있다
   assert.equal(isValidHolding({ ...ok, avgBuyPrice: 0 }), true);
-  // 평균 매입가는 모르면 비워 둘 수 있다
   assert.equal(isValidHolding({ ...ok, avgBuyPrice: null }), true);
 
   assert.equal(isValidHolding({ ...ok, quantity: 0 }), false, "수량 0은 보유가 아니다");
@@ -44,7 +42,6 @@ test("비중 단가: 최신 종가가 있으면 평가금액, 없으면 매입�
 test("평단 대비 평가손익(#255): 평단·종가가 모두 있어야 계산한다", () => {
   assert.ok(Math.abs(gainRatio(50_000, 56_000)! - 0.12) < 1e-12);
   assert.ok(Math.abs(gainRatio(50_000, 45_000)! + 0.1) < 1e-12);
-  // 평단을 모르거나 0(무상증자), 종가가 없으면 미제공
   assert.equal(gainRatio(null, 56_000), null);
   assert.equal(gainRatio(0, 56_000), null);
   assert.equal(gainRatio(50_000, undefined), null);
@@ -53,20 +50,19 @@ test("평단 대비 평가손익(#255): 평단·종가가 모두 있어야 계�
 test("숫자 입력칸 정리(#278): 문자·지수 표기·NaN이 들어가지 않는다", () => {
   assert.equal(digitsOnly("10abc", 9), "10");
   assert.equal(digitsOnly("1,200", 9), "1200");
-  assert.equal(digitsOnly("1.5", 9), "1"); // 15가 되면 안 된다
+  assert.equal(digitsOnly("1.5", 9), "1");
   assert.equal(digitsOnly("318,000.5", 12), "318000");
   assert.equal(digitsOnly("１２", 9), "12");
-  assert.equal(numberDraft("1.5", 9), "1.5"); // 보여 주고 넣을 때 막는다
+  assert.equal(numberDraft("1.5", 9), "1.5");
   assert.ok(Number.isNaN(parseWholeNumber(numberDraft("1.5", 9))));
   assert.equal(numberDraft("2,500주", 9), "2,500주");
   assert.equal(numberDraft("1234567", 9), "1,234,567");
   assert.equal(numberDraft("1234567.5", 9), "1,234,567.5");
-  assert.equal(parseWholeNumber(numberDraft("71200", 12)), 71200); // 저장 값은 숫자 그대로
+  assert.equal(parseWholeNumber(numberDraft("71200", 12)), 71200);
   assert.equal(numberDraft("１２", 9), "12");
-  assert.equal(digitsOnly("", 9), ""); // 지워도 NaN이 아니라 빈칸
-  assert.equal(digitsOnly("12345678901234567890123", 12), "123456789012"); // 1e+22 대신 자릿수에서 멈춤
+  assert.equal(digitsOnly("", 9), "");
+  assert.equal(digitsOnly("12345678901234567890123", 12), "123456789012");
   assert.ok(Number.isSafeInteger(Number(digitsOnly("9".repeat(30), 12))));
-  // 엄격 파싱: 앞 숫자만 읽지 않는다
   assert.ok(Number.isNaN(parseWholeNumber("10abc")));
   assert.equal(parseWholeNumber("1,200"), 1200);
   assert.equal(parseWholeNumber(" "), null);

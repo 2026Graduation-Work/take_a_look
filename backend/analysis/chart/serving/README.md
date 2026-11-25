@@ -6,4 +6,4 @@
 
 pack은 모델·피처 순서·클래스·과거 사례·달력·공통 처리 설정·구현 해시·동봉된 builder 원본을 검사한다. 불일치하면 수집·추론·발행 전에 중단한다. 공개 JSON과 Supabase 테이블·view·RPC 계약은 변경하지 않았다.
 
-실행과 되돌리기는 [OPERATIONS.md](OPERATIONS.md), 해석 제한은 [품질 문서](../docs/DATA_QUALITY.md), 로컬 전환 근거는 [검증 기록](../docs/VALIDATION.md)에 있다.
+실행과 되돌리기는 [OPERATIONS.md](OPERATIONS.md), 해석 제한은 [품질 제한](../docs/RESULTS.md#품질-제한)에 있다.

@@ -234,8 +234,7 @@ function validateDeltaConsistency(
   }
 }
 
-// 결론 판정 로직은 없다: 지금 결과(B − A가 AUC 0.001 미만, 수익률은 오히려 낮음)에 맞춘 '의미 있는 개선 아님' 문장이다.
-// 수치는 화면이 comparison_deltas에서 두 줄로 따로 읽는다.
+// 판정 로직 없이 지금 결과(B − A가 AUC 0.001 미만, 수익률은 오히려 낮음)에 맞춘 고정 문장이다.
 const NO_MEANINGFUL_GAIN = "시장 분위기 지표를 더해도 거의 달라지지 않았어요.";
 
 function validateExperiment(value: unknown): PerformanceExperiment {

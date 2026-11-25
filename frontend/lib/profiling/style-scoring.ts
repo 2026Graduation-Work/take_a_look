@@ -1,20 +1,8 @@
-// 8축 스코어링·신뢰도·모순 검출·v1.0 필드 축약. 채점 로직의 정본이다.
-// (backend/profiling/survey/style_scoring.py를 옮겼다. style-golden-cases.json이 그 결과를 고정한다.)
-//
-// 전부 결정론이다. 같은 응답이면 항상 같은 값이 나오고 LLM을 쓰지 않는다.
-// 산출물은 소프트 틸트이며 종목 제거에 쓰지 않는다.
-//
-// 축 점수: 응답을 축 방향 점수(-2~+2)로 옮기고 가중평균을 극단값 2로 나눠 ratio(-1~+1)를 얻는다.
-//   - 리커트: (응답값 - 3) × direction
-//   - 시나리오: 고른 선택지의 scores[축] (선택지가 그 축을 적지 않았으면 0)
-// 신뢰도: 일관성 × 응답률. 일관성은 축 안 응답들의 가중 평균절대편차를 2로 나눠 뒤집는다.
-
 import type { StyleAxes, StyleAxis, StyleAxisId } from "../types.ts";
 import bank from "./style-questions.json" with { type: "json" };
 
 export type AssessmentMode = StyleAxes["assessment_mode"];
-// short(16문항)는 온보딩용 문항 선택일 뿐 채점 규칙은 같다. 스키마 v1.x의 assessment_mode enum이
-// quick·detailed로 고정(freeze)돼 있어, 저장할 때는 quick으로 기록한다. 축별 question_count(2)로 구분된다.
+// 스키마 v1.x의 assessment_mode enum이 quick·detailed로 고정돼 short도 quick으로 저장한다. 축별 question_count(2)로 구분된다.
 export type SurveyMode = "short" | AssessmentMode;
 
 interface LikertQuestion {
@@ -76,7 +64,7 @@ function axesOf(question: StyleQuestion): StyleAxisId[] {
   return [...new Set(question.options.flatMap(({ scores }) => Object.keys(scores) as StyleAxisId[]))];
 }
 
-// 응답을 축 방향 점수로. 미응답이면 null, 계약 위반이면 에러.
+// 미응답이면 null, 계약 위반이면 에러.
 function orientedScores(
   question: StyleQuestion,
   raw: number | string | undefined,
@@ -97,7 +85,6 @@ export function scoreStyleAxes(answers: StyleAnswers, mode: SurveyMode): StyleAx
   return scoreWithQuestions(answers, mode === "detailed" ? "detailed" : "quick", questionsForMode(mode));
 }
 
-// 문항 목록을 직접 받는 채점기. 시나리오형 문항이 은행에 들어오기 전에 테스트가 쓴다.
 export function scoreWithQuestions(
   answers: StyleAnswers,
   mode: AssessmentMode,
@@ -155,7 +142,6 @@ function axisResult(
   };
 }
 
-// 프리셋(축 방향 강도 -2~+2)을 리커트 응답으로 조립한다. 역채점 문항에는 반대 부호가 들어간다.
 export function answersFromPattern(
   pattern: Partial<Record<StyleAxisId, number>>,
   mode: SurveyMode,
@@ -168,8 +154,6 @@ export function answersFromPattern(
   return answers;
 }
 
-// ── 모순 검출 ─────────────────────────────────────────────────────────
-// observation은 관측 서술만 담는다. 행동 제안·권유 문구를 넣지 않는다.
 export interface Contradiction {
   id: string;
   axes: StyleAxisId[];
@@ -225,7 +209,6 @@ const CONTRADICTION_RULES: readonly (Contradiction & {
   },
 ];
 
-// 화면 문장: 관측 + 확인 질문 한 줄(해요체). 예전에 저장된 결과도 지금 문장으로 보이게 id로 다시 찾는다.
 export function contradictionText(item: Pick<Contradiction, "id" | "observation" | "follow_up_question">): string {
   const rule = CONTRADICTION_RULES.find(({ id }) => id === item.id) ?? item;
   return `${rule.observation} ${rule.follow_up_question}`;
@@ -249,7 +232,6 @@ export function detectContradictions(styleAxes: StyleAxes): Contradiction[] {
   }));
 }
 
-// ── v1.0 필드 축약 (schema style_axes 설명과 같은 규칙) ────────────────
 const LEGACY_RATIO_FIELDS = [
   ["risk_tolerance", "loss_tolerance"],
   ["fomo_index", "urgency"],
@@ -277,7 +259,6 @@ export function confidencePerAxis(styleAxes: StyleAxes): Record<string, number> 
   return Object.fromEntries(LEGACY_RATIO_FIELDS.map(([field, axis]) => [field, confidence(axis)]));
 }
 
-// turnover ratio → 투자 기간(일). 회전율이 낮을수록 길다.
 export function daysForTurnover(ratio: number): number {
   if (ratio < -1 || ratio > 1) throw new Error("turnover ratio는 -1~1이어야 해요.");
   const rule = TURNOVER_DAY_RULES.find(({ max_ratio }) => ratio < max_ratio);

@@ -1,20 +1,15 @@
-"""뉴스 신선도(staleness) 측정 — 결정론·화이트박스.
+"""뉴스 신선도(staleness) 측정.
 
 Tetlock (2011), "All the News That's Fit to Reprint: Do Investors React to Stale
 Information?", Review of Financial Studies 24(5), 1481-1512.
 
-구성을 그대로 따른다: staleness = 해당 종목의 '직전 10건' 기사와의 단어 중복률.
-Tetlock의 발견:
-- 주가는 오래된(stale) 뉴스에 덜 반응한다.
-- 그런데 stale news 당일 수익률은 다음 주 수익률을 음(-)으로 예측한다 (반전).
-- 개인투자자가 stale news에 더 공격적으로 거래하며, 개인 비중이 높은 종목일수록
-  반전이 크다 → 개인의 과잉반응이 일시적 가격 왜곡을 만든다.
+staleness = 해당 종목의 '직전 10건' 기사와의 단어 중복률. Tetlock은 stale news 당일
+수익률이 다음 주 수익률을 음(-)으로 예측하며(반전), 개인 비중이 높은 종목일수록 반전이
+크다는 것을 보였다.
 
-행동재무학 기반 심리 지수라는 프로젝트 논지에 직결되는 피처다.
-
-임베딩·벡터DB를 쓰지 않는 이유: 비교 대상이 '직전 10건'이라 후보군이 애초에 작고,
-단어 중복률은 비전공자에게 두 기사를 나란히 보여주며 "이 뉴스의 82%가 3일 전
-기사와 겹칩니다"라고 설명할 수 있다(화이트박스). 임베딩 코사인 0.87로는 못 한다.
+임베딩을 쓰지 않는 이유: 비교 대상이 '직전 10건'이라 후보군이 애초에 작고, 단어 중복률은
+"이 뉴스의 82%가 3일 전 기사와 겹칩니다"처럼 비전공자에게 설명할 수 있다.
+임베딩 코사인 0.87로는 못 한다.
 """
 from __future__ import annotations
 
@@ -25,7 +20,6 @@ _TOKEN = re.compile(r"[가-힣]{2,}|[A-Za-z]{2,}|\d+")
 
 
 def tokenize(text: str) -> set[str]:
-    """중복률 계산용 토큰 집합."""
     return set(_TOKEN.findall(text or ""))
 
 
@@ -68,10 +62,10 @@ def staleness_score(current: list[str], previous: list[str]) -> float:
 
 
 def pairwise_max_similarity(current: list[str], previous: list[str]) -> float:
-    """가장 유사한 개별 기사와의 Jaccard 최대값 — '이 뉴스는 재탕인가' 직접 판정용.
+    """가장 유사한 개별 기사와의 Jaccard 최대값.
 
     staleness_score가 어휘 전체 대비 평균이라면 이건 '단 한 건이라도 거의 같은
-    기사가 있었나'를 본다. 근거 제시(화이트박스)에 쓰기 좋다.
+    기사가 있었나'를 본다.
     """
     if not current or not previous:
         return 0.0

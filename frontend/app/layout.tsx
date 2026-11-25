@@ -11,7 +11,7 @@ const pretendard = localFont({
   variable: "--font-pretendard",
 });
 
-// theme-color = 페이지 바탕(--color-page). 모바일 브라우저 주소창 색이 화면과 이어진다(Vercel Web Interface Guidelines)
+// 모바일 브라우저 주소창 색을 페이지 바탕(--color-page)과 맞춘다
 export const viewport: Viewport = { themeColor: "#f5f5f7" };
 
 export const metadata: Metadata = {

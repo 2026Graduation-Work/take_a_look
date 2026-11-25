@@ -1,4 +1,3 @@
-"""A flow pack must match its actual training inputs, including missing values."""
 import json
 from pathlib import Path
 
@@ -11,8 +10,8 @@ from shared.io import atomic_json, sha256_file
 from shared.settings import PREPROCESSING, PRICE_BASIS, processing_contract
 
 
-@pytest.mark.parametrize("tampered", [False, True])
-def test_flow_training_values_and_missingness_are_verified(tmp_path, monkeypatch, tampered):
+@pytest.mark.parametrize("case_name", ["current_contract", "tampered_flow", "stale_contract"])
+def test_flow_training_values_and_missingness_are_verified(tmp_path, monkeypatch, case_name):
     from experiments.export import refresh_pack
     fixture = Path(__file__).parents[3] / "shared/tests/fixtures/v3-golden.json"
     case = next(c for c in json.loads(fixture.read_text())["cases"] if c["name"] == "flow_missing")
@@ -26,15 +25,18 @@ def test_flow_training_values_and_missingness_are_verified(tmp_path, monkeypatch
     raw.to_parquet(tmp_path / "raw/005930.parquet", index=False)
     panel.drop(columns=list(FLOW_FEATURES)).to_parquet(tmp_path / "processed/005930.parquet", index=False)
     trained = panel.copy()
-    if tampered:
+    if case_name == "tampered_flow":
         missing = trained.flow_foreign_20.isna()
         trained.loc[missing, "flow_foreign_20"] = 0.
     trained.to_parquet(store / "005930.parquet", index=False)
     raw_hashes = {"005930.parquet": sha256_file(tmp_path / "raw/005930.parquet")}
     atomic_json(tmp_path / "dataset_manifest.json", {"contract_version": 3, "prices_complete": True,
                 "price_basis": PRICE_BASIS, "raw_files": raw_hashes})
+    contract = processing_contract()
+    if case_name == "stale_contract":
+        contract["sha256"] = "0" * 64
     atomic_json(tmp_path / "processed_manifest.json", {"settings": PREPROCESSING, "raw_files": raw_hashes,
-                "processing_contract": processing_contract(),
+                "processing_contract": contract,
                 "files": {"005930.parquet": sha256_file(tmp_path / "processed/005930.parquet")}})
     atomic_json(tmp_path / "calendar.json", {"trading_days": raw.Date.astype(str).tolist()})
     pd.DataFrame({"Code": ["005930"], "ListingDate": [raw.Date.min()], "DelistingDate": [pd.NaT]}).to_csv(
@@ -42,7 +44,10 @@ def test_flow_training_values_and_missingness_are_verified(tmp_path, monkeypatch
     # The golden fixture uses a synthetic calendar; real exports audit exchange sessions.
     monkeypatch.setattr(refresh_pack, "verify_calendar_schedule", lambda calendar: None)
     names = list(BASE_FEATURES) + list(FLOW_FEATURES)
-    if tampered:
+    if case_name == "stale_contract":
+        with pytest.raises(ValueError, match="processing contract mismatch"):
+            verify_inputs(tmp_path, names, store)
+    elif case_name == "tampered_flow":
         with pytest.raises(ValueError, match="flow feature mismatch"):
             verify_inputs(tmp_path, names, store)
     else:

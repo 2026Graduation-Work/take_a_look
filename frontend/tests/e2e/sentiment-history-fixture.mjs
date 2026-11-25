@@ -1,4 +1,3 @@
-// Opt-in server-side Supabase fixture for full-period chart integration tests.
 const START = Date.parse('2016-01-01T00:00:00Z');
 const END = Date.parse('2026-10-04T00:00:00Z');
 const daily = Array.from({ length: (END - START) / 86_400_000 + 1 }, (_, index) => ({

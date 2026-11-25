@@ -4,7 +4,6 @@ import { toHoldingsStep } from "./demo-steps";
 test("수량 소수점은 그대로 보이고 넣을 때 막힌다, 전각 숫자는 읽는다", async ({ page }) => {
   await toHoldingsStep(page);
   await page.getByRole("button", { name: "현대차 삭제" }).click();
-  // 검색에서 고르면(Enter) 바로 목록 맨 위에 행이 생기고 수량 칸으로 간다
   await page.getByLabel("종목 검색").fill("현대차");
   await page.getByLabel("종목 검색").press("Enter");
   const quantity = page.getByLabel("현대차 수량");
@@ -37,7 +36,6 @@ test("수량과 평균 매입가는 입력하는 동안 천 단위 쉼표를 보
   await price.fill("");
   await price.pressSequentially("1234567");
   await expect(price).toHaveValue("1,234,567");
-  // 붙여넣은 값도 같게
   await price.fill("71,200");
   await expect(price).toHaveValue("71,200");
   await page.getByLabel("삼성전자 수량").fill("12000");

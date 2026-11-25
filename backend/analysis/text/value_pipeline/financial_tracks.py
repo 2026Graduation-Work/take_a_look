@@ -1,9 +1,4 @@
-"""DART 재무 결과를 Supabase 적재에 가까운 행 중심 JSON으로 정규화한다.
-
-테이블명이나 SQL 타입은 팀 합의 전까지 고정하지 않는다. 대신 스냅샷 식별자와
-metric upsert 키(ticker, as_of, fiscal_year, metric_key)를 JSON에 명시해 둔다.
-원시 DART 계정은 출력하지 않고 화면에서 사용하는 6개 지표와 계산 근거만 남긴다.
-"""
+"""원시 DART 계정은 출력하지 않고 화면에서 사용하는 6개 지표와 계산 근거만 남긴다."""
 from __future__ import annotations
 
 import json
@@ -88,7 +83,6 @@ def build_financial_track(
     filed_at: str,
     validation_errors: list[str],
 ) -> dict[str, Any]:
-    """표준화 재무 dict를 DB upsert 가능한 재무 스냅샷으로 변환한다."""
     if filed_at > as_of:
         raise ValueError(f"기준일 이후 공시는 사용할 수 없습니다: {filed_at} > {as_of}")
     fiscal_year = int(raw_financials["fiscal_year"])
@@ -144,7 +138,6 @@ def build_financial_track(
 
 
 def write_financial_track(output: dict[str, Any], path: Path) -> None:
-    """재무 스냅샷을 임시 파일 후 교체 방식으로 저장한다."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f"{path.suffix}.tmp")
     temporary.write_text(

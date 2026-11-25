@@ -1,7 +1,6 @@
 "use client";
 
-// 되돌리기 어려운 행동의 확인 창(DESIGN.md 0-1 ④). window.confirm과 달리 주 버튼에 실제 행동을 쓴다.
-// 네이티브 dialog라 포커스 가두기·Esc 닫기를 브라우저가 맡는다(holdings-editor.tsx 종목 추가 시트와 같은 방식).
+// 네이티브 dialog라 포커스 가두기·Esc 닫기를 브라우저가 맡는다.
 
 import { useId, useRef, type ReactNode } from "react";
 import StepNav from "./step-nav";

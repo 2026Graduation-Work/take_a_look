@@ -1,5 +1,3 @@
-"""Observed return histogram from matching walk-forward scores and Sigma."""
-
 import math
 
 import numpy as np

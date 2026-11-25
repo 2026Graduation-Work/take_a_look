@@ -3,8 +3,6 @@
 - 재무는 '기간 종료일' 기준 point-in-time (collect_financials(period_end) 재사용)
 - 뉴스는 빅카인즈 엑셀 전용, 관련성 필터(규칙) 후 기사 단위 가중 집계
 - LLM은 기간 경로에서 아예 호출되지 않는다 — 점수·이벤트 모두 100% 결정론
-
-검증 기준 전문: backend/analysis/text/VALUE_PIPELINE_VALIDATION.md
 """
 from __future__ import annotations
 
@@ -93,7 +91,6 @@ def _patch_sources(
     return seen
 
 
-# ── 기간 파싱 ──────────────────────────────────────────────────────
 def test_parse_period_month_year_and_leap() -> None:
     assert period_mod.parse_period("2022") == ("2022-01-01", "2022-12-31")
     assert period_mod.parse_period("2022-01") == ("2022-01-01", "2022-01-31")
@@ -103,7 +100,6 @@ def test_parse_period_month_year_and_leap() -> None:
             period_mod.parse_period(bad)
 
 
-# ── 재무: 기간 종료일 기준 point-in-time ───────────────────────────
 def test_period_financials_use_period_end(monkeypatch: pytest.MonkeyPatch) -> None:
     """재무 수집은 기간 종료일로 호출된다 → look-ahead 방지가 그대로 적용된다."""
     seen = _patch_sources(monkeypatch, {}, _fin())
@@ -126,7 +122,6 @@ def test_period_lookahead_fiscal_year_fails_validation(
     assert any("룩어헤드" in e for e in out["validation"]["errors"])
 
 
-# ── 뉴스: 관련성 필터 + 기사 단위 가중 집계 ────────────────────────
 def _june_news() -> dict[str, list[dict]]:
     return {
         "2022-06-01": [
@@ -193,9 +188,8 @@ def test_period_staleness_rolls_forward_within_period(
     assert by_date["2022-06-02"]["staleness"] == 1.0  # 전날 기사와 완전 중복
 
 
-# ── 종합·검증 ──────────────────────────────────────────────────────
 def test_period_row_is_self_auditing(monkeypatch: pytest.MonkeyPatch) -> None:
-    """행 하나만 보고 composite·signal을 재계산할 수 있어야 한다(화이트박스)."""
+    """행 하나만 보고 composite·signal을 재계산할 수 있어야 한다."""
     _patch_sources(monkeypatch, _june_news(), _fin())
     out = period_mod.run_period_pipeline("005930", "2022-06", "삼성전자")
 
@@ -233,7 +227,7 @@ def test_period_partial_coverage_is_excluded_not_zero_filled(
     """워크북이 일부 날짜만 덮으면 비관측일을 기사 0건으로 채우지 않고 행을 제외한다.
 
     0으로 채우면 30일 중 10일 관측·5일 기사 → 비율 5/30으로 과소평가되어
-    수집 누락이 '조용한 종목'처럼 학습된다 (PR #67 리뷰 0Cracker 3).
+    수집 누락이 '조용한 종목'처럼 학습된다.
     """
     covered = {f"2022-06-{d:02d}" for d in range(1, 11)}  # 30일 중 10일만
     _patch_sources(monkeypatch, _june_news(), _fin(), covered=covered)
@@ -254,7 +248,6 @@ def test_period_pipeline_is_deterministic(monkeypatch: pytest.MonkeyPatch) -> No
     assert a == b  # 결정론(같은 입력 → 같은 출력)
 
 
-# ── 출력 계약 ──────────────────────────────────────────────────────
 _EXPECTED_FIELDS = {
     "ticker", "period", "period_start", "period_end", "company_name",
     "news_sentiment", "news_impact_score", "news_sentiment_std", "news_staleness",
@@ -278,7 +271,6 @@ def test_impact_score_shared_rule() -> None:
     assert agents_mod.impact_score(12, 1.0) == 10  # 상한
 
 
-# ── 학습용 피처 추출 (features.py — 피처 선택 규칙의 SSOT) ─────────
 def test_feature_extraction_drops_derived_and_text_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -297,7 +289,6 @@ def test_feature_extraction_drops_derived_and_text_fields(
         "article_count", "article_count_raw",
     ):
         assert banned not in row
-    # 값 검증: 파생 비율·평탄화된 재무 지표
     assert row["days_with_articles_ratio"] == pytest.approx(2 / 30)
     assert row["avg_daily_articles"] == pytest.approx(3 / 30, abs=1e-4)
     assert row["financial_age_months"] == 6

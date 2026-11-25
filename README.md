@@ -1,6 +1,6 @@
 # Take a Look
 
-**초보 투자자를 위한 판단 근거 서비스**
+**초보 투자자를 위한 의사결정 지원 서비스**
 
 행동재무학 기반 투자 판단 보조 플랫폼 · 성균관대 소프트웨어학과 2026 졸업작품.
 투자 성향을 진단해 근거를 보여 주는 순서를 사람마다 다르게 하고, 주가 예측 모델은 여러 근거 중 하나로만 씁니다.
@@ -9,7 +9,7 @@
 [![Python CI](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml/badge.svg)](https://github.com/2026Graduation-Work/take_a_look/actions/workflows/python-ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> **v1.1.0 최종 제출본(2026-10-27 코드 동결).** 지금 main에는 치명 버그 수정과 문서만 들어가고 v1.1.x로 올립니다. 이어서 할 개선과 연구는 [Co-Deep 2026-2](https://github.com/2026Graduation-Work/take_a_look/milestone/1) 마일스톤에 있습니다.
+> **졸업작품 제출본은 태그 [`v1.1.0`](https://github.com/2026Graduation-Work/take_a_look/releases/tag/v1.1.0)(2026-10-27, `3d988e0`)입니다.** main은 그 뒤로 개선과 연구를 이어 갑니다([Co-Deep 2026-2](https://github.com/2026Graduation-Work/take_a_look/milestone/1)).
 
 **라이브 데모 → https://takealook-skku.vercel.app** (가입 없이 "데모로 둘러보기"로 모든 화면을 볼 수 있습니다. 처음이라면 [이용 안내](https://takealook-skku.vercel.app/guide)부터 보세요. 기존 주소 https://stock-prediction-v2-chi.vercel.app 도 그대로 동작합니다)
 

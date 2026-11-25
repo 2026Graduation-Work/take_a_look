@@ -1,13 +1,5 @@
-// BIT(Behavioral Investor Type) 분류. 순수 함수, 외부 의존성 없음.
-//
-// Pompian 행동알파 프로세스 1~2단계를 8축에 적용한 것이며,
-// 원전의 면담 기반 판별을 설문 축으로 대체한 근사다.
-//   능동성   = turnover.ratio
-//   위험감수 = (loss_tolerance.ratio + concentration.ratio) / 2
-//   composite = (능동성 + 위험감수) / 2
-// composite를 1차원 스펙트럼 PRESERVER → FOLLOWER → INDEPENDENT → ACCUMULATOR 4구간으로 나눈다.
+// Pompian 행동알파 프로세스 1~2단계를 8축에 적용한 근사다. 원전의 면담 기반 판별을 설문 축으로 대체했다.
 // 스펙트럼 양 끝은 감정적 편향, 가운데 둘은 인지적 편향이 지배적이다(biasMode).
-// 결과는 소프트 틸트다. 카드 순서와 넛지에만 쓰고 종목을 제거하지 않는다.
 
 import type { StyleAxes, StyleAxisId } from "../types";
 
@@ -15,7 +7,6 @@ export type BitType = "PRESERVER" | "FOLLOWER" | "INDEPENDENT" | "ACCUMULATOR";
 export type BiasMode = "emotional" | "cognitive";
 export type CardId = "nudge" | "risk" | "financial" | "contribution" | "supply" | "sentiment";
 
-// 회의에서 조정할 초기값. 첫 칸은 항상 넛지(사각지대 우선).
 export const CARD_ORDER: Record<BitType, readonly CardId[]> = {
   PRESERVER: ["nudge", "risk", "financial", "contribution", "supply", "sentiment"],
   FOLLOWER: ["nudge", "supply", "sentiment", "risk", "contribution", "financial"],
@@ -25,7 +16,6 @@ export const CARD_ORDER: Record<BitType, readonly CardId[]> = {
 
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 
-// 유형 분류에 쓰지 않는 축. "주의할 편향 프로필"로 따로 돌려준다.
 export const BIAS_PROFILE_AXES: readonly StyleAxisId[] = [
   "market_participation",
   "rule_adherence",
@@ -40,8 +30,8 @@ export interface BitResult {
   activeness: number;
   riskTaking: number;
   composite: number;
-  confidence: number; // turnover·loss_tolerance·concentration confidence 평균
-  lowConfidence: boolean; // true면 화면에서 유형명을 단정하지 않는다
+  confidence: number;
+  lowConfidence: boolean;
   ratios: Record<StyleAxisId, number>;
   biasProfile: { axisId: StyleAxisId; ratio: number; confidence: number }[];
   cardOrder: readonly CardId[];
@@ -91,7 +81,7 @@ export function classifyBit(styleAxes: StyleAxes): BitResult {
   };
 }
 
-// 화면 표시 이름. 금융회사 투자자 정보 확인서의 5단계 등급명(안정형~공격투자형)과 겹치지 않게 짓는다.
+// 금융회사 투자자 정보 확인서의 5단계 등급명(안정형~공격투자형)과 겹치지 않게 짓는다.
 export const BIT_LABEL: Record<BitType, string> = {
   PRESERVER: "자산 보존형",
   FOLLOWER: "추종형",
@@ -99,7 +89,6 @@ export const BIT_LABEL: Record<BitType, string> = {
   ACCUMULATOR: "적극 축적형",
 };
 
-// 대시보드 성향 줄의 "놓치기 쉬운 것"(성우 개선 포인트 2). 유형별 고정 문구 4개, 종목을 거르거나 순서를 바꾸지 않는다.
 export const BIT_BLIND_SPOT: Record<BitType, string> = {
   PRESERVER: "떨어진 종목을 오래 들고 있느라 회사 상황이 바뀐 걸 놓치기 쉬워요.",
   FOLLOWER: "많이들 산다는 이유만으로 근거 확인을 건너뛰기 쉬워요.",
@@ -116,8 +105,6 @@ export const BIT_SUMMARY: Record<BitType, string> = {
 
 export const BIT_TYPES: readonly BitType[] = ["PRESERVER", "FOLLOWER", "INDEPENDENT", "ACCUMULATOR"];
 
-// "다른 성향으로 보기" 프리셋. 분류 3축(turnover·loss_tolerance·concentration)을 각 구간의
-// 한가운데 값으로 두고 나머지 축은 내 응답을 그대로 둔다. 화면 state에만 쓰고 저장하지 않는다.
 const PRESET_RATIO: Record<BitType, number> = {
   PRESERVER: -0.75,
   FOLLOWER: -0.25,

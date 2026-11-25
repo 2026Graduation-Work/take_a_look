@@ -1,10 +1,3 @@
-"""고정 universe의 processed Parquet을 Drive 전달용으로 검증하고 기록한다.
-
-H5/H20 전용 라벨 파일을 새로 만들지 않는다. 기존 종목별 processed Parquet이
-정본이며, 학습 시 ``train_src.loaders``가 실험 config의 dynamic-sigma 규칙으로
-``Y_Label``을 다시 계산한다.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -202,7 +195,6 @@ def prepare_handoff_package(
     dataset_id: str = "chart_processed_holdout2025_v1",
     archive_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """고정 universe를 검증하고 manifest/checksum 및 선택적 archive를 만든다."""
     source_dir = Path(processed_dir).resolve()
     source_universe = Path(universe_file).resolve()
     destination = Path(output_dir).resolve()

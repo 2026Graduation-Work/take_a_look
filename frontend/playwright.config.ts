@@ -33,7 +33,6 @@ export default defineConfig({
       url: "http://localhost:3101/login",
       reuseExistingServer: false,
       timeout: 120_000,
-      // 계정 화면 e2e용 가짜 Supabase 주소(위 stub + tests/e2e/supabase-mock.ts). CI는 빌드 때 같은 값을 넣는다.
       env: {
         NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-anon-key",

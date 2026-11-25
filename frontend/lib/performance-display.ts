@@ -36,7 +36,6 @@ export interface MetricDefinition {
 }
 
 export const AUC_ABILITY = "상승 종목을 위에 세우는 능력";
-// 지도교수님 면담(10/19): AUC를 한눈에 읽게. 짝 비교로 설명하고 값 옆에 '100쌍 중 N쌍'을 둔다
 export const AUC_DEFINITION = "상승한 종목과 상승하지 않은 종목을 하나씩 짝지었을 때, 상승한 종목에 더 높은 점수를 준 비율이에요. 0.5면 무작위로 줄 세운 것과 같아요.";
 export const aucPairs = (value: number | null) => (value === null || !Number.isFinite(value) ? null : `100쌍 중 ${(value * 100).toFixed(1)}쌍`);
 
@@ -98,14 +97,11 @@ export const METRICS: MetricDefinition[] = [
   },
 ];
 
-// 실험 런 id(stable, aggressive)는 데이터 계약 그대로 두고 화면에는 기간 이름만(대시보드 기간 전환과 같은 말)
 export const PROFILE_LABEL: Record<ComparisonProfile, string> = {
   stable: "4주",
   aggressive: "1주",
 };
 
-
-// 결론 줄의 AUC 차이: 0.001 아래 차이가 보이게 소수 넷째 자리
 export function formatAucDelta(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "미산출";
   return `${value > 0 ? "+" : ""}${value.toFixed(4)}`;

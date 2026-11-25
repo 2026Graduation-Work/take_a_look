@@ -3,8 +3,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 
-// 시장 흔들림 "자세히": 트리거 바로 아래에 붙는 설명.
-// 기본은 클릭으로 열고 다시 클릭/바깥 클릭/Esc로 닫는다. 피처 설명만 hover를 켜고, 포털로 이동하는 동안 닫힘을 잠시 늦춘다.
 // 시장 막대가 가로 스크롤(overflow)이라 absolute는 잘린다 → 열 때 트리거 위치로 fixed 좌표를 계산한다.
 // 헤더의 backdrop-filter가 fixed의 기준 상자가 되므로 설명은 body로 portal한다.
 export default function MarketDetail({
@@ -60,7 +58,7 @@ export default function MarketDetail({
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setOpen(false);
-      trigger.current?.focus(); // 닫은 뒤 키보드 위치를 트리거로
+      trigger.current?.focus();
     };
     place();
     window.addEventListener("resize", place);
@@ -84,7 +82,6 @@ export default function MarketDetail({
         aria-controls={id}
         onClick={() => {
           cancelClose();
-          // 포인터 진입 직후 클릭해도 호버로 연 설명이 곧바로 닫히지 않게 한다.
           const keepOpen = hover && openedByHover.current;
           openedByHover.current = false;
           setOpen(current => keepOpen || !current);

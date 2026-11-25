@@ -83,7 +83,7 @@ def test_historical_test_rejects_remote_supabase(monkeypatch, tmp_path):
 
 
 def test_daily_universe_drops_codes_outside_verified_listing(monkeypatch, verified_listing_provider, capsys):
-    # 코스피 목록에 리츠·인프라(상장일 확인 목록 '주권' 밖)가 섞여도 유니버스는 확인 목록 안에서만 만든다(#296)
+    # 코스피 목록에 리츠·인프라(상장일 확인 목록 '주권' 밖)가 섞여도 유니버스는 확인 목록 안에서만 만든다
     from shared.data.providers import krx as stock
 
     reits = ["088980", "395400", "0030R0"]

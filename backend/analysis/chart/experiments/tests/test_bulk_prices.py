@@ -1,5 +1,3 @@
-"""Daily cache resume and raw adapter parity, without contacting providers."""
-
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -39,7 +37,6 @@ def test_bulk_cache_resume_corruption_and_missing_stock(tmp_path, monkeypatch):
     assert calls == ["20240103", "20240104"]
     assert len(bulk_prices.stock_raw(grouped, codes[0], days)) == 3
     assert bulk_prices.stock_raw(grouped, codes[-1], days) is None
-    # A wrong-date cache with an otherwise valid hash must be refetched.
     path = tmp_path / "price_day_cache/2024-01-02.parquet"
     damaged = pd.read_parquet(path).assign(Date=days[-1])
     atomic_parquet(path, damaged)
@@ -99,7 +96,6 @@ def test_legacy_days_enriched_once_without_overwriting_cache(tmp_path, monkeypat
     calls.clear()
     bulk_prices.prepare_bulk_prices(tmp_path, metadata, calendar, "full", {}, source)
     assert calls == []
-    # Revisions cannot be silently adopted as supplementary OHLC.
     for path in (tmp_path / "price_ohlc_day_cache").glob("*.parquet"):
         changed = pd.read_parquet(path)
         changed.loc[0, "RawClose"] += 1

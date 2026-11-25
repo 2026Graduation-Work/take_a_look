@@ -17,7 +17,6 @@ FilingLoader = Callable[[str, int, str], dict[str, Any]]
 
 
 def _fetch_filing_metadata(ticker: str, fiscal_year: int, as_of: str) -> dict[str, Any]:
-    """사업보고서 접수번호·공시일과 연결/별도 구분을 확인한다."""
     if not SETTINGS.has_dart:
         raise RuntimeError("DART_API_KEY가 없습니다.")
     dart = collectors.OpenDartReader(SETTINGS.dart_api_key)
@@ -77,7 +76,6 @@ def run_financial_cycle(
     collector: Collector = collectors.collect_financials,
     filing_loader: FilingLoader = _fetch_filing_metadata,
 ) -> dict[str, dict[str, Any]]:
-    """대상 종목의 DART 스냅샷을 같은 기준일로 생성한다."""
     if not targets:
         raise ValueError("최소 하나의 대상 종목이 필요합니다.")
     dt.date.fromisoformat(as_of)

@@ -1,4 +1,3 @@
-"""Config-driven local preprocessing. Warmup and price paths are preserved."""
 import argparse
 import sys
 from pathlib import Path
@@ -15,7 +14,6 @@ from shared.features.builder import normalize_trading_halts as normalize_trading
 
 
 def _load_trading_days_for_files(raw_files: list[str]) -> set:
-    """원본 파일 전체 기간을 덮는 KRX 캘린더를 한 번만 조회합니다."""
     min_date = None
     max_date = None
     for file_path in raw_files:
@@ -38,7 +36,6 @@ def _load_trading_days_for_files(raw_files: list[str]) -> set:
 
 
 def _processed_has_actual_vwap(file_path: str) -> bool:
-    """구형 HLC3 기반 processed 파일과 실제 VWAP 기반 파일을 구분합니다."""
     try:
         pd.read_parquet(file_path, columns=["VWAP"])
         return True

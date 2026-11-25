@@ -1,4 +1,3 @@
-"""뉴스 심리지수 2-track 실행 진입점."""
 from __future__ import annotations
 
 import argparse
@@ -102,7 +101,6 @@ def run_historical_cycle(
     require_finbert: bool = False,
     inference_batch_size: int = 16,
 ) -> dict[str, Any]:
-    """BigKinds 워크북에서 기간 기사를 읽어 과거 트랙을 만든다."""
     start = date.fromisoformat(date_start)
     end = date.fromisoformat(date_end)
     if start > end:

@@ -43,10 +43,6 @@ import {
   subscribeToSavedProfile,
 } from "@/lib/save-profile";
 
-// 섹션 제목 줄: 제목 + 오른쪽 컨트롤(그것이 바꾸는 내용의 제목 줄, DESIGN.md '읽는 순서') + 아래 13px 한 줄.
-// 두 열의 제목 줄 높이를 같게(min-h-11) 두어 같은 높이에서 시작한다
-// 제목 줄: 제목 왼쪽, [설명][컨트롤] 오른쪽. 390처럼 한 줄에 안 들어가면 [설명][컨트롤]이 제목 아래 둘째 줄로 가고
-// (컨트롤은 오른쪽), 설명이 없어도 컨트롤이 그 줄 높이를 잡아 아래 내용이 흔들리지 않는다
 function SectionHead({ title, control }: { title: string; control?: ReactNode }) {
   return (
     <div className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-1">
@@ -117,7 +113,7 @@ export default function Dashboard(initialData: DashboardData) {
   } = currentData;
   const holdingAlerts = holdingAlertsOutside(rawHoldingAlerts, stocks);
   const { watchlist } = useStockMarks();
-  const liveMarket = useMarketStatus(marketStatus); // 시장 바와 같은 최신 값
+  const liveMarket = useMarketStatus(marketStatus);
   const loadingAuthenticatedData =
     onboardingState.mode === "supabase" && !authenticatedData && !dataError;
   const savedSnapshot = useSyncExternalStore(
@@ -132,9 +128,7 @@ export default function Dashboard(initialData: DashboardData) {
     getServerHoldingsSnapshot,
   );
   const savedHoldings = parseSavedHoldings(savedHoldingsSnapshot);
-  // 보유·관심 종목의 최신 종가·신호(최신 게시 차트). 오늘 목록 종목도 같은 요청으로 읽어 출처 줄에 기준일을 붙인다.
   const savedCodes = [...(savedHoldings ?? holdings), ...watchlist, ...stocks].map(({ code }) => code).join(",");
-  // 신호 기간: 기본 4주, 1주로 바꿔 볼 수 있다. 선택은 이 기기에만 기억(서버 렌더는 4주)
   const [horizon, chooseHorizon] = useSignalHorizon();
   const publicData = isSupabaseConfigured();
   const closeKey = JSON.stringify([savedCodes, horizon, onboardingState.mode, onboardingState.userId, requestVersion]);
@@ -151,12 +145,9 @@ export default function Dashboard(initialData: DashboardData) {
       active = false;
     };
   }, [savedCodes, horizon, closeKey]);
-  // 사용자가 등록한 종목에 오늘 신호를 붙인다. 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값.
-  // 신호가 없는 종목은 중립으로 꾸미지 않고 맵에서 빼고 개수만 알린다 — 없는 판단을 지어내지 않는다.
   const signalByCode = new Map(
     [...holdings, ...stocks, ...rawHoldingAlerts].map((item) => [item.code, item]),
   );
-  // 보유 맵·관심 종목이 같은 신호를 쓴다(#278): 최신 게시 차트(4주 방향)가 먼저, 없으면 기존 값
   const lightFor = (code: string) => publicData ? closes.get(code)?.signal : signalByCode.get(code)?.signalLight;
   const displayHoldings = savedHoldings ?? (publicData ? holdings.map(row => ({ ...row, avgBuyPrice: null })) : null);
   const activeHoldings = displayHoldings
@@ -180,7 +171,6 @@ export default function Dashboard(initialData: DashboardData) {
         ];
       })
     : holdings;
-  // 어제와 달라진 근거: 보유 ∪ 관심 종목
   const changeKey = JSON.stringify([...new Map([...(savedHoldings ?? holdings), ...watchlist].map(({ code, name }) => [code, name]))]);
   const changeRequestKey = JSON.stringify([changeKey, horizon]);
   const [changeResult, setChangeResult] = useState<{ key: string; data: DailyChange[] | null } | null>(null);
@@ -204,7 +194,6 @@ export default function Dashboard(initialData: DashboardData) {
         .map((asset) => AVOIDED_ASSET_LABELS[asset])
         .filter((label): label is string => Boolean(label))
     : avoidedLabels;
-  // 오늘 신호가 강한 종목: 최신 게시 배치 코스피 전 종목의 4주 확신도 순(계정·데모 같은 화면). 회피 항목만 뺀다.
   const avoidedKey = (Object.entries(AVOIDED_ASSET_LABELS) as [RiskFlag, string][])
     .filter(([, label]) => activeAvoidedLabels.includes(label)).map(([flag]) => flag).join(",");
   const strongKey = JSON.stringify([avoidedKey, horizon]);
@@ -235,7 +224,6 @@ export default function Dashboard(initialData: DashboardData) {
     holdingCount,
     strongCount: strongSignals.length,
   });
-  // 요약 문장은 보유 맵 신호의 기준일(최신 게시 차트)을 따른다. 없으면 시장 기준일.
   const summaryAsOf = activeHoldings.map(({ priceAsOf }) => priceAsOf ?? "").sort().at(-1) || liveMarket.date;
 
   function retryAuthenticatedData() {
@@ -281,14 +269,11 @@ export default function Dashboard(initialData: DashboardData) {
           <DashboardLoading />
         ) : (
           <>
-            {/* 읽는 순서(DESIGN.md): 결론(요약) → 나에게 해당하는 것(성향 줄, 내 포트폴리오) → 둘러볼 것(신호가 강한 종목) */}
             <section aria-labelledby="today-summary" className="flex flex-col gap-2 px-1">
-              {/* 기준일은 시장 바에 한 번 — 신호가 2영업일 넘게 밀렸을 때만 여기에도 */}
               {staleLabel(summaryAsOf) && <span className="text-2xs text-muted tabular-nums">{summaryAsOf.replaceAll("-", ".")} 기준</span>}
               <h1 id="today-summary" className="text-3xl font-semibold">
                 {summary}
               </h1>
-              {/* 성향 한 줄: 유형(굵게) + 놓치기 쉬운 것. 누르면 내 투자 성향 */}
               <Link
                 href="/profile"
                 aria-label={`내 투자 성향: ${activeProfile.profileTypeLabel}. 결과 보기`}
@@ -302,11 +287,9 @@ export default function Dashboard(initialData: DashboardData) {
               </Link>
             </section>
 
-            {/* 2단(1024px 이상 8:4): 왼쪽 내 것, 오른쪽 시장 전체. 1단에서는 왼쪽 → 오른쪽 순서 */}
             <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-12 lg:gap-6">
               <section aria-label="내 포트폴리오" className="flex flex-col gap-6 lg:col-span-8">
                 <div className="flex flex-col gap-2">
-                  {/* 기간 전환은 그것이 바꾸는 내용(맵, 요약, 목록)의 제목 줄에. 1주, 4주 오름차순(기본 4주) */}
                   <SectionHead
                     title="내 포트폴리오"
                     control={<>
@@ -379,7 +362,6 @@ export default function Dashboard(initialData: DashboardData) {
                     )}
                   </div>
                 ) : (
-                  // 묶음 제목 없이 한 목록(상승 먼저), 줄 오른쪽에 색 단어 하나(화면 규칙 v2)
                   <div className="group-list">
                     {[...visibleStrong.filter(({ direction }) => direction === "up"), ...visibleStrong.filter(({ direction }) => direction === "down")]
                       .map((signal) => <StrongRow key={signal.code} signal={signal} />)}
@@ -410,7 +392,6 @@ export default function Dashboard(initialData: DashboardData) {
               </section>
             </div>
 
-            {/* 데이터 출처는 모델 성적표(/performance) "데이터 출처"로 옮겼다(10/18). 맨 아래 면책 문구에서 성적표로 간다 */}
           </>
         )}
       </div>
@@ -420,7 +401,6 @@ export default function Dashboard(initialData: DashboardData) {
   );
 }
 
-// 보유·관심 종목에서 직전 대비 바뀐 사실 최대 3줄. 판단 문구 없이 무엇이·어떻게 + 상세 링크.
 function DailyChanges({ changes }: { changes: DailyChange[] }) {
   return (
     <section aria-labelledby="daily-changes" className="flex flex-col gap-2">
@@ -449,7 +429,6 @@ function DailyChanges({ changes }: { changes: DailyChange[] }) {
   );
 }
 
-// 한 줄: 종목명, 코드, 오른쪽 색 단어(상승/하락), 상세로 가는 화살표. 근거는 상세 화면 '모델이 본 이유'에 있다.
 function StrongRow({ signal }: { signal: StrongSignal }) {
   return (
     <Link

@@ -1,5 +1,3 @@
-"""Validate an immutable H5/H20 model pack and download its release archive."""
-
 import json
 import os
 import re

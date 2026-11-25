@@ -31,7 +31,7 @@ def test_past_date_requires_archived_inputs(monkeypatch, tmp_path, replay):
 
 
 def test_delayed_schedule_after_midnight_collects_live(monkeypatch, tmp_path):
-    """#291: 18:47 schedule starting at 01:00 KST must not switch to archive replay."""
+    """18:47 schedule starting at 01:00 KST must not switch to archive replay."""
     class Clock(datetime):
         @classmethod
         def now(cls, tz=None):

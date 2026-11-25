@@ -15,7 +15,6 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   const timeline = page.getByLabel("감성 시점 탐색");
   const tabs = page.getByRole("tablist", { name: "뉴스 분위기 기간" });
   const tick = (text: string) => panel.locator(".recharts-cartesian-axis-tick-value", { hasText: new RegExp(`^${text}$`) });
-  // 일별은 최근 365일 + 오늘 Live를 한 그래프로, 날짜는 그래프 안 축에
   await expect(tick("2025.10.05")).toHaveCount(1);
   await expect(tick("오늘 Live")).toHaveCount(1);
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(1);
@@ -27,7 +26,6 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   const endpoint = points.at(-1)!.split(",").map(Number);
   expect(endpoint[0]).toBeCloseTo(Number(await marker.getAttribute("cx")), 5);
   expect(endpoint[1]).toBeCloseTo(Number(await marker.getAttribute("cy")), 5);
-  // 처음 위치는 오른쪽 끝
   expect(await timeline.evaluate((element) => element.scrollWidth - element.clientWidth - element.scrollLeft)).toBeLessThan(2);
   await expect(page.getByRole("button", { name: "2026.10.04", exact: true })).toHaveCount(0);
 

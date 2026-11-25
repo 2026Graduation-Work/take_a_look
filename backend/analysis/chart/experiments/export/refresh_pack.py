@@ -23,24 +23,6 @@ from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS, 
 from .pack import build_pack
 
 
-def preserved_path(value):
-    """Only export resolves historical manifest paths through the audited move map."""
-    old = Path(value)
-    if not old.is_absolute():
-        old = CHART_ROOT / old
-    migration = json.loads((CHART_ROOT / "docs/migration.json").read_text())
-    original_root = Path(migration.get("original_chart_root", str(CHART_ROOT)))
-    try:
-        relative = str(old.relative_to(CHART_ROOT))
-    except ValueError:
-        relative = str(old.relative_to(original_root))
-    moves = migration["moves"]
-    for source, target in moves:
-        if relative == source or relative.startswith(source + "/"):
-            return (CHART_ROOT / (target + relative[len(source):])).resolve()
-    return old.resolve()
-
-
 def verify_inputs(dataset, names, feature_store=None):
     original = json.loads((dataset / "dataset_manifest.json").read_text())
     processed = json.loads((dataset / "processed_manifest.json").read_text())
@@ -51,13 +33,9 @@ def verify_inputs(dataset, names, feature_store=None):
             or processed["settings"] != PREPROCESSING
             or processed["raw_files"] != original["raw_files"]):
         raise ValueError("Preserved v3 dataset settings or raw provenance mismatch")
-    original_builder = CHART_ROOT / "workspace/archive/pre-refactor/originals/core/local_features.py"
-    if processed.get("processing_contract") == processing_contract():
-        builder_source = CHART_ROOT / "shared/features/builder.py"
-    else:
-        builder_source = original_builder
-        if processed["implementation_sha256"] != sha256_file(builder_source):
-            raise ValueError("Preserved processed data has an unverified builder")
+    contract = processing_contract()
+    if processed.get("processing_contract") != contract:
+        raise ValueError("Processed data processing contract mismatch")
     metadata = pd.read_csv(dataset / "ticker_metadata.csv", dtype={"Code": str},
                            parse_dates=["ListingDate", "DelistingDate"])
     days = pd.to_datetime(calendar["trading_days"])
@@ -119,7 +97,7 @@ def verify_inputs(dataset, names, feature_store=None):
             "rtol": 1e-8, "atol": 1e-10, "regular_session_unavailable_rows": unavailable_rows,
             "vwap_outside_range_rows": range_rows, "cases": cases,
             "flow_feature_columns": flow_names, "flow_incomplete_rows": flow_missing_rows,
-            "original_builder_sha256": sha256_file(builder_source),
+            "original_builder_sha256": contract["implementation_sha256"]["features/builder.py"],
             "dataset_manifest_sha256": sha256_file(dataset / "dataset_manifest.json"),
             "processed_manifest_sha256": sha256_file(dataset / "processed_manifest.json"),
             "calendar_sha256": sha256_file(dataset / "calendar.json")}
@@ -165,7 +143,7 @@ def verify_runs(result_dirs, *, with_flows=False):
                 or prediction.Date.max() != pd.Timestamp("2026-10-06")
                 or not np.allclose(prediction[["prob_down", "prob_neutral", "prob_up"]].sum(axis=1), 1)):
             raise ValueError("OOS dates/folds/classes mismatch")
-        store = preserved_path(cfg["features"]["materialized_dir"])
+        store = (CHART_ROOT / Path(cfg["features"]["materialized_dir"])).resolve()
         feature_manifest_path = store / "feature_manifest.json"
         feature_manifest = json.loads(feature_manifest_path.read_text())
         if feature_manifest["feature_columns"] != names:
@@ -185,7 +163,8 @@ def verify_runs(result_dirs, *, with_flows=False):
         configs.append(cfg)
     if configs[0]["dataset"] != configs[1]["dataset"]:
         raise ValueError("H5/H20 datasets disagree")
-    return models, predictions, provenance, preserved_path(configs[0]["dataset"]["root"])
+    dataset = (CHART_ROOT / Path(configs[0]["dataset"]["root"])).resolve()
+    return models, predictions, provenance, dataset
 
 
 def main(argv=None):
@@ -234,14 +213,12 @@ def main(argv=None):
         atomic_json(root / "previous_active_pack.json", {"config": previous,
                     "previous_processing_contract": previous_manifest.get("processing_contract"),
                     "previous_builder_sources": previous_manifest.get("builder_sources"),
-                    "builder_baseline_commit": "dc67769" if previous_manifest.get("processing_contract") == processing_contract() else ("0c474ff" if previous_manifest.get("processing_contract", {}).get("sha256") == "4bc96abda10a26638271744f35f5f4d157e177b8c127adab83bc13f287c71867" else ("e5a0fe4" if previous_manifest.get("processing_contract") else "095584b")), "original_builder_snapshot": "workspace/archive/pre-refactor/originals",
                     "policy": "Restore this pack together with its recorded compatible builder."})
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,
             "release_tag": "chart-serving-" + args.pack_id, "asset_name": archive.name,
             "sha256": sha256_file(archive), "builder_sha256": processing_contract()["sha256"]}}, sort_keys=False))
         temporary.replace(config_path)
-        # Explicitly export one operational preview input, with provenance. Serving never scans research paths.
         inputs = CHART_ROOT / "workspace/serving/inputs/raw"
         inputs.mkdir(parents=True, exist_ok=True)
         source = dataset / "raw/005930.parquet"

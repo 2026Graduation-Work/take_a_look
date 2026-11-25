@@ -1,5 +1,3 @@
-"""Verify active flow models using fresh confirmed inputs without database access."""
-
 import json
 from types import SimpleNamespace
 
@@ -26,7 +24,6 @@ def main():
     if not days:
         raise ValueError("No confirmed trading sessions")
     as_of = max(days).isoformat()
-    # The collector can only read providers and write its local cache here.
     store = SimpleNamespace(
         load_flow_day=lambda _: None,
         save_flow_day=lambda *_: None,

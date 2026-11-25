@@ -1,6 +1,5 @@
 import { Bone, SkeletonPage } from "../components/skeleton";
 
-// 대시보드 뼈대: 요약 문장 → 왼쪽 '내 포트폴리오', 오른쪽 '신호가 강한 종목'(1024px 이상 8:4)
 export default function Loading() {
   return (
     <SkeletonPage label="대시보드를 불러오는 중이에요." width="full">

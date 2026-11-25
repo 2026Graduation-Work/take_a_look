@@ -8,10 +8,8 @@ import { useOnboarding } from "./onboarding-provider";
 import ConfirmButton from "./confirm-button";
 import StepNav from "./step-nav";
 
-// ISO(UTC) → 한국 날짜 2026.09.27
 const localDate = (iso: string) => formatKstDateTime(iso).slice(0, 10);
 
-// 관심 종목·메모 + 로그인 사용자면 열 때 Supabase 값으로 한 번 맞춘다(조회 실패면 브라우저 값 그대로).
 export function useStockMarks() {
   const { mode } = useOnboarding().state;
   const marks = useMarks();
@@ -21,12 +19,11 @@ export function useStockMarks() {
   return { mode, ...marks };
 }
 
-// 종목 상세 헤더 아래: 관심 종목 켜기/끄기 + 내 판단 메모(지난 메모 · 날짜, 고치기·지우기). 주문과 무관하다.
 export default function StockMarks({ code, name }: { code: string; name: string }) {
   const { mode, watchlist, notes } = useStockMarks();
   const watched = watchlist.some((item) => item.code === code);
   const note = notes[code];
-  const [draft, setDraft] = useState<string | null>(null); // null = 편집 중 아님
+  const [draft, setDraft] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   async function run(task: () => Promise<void>) {
@@ -112,7 +109,6 @@ export default function StockMarks({ code, name }: { code: string; name: string 
   );
 }
 
-// 보유 종목 편집 화면의 관심 종목 목록: 보고 뺄 수 있다(추가는 종목 상세에서). 0개면 숨긴다.
 export function WatchlistEditor() {
   const { mode, watchlist } = useStockMarks();
   const [error, setError] = useState("");

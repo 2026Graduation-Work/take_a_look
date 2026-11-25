@@ -1,43 +1,23 @@
 """학습용 피처 추출 — 파이프라인 JSON들 → 모델 입력 테이블(CSV).
 
-"무엇을 모델에 넣고 무엇을 빼는가"의 SSOT. 다운스트림(LightGBM)이 JSON을 직접
-읽지 않고 이 모듈을 거치게 해서, 피처 선택 규칙이 코드 한 곳에만 존재하게 한다.
-일별(ValueSignal)·기간(PeriodValueSignal) 출력을 모두 지원하며, 한 테이블에
-두 종류를 섞는 것은 거부한다(집계 단위가 달라 행이 비교 불가능해진다).
-
 ⚠️ 아직 차트 블록 외부 피처 계약(Date, Code, AvailableDate)과 호환되지 않는다.
 `(ticker, date)`로 가격 행에 직접 조인하면 당일 뉴스가 같은 날 학습 행에 들어가는
-룩어헤드가 생긴다 — 가용 시점 분리(뉴스 다음 개장일·재무 공시일)는 후속 PR에서
-다룬다(PR #67 리뷰 0Cracker 1). 그 전까지 이 CSV를 차트 학습에 쓰지 말 것.
+룩어헤드가 생긴다. 가용 시점 분리(뉴스 다음 개장일·재무 공시일) 전까지 이 CSV를
+차트 학습에 쓰지 말 것.
+
+일별과 기간 행은 집계 단위가 달라 한 테이블에 섞지 않는다.
 
 빼는 것과 이유:
 - composite_score / value_investment_signal / confidence — 다른 피처들의 고정 공식
   조합이라 정보량이 0이다. 넣으면 모델이 수작업 공식을 복제하는 쪽으로 쏠린다.
-  (사용자 화면 표시용으로만 쓴다.)
-- key_events / reasoning / daily_metrics / validation — 사람이 읽는 텍스트·감사 메타.
-- 기간 행의 기사 절대량(article_count 등) — 월 길이·종목별 언론 노출량에 오염.
-  avg_daily_articles(일평균)·days_with_articles_ratio(비율)로 대체한다.
-  일별 행의 article_count는 이미 '하루' 단위라 그대로 쓴다.
+- 기간 행의 기사 절대량(article_count 등) — 월 길이·종목별 언론 노출량에 오염되므로
+  일평균·비율로 대체한다. 일별 행의 article_count는 이미 '하루' 단위라 그대로 쓴다.
 
-파생 피처:
-- financial_age_months — 일별 행에는 스키마에 없으므로 date와 financial_fiscal_year
-  로 계산해 붙인다(12월 결산 가정, 기간 행과 동일 정의).
-
-규약 — '결측'과 '오염'을 구분한다:
-- **오염 행은 제외한다.** 회계 항등식 위배·룩어헤드·단위 오류 등은 숫자 자체를
-  믿을 수 없으므로 버린다 (오염 행 하나가 없는 것보다 나쁘다 — 없으면 결측이지만,
-  오염 행은 모델이 학습해버린다).
-- **결측 행은 살린다.** 실패 사유가 '관련 기사 0건'뿐이면 뉴스가 없었을 뿐 재무
-  피처는 멀쩡하다. 감성 파생 피처만 NaN으로 두고 행은 유지한다 — 소형주는 조용한
-  날이 많아(실측: 에코프로비엠 2,467일 중 1,888일) 행을 통째로 버리면 그 종목이
-  데이터셋에서 사실상 사라져 대형주 편향이 생긴다.
-  기사 수(article_count 등)는 0이 사실이므로 그대로 둔다 — 결측 지시자다.
-- 결측(None)은 NaN으로 남긴다. 0으로 채우지 않는다 — LightGBM은 NaN을 네이티브로
-  처리하며, 0 대치는 '적자'와 '데이터 없음'을, 감성에서는 '무데이터'와 '중립'을 섞는다.
-
-사용:
-    python -m value_pipeline.features out/005930/*.json --out features_daily.csv
-    python -m value_pipeline.features 005930_2022-01.json --out features_monthly.csv
+오염 행(회계 항등식 위배·룩어헤드·단위 오류)은 버린다 — 모델이 학습해버리기 때문이다.
+결측 행(관련 기사 0건)은 살리고 감성 파생 피처만 NaN으로 둔다 — 소형주는 조용한 날이
+많아(실측: 에코프로비엠 2,467일 중 1,888일) 행을 통째로 버리면 대형주 편향이 생긴다.
+결측은 0으로 채우지 않는다 — LightGBM은 NaN을 네이티브로 처리하며, 0 대치는 '적자'와
+'데이터 없음'을, 감성에서는 '무데이터'와 '중립'을 섞는다.
 """
 from __future__ import annotations
 
@@ -51,7 +31,6 @@ from pathlib import Path
 
 _METRIC_COLUMNS = ["per", "pbr", "roe", "revenue_growth", "debt_ratio", "altman_z"]
 
-# ── 기간(PeriodValueSignal) 테이블 ─────────────────────────────────
 PERIOD_KEY_COLUMNS = ["ticker", "period", "period_start", "period_end"]
 PERIOD_FEATURE_COLUMNS = [
     "news_sentiment",
@@ -59,24 +38,23 @@ PERIOD_FEATURE_COLUMNS = [
     "news_sentiment_std",
     "news_staleness",
     "avg_daily_articles",
-    "days_with_articles_ratio",  # 파생: days_with_articles / period_days
+    "days_with_articles_ratio",
     "financial_health_score",
     "valuation_score",
     "financial_age_months",
     *_METRIC_COLUMNS,
 ]
 
-# ── 일별(ValueSignal) 테이블 ───────────────────────────────────────
 DAILY_KEY_COLUMNS = ["ticker", "date"]
 DAILY_FEATURE_COLUMNS = [
     "news_sentiment",
     "news_impact_score",
     "news_sentiment_std",
     "news_staleness",
-    "article_count",  # 하루 단위라 절대량 그대로 (일평균과 동일 의미)
+    "article_count",
     "financial_health_score",
     "valuation_score",
-    "financial_age_months",  # 파생: date − 사업연도 종료월
+    "financial_age_months",
     *_METRIC_COLUMNS,
 ]
 
@@ -104,7 +82,7 @@ def row_status(signal: dict) -> str:
         return "ok"
     errors = validation.get("errors") or []
     if errors and all(_MISSING_NEWS_MARKER in e for e in errors):
-        return "news_missing"  # 뉴스가 없었을 뿐 — 재무 피처는 유효
+        return "news_missing"
     return "invalid"
 
 
@@ -147,7 +125,6 @@ def extract_row(signal: dict) -> dict | None:
     asof = signal["period_end"] if kind == "period" else signal["date"]
     for col in feature_columns:
         if news_missing and col in _SENTIMENT_FEATURES:
-            # 기사가 없었으므로 감성은 '0.0(중립)'이 아니라 값이 없는 것이다
             row[col] = math.nan
             continue
         if col == "days_with_articles_ratio":
@@ -167,8 +144,7 @@ def extract_row(signal: dict) -> dict | None:
 def build_feature_table(paths: Sequence[Path]) -> tuple[list[dict], list[str], str]:
     """JSON 파일들 → (피처 행 리스트, 제외 사유 리스트, 테이블 종류).
 
-    테이블 종류는 첫 파일로 정해지며, 다른 종류의 행은 제외된다 —
-    일별과 기간 행은 집계 단위가 달라 한 테이블에서 비교 불가능하다.
+    테이블 종류는 첫 파일로 정해지며, 다른 종류의 행은 제외된다.
     """
     rows: list[dict] = []
     skipped: list[str] = []
@@ -192,7 +168,7 @@ def build_feature_table(paths: Sequence[Path]) -> tuple[list[dict], list[str], s
         if status == "news_missing":
             news_missing += 1
         rows.append(row)
-    if news_missing:  # 조용한 축소 금지 — 감성 결측 비중을 항상 알린다
+    if news_missing:
         skipped.append(
             f"(참고) 뉴스 결측 행 {news_missing}건은 감성 피처만 NaN으로 두고 유지"
         )

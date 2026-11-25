@@ -36,9 +36,6 @@ def demo_features(demo_prices: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
-# ── 형식 계약 ────────────────────────────────────────────────────────────────
-
-
 def test_output_columns_and_no_missing_values(demo_features: pd.DataFrame) -> None:
     assert list(demo_features.columns) == list(OUTPUT_COLUMNS)
     assert not demo_features[list(FEATURE_COLUMNS)].isna().any().any()
@@ -81,15 +78,11 @@ def test_treatment_feature_count_is_within_experiment_budget() -> None:
     assert not set(SUMMARY_AXES) & set(TREATMENT_FEATURES)
 
 
-# ── 미래 정보(lookahead) 부재 ────────────────────────────────────────────────
-
-
 def test_available_date_is_strictly_after_observation_date(demo_features: pd.DataFrame) -> None:
     assert (demo_features["AvailableDate"] > demo_features["Date"]).all()
 
 
 def test_future_rows_do_not_change_past_features(demo_prices: pd.DataFrame) -> None:
-    """뒤쪽 날짜를 잘라내도 앞 구간 값이 그대로여야 미래 정보가 없는 것이다."""
     cutoff = pd.Timestamp("2024-06-14")
     full, _ = build_psychology_features(demo_prices)
     truncated, _ = build_psychology_features(
@@ -111,7 +104,6 @@ def test_future_rows_do_not_change_past_features(demo_prices: pd.DataFrame) -> N
 def test_changing_a_future_price_does_not_change_earlier_features(
     demo_prices: pd.DataFrame,
 ) -> None:
-    """특정 날짜 이후 가격·거래량을 흔들어도 그 이전 피처는 불변이어야 한다."""
     cutoff = pd.Timestamp("2024-06-14")
     baseline, _ = build_psychology_features(demo_prices)
 
@@ -147,9 +139,6 @@ def test_warmup_rows_are_dropped(demo_prices: pd.DataFrame) -> None:
     assert metadata["warmup_trading_days"] == config.warmup_trading_days
 
 
-# ── 결정론 ───────────────────────────────────────────────────────────────────
-
-
 def test_repeated_runs_are_identical(demo_prices: pd.DataFrame) -> None:
     first, first_meta = build_psychology_features(demo_prices)
     second, second_meta = build_psychology_features(demo_prices)
@@ -181,9 +170,6 @@ def test_metadata_records_config_and_version(demo_prices: pd.DataFrame) -> None:
     assert metadata["features"]["recommended_treatment"] == list(TREATMENT_FEATURES)
 
 
-# ── 입력 검증 ────────────────────────────────────────────────────────────────
-
-
 def test_duplicate_keys_are_rejected(demo_prices: pd.DataFrame) -> None:
     duplicated = pd.concat([demo_prices, demo_prices.head(1)], ignore_index=True)
     with pytest.raises(PsychologyInputError, match="중복"):
@@ -209,13 +195,9 @@ def test_invalid_config_is_rejected() -> None:
         PsychologyFeatureConfig(overreaction_short_window=60, overreaction_long_window=60)
 
 
-# ── 저장소의 기존 계약과의 정합성 ────────────────────────────────────────────
-
-
 def test_output_passes_external_feature_source_contract(
     demo_features: pd.DataFrame, tmp_path: Path
 ) -> None:
-    """산출물이 build_feature_panel.py의 추가 피처 계약을 그대로 통과하는지 본다."""
     path = tmp_path / "psychology_market_v1.parquet"
     demo_features.to_parquet(path, index=False)
 
@@ -237,7 +219,6 @@ def test_output_passes_external_feature_source_contract(
 
 
 def _write_processed_store(directory: Path, panel: pd.DataFrame) -> None:
-    """러너가 읽는 baseline feature store(=data/processed) 형태로 저장한다."""
     directory.mkdir(parents=True, exist_ok=True)
     for code, group in panel.groupby("Code", sort=True, observed=True):
         frame = group.sort_values("Date", kind="stable").reset_index(drop=True)
@@ -293,12 +274,6 @@ def _comparison_config(
 def test_generated_store_satisfies_comparison_runner_contract(
     demo_prices: pd.DataFrame, demo_features: pd.DataFrame, tmp_path: Path
 ) -> None:
-    """실험을 실행하지 않고, 러너의 로딩·A/B 정합성 검증만 통과하는지 확인한다.
-
-    실제 운용 경로를 그대로 재현한다.
-    ``build_psychology_features`` → ``data/external`` → ``build_feature_store`` →
-    ``treatment_price_dir``.
-    """
     processed_dir = tmp_path / "processed"
     _write_processed_store(processed_dir, demo_prices)
 
@@ -366,7 +341,6 @@ def test_generated_store_satisfies_comparison_runner_contract(
         metadata,
     ) = prepare_profile_data(config, "aggressive", config_dir=tmp_path)
 
-    # A/B 행·라벨 정합성은 러너가 스스로 검사한다. 여기서는 통과 사실과 형식을 본다.
     assert len(base_train) == len(treat_train) > 0
     assert len(base_test) == len(treat_test) > 0
     assert resolved_baseline == ["chart_feature_a", "chart_feature_b"]
@@ -381,7 +355,6 @@ def test_generated_store_satisfies_comparison_runner_contract(
 def test_runner_rejects_treatment_store_with_missing_psychology_values(
     demo_prices: pd.DataFrame, demo_features: pd.DataFrame, tmp_path: Path
 ) -> None:
-    """워밍업 구간을 실험 기간에 넣으면 조용히 통과하지 않고 실패해야 한다."""
     from experiments.comparison.runner import ComparisonConfigError
 
     processed_dir = tmp_path / "processed"
@@ -409,8 +382,6 @@ def test_runner_rejects_treatment_store_with_missing_psychology_values(
         prepare_profile_data(config, "aggressive", config_dir=tmp_path)
 
 
-# ── 저장소에 커밋된 실제 가격 패널로 하는 생성 검증 ──────────────────────────
-
 CHART_DIR = Path(__file__).resolve().parents[2]
 SAMPLE_PROCESSED = CHART_DIR / "data" / "processed" / "005930.parquet"
 
@@ -426,7 +397,6 @@ def real_prices() -> pd.DataFrame:
 
 
 def test_real_ticker_generation(real_prices: pd.DataFrame) -> None:
-    """커밋된 005930 Alpha158 패널로 실제 생성이 되는지 확인한다."""
     features, metadata = build_psychology_features(real_prices)
 
     assert metadata["input"]["codes"] == 1
@@ -461,9 +431,6 @@ def test_real_ticker_generation_is_deterministic(real_prices: pd.DataFrame) -> N
     second, second_meta = build_psychology_features(real_prices)
     pd.testing.assert_frame_equal(first, second)
     assert first_meta["output"]["fingerprint_sha256"] == second_meta["output"]["fingerprint_sha256"]
-
-
-# ── 생성 스크립트 ────────────────────────────────────────────────────────────
 
 
 def test_cli_generates_parquet_metadata_and_sample(tmp_path: Path) -> None:
