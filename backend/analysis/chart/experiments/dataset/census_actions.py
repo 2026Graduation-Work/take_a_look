@@ -213,7 +213,7 @@ def _kind_inventory(client, start, end, company_cache, codes):
     return daily, company, targeted, tuple(rows.values()), failures
 
 
-def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded):
+def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded, unresolved_issuers=frozenset()):
     by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
     for key, names in aliases.items():
         for name in names:
@@ -225,9 +225,10 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     selected, fetched = 0, 0
     for filing in sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession)):
         topic = kind_topic(filing)
-        keys = by_name[normal_company(filing.company)] | by_code[filing.stock_code] | by_company[filing.company_id]
+        issuer = (filing.company_id or filing.stock_code)[:5]
+        keys = by_company[issuer] if issuer else by_name[normal_company(filing.company)]
         if not keys:
-            if topic == "structural" and not bounded:
+            if topic == "structural" and not bounded and (not issuer or issuer in unresolved_issuers):
                 unattributed_structure.add(filing.accession)
                 failures.append({"AcptNo": filing.accession, "Date": str(filing.published), "Stage": "structural_identity",
                                  "Topic": topic, "Reason": "No verified security matches the KIND list row",
@@ -252,7 +253,10 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             refs += acquired
             fetched += 1
             for facts in parse_notice(filing, form, body):
-                possible = by_code[facts.code] if facts.code else keys | by_name[normal_company(facts.company)]
+                if facts.code:
+                    possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
+                else:
+                    possible = keys if issuer else keys | by_name[normal_company(facts.company)]
                 if not any(key.active(facts.effective) and (
                     (facts.share_label in {"보통주", "보통주식"}) == (key.share_class == "common")
                 ) for key in possible):
@@ -429,8 +433,9 @@ def build_census(args, client):
         client, args.published_start, args.published_end, args.kind_company_cache, codes)
     spac_keys = {key for key, bars in securities.items()
                  if bars.SECT_TP_NM.str.contains(r"SPAC|기업인수목적|스팩", case=False, regex=True, na=False).any()}
+    unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
-                                spac_keys=spac_keys, bounded=bool(codes))
+                                spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers)
     notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, selected, fetched = acquired
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []

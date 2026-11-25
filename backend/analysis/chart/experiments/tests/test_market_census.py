@@ -1,7 +1,38 @@
 import json
+from collections import defaultdict
+from datetime import date
+from unittest.mock import Mock
 
 import pandas as pd
-from experiments.dataset.census_actions import main
+from experiments.dataset.census_actions import _collect_notices, main
+from shared.data.disclosures import Evidence
+from shared.data.kind_market import KindUnavailable, MarketFiling
+from shared.data.market_notices import SecurityKey, normal_company
+
+
+def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
+    holding = SecurityKey("007700", "KR7007700008", "1984-10-04", None, "KOSPI", "common")
+    aliases = {holding: {normal_company(name) for name in ("F&F", "F&F 홀딩스")}}
+    source = Evidence("a" * 64, "b" * 64)
+    filings = [MarketFiling(accession, date(2021, 5, day), title, source, company=name,
+                            company_id=issuer, submitter="유가증권시장본부")
+               for accession, day, name, issuer, title in (
+        ("20210517001277", 17, "F&F 홀딩스", "00770", "상장안내(회사분할(존속)에 따른 자본감소 및 상호변경)"),
+        ("20210518000357", 18, "F&F", "38322", "재상장(주식회사 에프앤에프, 상장일 2021.05.21)"),
+        ("20210520000242", 20, "F&F", "38322", "회사분할로 인한 재상장 기준가격결정방법 안내(분할신설법인)"),
+        ("20210520000243", 20, "F&F 홀딩스", "00770", "회사분할로 인한 변경상장 기준가격결정방법 안내(분할존속법인)"),
+    )]
+    client = Mock()
+    client.document.side_effect = KindUnavailable("outside this test's document cache")
+
+    _, _, _, gaps, unattributed, _, selected, _ = _collect_notices(
+        client, filings, aliases, defaultdict(tuple), anchors={}, spac_keys=set(), bounded=False,
+    )
+
+    attempted = [call.args[0].accession for call in client.document.call_args_list]
+    assert attempted == ["20210517001277", "20210520000243"]
+    assert selected == 2 and gaps[holding] == set(attempted)
+    assert not unattributed
 
 
 def test_census_never_compares_across_a_missing_security_session(tmp_path, capsys):
