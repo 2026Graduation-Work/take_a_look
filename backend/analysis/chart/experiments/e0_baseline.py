@@ -1,7 +1,8 @@
 """E0: reproduce the v1.1.0 baseline metrics from shared OOS predictions and add return-based ranking metrics.
 
 No training. Inputs are the Release `research-oos-2019-2025-20261021` (h5_A.parquet, h20_A.parquet)
-and a KOSPI close series (Date, Close).
+and a KOSPI close series (Date, Close). Other variants may be raw oos_history files; their outcome
+columns are copied from the first variant, since returns depend on prices only.
 
     python -m experiments.e0_baseline --oos-dir <dir> --kospi <KOSPI.parquet> --out <dir>
 """
@@ -25,6 +26,24 @@ def with_excess(frame, kospi):
     close = kospi.set_index(pd.to_datetime(kospi.Date)).Close
     start, end = close.reindex(frame.Date).to_numpy(), close.reindex(frame.return_date).to_numpy()
     return frame.assign(kospi_return=end / start - 1, excess_return=lambda f: f.forward_return - f.kospi_return)
+
+
+OUTCOMES = ["Trading_Halt", "return_date", "forward_return", "return_observed", "horizon"]
+
+
+def attach_outcomes(frame, base):
+    """Copy price-only outcome columns from another variant's export (raw oos_history has none)."""
+    if "forward_return" in frame:
+        return frame
+    keys = ["Date", "Code"]
+    merged = frame.merge(base[keys + ["label_observed", "fold_id", *OUTCOMES]], on=keys, how="left",
+                         suffixes=("", "_base"), validate="1:1", indicator=True)
+    if not merged._merge.eq("both").all() or len(merged) != len(base):
+        raise ValueError("Variant rows do not match the base export")
+    for column in ("label_observed", "fold_id"):
+        if not merged[column].equals(merged[f"{column}_base"]):
+            raise ValueError(f"Variant {column} differs from the base export")
+    return merged[list(base.columns)]
 
 
 def reproduction(frame):
@@ -62,7 +81,8 @@ def main():
     variants = args.variants.split(",")
     reproduced, ranking, comparisons = [], [], []
     for horizon in (5, 20):
-        frames = {v: with_excess(pd.read_parquet(args.oos_dir / f"h{horizon}_{v}.parquet"), kospi) for v in variants}
+        raw = {v: pd.read_parquet(args.oos_dir / f"h{horizon}_{v}.parquet") for v in variants}
+        frames = {v: with_excess(attach_outcomes(raw[v], raw[variants[0]]), kospi) for v in variants}
         for variant, frame in frames.items():
             reproduced.append({"horizon": horizon, "variant": variant, **reproduction(frame)})
             ranking += [{"variant": variant, **row} for row in ranking_rows(frame, horizon)]

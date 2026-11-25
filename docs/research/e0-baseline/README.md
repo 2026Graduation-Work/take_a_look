@@ -66,18 +66,32 @@ python -m experiments.e0_baseline --oos-dir <oos 폴더> --kospi <KOSPI.parquet>
 - 초과수익 IC가 원 수익률 IC와 거의 같은 건 정상이다. 같은 날 모든 종목에서 같은 KOSPI 수익률을 빼므로 순위가 바뀌지 않고, 거래정지로 끝나는 날이 다른 종목만 조금 달라진다. 종목 사이 순위 지표에서는 초과수익 버전이 정보를 더하지 않는다
 - H20/2020은 IC는 양수인데 상위−하위 차이가 음수다. 순위 전체로는 맞았지만 양 끝 10%에서 틀렸다는 뜻이라 두 지표를 함께 본다
 
-## 3. 두 모델 비교 검정
+## 3. 피처 A와 B 비교 검정
 
-피처 B(심리 4개 추가)의 표본 밖 예측은 Release에 없다(manifest에는 해시만 있음). 그래서 함수가 동작하는지는 같은 모델 A의 두 점수, `prob_up`과 `prob_up − prob_down`을 비교해 보였다.
+피처 B는 A에 심리 피처 4개를 더한 174개다([psychology-ab-2019-2025](../psychology-ab-2019-2025/README.md)). 같은 run `a6723ca89a07fbe5`, 같은 fold와 시드 42다.
 
-| 기간 | b − a(IC) | t | 95% 신뢰구간 | 날짜 | 달 |
-| --- | ---: | ---: | --- | ---: | ---: |
-| H5 | −0.0130 | −3.18 | [−0.0207, −0.0048] | 1,694 | 84 |
-| H20 | −0.0526 | −6.63 | [−0.0678, −0.0370] | 1,694 | 84 |
+입력과 처리
+- B 예측은 Release에 없어서, 서진세가 Drive `Chart/a6723ca89a07fbe5의 B 피처 OOS 예측/`에 올린 `h5`, `h20`의 `oos_history.parquet`를 썼다. sha256이 Release `manifest.json`의 `h5_B`, `h20_B` `oos_sha256`(f60d8852…, 36122e7e…)과 같다
+- 이 파일에는 수익률 열이 없다. 수익률은 가격만으로 정해지므로 A 내보내기의 `forward_return`, `return_date`, `return_observed`, `Trading_Halt`를 (Date, Code)로 붙였다(`attach_outcomes`). 행 수, 키, `label_observed`, `fold_id`가 A와 모두 같은지 확인하고 다르면 멈춘다
+- B 재현: H5 AUC(전체) 0.584381, 라벨 Rank IC 0.067644로 `psychology-ab-2019-2025/prediction_metrics.csv`의 B 값과 같다
 
-`prob_up` 하나로 순위를 매기는 편이 `상승 − 하락`보다 수익률 순위를 더 잘 맞춘다. 출처: [ic_comparison.csv](ic_comparison.csv)
+```bash
+python -m experiments.e0_baseline --oos-dir <h5_A, h20_A, h5_B, h20_B 폴더> --kospi <KOSPI.parquet> --out <출력> --variants A,B
+```
+
+| 기간 | 수익률 IC A | 수익률 IC B | B − A | t | 95% 신뢰구간 | 날짜 | 달 |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| H5 | 0.0463 | 0.0457 | −0.00058 | −1.96 | [−0.00114, −0.00002] | 1,694 | 84 |
+| H20 | 0.0535 | 0.0538 | +0.00031 | 0.93 | [−0.00033, +0.00098] | 1,694 | 84 |
+
+상위−하위 10%: H5 A +0.56%, B +0.55%. H20 A +1.42%, B +1.46%. 연도별 값은 [ranking.csv](ranking.csv), 검정은 [ic_comparison.csv](ic_comparison.csv)에 있다.
+
+읽는 법
+- 심리 피처를 더해도 수익률 순위는 나아지지 않았다. H20은 차이가 0과 구분되지 않는다. H5는 B가 IC 0.0006 낮고 신뢰구간이 0을 겨우 벗어난다. 차이 크기가 IC의 약 1%라 실질적으로는 같은 모델로 본다
+- 라벨 기준 AUC와 IC는 B가 조금 높다(H5 AUC 0.5850 대 0.5846). 라벨 지표와 수익률 지표의 결론이 갈리는 예라, 앞으로 비교는 수익률 IC로 한다
+- 시드 하나, 같은 기간 한 번의 결과다. 시드를 바꿔도 같은지는 아래 남은 것에서 본다
+- 함수 확인용으로 같은 모델 A의 두 점수도 비교했다: `prob_up − prob_down`은 `prob_up`보다 H5 −0.0130(t −3.18), H20 −0.0526(t −6.63) 낮다. 순위는 `prob_up` 하나로 매긴다
 
 ## 남은 것
 
-- 피처 A와 B 비교: `h5_B.parquet`, `h20_B.parquet`가 생기면 `--variants A,B`로 같은 스크립트를 돌린다
-- 시드 5개 반복: 재학습이 필요하다. 학습 데이터셋(`workspace/experiments/datasets/shared_v3_local_2016`)이나 KRX 로그인이 있어야 한다
+- 시드 5개 반복: 재학습이 필요하다. 학습 데이터셋(`shared_v3_local_2016`)은 남아 있지 않아(11/24 팀 채팅) Actions로 다시 만드는 방향이다. KRX 로그인이 필요하다

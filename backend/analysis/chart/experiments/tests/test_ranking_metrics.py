@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from experiments.e0_baseline import attach_outcomes
 from experiments.evaluation.metrics import (
     calculate_rank_ic,
     compare_daily_ic,
@@ -54,3 +55,17 @@ def test_block_bootstrap_detects_a_real_ic_gap_and_not_a_null_one():
     assert gap["n_months"] == len(pd.DatetimeIndex(good.index).to_period("M").unique())
     with pytest.raises(ValueError):
         compare_daily_ic(good.iloc[:0], good)
+
+
+def test_attach_outcomes_copies_returns_and_rejects_mismatched_rows():
+    base = _panel(days=3, stocks=4).drop(columns="ret").assign(label_observed=True, fold_id=0, Trading_Halt=0,
+                                           return_date=pd.Timestamp("2024-02-01"), forward_return=0.01,
+                                           return_observed=True, horizon=5)
+    raw = base[["Date", "Code", "score", "label_observed", "fold_id"]].sample(frac=1, random_state=0)
+    attached = attach_outcomes(raw, base)
+    assert list(attached.columns) == list(base.columns)
+    assert attached.forward_return.eq(0.01).all()
+    with pytest.raises(ValueError):
+        attach_outcomes(raw.iloc[1:], base)
+    with pytest.raises(ValueError):
+        attach_outcomes(raw.assign(fold_id=1), base)
