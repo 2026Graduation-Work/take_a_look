@@ -1148,5 +1148,161 @@
       "20200413001665"
     ],
     "final": true
+  },
+  "20151022000346": {
+    "form": "99332",
+    "title": "회사분할로 인한 변경상장 기준가격결정방법 안내(분할존속법인)",
+    "company": "현대코퍼레이션",
+    "body_url": "https://kind.krx.co.kr/external/2015/10/22/000346/20151022000693/99332.htm",
+    "charset": "utf-8",
+    "sha256": "6bd15d484d31dfb228e3ae77ce83728b2aa76a96932fa3998213a16ecddcdac9",
+    "document_no": "20151022000693",
+    "family": [
+      "20151022000693"
+    ],
+    "final": true
+  },
+  "20180104000369": {
+    "form": "99332",
+    "title": "회사분할로 인한 변경상장 기준가격결정방법 안내(분할존속법인, 1우선주)",
+    "company": "SK디스커버리",
+    "body_url": "https://kind.krx.co.kr/external/2018/01/04/000369/20180104001025/99332.htm",
+    "charset": "utf-8",
+    "sha256": "0e9a83b1066ec9bf9ee51f74c31d3035970937b44fdbe5e86c2df2d392965cef",
+    "document_no": "20180104001025",
+    "family": [
+      "20180104001025"
+    ],
+    "final": true
+  },
+  "20221017000403": {
+    "form": "70718",
+    "title": "주권 등 신규상장 기준가격 안내 (SPAC소멸합병상장)(SPAC소멸합병상장)",
+    "company": "비스토스",
+    "body_url": "https://kind.krx.co.kr/external/2022/10/17/000403/20221017000984/70718.htm",
+    "charset": "utf-8",
+    "sha256": "021bebf52f13efb3ed012598c0c9fda9dbc3855547a261562da3825a12598579",
+    "document_no": "20221017000984",
+    "family": [
+      "20221017000984"
+    ],
+    "final": true
+  },
+  "20230127000869": {
+    "form": "68156",
+    "title": "재상장(코오롱모빌리티그룹(주), 상장일 2023.01.31)",
+    "company": "코오롱모빌리티그룹",
+    "body_url": "https://kind.krx.co.kr/external/2023/01/27/000869/20230127002171/68156.htm",
+    "charset": "utf-8",
+    "sha256": "297889661a335dff6bb562ed2ab796d341289565a346f3975c78d6146e7a4e4f",
+    "document_no": "20230127002171",
+    "family": [
+      "20230127002171"
+    ],
+    "final": true
+  },
+  "20230130000673": {
+    "form": "99334",
+    "title": "회사분할로 인한 재상장 기준가격결정방법 안내(분할신설법인, 1우선주)",
+    "company": "코오롱모빌리티그룹",
+    "body_url": "https://kind.krx.co.kr/external/2023/01/30/000673/20230130001872/99334.htm",
+    "charset": "utf-8",
+    "sha256": "68ca4fef1676a58958b49df307de9db481e39470b70902ba7f4884509f83a485",
+    "document_no": "20230130001872",
+    "family": [
+      "20230130001872"
+    ],
+    "final": true
+  },
+  "20230329002563": {
+    "form": "68156",
+    "title": "재상장(한화갤러리아(주), 상장일 2023.03.31)",
+    "company": "한화갤러리아",
+    "body_url": "https://kind.krx.co.kr/external/2023/03/29/002563/20230329005435/68156.htm",
+    "charset": "utf-8",
+    "sha256": "eb90de1baff7087d20827a14089b98661f8e93183279c7c49ce5245deb8472d9",
+    "document_no": "20230329005435",
+    "family": [
+      "20230329005435"
+    ],
+    "final": true
+  },
+  "20230616000691": {
+    "form": "68152",
+    "title": "신규상장((주)비에이치, 상장일 2023.06.20)",
+    "company": "비에이치",
+    "body_url": "https://kind.krx.co.kr/external/2023/06/16/000691/20230616001528/68152.htm",
+    "charset": "utf-8",
+    "sha256": "6d5b14a4db43e8bace56f9e03031f177cf0ff218acd34edf233a2c86b58a9963",
+    "document_no": "20230616001528",
+    "family": [
+      "20230616001528"
+    ],
+    "final": true
+  },
+  "20230804000334": {
+    "form": "68152",
+    "title": "신규상장(나이스평가정보(주), 상장일 2023.08.08)",
+    "company": "NICE평가정보",
+    "body_url": "https://kind.krx.co.kr/external/2023/08/04/000334/20230804000819/68152.htm",
+    "charset": "utf-8",
+    "sha256": "ec22bb68e6dceba2267c79fa5c791a513cd9cbf9f3b67665adcae2a35dd7cc56",
+    "document_no": "20230804000819",
+    "family": [
+      "20230804000819"
+    ],
+    "final": true
+  },
+  "20240610000605": {
+    "form": "70718",
+    "title": "주권 등 신규상장 기준가격 안내 (SPAC소멸합병상장)",
+    "company": "다원넥스뷰",
+    "body_url": "https://kind.krx.co.kr/external/2024/06/10/000605/20240610001465/70718.htm",
+    "charset": "utf-8",
+    "sha256": "67dc0d0b5adc6da6b3101117fb8b17a0112d49016b702b9a462922b692098d6e",
+    "document_no": "20240610001465",
+    "family": [
+      "20240610001465"
+    ],
+    "final": true
+  },
+  "20251226000658": {
+    "form": "70718",
+    "title": "주권 등 신규상장 기준가격 안내 (SPAC소멸합병상장)",
+    "company": "삼미금속",
+    "body_url": "https://kind.krx.co.kr/external/2025/12/26/000658/20251226001738/70718.htm",
+    "charset": "utf-8",
+    "sha256": "f309d88b79b36fc2715e8b9bf16b6b0104e3ca56b8b4f08401918be2c2df3e48",
+    "document_no": "20251226001738",
+    "family": [
+      "20251226001738"
+    ],
+    "final": true
+  },
+  "20151020000053": {
+    "form": "68155",
+    "title": "변경상장(회사분할(존속))",
+    "company": "현대코퍼레이션",
+    "body_url": "https://kind.krx.co.kr/external/2015/10/20/000053/20151020000019/68155.htm",
+    "charset": "utf-8",
+    "sha256": "e7c1478315704e61b366a368b67f3af01ff60cb985cf6dd5e012492da71b1ed3",
+    "document_no": "20151020000019",
+    "family": [
+      "20151020000019"
+    ],
+    "final": true
+  },
+  "20180102000170": {
+    "form": "68151",
+    "title": "상장안내(상호변경 및 회사분할(존속)에 따른 자본감소)",
+    "company": "SK디스커버리",
+    "body_url": "https://kind.krx.co.kr/external/2018/01/02/000170/20180102000430/68151.htm",
+    "charset": "utf-8",
+    "sha256": "36cd91f50be17cac9ffad56bc620620293c315ea12cd897574a6ae1a583b1da7",
+    "document_no": "20180102000430",
+    "family": [
+      "20180102000430"
+    ],
+    "final": true
   }
 }

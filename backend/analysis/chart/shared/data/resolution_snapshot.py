@@ -344,6 +344,28 @@ def _load_tables(folder, manifest):
         refs.update(evidence)
         notices[security].append((accession, published, applied))
 
+    section_owners = defaultdict(set)
+    for security, accession, form, section in notice_refs:
+        section_owners[accession, form, section].add(security)
+
+    def section_key(value):
+        require(isinstance(value, list) and len(value) == 3 and all(isinstance(part, str) for part in value[:2])
+                and type(value[2]) is int, "Invalid KIND auction identity section")
+        return tuple(value)
+
+    linked = set()
+    links = coverage.get("kind_auction_identity_links", [])
+    require(isinstance(links, list), "Invalid KIND auction identity links")
+    for item in links:
+        require(isinstance(item, dict) and set(item) == {"Auction", "Witnesses"}
+                and isinstance(item["Witnesses"], list) and 1 <= len(item["Witnesses"]) <= 2,
+                "Invalid KIND auction identity link")
+        source = section_key(item["Auction"])
+        require(len(section_owners.get(source, ())) == 1 and source not in linked and source[1] in {"99332", "99334"}
+                and all(section_owners.get(section_key(ref)) == section_owners[source] for ref in item["Witnesses"]),
+                "KIND auction identity link does not reference the same security")
+        linked.add(source)
+
     for row in _csv(folder / "resolutions.csv", RESOLUTION_COLUMNS):
         security, day = _security(row), _day(row["Date"])
         key = (security, day)

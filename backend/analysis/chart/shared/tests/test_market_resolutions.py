@@ -23,7 +23,13 @@ from shared.data.kind_market import (
     daily_form,
     daily_page,
 )
-from shared.data.market_notices import SecurityKey, match_notice, normal_company, parse_notice
+from shared.data.market_notices import (
+    SecurityKey,
+    auction_identity_witness,
+    match_notice,
+    normal_company,
+    parse_notice,
+)
 from shared.data.market_resolutions import (
     Resolution,
     adjustment_events,
@@ -179,6 +185,54 @@ def test_stock_dividend_rejects_subsidiary_terms_even_without_listing_caption(ac
     for title in (filing.title, "주식배당결정"):
         with pytest.raises(DisclosureError, match="terms belong to a subsidiary"):
             parse_notice(replace(filing, title=title), form, body)
+
+
+@pytest.mark.parametrize("accession,expected", [
+    ("20230127000869", [("450140", "KR7450140009", "2023-01-31", "보통주", 62_777_250),
+                        ("45014K", "KR745014K018", "2023-01-31", "1우선주", 2_456_120)]),
+    ("20230329002563", [("452260", "KR7452260003", "2023-03-31", "보통주", 193_859_610),
+                        ("45226K", "KR745226K018", "2023-03-31", "1우선주", 2_904_470)]),
+    ("20230616000691", [("090460", "KR7090460007", "2023-06-20", "보통주", 34_464_379)]),
+    ("20230804000334", [("030190", "KR7030190003", "2023-08-08", "보통주", 60_714_820)]),
+])
+def test_numbered_new_listing_routes_preserve_exact_stock_identity(accession, expected):
+    filing, form, body = official_body(accession)
+    facts = parse_notice(filing, form, body)
+    assert [row.section for row in facts] == list(range(1, len(expected) + 1))
+    assert [(row.code, row.isin, row.effective, row.share_label, row.shares_after) for row in facts] == expected
+
+
+def test_uncoded_auction_identity_requires_exact_final_listing_and_rename_sections():
+    filing, form, body = official_body("20180104000369")
+    auction, = parse_notice(filing, form, body)
+    assert auction.code is auction.isin is None
+    preferred = SecurityKey("006125", "KR7006121008", "1989-11-24", None, "KOSPI", "preferred")
+    filing, listing_form, body = official_body("20180102000170")
+    filing = replace(filing, company_id="00612")
+    related = [match_notice(filing, listing_form, row, body, (body.evidence,), {preferred: set()})
+               for row in parse_notice(filing, listing_form, body) if row.code == preferred.code]
+    rename, listing = related
+    assert auction_identity_witness(form, auction, "00612", True, related) == (listing, rename)
+    assert not auction_identity_witness(form, auction, "00612", False, related)
+    for altered in ([listing], [rename], [rename, listing, listing],
+                    [rename, replace(listing, company_id="01232")],
+                    [rename, replace(listing, final=False)],
+                    [rename, replace(listing, facts=replace(listing.facts, effective="2018-01-04"))],
+                    [rename, replace(listing, facts=replace(listing.facts, share_label="2우선주"))],
+                    [rename, replace(listing, facts=replace(listing.facts, isin="KR7006120000"))],
+                    [replace(rename, facts=replace(rename.facts, renamed_company="다른회사")), listing]):
+        assert not auction_identity_witness(form, auction, "00612", True, altered)
+
+
+def test_fixed_new_listing_price_checks_the_first_krx_base_without_a_price_candidate():
+    security = SecurityKey("419540", "KR7419540000", "2022-10-18", None, "KOSDAQ", "common")
+    notice, = actual_notices(security, "20221017000403")
+    raw = bars(security, [("2022-10-18", 3470, 3870, 3470, 3870, 890, 9_494_166, 36_050_256_885, 21_175_308)])
+    assert (notice.facts.kind, notice.facts.base) == ("listing_price", 2980)
+    ledger = resolve(security, raw, [notice], coverage_complete=True)
+    assert ledger.candidates == ledger.resolutions == ()
+    with pytest.raises(DisclosureError, match="new-listing reference differs from the KRX base"):
+        resolve(security, raw, [replace(notice, facts=replace(notice.facts, base=2985))], coverage_complete=True)
 
 
 @pytest.mark.parametrize("accession,record,shares,added,ratio,listing", [

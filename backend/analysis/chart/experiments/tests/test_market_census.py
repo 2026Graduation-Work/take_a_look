@@ -299,7 +299,7 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
     assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)
 
 
-def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=()):
+def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=(), published_start=None):
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
@@ -314,7 +314,7 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=Fa
     pd.DataFrame(delisted, columns=["Symbol", "ISIN", "Name", "Market", "SecuGroup", "ListingDate", "DelistingDate",
                                     "KIND_STKCERT_TP_NM"]).to_parquet(delisted_path, index=False)
     start, end = bars.Date.min().date(), bars.Date.max().date()
-    main(["--start", str(start), "--end", str(end), "--published-start", str(start - timedelta(days=7)),
+    main(["--start", str(start), "--end", str(end), "--published-start", str(published_start or start - timedelta(days=7)),
           "--published-end", str(end + timedelta(days=3)), "--krx-days", str(days), "--active-master", str(active_path),
           "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output),
           "--request-budget", str(budget), *(["--preview"] if preview else []),
@@ -323,6 +323,94 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=Fa
                                        active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
     notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
     return read_resolution_snapshot(path, verify_archive=True), notices
+
+
+@pytest.mark.parametrize("accession,code,isin,name,old_listing,day,base,raw", [
+    ("20240610000605", "323350", "KR7323350009", "다원넥스뷰", "2019/05/21", "2024-06-11", 13_850, [
+        ("2024-06-10", "323350", "다원넥스뷰", "KONEX", 15550, 15550, 14500, 14900, 410, 3685, 54452920, 6312500),
+        ("2024-06-11", "323350", "다원넥스뷰", "KOSDAQ", 14850, 15490, 10850, 11000, -2850, 3183508, 39389431040, 7596111),
+    ]),
+    ("20251226000658", "012210", "KR7012210001", "삼미금속", "2023/05/16", "2025-12-29", 10_180, [
+        ("2025-12-26", "012210", "삼미금속", "KONEX", 15980, 15980, 14610, 15980, 2080, 9667, 154272470, 19766609),
+        ("2025-12-29", "012210", "삼미금속", "KOSDAQ", 13230, 13230, 13230, 13230, 3050, 1554328, 20563759440, 22192012),
+    ]),
+])
+def test_fixed_new_listing_reference_keeps_same_code_old_and_new_markets_separate(
+    tmp_path, monkeypatch, accession, code, isin, name, old_listing, day, base, raw,
+):
+    publication = f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}"
+    use_archived_kind_bodies(monkeypatch, {publication: (accession,)}, issuer=code[:5], submitter="코스닥시장본부")
+    snapshot, notices = freeze_kind_case(
+        tmp_path, raw, active=[(code, isin, name, name, "KOSDAQ", "주권", day.replace("-", "/"), "보통주")],
+        delisted=[(code, isin, name, "KONEX", "주권", old_listing, day, "보통주")])
+    reference = notices.loc[accession]
+    assert (reference.Kind, reference.BasePrice, reference.Code) == ("listing_price", base, code)
+    old, new = sorted(snapshot.ledgers, key=lambda key: key.listing)
+    assert old.isin == new.isin == isin
+    assert (old.market, old.delisting, new.market, new.listing) == ("KONEX", day, "KOSDAQ", day)
+    assert (snapshot.segment_starts(old), snapshot.segment_starts(new)) == ([old.listing], [day])
+    assert snapshot.ledgers[old].resolutions == ()
+    event, = snapshot.ledgers[new].resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review and event.price_factor is event.volume_factor is None
+
+
+def test_uncoded_auction_archive_checks_exact_companion_listing_and_rename(tmp_path, monkeypatch):
+    auction, listing = "20180104000369", "20180102000170"
+    use_archived_kind_bodies(monkeypatch, {"2018-01-02": (listing,), "2018-01-04": (auction,)},
+                            issuer="00612", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2018-01-04", "006125", "SK케미칼우", "KOSPI", 0, 0, 0, 40500, 0, 0, 0, 2817125),
+        ("2018-01-05", "006125", "SK디스커버리우", "KOSPI", 25000, 32500, 25000, 26250, 1250, 745279, 21803809600, 1358455),
+    ], active=[("006125", "KR7006121008", "에스케이디스커버리1우선주", "SK디스커버리우", "KOSPI", "주권", "1989/11/24", "구형우선주")])
+    assert (notices.loc[auction, "Code"], notices.loc[auction, "Section"]) == ("006125", 1)
+    link = {"Auction": [auction, "99332", 1], "Witnesses": [[listing, "68151", 4], [listing, "68151", 2]]}
+    assert snapshot.coverage["kind_auction_identity_links"] == [link]
+    ledger, = snapshot.ledgers.values()
+    assert ledger.resolutions[0].reason == "official_division"
+    assert {item.accession for item in ledger.resolutions[0].evidence} == {auction, listing}
+
+    output = tmp_path / "output"
+    coverage_path, manifest_path = output / "coverage.json", output / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for index, invalid in enumerate(([], [{**link, "Witnesses": [[listing, "68151", 4]]}])):
+        coverage_path.write_text(json.dumps({**snapshot.coverage, "kind_auction_identity_links": invalid}))
+        manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+        manifest_path.write_text(json.dumps(manifest))
+        with pytest.raises(DisclosureError, match="auction identity links are missing or differ"):
+            freeze_resolution_snapshot(output, tmp_path / f"invalid_identity_{index}", krx_days=tmp_path / "days",
+                                       active_master=tmp_path / "active.parquet", delisted_master=tmp_path / "delisted.parquet",
+                                       evidence_archives=[tmp_path / "kind"])
+
+
+def test_uncoded_auction_before_price_capture_proves_only_identity(tmp_path, monkeypatch):
+    auction, listing = "20151022000346", "20151020000053"
+    use_archived_kind_bodies(monkeypatch, {"2015-10-20": (listing,), "2015-10-22": (auction,)},
+                            issuer="01176", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2016-01-04", "011760", "현대상사", "KOSPI", 28950, 28950, 27450, 27500, -1100, 20875, 583572650, 13228966),
+    ], active=[("011760", "KR7011760006", "현대코퍼레이션보통주", "현대코퍼레이션", "KOSPI", "주권", "1977/12/01", "보통주")],
+        published_start="2015-10-20")
+    assert notices.loc[auction, "AppliedDate"] == "2015-10-23"
+    assert snapshot.coverage["kind_auction_identity_links"] == [
+        {"Auction": [auction, "99332", 1], "Witnesses": [[listing, "68155", 1]]}]
+    ledger, = snapshot.ledgers.values()
+    assert ledger.candidates == ledger.resolutions == ()
+
+
+def test_uncoded_new_listing_auction_uses_the_exact_preferred_section(tmp_path, monkeypatch):
+    auction, listing = "20230130000673", "20230127000869"
+    use_archived_kind_bodies(monkeypatch, {"2023-01-27": (listing,), "2023-01-30": (auction,)},
+                            issuer="45014", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2023-01-31", "450140", "코오롱모빌리티그룹", "KOSPI", 3750, 4875, 3750, 4875, 1125, 12492132, 57562858300, 62777250),
+        ("2023-01-31", "45014K", "코오롱모빌리티그룹우", "KOSPI", 7280, 9460, 7280, 9460, 2180, 98108, 907502860, 2456120),
+    ], active=[], delisted=[
+        ("450140", "KR7450140009", "코오롱모빌리티그룹", "KOSPI", "주권", "2023/01/31", "2026/01/07", "보통주"),
+        ("45014K", "KR745014K018", "코오롱모빌리티그룹우", "KOSPI", "주권", "2023/01/31", "2026/01/07", "종류주권"),
+    ])
+    assert (notices.loc[auction, "Code"], notices.loc[auction, "ISIN"]) == ("45014K", "KR745014K018")
+    assert snapshot.coverage["kind_auction_identity_links"] == [
+        {"Auction": [auction, "99334", 1], "Witnesses": [[listing, "68156", 2]]}]
 
 
 @pytest.mark.parametrize("original,final,common,preferred,active,raw", [

@@ -272,7 +272,8 @@ def _compatible_action_notices(action, notices, candidate):
 def _official_transfer(security, raw, at, candidate, events):
     if "Market" not in raw or raw.Market.iloc[at - 1] == raw.Market.iloc[at]:
         return False
-    prices = [notice for notice in events if notice.facts.kind in {"listing_price", "auction"}]
+    prices = [notice for notice in events
+              if notice.facts.kind in {"listing_price", "auction"} and notice.form != "70718"]
     if len(prices) != 1:
         return False
     notice = prices[0]
@@ -452,6 +453,11 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
             "Verified actions mix listing identities or effective dates")
     candidates, resolved, incomplete = [], [], []
     by_date = {day.date().isoformat(): at for at, day in enumerate(days)}
+    for notice in notices:
+        day = notice.facts.effective
+        if notice.final and notice.form == "70718" and day in by_date:
+            require(notice.facts.kind == "listing_price" and notice.facts.base == base.iloc[by_date[day]],
+                    f"{security.code} {day}: KIND new-listing reference differs from the KRX base")
     outside = sorted(day for day in set(indexed_actions) | set(on_date)
                      if first_day <= day <= max(by_date) and day not in by_date)
     for day in outside:

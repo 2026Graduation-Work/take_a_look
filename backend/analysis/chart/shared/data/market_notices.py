@@ -1,6 +1,7 @@
 """Normalize supported KIND forms before resolving price observations."""
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import date
 from fractions import Fraction
@@ -19,15 +20,15 @@ IDENTITY = (
     r"\s*\(\s*단축코드\s*:\s*A(?P<code>[0-9A-Z]{6})\s*\)"
 )
 FIXED_REFERENCE_FORMS = frozenset({"70795", "32103"})
-PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70793", "72100", "99301", "99302", "99311", "99321", "99322", "99323", "99326",
+PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70718", "70793", "72100", "99301", "99302", "99311", "99321", "99322", "99323", "99326",
                                      "99328", "99331", "99332", "99334", "99335", "99336", "99343", "99360", "99362", "99409",
                                      "32108"}
 TABLE_LISTINGS = frozenset({"32002", "32003", "32004", "32005", "32006", "70760", "70763", "70764", "70765", "70779", "70791"})
 TEXT_LISTINGS = frozenset({"68151", "68152", "68154", "68155"})
 CLASS_RELISTING = (
-    r"^◎\s*(.+?)\s+주권\s+재상장(?:\s+내역\((?:재상장-)?인적분할\)"
+    r"^◎\s*(.+?)\s+(?:보통)?주권\s+재상장(?:\s+내역\((?:재상장-)?인적분할\)"
     r"|\(재상장-인적분할\)\s+및\s+종류주권\s+신규상장\s+내역"
-    r"|\s+및\s+종류주권\s+신규상장\s+내역\s*\(재상장-인적분할\))\s*(?=\(1\))"
+    r"|\s+및\s+(?:종류주권\s+)?신규상장\s+내역\s*\(재상장-인적분할\))\s*(?=\(1\))"
 )
 
 
@@ -75,6 +76,7 @@ class NoticeSection:
     listing: str | None = None
     previous_market: str | None = None
     previous_close: int | None = None
+    renamed_company: str | None = None
 
 
 @dataclass(frozen=True)
@@ -186,6 +188,9 @@ def _price_table(form, rows):
     require(len(header) == 1, "KIND price table header missing")
     columns = [_compact(cell) for cell in header[0][1:]]
     require(columns[0] == "주권종류", "Invalid KIND price class header")
+    if form == "70718":
+        require("단축코드" in columns and "평가가격(원)" not in columns,
+                "KIND new-listing reference lacks a coded fixed price")
     after = rows[rows.index(header[0]) + 1:]
     securities = [row for row in after if re.fullmatch(CLASS, row[0])]
     require(securities, "KIND price table identifies no ordinary or preferred shares")
@@ -636,11 +641,22 @@ def _listed_text(html, form, *, final):
                 else:
                     after = _integer(left)
             kind = "new_listing" if section_type == "신규상장" else "listing"
+            renamed = None
+            if form == "68151" and kind == "listing" and reason == "상호변경":
+                names = re.findall(r"㉯\s*상장종목약명\(영문약명\)\s*-\s*([^()]+)\(영문약명:[^()]+(?:\([^()]+\))?\)\s*→\s*"
+                                   r"([^()]+)\(영문약명:[^()]+(?:\([^()]+\))?\)\s*㉰", block)
+                if len(names) == 1:
+                    old, new = (normal_company(value) for value in names[0])
+                    if label not in {"보통주", "보통주식"} and old.endswith("우") and new.endswith("우"):
+                        old, new = old[:-1], new[:-1]
+                    if old == normal_company(company) and old != new:
+                        renamed = new
             sections.append(NoticeSection(len(sections) + 1, kind, company, label, day, reason,
                                           code=identity["code"], isin=identity["isin"], shares_before=before,
                                           shares_after=after, added_shares=delta,
                                           par_before=_integer(par[0][0]) if par and par[0][1] else None,
-                                          par_after=_integer(par[0][1] or par[0][0]) if par else None))
+                                          par_after=_integer(par[0][1] or par[0][0]) if par else None,
+                                          renamed_company=renamed))
     require(sections, "KIND document has no supported listing section")
     if correction:
         require(len(sections) == 1 and sections[0].effective == official_date(correction[2]),
@@ -727,7 +743,8 @@ def parse_notice(filing, form, body):
             return _class_relisting_text(filing, flattened, heading[1])
         circled = (r"①\s*상장종목명" if form == "68156" else
                    r"^①\s*상장종목명|④\s*종목코드\s*:\s*표준코드\s+(?=[A-Z]{2})|"
-                   r"④\s*표준코드\s*:\s*[A-Z0-9]{12}\s*\([^()]*\)\s+⑤\s*주식의\s*종류와\s*수\s*:?\s*-")
+                   r"④\s*표준코드\s*:\s*[A-Z0-9]{12}\s*\([^()]*\)\s+⑤\s*주식의\s*종류와\s*수\s*"
+                   r"(?::?\s*-|:\s*(?=보통주))")
         if re.search(circled, flattened):
             return _circled_listing_text(filing, flattened, form)
     if form in TEXT_LISTINGS:
@@ -766,7 +783,69 @@ def _preferred_name_matches(facts, company, names):
     return bool(candidates & names)
 
 
-def match_notice(filing, form, facts, body, evidence, securities):
+def can_join_auction_identity(form, facts, final):
+    return (final and form in {"99332", "99334"} and facts.kind == "auction"
+            and facts.code is None and facts.isin is None)
+
+
+def _share_series(label):
+    return "보통주" if label == "보통주식" else label
+
+
+def notice_section_key(notice):
+    return notice.accession, notice.form, notice.facts.section
+
+
+def auction_listing_index(notices):
+    listings = defaultdict(list)
+    for notice in notices:
+        if notice.final and notice.facts.kind in {"listing", "new_listing"} and notice.facts.code and notice.facts.isin:
+            listings[notice.company_id, notice.facts.effective].append(notice)
+    return listings
+
+
+def auction_identity_witness(form, facts, issuer, final, listings):
+    """Find the unique coded listing and optional exact rename for an uncoded auction."""
+    if not can_join_auction_identity(form, facts, final) or not re.fullmatch(r"[0-9A-Z]{5}", issuer):
+        return ()
+    name = normal_company(facts.company)
+    same_issuer_session_class = [
+        row for row in listings if row.final and row.company_id == issuer and row.security.code.startswith(issuer)
+        and row.security.active(facts.effective) and row.facts.effective == facts.effective
+        and _share_series(row.facts.share_label) == _share_series(facts.share_label)
+        and row.facts.code == row.security.code and row.facts.isin == row.security.isin
+    ]
+    choices = []
+    for row in same_issuer_session_class:
+        section = row.facts
+        if not (form == "99334" and section.kind == "new_listing" or form == "99332" and section.kind == "listing"
+                and re.search(r"회사분할|인적분할|분할합병", _compact(section.reason))):
+            continue
+        listed_name = normal_company(section.company)
+        if name == listed_name:
+            choices.append((row,))
+            continue
+        aliases = [item for item in same_issuer_session_class if item.security == row.security
+                   and item.accession == row.accession and item.document_no == row.document_no
+                   and item.facts.kind == "listing" and item.facts.reason == "상호변경"
+                   and normal_company(item.facts.company) == name and item.facts.renamed_company == listed_name]
+        choices.extend((row, alias) for alias in aliases)
+    return choices[0] if len(choices) == 1 else ()
+
+
+def auction_identity_links(notices, listings):
+    links = []
+    for notice in notices:
+        witness = auction_identity_witness(notice.form, notice.facts, notice.company_id, notice.final,
+                                           listings.get((notice.company_id, notice.facts.effective), ()))
+        if witness:
+            require(notice.security == witness[0].security, "KIND auction differs from its witnessed KRX security")
+            links.append({"Auction": list(notice_section_key(notice)),
+                          "Witnesses": [list(notice_section_key(row)) for row in witness]})
+    return sorted(links, key=lambda row: row["Auction"])
+
+
+def match_notice(filing, form, facts, body, evidence, securities, *, identity_witness=()):
     """Bind by explicit identifiers or by a unique issuer and disclosed share class."""
     company = normal_company(facts.company)
     share_class = "common" if facts.share_label in {"보통주", "보통주식"} else "preferred"
@@ -777,6 +856,12 @@ def match_notice(filing, form, facts, body, evidence, securities):
                and (facts.code or share_class == "common" and company in names
                     or share_class == "preferred" and _preferred_name_matches(facts, company, names) or facts.kind == "rename" and any(
                    normal_company(name) in names for name in facts.reason.split(" · ")))]
+    if identity_witness:
+        witnessed = identity_witness[0].security
+        require(can_join_auction_identity(form, facts, body.final) and witnessed in securities
+                and witnessed.share_class == share_class and witnessed.active(facts.effective),
+                "KIND auction witness differs from the KRX listing interval")
+        matches = [witnessed]
     if len(matches) != 1:
         raise DisclosureError(f"KIND notice does not identify one KRX security: {facts.company} {facts.share_label}")
     return Notice(matches[0], filing.accession, form, filing.published.isoformat(), filing.company_id,

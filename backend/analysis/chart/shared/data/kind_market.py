@@ -143,7 +143,7 @@ def company_page(response, code, start, end, page):
         displayed = date.fromisoformat(cells[1][:10])
         require(start <= displayed <= end, "KIND company filing is outside search")
         require(not company_id or code.startswith(company_id),
-                "KIND company result identifies another company")
+                "KIND company result lacks a verified issuer-code binding")
         _, _, company, title, submitter, _ = cells
         rows.append(MarketFiling(accession, displayed, caption or title, response.evidence, stock_code=code,
                                  company=company, displayed=displayed, company_id=company_id, submitter=submitter))

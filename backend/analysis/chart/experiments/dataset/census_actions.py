@@ -21,6 +21,10 @@ from shared.data.events import observation_mask
 from shared.data.kind_market import KindMarket, KindUnavailable
 from shared.data.market_notices import (
     SecurityKey,
+    auction_identity_links,
+    auction_identity_witness,
+    auction_listing_index,
+    can_join_auction_identity,
     kind_topic,
     match_notice,
     normal_company,
@@ -234,11 +238,29 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
     selected, fetched, verified, families = set(), set(), {}, []
     missing_merger_sources = set()
+    pending_auctions, pending_families = [], []
 
     def has_session(key, day):
         return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
 
-    def bind(filing, form, body, acquired, issuer, keys):
+    def failed(filing, structural, keys, affected, refs, exc):
+        stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
+        if isinstance(exc, DocumentFormatError):
+            refs += exc.evidence
+        failures.append({"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
+                         "Stage": stage, "Topic": kind_topic(filing), "Reason": str(exc),
+                         "Evidence": [asdict(ref) for ref in refs]})
+        if structural:
+            for key in keys:
+                structural_gaps[key].add(filing.accession)
+        for key, candidate in affected:
+            if stage == "kind_document":
+                blocked[key].add(candidate.date)
+            else:
+                unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
+                                                    for ref in refs)
+
+    def bind(filing, form, body, acquired, issuer, keys, structural, affected):
         sections = parse_notice(filing, form, body)
         if not sections:
             require(form == "68155" and body.final, "KIND notice lacks verified listing sections")
@@ -258,7 +280,14 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                         and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)):
                     missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
                 continue
-            notice = match_notice(filing, form, facts, body, acquired, {key: aliases[key] for key in possible})
+            securities = {key: aliases[key] for key in possible}
+            try:
+                notice = match_notice(filing, form, facts, body, acquired, securities)
+            except DisclosureError as exc:
+                if not can_join_auction_identity(form, facts, body.final):
+                    raise
+                pending_auctions.append((filing, form, facts, body, acquired, securities, structural, keys, affected, exc))
+                continue
             parsed[notice.security].append(notice)
             matched.append(notice)
         verified[filing.accession] = matched
@@ -298,7 +327,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             refs += acquired
             fetched.add(filing.accession)
             if body.final:
-                bind(filing, form, body, acquired, issuer, keys)
+                bind(filing, form, body, acquired, issuer, keys, structural, affected)
                 continue
             referral = client.final_referral(filing, body, acquired)
             accession = referral.route.accession
@@ -315,35 +344,43 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             target_form, target_body, target_refs = client.document(target, expected=referral)
             fetched.add(accession)
             if accession not in verified:
-                bind(target, target_form, target_body, target_refs, issuer, keys)
-            rows = [row for row in verified[accession] if row.security in keys and row.document_no == target_body.document_no
+                target_affected = [(key, candidate) for key in keys for candidate in candidates[key]
+                                   if _in_scope(target, candidate)]
+                bind(target, target_form, target_body, target_refs, issuer, keys, structural, target_affected)
+            family = {"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
+                      "FinalDocNo": target_body.document_no, "FormId": target_form,
+                      "Evidence": [asdict(ref) for ref in (filing.evidence, acquired[0], referral.evidence,
+                                                           target.evidence, *target_refs)]}
+            pending_families.append((filing, structural, keys, affected, refs, target_refs, family))
+        except (ValueError, OSError) as exc:
+            failed(filing, structural, keys, affected, refs, exc)
+
+    listings = auction_listing_index(notice for rows in parsed.values() for notice in rows)
+    for filing, form, facts, body, acquired, securities, structural, keys, affected, initial_error in pending_auctions:
+        witness = auction_identity_witness(form, facts, filing.company_id, body.final,
+                                           listings.get((filing.company_id, facts.effective), ()))
+        try:
+            if not witness:
+                raise initial_error
+            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness)
+            parsed[notice.security].append(notice)
+            verified[filing.accession].append(notice)
+        except DisclosureError as exc:
+            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc)
+
+    for filing, structural, keys, affected, refs, target_refs, family in pending_families:
+        try:
+            accession = family["FinalAcptNo"]
+            rows = [row for row in verified[accession] if row.security in keys and row.document_no == family["FinalDocNo"]
                     and row.evidence[1:] == target_refs]
             require(rows, "KIND final document identifies no affected stock")
             closed, affected_keys = structural_closure(rows, keys, has_session) if structural else (set(), set())
             require(not structural or closed, "KIND final document does not confirm an affected structural event")
             for key in affected_keys - closed:
                 structural_gaps[key].add(filing.accession)
-            families.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
-                             "FinalDocNo": target_body.document_no, "FormId": target_form,
-                             "ClosedWindows": [_security_columns(key) for key in sorted(closed, key=str)],
-                             "Evidence": [asdict(ref) for ref in (filing.evidence, acquired[0], referral.evidence,
-                                                                  target.evidence, *target_refs)]})
+            families.append({**family, "ClosedWindows": [_security_columns(key) for key in sorted(closed, key=str)]})
         except (ValueError, OSError) as exc:
-            stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
-            if isinstance(exc, DocumentFormatError):
-                refs += exc.evidence
-            failures.append({"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
-                             "Stage": stage, "Topic": topic, "Reason": str(exc),
-                             "Evidence": [asdict(ref) for ref in refs]})
-            if structural:
-                for key in keys:
-                    structural_gaps[key].add(filing.accession)
-            for key, candidate in affected:
-                if stage == "kind_document":
-                    blocked[key].add(candidate.date)
-                else:
-                    unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
-                                                        for ref in refs)
+            failed(filing, structural, keys, affected, refs, exc)
     require(not missing_merger_sources,
             "Issuer merger source is outside the bounded census; include --code for "
             + ", ".join(sorted(missing_merger_sources)))
@@ -616,6 +653,7 @@ def build_census(args, client):
                 "incomplete_candidates": unresolved, "unassigned_market_observations": unassigned,
                 "market_observations_outside_ledger_scope": market_exclusions,
                 "nonstock_notices": nonstock,
+                "kind_auction_identity_links": auction_identity_links(all_notices, auction_listing_index(all_notices)),
                 "kind_final_families": sorted(families, key=lambda row: row["AcptNo"]),
                 "failures": [*failures, *source_errors, *document_errors, *failed_windows]}
     tables = {

@@ -8,7 +8,7 @@ from pathlib import Path
 import pandas as pd
 from shared.data.disclosures import require
 from shared.data.kind_market import MarketFiling
-from shared.data.market_notices import SecurityKey, match_notice
+from shared.data.market_notices import SecurityKey, match_notice, notice_section_key
 from shared.data.market_resolutions import (
     ISSUER_MERGER_REASON,
     issuer_merger_boundaries,
@@ -82,11 +82,15 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
 
     def verify_ledger(official):
         by_security = defaultdict(list)
+        sections = {notice_section_key(notice): notice for notice in official}
+        links = {tuple(row["Auction"]): tuple(sections[tuple(witness)] for witness in row["Witnesses"])
+                 for row in coverage.get("kind_auction_identity_links", [])}
         for notice in official:
             filing = MarketFiling(notice.accession, pd.Timestamp(notice.published).date(), notice.title,
                                   notice.evidence[0], company_id=notice.company_id)
             matched = match_notice(filing, notice.form, notice.facts, notice, notice.evidence[1:],
-                                   {notice.security: aliases[notice.security]})
+                                   {notice.security: aliases[notice.security]},
+                                   identity_witness=links.get(notice_section_key(notice), ()))
             require(matched.security == notice.security, "Official filing differs from the KRX listing identity")
             by_security[notice.security].append(matched)
         issuer_mergers = issuer_merger_boundaries(

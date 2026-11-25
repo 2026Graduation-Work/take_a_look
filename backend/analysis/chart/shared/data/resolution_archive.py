@@ -2,6 +2,7 @@
 
 import csv
 import json
+from collections import defaultdict
 from datetime import date
 
 from .disclosures import (
@@ -27,7 +28,16 @@ from .kind_market import (
     final_document_number,
     viewer_documents,
 )
-from .market_notices import Notice, SecurityKey, kind_topic, parse_notice
+from .market_notices import (
+    Notice,
+    SecurityKey,
+    auction_identity_links,
+    auction_listing_index,
+    can_join_auction_identity,
+    kind_topic,
+    notice_section_key,
+    parse_notice,
+)
 from .market_resolutions import structural_closure
 
 
@@ -149,6 +159,36 @@ def _verify_final_family(archive, row, refs, filings, daily_targets, windows, fi
     return closed
 
 
+def _verify_auction_identities(coverage, windows, official, documents, filings):
+    scopes = {(notice.company_id, notice.facts.effective) for notice in official
+              if can_join_auction_identity(notice.form, notice.facts, notice.final)}
+    windows_by_code = defaultdict(list)
+    for key in windows:
+        windows_by_code[key.code].append(key)
+    # Use all the original sections of each verified listing body, including any missing from notices.csv.
+    listings = []
+    for (accession, document, form, refs), (sections, family, final) in documents.items():
+        filing = filings[accession, refs[0]]
+        if not final or not filing.company_id:
+            continue
+        for facts in sections.values():
+            if ((filing.company_id, facts.effective) not in scopes or facts.kind not in {"listing", "new_listing"}
+                    or not facts.code or not facts.isin):
+                continue
+            keys = [key for key in windows_by_code[facts.code] if key.isin == facts.isin and key.active(facts.effective)
+                    and key.code.startswith(filing.company_id)
+                    and (facts.share_label in {"보통주", "보통주식"}) == (key.share_class == "common")]
+            require(len(keys) <= 1, "KIND auction witness matches ambiguous KRX listing intervals")
+            for key in keys:
+                listings.append(Notice(key, accession, form, filing.published.isoformat(), filing.company_id,
+                                       filing.title, facts, refs, document, family, final))
+    links = auction_identity_links(official, auction_listing_index(listings))
+    retained = {notice_section_key(notice) for notice in official}
+    require(links == coverage.get("kind_auction_identity_links", [])
+            and all(tuple(witness) in retained for row in links for witness in row["Witnesses"]),
+            "KIND auction identity links are missing or differ from official evidence")
+
+
 def verify_archive_bindings(folder, coverage, archive, session_dates):
     with (folder / "notices.csv").open(encoding="utf-8", newline="") as stream:
         notices = [(row, tuple(Evidence(**raw) for raw in json.loads(row["Evidence"]))) for row in csv.DictReader(stream)]
@@ -216,6 +256,7 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
                                facts, refs, document, family, final))
         if final:
             proved.add((filing.accession, filing.evidence))
+    _verify_auction_identities(coverage, windows, official, documents, filings)
     final_notices = {}
     for notice in official:
         if notice.final:
