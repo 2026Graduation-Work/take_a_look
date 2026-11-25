@@ -266,6 +266,12 @@ def load_experiment_config(path):
     if bt["signal_lag_days"] != 1:
         # Labels observe T+1..T+H; any other lag would trade a window the label never saw.
         raise ValueError("backtest.signal_lag_days must be 1 to match the label window")
+    if labels["type"] == "dynamic_sigma":
+        # Execution resolves the same barriers the model was trained on (hard stop is extra).
+        for label_key, backtest_key in (("horizon", "max_holding_days"), ("up_mult", "up_mult"),
+                                        ("down_mult", "down_mult")):
+            if bt.get(backtest_key) != labels[label_key]:
+                raise ValueError(f"backtest.{backtest_key} must equal labels.{label_key}")
     if (
         not math.isfinite(bt["initial_cash"])
         or not math.isfinite(bt["fee"])

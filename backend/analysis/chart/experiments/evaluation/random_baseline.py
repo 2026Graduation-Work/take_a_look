@@ -52,11 +52,12 @@ def compare_with_random(config, predictions, prices, model_result, model_metrics
         values = distribution[name].astype(float)
         valid = values[np.isfinite(values)]
         summary[f"random_{name}_median"] = float(valid.median()) if len(valid) else np.nan
-        summary[f"{name}_valid_runs"] = len(valid)
-        # Share of comparable random runs the model beat; drawdown is negative, so higher is
+        # Runs actually compared with the model: none when the model's own value is undefined.
+        compared = valid if np.isfinite(model_value) else valid.iloc[0:0]
+        summary[f"{name}_valid_runs"] = len(compared)
+        # Share of compared random runs the model beat; drawdown is negative, so higher is
         # better too. Undefined on either side (e.g. no volatility) is not a loss: it is NaN.
         summary[f"{name}_percentile_vs_random"] = (
-            float((valid < model_value).mean()) if len(valid) and np.isfinite(model_value)
-            else np.nan
+            float((compared < model_value).mean()) if len(compared) else np.nan
         )
     return summary, distribution
