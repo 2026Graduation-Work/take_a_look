@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -43,6 +45,14 @@ def pack_inputs(tmp_path):
             "processed_dir": processed, "calendar_file": calendar, "research_manifest": provenance}
 
 
+def write_valid_sidecars(pack_inputs):
+    contract = pack_inputs["research_manifest"]["processing_contract"]
+    for kind in ("models", "predictions"):
+        for path in pack_inputs[kind].values():
+            atomic_json(f"{path}.manifest.json", {"sha256": sha256_file(path),
+                        "feature_columns": list(BASE_FEATURES), "processing_contract": contract})
+
+
 @pytest.mark.parametrize(("artifact", "changed", "message"), [
     ("models", "qlib", "processing contract"),
     ("models", "sha256", "checksum"),
@@ -54,6 +64,7 @@ def pack_inputs(tmp_path):
 def test_export_rejects_mismatched_sidecar_before_creating_pack(pack_inputs, artifact, changed, message):
     path = pack_inputs[artifact][20]
     contract = pack_inputs["research_manifest"]["processing_contract"]
+    write_valid_sidecars(pack_inputs)
     sidecar = {"sha256": sha256_file(path), "feature_columns": list(BASE_FEATURES),
                "processing_contract": contract}
     if changed == "qlib":
@@ -87,7 +98,17 @@ def test_export_preserves_legacy_pack_builds(pack_inputs, with_sidecars):
                 sidecar["processing_contract"] = contract
             atomic_json(f"{prediction}.manifest.json", sidecar)
 
-    root, archive, _ = build_pack(**pack_inputs)
+    root, archive, _ = build_pack(**pack_inputs, allow_legacy_artifacts=not with_sidecars)
     manifest, _ = load_pack(root)
     assert archive.is_file()
     assert manifest["processing_contract"] == pack_inputs["research_manifest"]["processing_contract"]
+
+
+@pytest.mark.parametrize("artifact", ["models", "predictions"])
+def test_export_requires_sidecars_unless_legacy_opt_in(pack_inputs, artifact):
+    write_valid_sidecars(pack_inputs)
+    Path(f"{pack_inputs[artifact][20]}.manifest.json").unlink()
+
+    with pytest.raises(ValueError, match="Missing .* manifest"):
+        build_pack(**pack_inputs)
+    assert not pack_inputs["output"].exists()

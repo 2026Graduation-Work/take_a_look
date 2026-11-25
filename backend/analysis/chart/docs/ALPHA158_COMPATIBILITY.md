@@ -67,7 +67,7 @@ python -m experiments.run_experiment_analysis --config YOUR_EXPERIMENT.yaml
 python -m experiments.run_inference --model-path YOUR_MODEL.txt --raw-dir workspace/experiments/datasets/qlib_2016/raw
 ```
 
-원본 모델의 운영 pack 내보내기는 현재 `refresh_pack`의 기존 v3 검증에서 거부된다. 직접 `build_pack`을 호출해도 모델·예측 sidecar가 있으면 파일 해시와 처리 계약을 검사한다. 새 Qlib 모델에 기존 연구 manifest를 잘못 붙여도 내보내지 않는다. sidecar가 없는 과거 보관 파일은 기존 연구 manifest 검증을 유지한다. 실제 재학습·평가 후 원본 계약을 지원하는 pack 검증과 담당자 확인을 거쳐 운영을 전환한다. 이 변경은 활성 pack, 정기 실행, DB를 바꾸지 않는다.
+원본 모델의 운영 pack 내보내기는 현재 `refresh_pack`의 기존 v3 검증에서 거부된다. 직접 `build_pack`을 호출할 때도 모델·예측 sidecar(`.manifest.json`)가 필수이며 파일 해시와 처리 계약을 검사한다. 피처 이름이 같아 sidecar 없이 옮긴 Qlib 모델을 구별할 수 없기 때문이다. sidecar가 없는 과거 `shared_v3` 보관 파일만 `--allow-legacy-artifacts`를 붙여 내보내며, 이 옵션도 기존 계산 경로와 함께 [#464](https://github.com/2026Graduation-Work/take_a_look/issues/464)에서 삭제한다. 실제 재학습·평가 후 원본 계약을 지원하는 pack 검증과 담당자 확인을 거쳐 운영을 전환한다. 이 변경은 활성 pack, 정기 실행, DB를 바꾸지 않는다.
 
 ## 검증 다시 실행하기
 

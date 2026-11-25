@@ -13,10 +13,12 @@ from .samples import build_samples
 LOCAL_BUILDER_ID = BUILDER_ID
 
 
-def _verify_artifact(path, expected_contract, *, kind):
+def _verify_artifact(path, expected_contract, *, kind, allow_legacy):
     sidecar = Path(f"{path}.manifest.json")
     if not sidecar.exists() and not sidecar.is_symlink():
-        return None
+        if allow_legacy:
+            return None
+        raise ValueError(f"Missing {kind} manifest: {sidecar}. Use --allow-legacy-artifacts for legacy files.")
     metadata = json.loads(sidecar.read_text())
     if not isinstance(metadata, dict):
         raise ValueError(f"Invalid {kind} manifest: {sidecar}")
@@ -31,7 +33,8 @@ def _verify_artifact(path, expected_contract, *, kind):
     return metadata
 
 
-def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_file=None, research_manifest=None):
+def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_file=None, research_manifest=None,
+               allow_legacy_artifacts=False):
     if not pack_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in pack_id):
         raise ValueError("Invalid pack ID")
     if not research_manifest or not calendar_file:
@@ -46,8 +49,10 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
         raise FileExistsError(root)
     verified_inputs = {}
     for horizon in (5, 20):
-        model_meta = _verify_artifact(models[horizon], expected_contract, kind="model")
-        prediction_meta = _verify_artifact(predictions[horizon], expected_contract, kind="prediction")
+        model_meta = _verify_artifact(models[horizon], expected_contract, kind="model",
+                                      allow_legacy=allow_legacy_artifacts)
+        prediction_meta = _verify_artifact(predictions[horizon], expected_contract, kind="prediction",
+                                           allow_legacy=allow_legacy_artifacts)
         model = lgb.Booster(model_file=str(models[horizon]))
         feature_names = model.feature_name()
         if model.num_model_per_iteration() != 3:
