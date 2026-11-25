@@ -5,9 +5,11 @@ from dataclasses import replace
 from datetime import date
 from fractions import Fraction
 from pathlib import Path
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
+from requests.exceptions import ChunkedEncodingError, ConnectionError, ReadTimeout
 from shared.data.actions import Action, FieldEvidence, deal_table, tick_size
 from shared.data.disclosures import DisclosureError, Evidence, Response, collect_pages
 from shared.data.events import apply_events
@@ -308,9 +310,10 @@ def test_kind_cache_import_preserves_receipt_time_and_skips_network(tmp_path):
         client.day(day)
 
 
-def test_kind_403_stops_further_live_requests(tmp_path):
+@pytest.mark.parametrize("status", [403, 429])
+def test_kind_access_rejection_stops_further_live_requests(tmp_path, status):
     class Rejected:
-        status_code = 403
+        status_code = status
 
         def __enter__(self):
             return self
@@ -323,13 +326,60 @@ def test_kind_403_stops_further_live_requests(tmp_path):
             return Rejected()
 
     client = KindMarket(tmp_path, budget=3, session=Session())
-    with pytest.raises(KindUnavailable, match="403"):
+    with pytest.raises(KindUnavailable, match=str(status)):
         client.day(date(2016, 1, 1))
     with pytest.raises(KindUnavailable, match="stopped"):
         client.day(date(2016, 1, 2))
     assert client.calls == 1
     call = json.loads((tmp_path / "calls.jsonl").read_text())
-    assert call["status"] == 403
+    assert call["status"] == status
+
+
+def test_kind_transport_failure_limit_keeps_cache_and_allows_a_new_run(tmp_path, monkeypatch):
+    monkeypatch.setattr("shared.data.kind_market.time.sleep", lambda _: None)
+    complete = MagicMock(status_code=200, headers={})
+    complete.__enter__.return_value = complete
+    complete.iter_content.return_value = ["조회된 결과값이 없습니다. 전체 <em>0</em>건 : <strong>1</strong>/1".encode()]
+    partial = MagicMock(status_code=200, headers={})
+    partial.__enter__.return_value = partial
+    partial.iter_content.side_effect = ChunkedEncodingError("fake secret in partial response")
+    request = Mock(side_effect=[
+        ReadTimeout("fake secret in timeout"), ConnectionError("fake secret in connection"), complete,
+        ReadTimeout(), partial, ConnectionError(), complete,
+    ])
+    session = Mock(request=request)
+    client = KindMarket(tmp_path, budget=10, session=session)
+    for day in (1, 2):
+        with pytest.raises(KindUnavailable, match="network request failed"):
+            client.day(date(2016, 1, day))
+    cached_day = date(2016, 1, 3)
+    saved = client.day(cached_day)
+    for day in (4, 5):
+        with pytest.raises(KindUnavailable, match="network request failed"):
+            client.day(date(2016, 1, day))
+    assert client.day(cached_day) == saved
+    with pytest.raises(KindUnavailable, match="network request failed"):
+        client.day(date(2016, 1, 6))
+
+    with pytest.raises(KindUnavailable, match="stopped"):
+        client.day(date(2016, 1, 7))
+    assert client.day(cached_day) == saved
+    assert request.call_count == client.calls == 6 and client.remaining == 4
+
+    resumed = KindMarket(tmp_path, budget=1, session=session)
+    assert resumed.day(cached_day) == saved
+    assert resumed.day(date(2016, 1, 7))[0] == []
+    with pytest.raises(KindUnavailable, match="budget exhausted"):
+        resumed.day(date(2016, 1, 8))
+    assert request.call_count == 7 and resumed.calls == 1 and resumed.remaining == 0
+
+    log = (tmp_path / "calls.jsonl").read_text()
+    assert "fake secret" not in log
+    calls = [json.loads(line) for line in log.splitlines()]
+    assert [call["status"] for call in calls] == [None, None, 200, None, 200, None, 200]
+    assert [call.get("error_type") for call in calls] == [
+        "ReadTimeout", "ConnectionError", None, "ReadTimeout", "ChunkedEncodingError", "ConnectionError", None,
+    ]
 
 
 def test_raw_window_fingerprint_checks_every_amount_and_expected_session():

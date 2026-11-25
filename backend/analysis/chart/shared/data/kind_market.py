@@ -166,6 +166,7 @@ class KindMarket:
         self.calls = 0
         self._last_request = -float("inf")
         self._stopped = False
+        self._transport_failures = 0
 
     def _store(self, request, body, charset, received_at, origin):
         digest = hashlib.sha256(body).hexdigest()
@@ -247,11 +248,12 @@ class KindMarket:
         headers = {"User-Agent": "Mozilla/5.0", "Referer": referer}
         if form is not None:
             headers["X-Requested-With"] = "XMLHttpRequest"
-        status = None
+        call = {**request, "status": None}
         try:
             with self.session.request("POST" if form else "GET", url, data=form, headers=headers,
                                       timeout=(10, 40), stream=True, allow_redirects=False) as response:
                 status = response.status_code
+                call["status"] = status
                 if status in {403, 429}:
                     self._stopped = True
                 if status != 200:
@@ -263,14 +265,20 @@ class KindMarket:
                 for block in response.iter_content(64 * 1024):
                     body.extend(block)
                     require(len(body) <= BODY_LIMIT, "KIND response exceeds body limit")
-        except requests.RequestException:
+        except requests.RequestException as exc:
+            self._transport_failures += 1
+            if self._transport_failures >= 3:
+                self._stopped = True
+            call["error_type"] = type(exc).__name__
             raise KindUnavailable("KIND network request failed") from None
+        else:
+            self._transport_failures = 0
         finally:
             self._last_request = time.monotonic()
             self.root.mkdir(parents=True, exist_ok=True)
             at = datetime.now(UTC).isoformat()
             with (self.root / "calls.jsonl").open("a") as log:
-                log.write(json.dumps({**request, "status": status, "received_at": at}) + "\n")
+                log.write(json.dumps({**call, "received_at": at}) + "\n")
         return self._store(request, bytes(body), charset, at, "http")
 
     def _get(self, url, *, referer, form=None, daily=None, legacy=None, parse=lambda response: response, page_caches=None):
