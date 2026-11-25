@@ -38,7 +38,7 @@ from .market_notices import (
     notice_section_key,
     parse_notice,
 )
-from .market_resolutions import structural_closure
+from .market_resolutions import role_correction_windows, structural_closure
 
 
 def _response(archive, ref):
@@ -150,6 +150,12 @@ def _verify_final_family(archive, row, refs, filings, daily_targets, windows, fi
     require(matched, "KIND correction target has no verified stock facts")
     closed = {_security(item) for item in row["ClosedWindows"]}
     keys = {key for key in windows if key.code.startswith(issuer)}
+    if "OriginalNoticeEvidence" in row:
+        original_refs = (*refs[:2], *(Evidence(**ref) for ref in row["OriginalNoticeEvidence"]))
+        sections, _, source_final = _official_sections(archive, original, row["DocNo"], row["FormId"], original_refs)
+        require(not source_final and closed == role_correction_windows(original, row["FormId"],
+                list(sections.values()), matched, keys, has_session), "KIND source role closure differs")
+        return closed
     confirmed, affected = structural_closure(matched, keys, has_session)
     require(closed <= confirmed,
             "KIND correction closure lacks an affected structural fact")
@@ -203,6 +209,17 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
                 and windows[key]["first_session"] <= day <= windows[key]["last_session"])
 
     issuers = {key.code[:5] for key in windows}
+    ordered = sorted(session_dates)
+    prior_sessions = dict(zip(ordered[1:], ordered))
+    prior_markets = defaultdict(set)
+    for key, window in windows.items():
+        if key.delisting and prior_sessions.get(key.delisting) == window["last_session"]:
+            prior_markets[key.code, key.delisting].add(key.market)
+    role_issuers = {
+        "rename": {key.code[:5] for key, window in windows.items() if window["spac"]["observations"]},
+        "new_listing": {key.code[:5] for key, window in windows.items() if window["first_session"] == key.listing
+                        and prior_markets[key.code, key.listing] - {key.market}},
+    }
     expected, proved, daily_targets = {}, set(), {}
     final_accessions = {row["FinalAcptNo"] for row, _ in families}
     filings = {}
@@ -219,7 +236,8 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
         for row in rows:
             if row.accession in final_accessions:
                 daily_targets.setdefault(row.accession, []).append(row)
-            if row.company_id[:5] in issuers and kind_topic(row) == "structural":
+            topic, issuer = kind_topic(row), row.company_id[:5]
+            if issuer in issuers and (topic == "structural" or issuer in role_issuers.get(topic, ())):
                 expected.setdefault(row.accession, row)
     for table in ("company", "archived_market_actions"):
         for code, entries in coverage[table].items():

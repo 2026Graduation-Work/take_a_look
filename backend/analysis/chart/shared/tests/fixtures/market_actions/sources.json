@@ -1304,5 +1304,74 @@
       "20180102000430"
     ],
     "final": true
+  },
+  "20210722000431": {
+    "form": "70765",
+    "title": "변경상장(상호변경)",
+    "company": "휴럼",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/22/000431/20210722001090/70765.htm",
+    "charset": "utf-8",
+    "sha256": "bcbc4d021c61c3186b5f48c0275280d240b361ebe3807ae18c3ae1be00a58550",
+    "document_no": "20210722001090",
+    "family": [
+      "20210722001090",
+      "20210722001202"
+    ],
+    "final": false
+  },
+  "20210722000497": {
+    "form": "70765",
+    "title": "변경상장(상호변경)",
+    "company": "휴럼",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/22/000497/20210722001202/70765.htm",
+    "charset": "utf-8",
+    "sha256": "47069e5b466b6864441c873642d2a39e73a4e02828172ef427367ff7bf3c9aa3",
+    "document_no": "20210722001202",
+    "family": [
+      "20210722001090",
+      "20210722001202"
+    ],
+    "final": true
+  },
+  "20221220000314": {
+    "form": "32002",
+    "title": "신규상장",
+    "company": "지에프씨생명과학",
+    "body_url": "https://kind.krx.co.kr/external/2022/12/20/000314/20221220000946/32002.htm",
+    "charset": "utf-8",
+    "sha256": "243870e5e341e11b37e2a5c627b3cc023b7c694c94b390a17b2a57ea71dd58c1",
+    "document_no": "20221220000946",
+    "family": [
+      "20221220000946",
+      "20221220001321"
+    ],
+    "final": false
+  },
+  "20221220000503": {
+    "form": "32002",
+    "title": "신규상장",
+    "company": "지에프씨생명과학",
+    "body_url": "https://kind.krx.co.kr/external/2022/12/20/000503/20221220001321/32002.htm",
+    "charset": "utf-8",
+    "sha256": "4fe7c154ee44d4a70220b8fef2eed6677a7e99c7c41c8299c54d1d60c5763d19",
+    "document_no": "20221220001321",
+    "family": [
+      "20221220000946",
+      "20221220001321"
+    ],
+    "final": true
+  },
+  "20210726000260": {
+    "form": "70791",
+    "title": "추가상장(타법인흡수합병)",
+    "company": "휴럼",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/26/000260/20210726000719/70791.htm",
+    "charset": "utf-8",
+    "sha256": "d02b27e36c8f34341a4cf05c2287315975e529e686b0f5ce1d2251618a23c49b",
+    "document_no": "20210726000719",
+    "family": [
+      "20210726000719"
+    ],
+    "final": true
   }
 }

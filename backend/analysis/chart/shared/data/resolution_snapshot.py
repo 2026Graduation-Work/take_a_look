@@ -275,7 +275,7 @@ def _load_tables(folder, manifest):
     sources = set()
     for row in families:
         identifiers = ("AcptNo", "DocNo", "FinalAcptNo", "FinalDocNo")
-        require(isinstance(row, dict) and set(row) == {*identifiers, "FormId", "ClosedWindows", "Evidence"}
+        require(isinstance(row, dict) and set(row) - {"OriginalNoticeEvidence"} == {*identifiers, "FormId", "ClosedWindows", "Evidence"}
                 and all(isinstance(row[name], str) and re.fullmatch(r"[0-9]{14}", row[name]) for name in identifiers)
                 and row["AcptNo"] != row["FinalAcptNo"] and row["DocNo"] != row["FinalDocNo"]
                 and isinstance(row["FormId"], str) and re.fullmatch(r"[0-9]{5}", row["FormId"])
@@ -285,6 +285,11 @@ def _load_tables(folder, manifest):
         require(len(closed) == len(row["ClosedWindows"]), "Duplicate KIND final family closure window")
         sources.add(row["AcptNo"])
         refs.update(map(_evidence, row["Evidence"]))
+        if "OriginalNoticeEvidence" in row:
+            original = row["OriginalNoticeEvidence"]
+            require(row["FormId"] in {"70765", "32002"} and isinstance(original, list) and len(original) == 2
+                    and closed, "Invalid KIND source role evidence")
+            refs.update(map(_evidence, original))
     published = manifest["scope"]
     first = date.fromisoformat(published["published_start"])
     last = date.fromisoformat(published["published_end"])

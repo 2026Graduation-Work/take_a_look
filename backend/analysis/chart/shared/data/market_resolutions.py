@@ -15,7 +15,7 @@ from .actions import Action, FieldEvidence, compatible_base, tick_size
 from .calendar import scheduled_sessions
 from .disclosures import require
 from .events import _observations, verify_action
-from .market_notices import SecurityKey, normal_company
+from .market_notices import SecurityKey, kind_topic, normal_company
 from .validation import validate_krx_raw
 
 
@@ -153,6 +153,26 @@ def structural_closure(notices, keys, has_session):
     issuer_windows = [_issuer_merger_windows(notice, keys, has_session) for notice in structural]
     closed.update(key for targets in issuer_windows for key in targets)
     return closed, closed if issuer_windows and all(issuer_windows) else keys
+
+
+def role_correction_kind(filing, form):
+    role = {"70765": "rename", "32002": "new_listing"}.get(form)
+    return role if role == kind_topic(filing) else None
+
+
+def role_correction_windows(filing, form, original, final, keys, has_session):
+    """Close only the exact name change or initial listing both versions prove."""
+    role, issuer = role_correction_kind(filing, form), filing.company_id
+    require(role and issuer and len(original) == len(final) == 1, "KIND correction does not establish one source role")
+    source, = original
+    notice, = final
+    key, day = notice.security, source.effective
+    require(source == notice.facts and source.kind == role and notice.final and notice.form == form
+            and notice.company_id == issuer and key in keys and key.code.startswith(issuer)
+            and key.active(day) and has_session(key, day)
+            and (role == "rename" or (source.code, source.isin, day) == (key.code, key.isin, key.listing)),
+            "KIND correction changes its verified source role or listing window")
+    return {key}
 
 
 def _division_notice(notice):

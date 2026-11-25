@@ -36,6 +36,7 @@ from shared.data.market_resolutions import (
     issuer_merger_boundaries,
     raw_window_fingerprint,
     resolve_events,
+    role_correction_windows,
     structural_closure,
 )
 
@@ -298,6 +299,27 @@ def test_issuer_merger_only_reaches_active_listing_windows_with_the_effective_se
     for excluded in (replace(notice, final=False), replace(notice, company_id="01014"),
                      replace(notice, facts=replace(notice.facts, reason="인적분할"))):
         assert not issuer_merger_boundaries([excluded], windows, has_session)
+
+
+def test_initial_listing_correction_only_closes_the_exact_original_market_window():
+    original = SecurityKey("388610", "KR7388610008", "2022-12-23", "2025-06-30", "KONEX", "common")
+    later = replace(original, listing="2025-06-30", delisting=None, market="KOSDAQ")
+    filing, form, body = official_body("20221220000314")
+    filing = replace(filing, company_id="38861", submitter="코스닥시장본부")
+    start, = parse_notice(filing, form, body)
+    final, = actual_notices(original, "20221220000503")
+    final = replace(final, company_id=filing.company_id)
+    assert start.shares_after == 1_036_526
+
+    def has_session(key, day):
+        return day == key.listing
+
+    keys = {original, later}
+    assert role_correction_windows(filing, form, [start], [final], keys, has_session) == {original}
+    with pytest.raises(DisclosureError, match="source role or listing window"):
+        role_correction_windows(filing, form, [start], [replace(final, security=later)], keys, has_session)
+    with pytest.raises(DisclosureError, match="source role or listing window"):
+        role_correction_windows(filing, form, [replace(start, shares_after=1)], [final], keys, has_session)
 
 
 def test_resumption_keeps_actual_return_and_halted_share_change_has_no_factors():

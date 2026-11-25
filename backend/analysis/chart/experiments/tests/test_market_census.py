@@ -299,13 +299,16 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
     assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)
 
 
-def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=(), published_start=None):
+def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=(), published_start=None,
+                     spac_before=None):
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
                "RawVolume", "Amount", "ListedShares"]
     bars = pd.DataFrame(raw, columns=columns).assign(SECT_TP_NM="")
     bars["Date"] = pd.DatetimeIndex(bars.Date, dtype="datetime64[ns]")
+    if spac_before:
+        bars.loc[bars.Date.lt(pd.Timestamp(spac_before)), "SECT_TP_NM"] = "기업인수목적회사"
     for day, rows in bars.groupby("Date"):
         rows.to_parquet(days / f"{day:%Y-%m-%d}.parquet", index=False)
     active_path, delisted_path = tmp_path / "active.parquet", tmp_path / "delisted.parquet"
@@ -323,6 +326,50 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=Fa
                                        active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
     notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
     return read_resolution_snapshot(path, verify_archive=True), notices
+
+
+@pytest.mark.parametrize("with_merger", [False, True])
+def test_spac_rename_correction_closes_only_the_name_change(tmp_path, monkeypatch, with_merger):
+    original, final, merger = "20210722000431", "20210722000497", "20210726000260"
+    filings = {"2021-07-22": (original, final)}
+    if with_merger:
+        filings["2021-07-26"] = (merger,)
+    use_archived_kind_bodies(monkeypatch, filings, issuer="35319", submitter="코스닥시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2021-07-26", "353190", "엔에이치스팩16호", "KOSDAQ", 3070, 3070, 2955, 2995, -5, 129400, 386219735, 4310000),
+        ("2021-07-27", "353190", "휴럼", "KOSDAQ", 2900, 2900, 2580, 2655, -340, 2218058, 5906731610, 27682521),
+    ], active=[("353190", "KR7353190002", "휴럼", "휴럼", "KOSDAQ", "주권", "2020/06/17", "보통주")],
+        spac_before="2021-07-27")
+    assert notices.loc[final, "Kind"] == "rename"
+    family, = snapshot.coverage["kind_final_families"]
+    assert (family["AcptNo"], family["FinalAcptNo"]) == (original, final)
+    assert {item["Code"] for item in family["ClosedWindows"]} == {"353190"}
+    assert len(family["Evidence"]) == 7 and len(family["OriginalNoticeEvidence"]) == 2
+    ledger, = snapshot.ledgers.values()
+    if with_merger:
+        event, = ledger.resolutions
+        assert (event.date, event.kind, event.price_factor, event.volume_factor) == (
+            "2021-07-27", Resolution.SPAC_PREMERGER, None, None)
+        assert merger in {item.accession for item in event.evidence}
+    else:
+        assert not ledger.resolutions
+        return
+
+    output = tmp_path / "output"
+    coverage_path, manifest_path = output / "coverage.json", output / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    for index, (rows, reason) in enumerate([
+        ([], f"Missing official structural notice evidence: {original}"),
+        ([{**family, "OriginalNoticeEvidence": family["Evidence"][5:]}], "body receipt differs|viewer differs"),
+    ]):
+        coverage_path.write_text(json.dumps({**snapshot.coverage, "kind_final_families": rows}))
+        manifest["superseded_documents"] = len(rows)
+        manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+        manifest_path.write_text(json.dumps(manifest))
+        with pytest.raises(DisclosureError, match=reason):
+            freeze_resolution_snapshot(output, tmp_path / f"tampered_role_{index}", krx_days=tmp_path / "days",
+                                       active_master=tmp_path / "active.parquet", delisted_master=tmp_path / "delisted.parquet",
+                                       evidence_archives=[tmp_path / "kind"])
 
 
 @pytest.mark.parametrize("accession,code,isin,name,old_listing,day,base,raw", [
