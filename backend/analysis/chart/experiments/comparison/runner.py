@@ -373,6 +373,7 @@ def _build_backtest_config(
         "entry_price": "open",
         "exit_price": "open",
         "fee": 0.00105,
+        "slippage_bps": 10,
         "up_mult": 1.8,
         "down_mult": 1.2,
         "hard_sl_mult": 1.5,

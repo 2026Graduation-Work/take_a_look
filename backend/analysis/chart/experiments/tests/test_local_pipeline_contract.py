@@ -248,6 +248,7 @@ def execution_config():
         "backtest": {
             "initial_cash": 1000.0,
             "fee": 0.01,
+            "slippage_bps": 0,
             "max_holding_days": 5,
             "up_mult": 1.0,
             "down_mult": 1.0,
@@ -916,7 +917,7 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     config = {"contract_version": 3, "data": {"embargo_days": 0},
               "strategy": {"score_column": "prob_up", "top_n": 1, "prob_threshold": 0.5},
               "backtest": {"capital_mode": "independent_year", "initial_cash": 1000,
-                           "fee": 0.0, "signal_lag_days": 1, "max_holding_days": 20,
+                           "fee": 0.0, "slippage_bps": 0, "signal_lag_days": 1, "max_holding_days": 20,
                            "up_mult": None, "down_mult": None, "hard_sl_mult": None}}
     splits = [{"fold_id": i, "train_start": f"{year-3}-01-01", "train_end": f"{year-1}-12-31",
                "test_start": f"{year}-01-01", "test_end": f"{year}-12-31"}
@@ -957,6 +958,20 @@ def test_previous_builder_processed_data_is_preserved(local_dataset):
     with pytest.raises(ValueError, match="new dataset root"):
         preprocess_dataset(dataset_path)
     assert {path: sha256(path) for path in before} == before
+
+
+@pytest.mark.parametrize("key,value,message", [
+    ("slippage_bps", True, "slippage_bps"),
+    ("slippage_bps", -1, "slippage_bps"),
+    ("signal_lag_days", 2, "signal_lag_days must be 1"),
+])
+def test_backtest_cost_and_lag_settings_are_validated(local_dataset, key, value, message):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    invalid["backtest"][key] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match=message):
+        load_experiment_config(config_path)
 
 
 @pytest.mark.parametrize("key,value", [("up_mult", 9.9), ("down_mult", 9.9), ("max_holding_days", 1)])

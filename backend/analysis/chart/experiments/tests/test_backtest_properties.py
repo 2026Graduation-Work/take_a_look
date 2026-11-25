@@ -34,6 +34,7 @@ def random_config(rng):
         return None if rng.random() < 0.2 else float(rng.uniform(0.5, 3.0))
     return config(top_n=3, initial_cash=float(rng.uniform(1e3, 1e7)),
                   fee=float(rng.choice([0.0, 0.00105, 0.0025])),
+                  slippage_bps=float(rng.choice([0, 10, 30])),
                   max_holding_days=int(rng.integers(1, 7)),
                   up_mult=multiplier(), down_mult=multiplier(), hard_sl_mult=multiplier())
 

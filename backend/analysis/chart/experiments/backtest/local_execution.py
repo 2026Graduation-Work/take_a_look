@@ -50,6 +50,7 @@ def simulate(config, entries, price_df):
     lag = bt.get("signal_lag_days", 1)
     horizon = bt["max_holding_days"]
     fee = bt["fee"]
+    slippage = bt["slippage_bps"] / 10_000
     top_n = config["strategy"]["top_n"]
     codes = list(entries.columns)
     days = pd.DatetimeIndex(entries.index)
@@ -102,7 +103,7 @@ def simulate(config, entries, price_df):
             anchor * (1 - down * sigma) if down is not None else -np.inf,
         )
 
-    def close_trade(code, row, price, exit_fee, reason, side):
+    def close_trade(code, row, price, exit_fee, reason, side, reference=0.0):
         pos = positions.pop(code)
         quantity = pos["quantity"]
         pnl = quantity * (price - pos["price"]) - pos["fee"] - exit_fee
@@ -114,16 +115,18 @@ def simulate(config, entries, price_df):
             "holding_sessions": pos["sessions"], "exit_reason": reason,
         })
         events.append({"date": row, "code": code, "side": side, "quantity": quantity,
-                       "price": price, "fee": exit_fee, "reason": reason})
+                       "price": price, "reference_price": reference, "fee": exit_fee,
+                       "reason": reason})
 
-    def sell(code, row, price, reason):
+    def sell(code, row, reference, reason):
         nonlocal cash
         quantity = positions[code]["quantity"]
+        price = reference * (1 - slippage)
         proceeds = quantity * price
         cash += proceeds * (1 - fee)
         sizes.loc[row, code] = -quantity
         order_prices.loc[row, code] = price
-        close_trade(code, row, price, proceeds * fee, reason, "sell")
+        close_trade(code, row, price, proceeds * fee, reason, "sell", reference)
 
     for day_number, day in enumerate(days):
         rows = [day + pd.Timedelta(hours=hour) for hour in EVENT_HOURS]
@@ -182,13 +185,14 @@ def simulate(config, entries, price_df):
                 continue
             if bt.get("hard_sl_mult") is not None and bt["hard_sl_mult"] * sigma >= 1:
                 raise ValueError("Hard stop lies at a non-positive price")
-            price = fields["Open"].loc[day, code]
+            open_price = fields["Open"].loc[day, code]
             candidate = {"anchor": anchor, "sigma": sigma}
             stop, profit, _ = lines(candidate)
-            if reached_down(price, stop) or reached_up(price, profit):
+            if reached_down(open_price, stop) or reached_up(open_price, profit):
                 # An open beyond a barrier exits at that same open: a forced fee-only round trip.
                 exclusions.append({"date": str(day.date()), "code": code, "reason": "open_beyond_barrier"})
                 continue
+            price = open_price * (1 + slippage)
             quantity = floor(max(0.0, budget) / (price * (1 + fee)))
             cost = quantity * price * (1 + fee)
             if quantity < 1 or cost > cash:
@@ -201,7 +205,8 @@ def simulate(config, entries, price_df):
             sizes.loc[rows[1], code] = quantity
             order_prices.loc[rows[1], code] = price
             events.append({"date": rows[1], "code": code, "side": "buy", "quantity": quantity,
-                           "price": price, "fee": quantity * price * fee, "reason": "top_n"})
+                           "price": price, "reference_price": open_price,
+                           "fee": quantity * price * fee, "reason": "top_n"})
 
         # 12:00 intraday barriers. Ambiguous dual touch is downside first.
         for code in list(positions):

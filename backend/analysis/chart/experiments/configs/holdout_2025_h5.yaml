@@ -63,6 +63,7 @@ backtest:
   entry_price: open
   exit_price: rule
   fee: 0.00105
+  slippage_bps: 10
   max_holding_days: 5
   up_mult: 1.75
   down_mult: 1.5
