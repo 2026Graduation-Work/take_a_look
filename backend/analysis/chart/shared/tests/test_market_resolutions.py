@@ -340,3 +340,103 @@ def test_raw_window_fingerprint_checks_every_amount_and_expected_session():
     assert raw_window_fingerprint(raw, expected) != digest
     with pytest.raises(ValueError, match="Price coverage mismatch"):
         raw_window_fingerprint(raw.iloc[1:], expected)
+
+
+def test_historical_fixed_reference_notice_binds_a_compound_price_without_a_lone_split():
+    from shared.data.market_notices import Notice, NoticeSection
+
+    rows = [
+        ["1. 회사명", "예시기업"],
+        ["2. 기준가격", "주권종류", "단축코드", "기준가(원)"],
+        ["보통주식", f"A{SAMSUNG.code}", "500"],
+        ["3. 적용일", "2018-03-07"],
+        ["4. 사유", "액면병합", "액면가 100원에서 500원으로 액면병합"],
+        ["6. 기타", "기준가격은 액면병합 및 무상증자 권리락을 반영한 수치임"],
+    ]
+    table = "<table>" + "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>"
+                              for row in rows) + "</table>"
+    accession = "20180306000596"
+    filing = MarketFiling(accession, date(2018, 3, 6), "변경상장 기준가격 안내", TEST_SOURCE, company="예시기업")
+    body = KindBody(table.encode(), "utf-8", TEST_SOURCE, accession, (accession,), True)
+    facts, = parse_notice(filing, "70795", body)
+    assert (facts.kind, facts.base, facts.effective) == ("listing_price", 500, "2018-03-07")
+    assert "무상증자 권리락" in facts.reason
+    pricing = match_notice(filing, "70795", facts, body, (TEST_SOURCE,), {SAMSUNG: {"예시기업"}})
+    listing = Notice(SAMSUNG, "20180306000595", "70764", "2018-03-06", "", "변경상장",
+                     NoticeSection(1, "listing", "예시기업", "보통주식", "2018-03-07", "액면병합",
+                                   shares_after=200, par_before=100, par_after=500),
+                     (TEST_SOURCE,), "20180306000595", (), True)
+    raw = bars(SAMSUNG, [
+        ("2018-03-06", 100, 101, 99, 100, 0, 100, 10_000, 1000),
+        ("2018-03-07", 500, 510, 495, 505, 5, 100, 50_500, 200),
+    ])
+    simple = replace(pricing, facts=replace(facts, reason="액면병합"))
+    simple_event, = resolve(SAMSUNG, raw, [simple, listing], coverage_complete=True).resolutions
+    assert simple_event.kind == Resolution.UNIT_CHANGE
+    compound, = resolve(SAMSUNG, raw, [pricing, listing], coverage_complete=True).resolutions
+    assert compound.kind == Resolution.SEGMENT_BREAK and compound.review
+
+
+@pytest.mark.parametrize(
+    "accession, security, shares",
+    [
+        ("20151021000366", SecurityKey("229000", "KR7229000005", "2015-10-27", "2020-06-25", "KONEX", "common"), 2_390_000),
+        ("20150902000142", SecurityKey("225650", "KR7225650001", "2015-09-04", "2019-09-16", "KOSDAQ", "common"), 10_686_277),
+        ("20151020000422", SecurityKey("227840", "KR7227840006", "2015-10-23", None, "KOSPI", "common"), 9_100_836),
+    ],
+)
+def test_official_new_and_relisting_forms_keep_exact_identity_and_session(accession, security, shares):
+    notice, = actual_notices(security, accession)
+    facts = notice.facts
+    assert (facts.kind, facts.isin, facts.code) == ("new_listing", security.isin, security.code)
+    assert (facts.effective, facts.shares_after) == (security.listing, shares)
+
+
+def test_official_fixed_reference_and_listing_agree_on_the_share_unit_change():
+    security = SecurityKey("228180", "KR7228180006", "2015-10-22", "2020-08-07", "KONEX", "common")
+    pricing, listing = actual_notices(security, "20160511000606", "20160509000281")
+    assert (pricing.facts.kind, pricing.facts.share_label, pricing.facts.effective, pricing.facts.base) == (
+        "listing_price", "보통주식", "2016-05-12", 14_500,
+    )
+    assert (listing.facts.par_before, listing.facts.par_after) == (5_000, 500)
+    raw = bars(security, [
+        ("2016-05-11", 0, 0, 0, 145_000, 0, 0, 0, 200_631),
+        ("2016-05-12", 14_500, 14_500, 14_000, 14_300, -200, 3_350, 47_295_000, 2_006_310),
+    ])
+    event, = resolve(security, raw, [pricing, listing], coverage_complete=True).resolutions
+    assert (event.kind, event.price_factor, event.volume_factor) == (Resolution.UNIT_CHANGE, Fraction(1, 10), 10)
+    adjusted = apply_events(raw, adjustment_events([event]))
+    assert adjusted.Close.tolist() == [14_500, 14_300]
+
+
+def test_official_compound_fixed_reference_stays_unresolved():
+    security = SecurityKey("123420", "KR7123420002", "2010-11-10", None, "KOSDAQ", "common")
+    pricing, = actual_notices(security, "20160513000766")
+    facts = pricing.facts
+    assert (facts.kind, facts.share_label, facts.effective, facts.base) == (
+        "listing_price", "보통주식", "2016-05-16", 39_950,
+    )
+    assert "무상증자 권리락" in facts.reason
+    raw = bars(security, [
+        ("2016-05-13", 0, 0, 0, 11_850, 0, 0, 0, 32_253_838),
+        ("2016-05-16", 42_150, 44_400, 39_100, 39_100, -850, 237_283, 9_866_855_050, 6_450_767),
+    ])
+    event, = resolve(security, raw, [pricing], coverage_complete=True).resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review
+    assert event.price_factor is None and event.volume_factor is None
+
+
+def test_official_long_halt_auction_cannot_reset_on_a_zero_open_volume_bar():
+    security = SecurityKey("224090", "KR7224090001", "2015-07-31", "2016-06-29", "KONEX", "common")
+    notice, = actual_notices(security, "20160225000871")
+    facts = notice.facts
+    assert (facts.kind, facts.effective, facts.evaluation, facts.low, facts.high) == (
+        "auction", "2016-02-26", 6_370, 3_185, 12_750,
+    )
+    raw = bars(security, [
+        ("2016-02-25", 0, 0, 0, 6_370, 0, 0, 0, 4_390_000),
+        ("2016-02-26", 0, 0, 0, 6_500, 0, 0, 0, 4_390_000),
+    ])
+    event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review
+    assert event.price_factor is None and event.volume_factor is None

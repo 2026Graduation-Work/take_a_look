@@ -3,10 +3,21 @@
 import numpy as np
 import pandas as pd
 
-LABEL_VERSION = 3
+LABEL_VERSION = 4
 
 
 def barrier_labels(df, horizon, *, up_mult=None, down_mult=None, tp=None, sl=None):
+    keys = [key for key in ("Code", "SegmentId") if key in df]
+    if "SegmentId" not in keys or df.empty:
+        return _barrier_labels(df, horizon, up_mult=up_mult, down_mult=down_mult, tp=tp, sl=sl)
+    result = np.full(len(df), np.nan)
+    for positions in df.groupby(keys, sort=False, observed=True).indices.values():
+        result[positions] = _barrier_labels(df.iloc[positions], horizon, up_mult=up_mult,
+                                            down_mult=down_mult, tp=tp, sl=sl)
+    return pd.Series(result, index=df.index)
+
+
+def _barrier_labels(df, horizon, *, up_mult, down_mult, tp, sl):
     if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon < 1:
         raise ValueError("horizon must be positive integer")
     dynamic = up_mult is not None

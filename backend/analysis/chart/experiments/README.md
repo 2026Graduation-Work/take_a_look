@@ -21,9 +21,9 @@ python -m experiments.export_oos \
 | `prob_down`, `prob_neutral`, `prob_up`, `Prob` | 저장된 세 클래스 점수와 기존 상승 점수 |
 | `Y_Label`, `label_observed` | 원래 라벨 0=하락, 1=중립, 2=상승과 관측 여부 |
 | `horizon`, `return_date`, `forward_return`, `return_observed` | 기간, 관측 종료일, 종료 종가/신호 종가−1, 수익률 관측 여부 |
-| `Trading_Halt` | 신호 날짜의 기존 거래정지 표시 |
+| `Trading_Halt`, `SegmentId` | 신호 날짜의 거래정지 표시와 가격 구간 ID |
 
-수익률은 H5는 5개, H20은 20개의 후속 거래 가능 관측을 사용하고 거래정지를 건너뛴다. 라벨과 같이 최대 `floor(2.5 × horizon)`행 안에서 관측해야 한다. 미래 관측이 부족하거나 라벨을 확정할 수 없는 행은 제거하지 않고 라벨과 수익률을 비워 둔다. 비용, 다음 날 시가 진입, 배리어 조기 청산을 반영한 전략 수익률과는 다르다.
+수익률은 H5는 5개, H20은 20개의 후속 거래 가능 관측을 사용하고 거래정지를 건너뛴다. 라벨과 같이 같은 가격 구간 안의 최대 `floor(2.5 × horizon)`행에서 관측해야 한다. 미래 관측이 부족하거나 라벨을 확정할 수 없는 행은 제거하지 않고 라벨과 수익률을 비워 둔다. 비용, 다음 날 시가 진입, 배리어 조기 청산을 반영한 전략 수익률과는 다르다.
 
 라벨 배수는 실행 manifest가 정본이다. 이 A/B의 H5는 상방 1.75σ, 하방 1.5σ, H20은 상방 3.75σ, 하방 3.0σ다. 화면 설명의 배수로 다시 라벨링하지 않는다. 고정된 B 입력의 공통 가격 경로를 사용하고 저장된 A 라벨과 전수 대조한다. 산출물은 로컬 workspace에 남기며 Git에 대용량 원본을 추가하지 않는다.
 
@@ -41,13 +41,13 @@ python -m experiments.train --config experiments/configs/sliding_2016_2026_h5.ya
 python -m experiments.run_experiment_analysis --config experiments/configs/sliding_2016_2026_h5.yaml
 ```
 
-먼저 아래 절차로 공식 사건표를 수집하고, 출력된 파일 경로를 `ACTION_SNAPSHOT`에 지정한다. H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼다. `--allow-partial`은 검증된 가격 파일만 처리하고 제외 이유를 남길 때 명시적으로 사용한다. 수급 모델 변경·추가 튜닝은 이번 전환에 포함하지 않았다.
+먼저 아래 절차로 공식 판정 장부를 고정하고, 출력된 V2 스냅샷 파일 경로를 `ACTION_SNAPSHOT`에 지정한다. H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼다. `--allow-partial`은 검증된 가격 파일만 처리하고 제외 이유를 남길 때 명시적으로 사용한다. 수급 모델 변경·추가 튜닝은 이번 전환에 포함하지 않았다.
 
 ## 저장과 재개
 
-설정의 `root`는 새 `workspace/experiments/datasets/shared_v3_kospi_2016`을 가리킨다. 기존 `local_2016_kospi_v1`은 원본 보존용이며 자동 재연결하지 않는다. 공급자 로그인은 `.env`의 기존 KRX 인증 설정을 사용한다.
+설정의 `root`에 새 빈 데이터셋 디렉터리를 지정한다. 실험 설정의 벤치마크 파일은 해당 데이터셋의 `benchmarks/KOSPI.parquet`를 가리킨다. 공급자 로그인은 `.env`의 기존 KRX 인증 설정을 사용한다.
 
-같은 root에서 `collect --mode full`을 다시 실행하면 검증된 수집 파일을 재사용한다. 끝 날짜는 최초 구축 때 확정하고 이후 재개에서도 고정한다. `--rebuild`는 새 빈 root에서만 허용한다. 처리 버전·builder가 다른 processed 자료는 덮어쓰지 않는다.
+같은 root에서 `collect --mode full`을 다시 실행하면 검증된 수집 파일을 재사용한다. 끝 날짜를 생략하면 고정 장부의 마지막 범위를 사용한다. `--rebuild`는 새 빈 root에서만 허용한다. 처리 버전·builder가 다른 processed 자료는 덮어쓰지 않는다.
 
 데이터는 `workspace/experiments/datasets/`, 예측은 `workspace/experiments/cache/predictions/`, 모델·학습 입력 캐시는 `workspace/experiments/cache/training/`, 결과는 `workspace/experiments/runs/`에 저장한다. 변경된 경로·코드·입력 해시는 새 캐시 식별자를 만든다. 이전 캐시와 manifest는 보존하며 검증 없이 새 식별자로 옮기지 않는다.
 
@@ -83,7 +83,7 @@ python -m experiments.dataset.collect_actions \
 ```bash
 python -m experiments.dataset.census_actions \
   --start 2016-01-01 --end 2026-11-20 \
-  --published-start 2016-01-01 --published-end 2026-11-20 \
+  --published-start 2015-12-28 --published-end 2026-11-23 \
   --krx-days "$KRX_DAYS" --active-master "$KRX_ACTIVE_MASTER" \
   --delisted-master "$KRX_DELISTED_MASTER" --kind-root "$KIND_ARCHIVE" \
   --kind-daily-cache "$KIND_DAILY_CACHE" --output "$CENSUS_RUN" --preview
@@ -99,13 +99,34 @@ python -m experiments.dataset.census_actions \
 
 주주배정 유상증자는 거래소가 확인한 권리락 기준가를 사용한다. 무상증자와 주식배당은 공식 공시의 1주당 배정 비율로 조정한다. 2023-01-25 전후의 거래소 호가표를 적용하며, 공시가 가격 차이를 설명하지 않는 경우에 호가 올림을 확인한다. [KRX 기준가격](https://regulation.krx.co.kr/contents/RGL/03/03010100/RGL03010100T6.jsp) · [KRX 권리락](https://regulation.krx.co.kr/contents/RGL/03/03010401/RGL03010401.jsp) · [KRX 과거 호가표](https://global.krx.co.kr/contents/GLB/01/0109/0109000000/guide_to_trading_in_the_korean_stock_market.pdf) · [KRX 개정 호가표](https://regulation.krx.co.kr/contents/RGL/03/03020100/RGL03020100.jsp)
 
-새 데이터셋은 시작할 때 사건표를 `official_actions/`에 복사하고 해당 해시를 가격·전처리·피처·학습·내보내기 manifest에 전달한다. 이후 같은 데이터셋은 고정된 사건표로 재개한다. 새 사건표를 쓰려면 새 데이터셋 root를 사용한다. 가격 범위는 사건표의 가격 범위 안에 있어야 한다.
+### 학습용 V2 스냅샷
+
+```bash
+python -m experiments.dataset.freeze_resolution_snapshot \
+  --census-dir "$CENSUS_RUN" --destination "$RESOLUTION_ROOT/official_actions" \
+  --krx-days "$KRX_DAYS" --active-master "$KRX_ACTIVE_MASTER" \
+  --delisted-master "$KRX_DELISTED_MASTER" --evidence-archive "$KIND_ARCHIVE"
+```
+
+Census가 V1 공식 단위 변경 자료를 사용했다면 같은 `--action-snapshot`들을 추가한다. 동결 명령은 KRX 파일, 종목 마스터, 장부, 공개 공시 원문과 영수증을 대조한다. 결과는 `official_actions/snapshots/<sha256>.json`과 같은 해시의 하위 디렉터리, `official_actions/archive/`에 저장한다.
+
+학습 수집기는 V2 스냅샷 전체를 새 root에 복사한다. 수집, 전처리, 피처, 학습, 내보내기 manifest가 같은 장부, 생산 코드, 구간 코드와 증거 해시를 사용한다. 같은 root에서 재개하면 고정한 장부를 다시 쓴다. 컬렉터의 KRX 세션이 고정 장부의 전체 세션과 일치해야 한다. `--code`로 만든 완전한 장부는 같은 코드 목록을 `collection.tickers`에 명시한다.
 
 가격 수집기는 KRX 원주가를 `krx_raw_prices/{code}.parquet`에 먼저 보존한다. 원본과 영업일을 검증한 뒤 공식 사건을 적용한다. 승인한 분할·병합·무상증자의 가격과 비교용 거래량은 공시의 교환비율로 각각 환산한다. 무상증자는 권리락일 전 가격과 거래량을 환산하고 후속 신주 상장일에는 같은 비율을 다시 적용하지 않는다. Raw OHLC, `RawVolume`, `RawChange`, `Amount`는 그대로 보존한다. 실제 거래량은 `RawVolume`이다.
 
 `ExchangeChange`는 KRX 당일 기준가 대비 등락률이다. `Change`는 단위를 맞춘 종가의 전일 대비 수익률이다. 씨아이테크의 3대1 병합은 정지 전 종가 295원을 885원으로 환산하고 재개 종가 623원을 그대로 사용한다. 학습 수익률에 약 -29.60%가 남으며, 재개 시초가 636원 대비 KRX 등락률 약 -2.04%도 별도로 남는다. 보통주 단위가 변하지 않은 액면감액의 확인된 기준가 재설정은 가격과 거래량을 그대로 유지한다. [씨아이테크 시행 공지](https://kind.krx.co.kr/external/2020/03/17/000810/20200317002023/68155.htm) · [2023년 전 호가단위](https://global.krx.co.kr/contents/GLB/01/0109/0109000000/guide_to_trading_in_the_korean_stock_market.pdf) · [현행 호가단위](https://global.krx.co.kr/contents/GLB/06/0602/0602010201/GLB0602010201T3.jsp)
 
-기준가 변화나 정지 전후 주식수는 검토할 KRX 관측이다. 교환비율과 적용일을 증명하지 못하거나 공시와 관측이 충돌하면 해당 종목의 파생 입력을 보류한다. 구형 파일이 있더라도 최신 manifest의 허용 목록에 없으면 전처리·학습에서 읽지 않는다. 명시적으로 부분 전처리한 결과에는 승인된 파일과 보류 내역을 남긴다.
+상장, 인적분할, 흡수합병, 검토 필요 사건의 시행일부터 새 `SegmentId`를 부여한다. 원주가는 구간마다 보존하고 `Change`는 이전과 비교할 수 없는 첫날에 비워 둔다. 가격 보정, 피처 준비 기간, 고정·동적 라벨과 OOS 반환일은 같은 구간에서 계산한다. 스팩은 합병 신주 추가상장일부터 학습에 포함한다. 합병 전 구간과 미합병 스팩의 전체 상장 구간은 원주가에 남기고 전처리에서 학습 대상에서 제외한다.
+
+`review_queue.csv`는 완료된 검색 뒤에도 근거를 확정하지 못한 사건과 비교한 KRX 관측, 주변 KIND 공시 링크를 담는다. 검토자는 다음 헤더의 CSV를 `census_actions --review-confirmations`에 전달한다.
+
+```csv
+Code,ISIN,ListingDate,DelistingDate,Market,ShareClass,Date,OfficialURL,FormId,Section,Ratio
+```
+
+`OfficialURL`에는 대기열 형식의 KIND 뷰어 주소를 사용한다. `FormId`와 `Section`은 해당 근거 문서의 양식과 구획이다. `Ratio`는 유리수로 적는다. 단위 변경은 기존 1주당 새 주식 수, 무상증자와 주식배당은 1주당 추가 주식 수, 유상증자 권리락은 기준가/전일 종가, 기준가 재설정은 1이다. 등록된 문서는 새 census에서 KRX 관측과 기존 공시 검증을 모두 통과해야 한다. 지원하지 않는 양식 또는 공시와 KRX 수치가 충돌하는 사건은 검토 대상으로 남는다.
+
+가격 기준이 달라지는 날까지 실제 모의 포지션을 보유하면 로컬 백테스트를 중단한다. 오류에 종목, 날짜, 진입 구간과 새 구간을 남긴다. 학습 자료, 라벨과 관측된 OOS 반환은 고정 구간으로 별도 계산한다.
 
 이 가격은 현재 선택한 공식 자료를 적용해 과거 주식 단위를 재구성한 자료다. 각 예측일에 당시 발표된 자료만으로 같은 피처를 생성할 수 있었는지는 별도 검증이 필요하다. 미지원·복합 사건과 공식 연결이 모호한 정정도 검토 대상이다.
 

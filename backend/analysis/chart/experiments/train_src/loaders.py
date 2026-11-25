@@ -1,13 +1,38 @@
 import glob
-import json
 import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from shared.data.resolution_snapshot import PRICE_POLICY, price_store_manifest
+from shared.data.segmented_prices import validate_segments
 from tqdm import tqdm
 
 from .labels import apply_dynamic_sigma_barrier_labeling, apply_fixed_barrier_labeling
+
+
+def eligible_samples(frame):
+    eligible = pd.Series(True, index=frame.index)
+    if "SampleEligible" in frame:
+        eligible &= frame.SampleEligible.eq(True)
+    elif "roc_60" in frame:
+        eligible &= frame.roc_60.notna()
+    if "Trading_Halt" in frame:
+        eligible &= frame.Trading_Halt.eq(0)
+    if "Sigma" in frame:
+        eligible &= frame.Sigma.notna()
+    return eligible
+
+
+def universe_eligibility(frame, intervals, code):
+    rows = intervals.loc[intervals.Code.eq(code)]
+    eligible = pd.Series(False, index=frame.index)
+    for interval in rows.itertuples():
+        active = frame.Date.ge(interval.ListingDate)
+        if pd.notna(interval.DelistingDate):
+            active &= frame.Date.lt(interval.DelistingDate)
+        eligible |= active
+    return eligible
 
 
 def load_parquet_data(
@@ -32,11 +57,19 @@ def load_parquet_data(
     메모리 절약을 위해 종목별 로딩 시점에 Y 라벨 생성 및 피처 분리를 즉시 수행합니다.
     """
     manifest_path = Path(data_dir) / "feature_manifest.json"
+    manifest = price_store_manifest(data_dir)
+    segmented = manifest.get("price_policy") == PRICE_POLICY
+    spac_files = set(manifest.get("spac_policy_excluded_files", [])) if segmented else set()
+    if segmented and Path(data_dir).name == "processed" and not manifest_path.exists():
+        spac_files = set(manifest["spac_excluded_rows"]) - manifest["files"].keys()
+    if feature_columns and "SegmentId" in feature_columns:
+        raise ValueError("SegmentId cannot be a model feature")
     if file_names is None and manifest_path.exists():
-        manifest = json.loads(manifest_path.read_text())
         file_names = manifest.get("file_hashes")
         if file_names is None:
             file_names = [item["file"] for item in manifest["files"]]
+    if file_names is None and segmented:
+        file_names = manifest.get("files", manifest.get("raw_files"))
     if file_names is not None:
         files = [str(Path(data_dir) / name) for name in sorted(file_names)]
     else:
@@ -56,13 +89,16 @@ def load_parquet_data(
             else {str(code).strip().zfill(6) for code in tickers}
         )
         available_codes = {os.path.basename(path).split(".")[0].zfill(6) for path in files}
-        if missing_codes := requested_codes - available_codes:
+        policy_codes = {Path(name).stem for name in spac_files}
+        if missing_codes := requested_codes - available_codes - policy_codes:
             raise FileNotFoundError(f"Missing requested ticker files: {sorted(missing_codes)}")
         files = [
             path
             for path in files
             if os.path.basename(path).split(".")[0].zfill(6) in requested_codes
         ]
+        if not files and requested_codes <= policy_codes:
+            raise ValueError("Requested tickers have no training segments after SPAC policy exclusion")
         if not files:
             raise ValueError(
                 "data.tickers와 일치하는 parquet 파일이 없습니다: "
@@ -90,7 +126,8 @@ def load_parquet_data(
                     "Trading_Halt",
                     "Sigma",
                 ]
-                required_cols.append("SampleEligible")
+                required_cols.extend(["SampleEligible", "SegmentId", "roc_60"] if segmented else
+                                     ["SampleEligible", "SegmentId"])
                 requested_features = feature_columns or []
                 if missing := set(requested_features) - set(file_schema_names):
                     raise ValueError(f"Missing selected features: {sorted(missing)}")
@@ -100,6 +137,12 @@ def load_parquet_data(
             else:
                 temp_df = pd.read_parquet(f)
 
+            if segmented and manifest_path.exists() and (
+                "SampleEligible" not in temp_df or not pd.api.types.is_bool_dtype(temp_df.SampleEligible)
+                or temp_df.SampleEligible.isna().any()
+            ):
+                raise ValueError("SampleEligible is missing or invalid in the segmented feature store")
+            validate_segments(temp_df, required=segmented)
             if temp_df.empty:
                 continue
 
@@ -166,13 +209,7 @@ def load_parquet_data(
 
             if universe_intervals is not None:
                 code = os.path.basename(f).split(".")[0].upper().zfill(6)
-                intervals = universe_intervals.loc[universe_intervals.Code.eq(code)]
-                eligible = pd.Series(False, index=temp_df.index)
-                for interval in intervals.itertuples():
-                    active = temp_df.Date.ge(interval.ListingDate)
-                    if pd.notna(interval.DelistingDate):
-                        active &= temp_df.Date.lt(interval.DelistingDate)
-                    eligible |= active
+                eligible = universe_eligibility(temp_df, universe_intervals, code)
                 temp_df["UniverseEligible"] = eligible
                 if universe_only or training or label_params is not None or sample_only:
                     temp_df = temp_df.loc[eligible].copy()
@@ -191,20 +228,15 @@ def load_parquet_data(
                 if missing := set(feature_columns) - set(temp_df):
                     raise ValueError(f"Missing selected features: {sorted(missing)}")
             if training or sample_only:
-                if "SampleEligible" in temp_df:
-                    temp_df = temp_df.loc[temp_df.SampleEligible.eq(True)].copy()
-                if "Trading_Halt" in temp_df:
-                    temp_df = temp_df.loc[temp_df.Trading_Halt.eq(0)].copy()
-                if "roc_60" in temp_df and "SampleEligible" not in temp_df:
-                    temp_df = temp_df.loc[temp_df.roc_60.notna()].copy()
-                if "Sigma" in temp_df:
-                    temp_df = temp_df.loc[temp_df.Sigma.notna()].copy()
+                temp_df = temp_df.loc[eligible_samples(temp_df)].copy()
+
 
             # [훈련 피처 다이어트] 훈련 데이터셋 로딩 시 즉각 피처만 남겨서 peak 메모리 최소화
             if training:
                 exclude_cols = [
                     "Code",
                     "Name",
+                    "SegmentId",
                     "Open",
                     "High",
                     "Low",
@@ -232,7 +264,7 @@ def load_parquet_data(
 
             df_list.append(temp_df)
         except Exception as e:
-            if strict:
+            if strict or segmented:
                 raise ValueError(f"Failed to load {f}: {e}") from e
             print(f"Error loading {f}: {e}")
 

@@ -9,6 +9,7 @@ import tempfile
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
+from fractions import Fraction
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -31,19 +32,24 @@ from shared.data.market_resolutions import (
     raw_window_fingerprint,
     resolve_events,
 )
+from shared.data.resolution_archive import notice_facts_columns
+from shared.data.resolution_snapshot import (
+    CANDIDATE_COLUMNS,
+    CONFIRMATION_COLUMNS,
+    NOTICE_COLUMNS,
+    RESOLUTION_COLUMNS,
+    SECURITY_COLUMNS,
+    _csv,
+    _day,
+    _security,
+    kind_document_url,
+)
 from shared.data.validation import KRX_RAW_COLUMNS
 from shared.io import atomic_json, canonical_hash, sha256
 
 POLICY_VERSION = 1
 MARKETS = {"KOSPI", "KOSDAQ", "KONEX"}
 PRICES = ["Code", *KRX_RAW_COLUMNS, "ISU_ABBRV", "MKT_NM", "SECT_TP_NM"]
-SECURITY_COLUMNS = ["Code", "ISIN", "ListingDate", "DelistingDate", "Market", "ShareClass"]
-CANDIDATE_COLUMNS = SECURITY_COLUMNS + ["Date", "PrevDate", "PrevClose", "BasePrice", "SharesBefore", "SharesAfter", "Paused"]
-NOTICE_COLUMNS = SECURITY_COLUMNS + ["AcptNo", "FormId", "Section", "Published", "AppliedDate", "Title", "Kind",
-                                    "Reason", "BasePrice", "EvaluationPrice", "Low", "High", "ParBefore", "ParAfter",
-                                    "SharesBefore", "SharesAfter", "AddedShares", "Ratio", "Listing", "Sha256",
-                                    "Evidence", "DocNo", "Family", "Final", "PreviousMarket", "PreviousClose"]
-RESOLUTION_COLUMNS = SECURITY_COLUMNS + ["Date", "Resolution", "PriceFactor", "VolumeFactor", "Evidence", "Reason", "Review"]
 
 
 def calendar_days(start, end):
@@ -178,14 +184,14 @@ def _in_scope(filing, candidate):
     return start <= filing.published <= end
 
 
-def _kind_inventory(client, start, end, company_cache, codes):
+def _kind_inventory(client, start, end, company_cache, codes, registered=frozenset()):
     daily, company, targeted, failures, rows = {}, defaultdict(list), defaultdict(list), [], {}
     for day in calendar_days(start, end):
         try:
             filings, span = client.day(day)
             daily[day] = span
             for filing in filings:
-                if kind_topic(filing):
+                if kind_topic(filing) or filing.accession in registered:
                     rows.setdefault(filing.accession, filing)
         except (ValueError, OSError) as exc:
             failures.append({"Date": str(day), "Stage": "kind_daily", "Reason": str(exc)})
@@ -201,19 +207,20 @@ def _kind_inventory(client, start, end, company_cache, codes):
                 filings, span = client.cached_company(code, lo, hi)
                 company[code].append(span)
                 for filing in filings:
-                    if start <= filing.published <= end and kind_topic(filing):
+                    if start <= filing.published <= end and (kind_topic(filing) or filing.accession in registered):
                         rows.setdefault(filing.accession, filing)
             except (ValueError, OSError) as exc:
                 failures.append({"Code": code, "Stage": "kind_company", "Reason": str(exc)})
     for code, filings, span in client.archived_market_lists(start, end, codes):
         targeted[code].append(span)
         for filing in filings:
-            if start <= filing.published <= end and kind_topic(filing):
+            if start <= filing.published <= end and (kind_topic(filing) or filing.accession in registered):
                 rows.setdefault(filing.accession, filing)
     return daily, company, targeted, tuple(rows.values()), failures
 
 
-def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded, unresolved_issuers=frozenset()):
+def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded,
+                     unresolved_issuers=frozenset(), registered=frozenset()):
     by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
     for key, names in aliases.items():
         for name in names:
@@ -225,6 +232,8 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     selected, fetched = 0, 0
     for filing in sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession)):
         topic = kind_topic(filing)
+        if topic is None and filing.accession not in registered:
+            continue
         issuer = (filing.company_id or filing.stock_code)[:5]
         keys = by_company[issuer] if issuer else by_name[normal_company(filing.company)]
         if not keys:
@@ -244,7 +253,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                         if abs((date.fromisoformat(candidate.date) - filing.published).days) <= 120
                         and any(notice.final and notice.facts.kind == "ex_price" and notice.facts.effective == candidate.date
                                 and term_type in notice.facts.reason for notice in parsed[key])]
-        if not affected and not structural:
+        if not affected and not structural and filing.accession not in registered:
             continue
         selected += 1
         refs = (filing.evidence,)
@@ -302,12 +311,7 @@ def _covered(candidate, daily, spans):
         span.start <= start <= end <= span.end for span in spans)
 
 
-def _window_coverage(key, bars, expected, prices, daily, spans, structural_gaps, raw_sha256, ledger, *, sampled,
-                     unattributed_structure):
-    start, end = expected[0].date(), expected[-1].date()
-    publish_start, publish_end = start - timedelta(days=7), end + timedelta(days=3)
-    list_complete = all(day in daily or any(span.start <= day <= span.end for span in spans)
-                        for day in calendar_days(publish_start, publish_end))
+def spac_observations(bars, prices):
     spac_bars = bars[bars.SECT_TP_NM.str.contains(r"SPAC|기업인수목적|스팩", case=False, regex=True, na=False)]
     spac_receipts = []
     if not spac_bars.empty:
@@ -316,6 +320,15 @@ def _window_coverage(key, bars, expected, prices, daily, spans, structural_gaps,
             day = row.Date.date().isoformat()
             spac_receipts.append({"session": day, "field": "SECT_TP_NM", "value": row.SECT_TP_NM,
                                   "sha256": prices[day]})
+    return spac_receipts
+
+
+def _window_coverage(key, bars, expected, prices, daily, spans, structural_gaps, raw_sha256, ledger, *, sampled,
+                     unattributed_structure):
+    start, end = expected[0].date(), expected[-1].date()
+    publish_start, publish_end = start - timedelta(days=7), end + timedelta(days=3)
+    list_complete = all(day in daily or any(span.start <= day <= span.end for span in spans)
+                        for day in calendar_days(publish_start, publish_end))
     merger = next((row.date for row in ledger.resolutions if row.kind == Resolution.SPAC_PREMERGER), None) if ledger else None
     return {**_security_columns(key), "first_session": str(start), "last_session": str(end),
             "expected_sessions": len(expected), "price_rows": len(bars), "raw_sha256": raw_sha256,
@@ -326,7 +339,7 @@ def _window_coverage(key, bars, expected, prices, daily, spans, structural_gaps,
             "required_dates_incomplete": list(ledger.incomplete) if ledger else [],
             "complete": bool(not sampled and raw_sha256 and ledger and list_complete and not structural_gaps
                              and not unattributed_structure and not ledger.incomplete),
-            "spac": {"observations": spac_receipts, "merger_listing": merger}}
+            "spac": {"observations": spac_observations(bars, prices), "merger_listing": merger}}
 
 
 def _security_columns(key):
@@ -340,16 +353,10 @@ def _candidate_columns(candidate):
 
 
 def _notice_columns(notice):
-    facts = notice.facts
     return {**_security_columns(notice.security), "AcptNo": notice.accession, "FormId": notice.form,
-            "Section": facts.section, "Published": notice.published, "AppliedDate": facts.effective,
-            "Title": notice.title, "Kind": facts.kind, "Reason": facts.reason, "BasePrice": facts.base,
-            "EvaluationPrice": facts.evaluation, "Low": facts.low, "High": facts.high, "ParBefore": facts.par_before,
-            "ParAfter": facts.par_after, "SharesBefore": facts.shares_before, "SharesAfter": facts.shares_after,
-            "AddedShares": facts.added_shares, "Ratio": facts.ratio, "Listing": facts.listing,
+            "Published": notice.published, "Title": notice.title, **notice_facts_columns(notice.facts),
             "Sha256": notice.evidence[-1].sha256, "Evidence": json.dumps([asdict(ref) for ref in notice.evidence]),
-            "DocNo": notice.document_no, "Family": json.dumps(notice.family), "Final": notice.final,
-            "PreviousMarket": facts.previous_market, "PreviousClose": facts.previous_close}
+            "DocNo": notice.document_no, "Family": json.dumps(notice.family), "Final": notice.final}
 
 
 def _resolution_columns(resolution, observations, price_hashes):
@@ -383,11 +390,62 @@ def _implementation_hashes():
         "experiments/dataset/census_actions.py", "shared/data/actions.py", "shared/data/events.py",
         "shared/data/disclosures.py", "shared/data/kind_market.py", "shared/data/market_notices.py",
         "shared/data/market_resolutions.py", "shared/data/calendar.py", "shared/data/validation.py",
+        "shared/data/resolution_snapshot.py", "shared/data/resolution_archive.py",
     )}
+
+
+def read_review_confirmations(path):
+    if path is None:
+        return {}
+    rows = {}
+    for row in _csv(path, CONFIRMATION_COLUMNS):
+        key = (_security(row), _day(row["Date"]))
+        accession = row["OfficialURL"].rsplit("=", 1)[-1]
+        require(key not in rows and re.fullmatch(r"[0-9]{14}", accession)
+                and row["OfficialURL"] == kind_document_url(accession)
+                and re.fullmatch(r"[0-9]{5}", row["FormId"])
+                and int(row["Section"]) > 0 and Fraction(row["Ratio"]) > 0,
+                "Invalid or duplicate official review confirmation")
+        rows[key] = (accession, row)
+    require(rows, "Empty official review confirmations")
+    return rows
+
+
+def verify_review_confirmations(confirmations, notices, resolutions, candidates):
+    indexed = {(row.security, row.date): row for row in resolutions}
+    approved = []
+    for key, (accession, entry) in confirmations.items():
+        security, day = key
+        resolution = indexed.get(key)
+        require(key in candidates and resolution is not None and resolution.volume_factor is not None,
+                f"{security.code} {day}: official review confirmation did not resolve an observed candidate")
+        matching = [notice for notice in notices[security] if notice.accession == accession
+                    and (notice.form, notice.facts.section) == (entry["FormId"], int(entry["Section"]))
+                    and notice.final]
+        field = f"KIND {entry['FormId']}/{entry['Section']}"
+        require(len(matching) == 1 and any(
+            ref.accession == accession and ref.field == field and ref.source == matching[0].evidence[-1]
+            for ref in resolution.evidence
+        ), f"{security.code} {day}: confirmed official section is not part of the resolved event")
+        expected = {
+            Resolution.UNIT_CHANGE: resolution.volume_factor,
+            Resolution.BONUS: resolution.volume_factor - 1,
+            Resolution.RIGHTS: resolution.price_factor,
+            Resolution.REFERENCE_RESET: Fraction(1),
+        }.get(resolution.kind)
+        require(expected is not None and Fraction(entry["Ratio"]) == expected,
+                f"{security.code} {day}: confirmed ratio differs from the verified resolution")
+        approved.append(entry)
+    return approved
 
 
 def build_census(args, client):
     implementation = _implementation_hashes()
+    registration = getattr(args, "review_confirmations", None)
+    require(not registration or not args.sample, "Review confirmations require an unsampled census")
+    registration_hash = sha256(registration) if registration else None
+    confirmations = read_review_confirmations(registration)
+    registered = {accession for accession, _ in confirmations.values()}
     sessions = scheduled_sessions(pd.Timestamp(args.start), pd.Timestamp(args.end))
     require(len(sessions), "No KRX sessions in requested range")
     sample = set()
@@ -430,12 +488,13 @@ def build_census(args, client):
             failures.append({"Code": key.code, "Stage": "krx_candidate", "Reason": str(exc)})
 
     daily, company, targeted, filings, source_errors = _kind_inventory(
-        client, args.published_start, args.published_end, args.kind_company_cache, codes)
+        client, args.published_start, args.published_end, args.kind_company_cache, codes, registered)
     spac_keys = {key for key, bars in securities.items()
                  if bars.SECT_TP_NM.str.contains(r"SPAC|기업인수목적|스팩", case=False, regex=True, na=False).any()}
     unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
-                                spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers)
+                                spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
+                                registered=registered)
     notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, selected, fetched = acquired
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []
@@ -484,6 +543,7 @@ def build_census(args, client):
             unassigned.append({"Code": code, "Date": day, "PrevDate": prior.date().isoformat(),
                                "Reason": "transfer_proof_incomplete" if (code, day) in listing_starts
                                else "historical_security_identity_or_prices_incomplete"})
+    confirmed = verify_review_confirmations(confirmations, notices, resolved, observations)
     coverage = {"daily": [asdict(span) for span in daily.values()],
                 "company": {code: [asdict(span) for span in spans] for code, spans in company.items()},
                 "archived_market_actions": {code: [asdict(span) for span in spans] for code, spans in targeted.items()},
@@ -497,6 +557,8 @@ def build_census(args, client):
         "notices": (NOTICE_COLUMNS, map(_notice_columns, all_notices)),
         "resolutions": (RESOLUTION_COLUMNS, (_resolution_columns(r, observations, prices) for r in resolved)),
     }
+    if confirmed:
+        coverage["review_confirmations"] = confirmed
     hashes = {}
     for name, (columns, rows) in tables.items():
         path = args.output / f"{name}.csv"
@@ -537,6 +599,10 @@ def build_census(args, client):
             and all(window["complete"] for window in window_coverage)
         ),
     }
+    if confirmed:
+        require(sha256(registration) == registration_hash, "Review confirmation input changed during census")
+        report["sources"]["review_confirmations_sha256"] = canonical_hash(confirmed)
+        report["sources"]["review_confirmations_input_sha256"] = registration_hash
     atomic_json(args.output / "manifest.json", report)
     return report
 
@@ -559,6 +625,7 @@ def main(argv=None):
     cli.add_argument("--kind-legacy-docs", type=Path, action="append", default=[])
     cli.add_argument("--kind-archive", type=_archive, action="append", default=[])
     cli.add_argument("--action-snapshot", type=Path, action="append", default=[])
+    cli.add_argument("--review-confirmations", type=Path)
     cli.add_argument("--sample", type=Path, help="CSV with Code and Date columns")
     cli.add_argument("--code", action="append", default=[], help="Restrict to one or more verified securities")
     cli.add_argument("--request-budget", type=int, default=0)

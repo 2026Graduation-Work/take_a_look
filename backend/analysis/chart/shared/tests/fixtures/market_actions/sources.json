@@ -177,5 +177,96 @@
     "body_url": "https://kind.krx.co.kr/external/2021/01/29/001104/20210129002671/10800.htm",
     "charset": "utf-8",
     "sha256": "7cd06c02c90c22fac7e111e1f44315724bf36799d9d2845dae23b742b604b791"
+  },
+  "20160513000766": {
+    "form": "70795",
+    "title": "기준가격안내(액면병합 및 권리락)",
+    "company": "선데이토즈",
+    "body_url": "https://kind.krx.co.kr/external/2016/05/13/000766/20160513001391/70795.htm",
+    "charset": "utf-8",
+    "sha256": "84e73d603dc8f869031d5f7bd0c7486d5a3bbae5bd0552f4369328ac920a494a",
+    "document_no": "20160513001391",
+    "family": [
+      "20160513001391"
+    ],
+    "final": true
+  },
+  "20160511000606": {
+    "form": "32103",
+    "title": "기준가격안내(액면분할)",
+    "company": "한국티씨엠",
+    "body_url": "https://kind.krx.co.kr/external/2016/05/11/000606/20160511000905/32103.htm",
+    "charset": "utf-8",
+    "sha256": "04a3aee57d1548e76dfd855cfabbf9d67783181fb66471695ebbed6eb06ad1db",
+    "document_no": "20160511000905",
+    "family": [
+      "20160511000905"
+    ],
+    "final": true
+  },
+  "20160509000281": {
+    "form": "32006",
+    "title": "변경상장(액면변경)",
+    "company": "한국티씨엠",
+    "body_url": "https://kind.krx.co.kr/external/2016/05/09/000281/20160509000683/32006.htm",
+    "charset": "utf-8",
+    "sha256": "e8304f17b11071792708774ea4992b2ad65831473390019feba79c73fee6bb76",
+    "document_no": "20160509000683",
+    "family": [
+      "20160509000683"
+    ],
+    "final": true
+  },
+  "20160225000871": {
+    "form": "32108",
+    "title": "기준가산정 등에 관한 안내(장기간매매정지)",
+    "company": "정다운",
+    "body_url": "https://kind.krx.co.kr/external/2016/02/25/000871/20160225001868/32108.htm",
+    "charset": "utf-8",
+    "sha256": "3480d46b61355784cf314972f4a318df401fe6231b36f7240f42787d64b08b45",
+    "document_no": "20160225001868",
+    "family": [
+      "20160225001868"
+    ],
+    "final": true
+  },
+  "20151021000366": {
+    "form": "32002",
+    "title": "신규상장",
+    "company": "젠큐릭스",
+    "body_url": "https://kind.krx.co.kr/external/2015/10/21/000366/20151021001016/32002.htm",
+    "charset": "utf-8",
+    "sha256": "746e3651823ab1fb8c27948d71de8c5125536131d7410530e733e01fa811e05f",
+    "document_no": "20151021001016",
+    "family": [
+      "20151021001016"
+    ],
+    "final": true
+  },
+  "20150902000142": {
+    "form": "70779",
+    "title": "재상장",
+    "company": "쿠첸",
+    "body_url": "https://kind.krx.co.kr/external/2015/09/02/000142/20150902000336/70779.htm",
+    "charset": "utf-8",
+    "sha256": "87c0a1682c626bd14b11384c9abe2c47ef82c63708b9b8a3c02b3e74dded4860",
+    "document_no": "20150902000336",
+    "family": [
+      "20150902000336"
+    ],
+    "final": true
+  },
+  "20151020000422": {
+    "form": "68156",
+    "title": "재상장(현대씨앤에프(주), 상장일 2015.10.23)",
+    "company": "현대씨앤에프",
+    "body_url": "https://kind.krx.co.kr/external/2015/10/20/000422/20151020000897/68156.htm",
+    "charset": "utf-8",
+    "sha256": "c870642220d7ebdf1a7f982f7d366e4404ff164bfc6e1831500c5edc63e8ca31",
+    "document_no": "20151020000897",
+    "family": [
+      "20151020000897"
+    ],
+    "final": true
   }
 }

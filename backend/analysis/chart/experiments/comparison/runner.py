@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from lightgbm import LGBMClassifier
+from shared.data.resolution_snapshot import price_store_manifest
 
 from ..dataset.pipeline import validate_processed_inputs
 from ..evaluation.metrics import calculate_classification_metrics
@@ -171,6 +172,7 @@ def _load_split(
             label_params=label_params,
             label_observation_end=label_observation_end,
             training=False,
+            sample_only=True,
             file_names=file_names,
         )
     except (ValueError, KeyError, OSError) as exc:
@@ -179,7 +181,10 @@ def _load_split(
     missing = [column for column in required if column not in frame.columns]
     if missing:
         raise ComparisonConfigError(f"feature store {price_dir} missing columns: {missing}")
-    frame = frame[required].copy()
+    keep = [*required, "SegmentId"] if "SegmentId" in frame else required
+    frame = frame[keep].copy()
+    if provenance := price_store_manifest(price_dir).get("official_actions"):
+        frame.attrs["official_actions"] = provenance
     frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce").dt.tz_localize(None)
     frame["Code"] = frame["Code"].astype("string").str.strip().str.zfill(6)
     frame = frame.sort_values(["Date", "Code"], kind="stable", ignore_index=True)
@@ -206,7 +211,12 @@ def _assert_ab_alignment(
     split: str,
     baseline_features: list[str],
 ) -> None:
+    if (baseline.attrs.get("official_actions") != treatment.attrs.get("official_actions")
+            or ("SegmentId" in baseline) != ("SegmentId" in treatment)):
+        raise ComparisonConfigError(f"{profile} {split} A/B price provenance differs")
     columns = ["Date", "Code", "Y_Label", "Sigma", *baseline_features]
+    if "SegmentId" in baseline:
+        columns.append("SegmentId")
     left = baseline[columns].reset_index(drop=True)
     right = treatment[columns].reset_index(drop=True)
     if not left.equals(right):
@@ -282,6 +292,8 @@ def prepare_profile_data(
             "test": "post_test_right_buffer_allowed_for_outcome_observation",
         },
     }
+    if provenance := loaded["baseline", "train"].attrs.get("official_actions"):
+        metadata["official_actions"] = provenance
     return (
         loaded[("baseline", "train")],
         loaded[("baseline", "test")],

@@ -180,6 +180,11 @@ def _spac_merger(raw, at, merger):
             and before + merger.facts.added_shares == after)
 
 
+def _combined_reference_adjustment(notice):
+    reason = _reason(notice)
+    return bool(re.search(r"액면분할|액면병합", reason) and re.search(r"무상증자|권리락|주식배당", reason))
+
+
 def _compatible_action_notices(action, notices, candidate):
     for notice in notices:
         fact = notice.facts
@@ -192,7 +197,7 @@ def _compatible_action_notices(action, notices, candidate):
             ):
                 return False
         elif fact.kind == "listing_price":
-            if action.kind == "bonus" or fact.base != candidate.base_price:
+            if action.kind == "bonus" or fact.base != candidate.base_price or _combined_reference_adjustment(notice):
                 return False
         elif fact.kind == "listing":
             if action.kind == "bonus" or any((
@@ -306,7 +311,7 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
                            factors=(Fraction(1), Fraction(1)))
 
     if not nonfinal and all(notice.facts.kind == "listing_price" and notice.facts.base == candidate.base_price
-                            for notice in prices) and len(listings) == 1:
+                            and not _combined_reference_adjustment(notice) for notice in prices) and len(listings) == 1:
         listed = listings[0]
         facts = listed.facts
         if (facts.par_before and facts.par_after and facts.par_before != facts.par_after
@@ -410,6 +415,11 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
         if (anchored_transfer and transfer_source and transfer_source.isin != security.isin
                 and (row is None or row.kind in ADJUSTMENTS or row.kind == Resolution.SHARES_ONLY)):
             row = _result(security, day, Resolution.SEGMENT_BREAK, "separate_verified_listing_units", current)
+        if row is not None and row.review and not observed:
+            if not at:
+                incomplete.append(day)
+                continue
+            candidates.append(candidate or _observed_candidate(security, raw, days, at, base))
         if row is not None:
             resolved.append(row)
         elif observed or day in indexed_actions or (current and day in blocked_dates):

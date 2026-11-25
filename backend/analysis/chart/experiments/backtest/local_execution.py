@@ -7,6 +7,14 @@ import vectorbt as vbt
 from shared.io import atomic_json
 
 
+class PositionCrossesTrainingSegment(ValueError):
+    def __init__(self, code, day, entry_segment, new_segment):
+        self.details = {"code": code, "date": day.date().isoformat(), "entry_segment": entry_segment,
+                        "new_segment": new_segment, "reason": "held_position_crosses_training_segment"}
+        super().__init__(f"{code} {day.date()}: held position crosses an incomparable price basis "
+                         f"({entry_segment} -> {new_segment})")
+
+
 class DailyPortfolio:
     def __init__(self, portfolio, initial_cash, exclusions):
         self.portfolio = portfolio
@@ -56,6 +64,10 @@ def simulate(config, entries, weights, price_df):
         fields[column] = price_df.pivot(index="Date", columns="Code", values=column).reindex(
             index=days, columns=codes
         )
+    segments = (price_df.pivot(index="Date", columns="Code", values="SegmentId")
+                .reindex(index=days, columns=codes) if "SegmentId" in price_df else None)
+    if segments is not None and (price_df.SegmentId.isna() | price_df.SegmentId.eq("")).any():
+        raise ValueError("Missing SegmentId on an execution price")
     eligible = (
         price_df.pivot(index="Date", columns="Code", values="UniverseEligible")
         .reindex(index=days, columns=codes)
@@ -109,6 +121,8 @@ def simulate(config, entries, weights, price_df):
         available = fields["Open"].loc[day].notna() & fields["Close"].loc[day].notna()
         for code in list(positions):
             pos = positions[code]
+            if segments is not None and available[code] and segments.at[day, code] != pos["entry_segment"]:
+                raise PositionCrossesTrainingSegment(code, day, pos["entry_segment"], segments.at[day, code])
             if any(pd.Timestamp(pos["entry_date"]) < date <= day
                    for date in delisting_dates.get(code, [])):
                 if available[code]:
@@ -203,6 +217,8 @@ def simulate(config, entries, weights, price_df):
                 "pending": False,
                 "entry_date": str(day.date()),
             }
+            if segments is not None:
+                positions[code]["entry_segment"] = segments.at[day, code]
             sizes.loc[event_rows[1], code] = quantity
             order_prices.loc[event_rows[1], code] = price
             events.append(

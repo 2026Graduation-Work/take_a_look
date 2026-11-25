@@ -82,6 +82,10 @@ class SwingStrategy:
         for offset in range(1, lag + 1):
             entries &= prediction_dates.shift(offset).fillna(False)
 
+        if "SegmentId" in market:
+            segments = market.pivot(index="Date", columns="Code", values="SegmentId")
+            entries &= segments.notna() & segments.eq(segments.shift(lag))
+
         # VectorBT는 빈칸이 아니면 매일 비중을 조절하려 하므로, 매수 진입일 외에는 NaN으로 둠
         weights = weights.where(entries, np.nan)
 

@@ -14,9 +14,10 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from shared.data.resolution_snapshot import PRICE_POLICY, price_store_manifest
 
 REQUIRED_COLUMNS = ("Date", "Code", "AvailableDate")
-RESERVED_SOURCE_COLUMNS = frozenset({"date", "code", "availabledate"})
+RESERVED_SOURCE_COLUMNS = frozenset({"date", "code", "availabledate", "segmentid"})
 ALLOWED_BASE_TARGET_COLUMNS = frozenset({"y_label"})
 SUPPORTED_APPLY_PERIODS = {"one_day", "until_next_update"}
 SUPPORTED_MISSING_POLICIES = {"zero", "forward_fill", "drop", "error"}
@@ -31,6 +32,7 @@ FORBIDDEN_FEATURE_COLUMNS = {
 REQUIRED_BASE_COLUMNS = {
     "Date",
     "Code",
+    "SegmentId",
     "Name",
     "Open",
     "High",
@@ -208,7 +210,8 @@ def _validate_source_frame(spec: FeatureSourceSpec, frame: pd.DataFrame) -> pd.D
     if missing_columns:
         raise FeatureContractError(f"{spec.name}: Parquet 필수 컬럼이 없습니다: {missing_columns}")
 
-    selected = frame[[*REQUIRED_COLUMNS, *spec.columns]].copy()
+    segment = ["SegmentId"] if "SegmentId" in frame else []
+    selected = frame[[*REQUIRED_COLUMNS, *segment, *spec.columns]].copy()
     selected["Date"] = _normalize_date(selected["Date"], "Date", spec.name)
     selected["AvailableDate"] = _normalize_date(
         selected["AvailableDate"], "AvailableDate", spec.name
@@ -280,19 +283,19 @@ def load_feature_sources(source_configs: list[dict[str, Any]]) -> list[LoadedFea
     return loaded
 
 
-def _panel_trading_days(base: pd.DataFrame) -> pd.DataFrame:
+def _panel_trading_days(base: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     """종목별 패널 행에 거래일 순번을 부여한다."""
-    trading_days = base[["Code", "Date"]].drop_duplicates().sort_values(
-        ["Code", "Date"], kind="stable"
+    trading_days = base[[*keys, "Date"]].drop_duplicates().sort_values(
+        [*keys, "Date"], kind="stable"
     )
     trading_days["_trading_day_index"] = trading_days.groupby(
-        "Code", observed=True
+        keys, observed=True
     ).cumcount()
     return trading_days
 
 
 def _map_to_next_panel_day(
-    base: pd.DataFrame, source: LoadedFeatureSource
+    base: pd.DataFrame, source: LoadedFeatureSource, keys: list[str]
 ) -> pd.DataFrame:
     """외부 AvailableDate를 해당 종목의 첫 패널 거래일에 맞춘다.
 
@@ -301,29 +304,31 @@ def _map_to_next_panel_day(
     """
     codes = base["Code"].unique()
     filtered = source.frame.loc[source.frame["Code"].isin(codes)].copy()
+    for key in keys:
+        filtered[key] = filtered[key].astype(base[key].dtype)
     if filtered.empty:
         return filtered.assign(_effective_date=pd.NaT, _effective_trading_day_index=pd.NA)
 
-    trading_days = _panel_trading_days(base).rename(
+    trading_days = _panel_trading_days(base, keys).rename(
         columns={"Date": "_effective_date", "_trading_day_index": "_effective_trading_day_index"}
     )
-    left = filtered.sort_values(["AvailableDate", "Code"], kind="stable")
-    right = trading_days.sort_values(["_effective_date", "Code"], kind="stable")
+    left = filtered.sort_values(["AvailableDate", *keys], kind="stable")
+    right = trading_days.sort_values(["_effective_date", *keys], kind="stable")
     mapped = pd.merge_asof(
         left,
         right,
         left_on="AvailableDate",
         right_on="_effective_date",
-        by="Code",
+        by=keys,
         direction="forward",
         allow_exact_matches=True,
     )
     return mapped.loc[mapped["_effective_date"].notna()].copy()
 
 
-def _join_one_day(base: pd.DataFrame, source: LoadedFeatureSource) -> pd.DataFrame:
-    mapped = _map_to_next_panel_day(base, source)
-    payload = mapped[["Code", "_effective_date", *source.spec.columns]].rename(
+def _join_one_day(base: pd.DataFrame, source: LoadedFeatureSource, keys: list[str]) -> pd.DataFrame:
+    mapped = _map_to_next_panel_day(base, source, keys)
+    payload = mapped[[*keys, "_effective_date", *source.spec.columns]].rename(
         columns={"_effective_date": "Date"}
     )
     duplicate_effective_date = payload.duplicated(["Code", "Date"])
@@ -333,26 +338,26 @@ def _join_one_day(base: pd.DataFrame, source: LoadedFeatureSource) -> pd.DataFra
             f"{source.spec.name}: 비거래일을 다음 거래일로 매핑한 뒤 같은 Code/Date에 "
             f"여러 값이 생겼습니다. 외부 데이터를 일별로 집계하세요: {sample.to_dict('records')}"
         )
-    return base.merge(payload, on=["Code", "Date"], how="left", validate="many_to_one")
+    return base.merge(payload, on=[*keys, "Date"], how="left", validate="many_to_one")
 
 
-def _join_until_next_update(base: pd.DataFrame, source: LoadedFeatureSource) -> pd.DataFrame:
-    trading_days = _panel_trading_days(base)
-    left = base[["Code", "Date"]].merge(
-        trading_days, on=["Code", "Date"], how="left", validate="one_to_one"
+def _join_until_next_update(base: pd.DataFrame, source: LoadedFeatureSource, keys: list[str]) -> pd.DataFrame:
+    trading_days = _panel_trading_days(base, keys)
+    left = base[[*keys, "Date"]].merge(
+        trading_days, on=[*keys, "Date"], how="left", validate="one_to_one"
     )
     left["_panel_row"] = base.index
-    mapped = _map_to_next_panel_day(base, source)
+    mapped = _map_to_next_panel_day(base, source, keys)
     right = mapped[
-        ["Code", "_effective_date", "_effective_trading_day_index", *source.spec.columns]
+        [*keys, "_effective_date", "_effective_trading_day_index", *source.spec.columns]
     ]
 
     joined = pd.merge_asof(
-        left.sort_values(["Date", "Code"], kind="stable"),
-        right.sort_values(["_effective_date", "Code"], kind="stable"),
+        left.sort_values(["Date", *keys], kind="stable"),
+        right.sort_values(["_effective_date", *keys], kind="stable"),
         left_on="Date",
         right_on="_effective_date",
-        by="Code",
+        by=keys,
         direction="backward",
         allow_exact_matches=True,
     )
@@ -388,7 +393,8 @@ def _apply_missing_policy(panel: pd.DataFrame, source: LoadedFeatureSource) -> p
         if source.spec.apply_period == "one_day":
             limit = source.spec.max_staleness_trading_days
             if limit:
-                panel[columns] = panel.groupby("Code", observed=True)[columns].ffill(
+                keys = ["Code", "SegmentId"] if "SegmentId" in panel else ["Code"]
+                panel[columns] = panel.groupby(keys, observed=True)[columns].ffill(
                     limit=limit
                 )
     elif policy == "drop":
@@ -465,10 +471,15 @@ def assemble_feature_panel(base: pd.DataFrame, sources: list[LoadedFeatureSource
             raise FeatureContractError(
                 f"{source.spec.name}: 외부 피처가 기존 processed 컬럼과 충돌합니다: {collisions}"
             )
+        keys = ["Code"]
+        if "SegmentId" in source.frame:
+            if "SegmentId" not in panel:
+                raise FeatureContractError(f"{source.spec.name}: segmented source requires SegmentId on prices")
+            keys.append("SegmentId")
         if source.spec.apply_period == "one_day":
-            panel = _join_one_day(panel, source)
+            panel = _join_one_day(panel, source, keys)
         else:
-            panel = _join_until_next_update(panel, source)
+            panel = _join_until_next_update(panel, source, keys)
 
         missing_before_policy = panel[list(source.spec.columns)].isna().mean().to_dict()
         panel = _apply_missing_policy(panel, source)
@@ -508,6 +519,8 @@ def build_feature_store(
     )
     if not source_dir.is_dir():
         raise FileNotFoundError(f"기본 processed 디렉터리를 찾을 수 없습니다: {source_dir}")
+    if price_store_manifest(source_dir).get("price_policy") == PRICE_POLICY:
+        raise FeatureContractError("Use experiments.features.build_feature_panel for a V2 training store")
     base_files = sorted(source_dir.glob("*.parquet"))
     if not base_files:
         raise FeatureContractError(f"기본 processed 디렉터리에 Parquet 파일이 없습니다: {source_dir}")

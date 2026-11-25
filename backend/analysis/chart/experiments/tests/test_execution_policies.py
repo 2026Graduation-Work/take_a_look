@@ -66,3 +66,48 @@ def test_confirmed_delisting_is_not_applied_before_its_date(tmp_path):
     config["dataset"] = {"root": str(tmp_path)}
     with pytest.raises(ValueError, match="lost valuation"):
         simulate(config, entries, entries.astype(float), prices.iloc[:-1])
+
+
+@pytest.mark.parametrize("held", [False, True])
+def test_training_segment_change_blocks_a_report_only_for_a_held_position(tmp_path, monkeypatch, held):
+    import json
+    from types import SimpleNamespace
+
+    from experiments import run_backtest
+    from experiments.backtest.local_execution import PositionCrossesTrainingSegment
+
+    config, entries, prices = inputs()
+    config["contract_version"] = 3
+    prices["SegmentId"] = ["first", "first", "second"]
+    predictions = prices[["Date", "Code"]].copy()
+    monkeypatch.setattr(run_backtest, "SwingStrategy", lambda config: SimpleNamespace(
+        generate_signals=lambda *_: (entries, entries.astype(float))))
+    if not held:
+        config["backtest"]["max_holding_days"] = 1
+        result = simulate(config, entries, entries.astype(float), prices)
+        assert result.events.side.tolist() == ["buy", "sell"]
+        assert result.events.iloc[-1].date.normalize() == prices.Date.iloc[1]
+        entries.iloc[0, 0] = False
+        assert simulate(config, entries, entries.astype(float), prices).events.empty
+        return
+    config["backtest"]["max_holding_days"] = 2
+    with pytest.raises(PositionCrossesTrainingSegment, match="000700 2024-01-04: held position"):
+        run_backtest._run_local_period(config, predictions, prices, tmp_path)
+    error = json.loads((tmp_path / "execution_error.json").read_text())
+    assert (error["entry_segment"], error["new_segment"]) == ("first", "second")
+    assert error["reason"] == "held_position_crosses_training_segment"
+    assert not (tmp_path / "backtest_metrics.json").exists()
+    assert not (tmp_path / "trades.csv").exists()
+
+
+def test_lagged_signal_uses_its_own_price_basis():
+    from experiments.train_src.swing_strategy import SwingStrategy
+
+    config, _, prices = inputs()
+    config["backtest"]["signal_lag_days"] = 1
+    prediction = prices[["Date", "Code"]].assign(Prob=[.95, .1, .1])
+    prices["SegmentId"] = ["old", "new", "new"]
+    strategy = SwingStrategy(config)
+    assert not strategy.generate_signals(prediction, prices)[0].iloc[1, 0]
+    prices["SegmentId"] = "old"
+    assert strategy.generate_signals(prediction, prices)[0].iloc[1, 0]

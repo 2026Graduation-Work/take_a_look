@@ -7,7 +7,7 @@ import pandas as pd
 from experiments.dataset.census_actions import _collect_notices, main
 from shared.data.disclosures import Evidence
 from shared.data.kind_market import KindUnavailable, MarketFiling
-from shared.data.market_notices import SecurityKey, normal_company
+from shared.data.market_notices import SecurityKey, kind_topic, normal_company
 
 
 def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
@@ -33,6 +33,39 @@ def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
     assert attempted == ["20210517001277", "20210520000243"]
     assert selected == 2 and gaps[holding] == set(attempted)
     assert not unattributed
+
+
+def test_merger_title_requires_an_implementation_notice_to_select_without_a_candidate():
+    security = SecurityKey("373200", "KR7373200005", "2021-02-26", None, "KOSDAQ", "common")
+    source = Evidence("a" * 64, "b" * 64)
+    filings = [MarketFiling(accession, date.fromisoformat(published), title, source,
+                            stock_code=security.code, company="하인크코리아", submitter="코스닥시장본부")
+               for accession, published, title in (
+        ("20150904000307", "2015-09-04", "주권매매거래정지(SPAC합병(예비심사청구대상))"),
+        ("20151019000033", "2015-10-19", "조회공시요구(풍문또는보도)(회사합병추진보도)"),
+        ("20220119000510", "2022-01-19", "추가상장(타법인흡수합병)"),
+    )]
+    client = Mock()
+    client.document.side_effect = KindUnavailable("stop after selecting the official implementation")
+    *_, selected, _ = _collect_notices(
+        client, filings, {security: {"하인크코리아"}}, defaultdict(tuple),
+        anchors={}, spac_keys={security}, bounded=True,
+    )
+    assert selected == 1
+    assert client.document.call_args.args[0].accession == "20220119000510"
+
+
+def test_market_inventory_distinguishes_resumption_price_method_from_a_bare_halt():
+    proof = Evidence("a" * 64, "b" * 64)
+    titles = [
+        ("20170706000452", "기준가산정 등에 관한 안내(장기간매매정지)", "candidate"),
+        ("20170706000452", "매매거래재개 기준가격 결정방법 안내", "candidate"),
+        ("20160302000333", "주권매매거래정지기간변경(액면분할 주권 변경상장)", None),
+        ("20151120000302", "주권매매거래정지해제(합병철회)", None),
+    ]
+    for accession, title, expected in titles:
+        filing = MarketFiling(accession, date(2017, 7, 6), title, proof, submitter="코스닥시장본부")
+        assert kind_topic(filing) == expected
 
 
 def test_census_never_compares_across_a_missing_security_session(tmp_path, capsys):

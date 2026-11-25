@@ -501,6 +501,24 @@ class VectorBTEngine:
             cash_sharing=True,
         )
 
+        if "SegmentId" in price_df:
+            from .local_execution import PositionCrossesTrainingSegment
+
+            boundaries = {}
+            for code, frame in price_df.sort_values("Date").groupby("Code", observed=True):
+                previous = frame.SegmentId.shift()
+                boundaries[code] = frame.loc[previous.notna() & frame.SegmentId.ne(previous)]
+            for trade in pf.trades.records.itertuples():
+                code = entries.columns[trade.col]
+                entry = entries.index[trade.entry_idx]
+                exit = entries.index[trade.exit_idx]
+                frame = boundaries[code]
+                crossed = frame.loc[frame.Date.gt(entry) & frame.Date.le(exit)]
+                if not crossed.empty:
+                    current = crossed.iloc[0]
+                    previous = price_df.loc[price_df.Code.eq(code) & price_df.Date.eq(entry), "SegmentId"]
+                    raise PositionCrossesTrainingSegment(code, current.Date, previous.iloc[0], current.SegmentId)
+
         if generate_report:
             stats = pf.stats()
             print("\n" + "=" * 60)

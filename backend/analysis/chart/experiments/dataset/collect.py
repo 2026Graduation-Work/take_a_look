@@ -10,7 +10,7 @@ def main(argv=None):
     parser.add_argument("--config", required=True)
     parser.add_argument("--mode", choices=["full", "update"], default="full")
     parser.add_argument("--rebuild", action="store_true")
-    parser.add_argument("--action-snapshot", type=Path)
+    parser.add_argument("--action-snapshot", type=Path, help="Pinned V2 resolution snapshot for a new dataset")
     parser.add_argument("--verify-flows", action="store_true")
     args = parser.parse_args(argv)
     if args.verify_flows:

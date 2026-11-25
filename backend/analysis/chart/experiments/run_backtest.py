@@ -107,7 +107,7 @@ def add_kospi_benchmark(out_dir, config):
 
 
 def _run_local_period(config, predictions, prices, out):
-    from experiments.backtest.local_execution import save_execution
+    from experiments.backtest.local_execution import PositionCrossesTrainingSegment, save_execution
     from shared.io import atomic_json
 
     if predictions.empty or prices.empty:
@@ -116,6 +116,9 @@ def _run_local_period(config, predictions, prices, out):
     entries, weights = SwingStrategy(config).generate_signals(predictions, prices)
     try:
         portfolio = VectorBTEngine(config).run(entries, weights, prices, generate_report=False)
+    except PositionCrossesTrainingSegment as exc:
+        atomic_json(Path(out) / "execution_error.json", {**exc.details, "message": str(exc)})
+        raise
     except Exception as exc:
         atomic_json(Path(out) / "execution_error.json", {"reason": str(exc), "config": config})
         raise
@@ -151,7 +154,7 @@ def run_local_backtest(config, predictions_path=None):
     start, end = test_date_bounds(splits)
     prices = load_parquet_data(
         find_processed_dir(config, __file__), start, end,
-        columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt"],
+        columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt", "SegmentId"],
         tickers=resolve_tickers(config, __file__), strict=True,
         universe_intervals=load_universe_intervals(config),
     )
@@ -228,7 +231,7 @@ def main(config_path, predictions_path=None, benchmarks_only=False):
     tickers_cfg = resolve_tickers(config, __file__)
     universe_intervals = load_universe_intervals(config)
 
-    price_cols = ["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt"]
+    price_cols = ["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt", "SegmentId"]
     market_df = load_parquet_data(
         processed_dir,
         full_test_start,
@@ -279,7 +282,7 @@ def main(config_path, predictions_path=None, benchmarks_only=False):
 
     print("\n[2] VectorBT 퀀트 시뮬레이터 가동 (Backtest Engine)...")
     bt_engine = VectorBTEngine(config)
-    pf = bt_engine.run(entries, weights, market_df)
+    pf = bt_engine.run(entries, weights, market_df, generate_report="SegmentId" not in market_df)
 
     daily_returns = pf.returns()
     daily_returns.index = pd.to_datetime(daily_returns.index).tz_localize(None)
@@ -431,6 +434,9 @@ def main(config_path, predictions_path=None, benchmarks_only=False):
     )
 
     out_dir = result_dir(config, __file__)
+    if "SegmentId" in market_df:
+        daily_returns.rename("Portfolio").to_csv(Path(out_dir) / "daily_returns.csv")
+        trades_all.to_csv(Path(out_dir) / "trades.csv", index=False)
     alignment_df.to_csv(os.path.join(out_dir, "fold_alignment.csv"), index=False)
     backtest_metrics_df.to_csv(os.path.join(out_dir, "backtest_metrics_by_fold.csv"), index=False)
     backtest_by_year_df.to_csv(os.path.join(out_dir, "backtest_metrics_by_year.csv"), index=False)

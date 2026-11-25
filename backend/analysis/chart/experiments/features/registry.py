@@ -20,6 +20,8 @@ def resolve_feature_columns(config):
         if not isinstance(config.get(field, []), list):
             raise ValueError(f"features.{field} must be a list")
     external = [col for source in config.get("sources", []) for col in source["columns"]]
+    if any(name.casefold() == "segmentid" for name in external):
+        raise ValueError("SegmentId cannot be a model feature")
     known = set(BASE_FEATURES) | set(PSYCHOLOGY_COLUMNS) | set(FLOW_FEATURES) | set(external)
     requested = list(
         dict.fromkeys(
