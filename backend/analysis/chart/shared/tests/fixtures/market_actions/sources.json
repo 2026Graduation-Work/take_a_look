@@ -1092,5 +1092,61 @@
       "20171215000816"
     ],
     "final": true
+  },
+  "20171121000053": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "넥센",
+    "body_url": "https://kind.krx.co.kr/external/2017/11/21/000053/20171121000111/68154.htm",
+    "charset": "utf-8",
+    "sha256": "1b3299528690714316472af7480dc3c40c41ec07e923084073f02cd589464c2c",
+    "document_no": "20171121000111",
+    "family": [
+      "20171121000111",
+      "20171123000956"
+    ],
+    "final": false
+  },
+  "20171123000384": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "넥센",
+    "body_url": "https://kind.krx.co.kr/external/2017/11/23/000384/20171123000956/68154.htm",
+    "charset": "utf-8",
+    "sha256": "e6055344ea20b78ad334c790ffac3fab81eab34ddef8028242793d77113fe2ce",
+    "document_no": "20171123000956",
+    "family": [
+      "20171121000111",
+      "20171123000956"
+    ],
+    "final": true
+  },
+  "20200413000258": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "삼양사",
+    "body_url": "https://kind.krx.co.kr/external/2020/04/13/000258/20200413000680/68154.htm",
+    "charset": "utf-8",
+    "sha256": "b50104915e84ea976a929007fafe63e2b8dd1eda026694c57564092cea4ffbdc",
+    "document_no": "20200413000680",
+    "family": [
+      "20200413000680",
+      "20200413001665"
+    ],
+    "final": false
+  },
+  "20200413000763": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "삼양사",
+    "body_url": "https://kind.krx.co.kr/external/2020/04/13/000763/20200413001665/68154.htm",
+    "charset": "utf-8",
+    "sha256": "b448afdafe950d2c0ae19c5326986045bf0eaa06e5febdf660a3906c03e27aef",
+    "document_no": "20200413001665",
+    "family": [
+      "20200413000680",
+      "20200413001665"
+    ],
+    "final": true
   }
 }

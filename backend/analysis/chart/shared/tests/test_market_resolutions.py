@@ -27,8 +27,10 @@ from shared.data.market_notices import SecurityKey, match_notice, normal_company
 from shared.data.market_resolutions import (
     Resolution,
     adjustment_events,
+    issuer_merger_boundaries,
     raw_window_fingerprint,
     resolve_events,
+    structural_closure,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "market_actions"
@@ -218,6 +220,30 @@ def test_absorption_merger_marks_boundary_even_when_reference_and_both_bars_are_
     ])
     row, = resolve(DOBU, raw, actual_notices(DOBU, "20241115000546")).resolutions
     assert row.kind == Resolution.SEGMENT_BREAK and row.reason == "official_merger" and not row.review
+
+
+def test_issuer_merger_only_reaches_active_listing_windows_with_the_effective_session():
+    common = SecurityKey("005720", "KR7005720008", "1987-12-19", None, "KOSPI", "common")
+    preferred = SecurityKey("005725", "KR7005721006", "1989-09-23", None, "KOSPI", "preferred")
+    relisted = replace(preferred, listing="2016-01-04")
+    earlier = replace(preferred, delisting=relisted.listing)
+    future = replace(preferred, listing="2018-01-02")
+    other_issuer = replace(SAMSUNG, listing=common.listing)
+    day = "2017-11-24"
+    notice, = actual_notices(common, "20171123000384")
+    notice = replace(notice, company_id="00572")
+    windows = {common, relisted, earlier, future, other_issuer}
+
+    def has_session(key, day):
+        return key in windows and day == "2017-11-24"
+
+    assert issuer_merger_boundaries([notice], windows, has_session) == {relisted: {day: [notice]}}
+    issuer_windows = windows - {other_issuer}
+    assert structural_closure([notice], issuer_windows, has_session) == ({common, relisted}, {common, relisted})
+    assert not issuer_merger_boundaries([notice], windows, lambda key, _: key != relisted)
+    for excluded in (replace(notice, final=False), replace(notice, company_id="01014"),
+                     replace(notice, facts=replace(notice.facts, reason="인적분할"))):
+        assert not issuer_merger_boundaries([excluded], windows, has_session)
 
 
 def test_resumption_keeps_actual_return_and_halted_share_change_has_no_factors():

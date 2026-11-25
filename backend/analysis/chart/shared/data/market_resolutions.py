@@ -39,6 +39,7 @@ ACTION_KIND = {"split": Resolution.UNIT_CHANGE, "merge": Resolution.UNIT_CHANGE,
                "reference_reset": Resolution.REFERENCE_RESET}
 STRUCTURAL = re.compile(r"인적분할|회사분할|분할합병|분할\(존속\)|분할존속")
 MERGER = re.compile(r"합병")
+ISSUER_MERGER_REASON = "official_issuer_merger"
 DISALLOWED_LISTING = re.compile(r"분할|병합|감자|합병|액면|무상증자|주식배당")
 RESUME = re.compile(r"장기간매매정지|장기매매거래정지|장기거래정지|매매거래재개")
 RIGHTS = {"유상증자", "권리락(유상증자)", "주주배정유상증자", "권리락(주주배정유상증자)"}
@@ -128,6 +129,58 @@ def _reason(notice):
 def structural_notice(notice):
     return (notice.final and notice.facts.kind in {"listing", "auction"}
             and bool(STRUCTURAL.search(_reason(notice)) or MERGER.search(_reason(notice))))
+
+
+def merger_facts(kind, reason):
+    return kind in {"listing", "auction"} and bool(MERGER.search(re.sub(r"\s+", "", reason)))
+
+
+def _issuer_merger_windows(notice, keys, has_session):
+    security, day = notice.security, notice.facts.effective
+    issuer = notice.company_id[:5]
+    if (notice.final and merger_facts(notice.facts.kind, notice.facts.reason)
+            and re.fullmatch(r"[0-9A-Z]{5}", issuer) and security.code.startswith(issuer)
+            and security.active(day) and has_session(security, day)):
+        return {key for key in keys if key.code.startswith(issuer) and key.active(day) and has_session(key, day)}
+    return set()
+
+
+def structural_closure(notices, keys, has_session):
+    """Identify the verified structural windows covered by a final correction."""
+    structural = [notice for notice in notices if structural_notice(notice)]
+    closed = {notice.security for notice in structural
+              if notice.security in keys and has_session(notice.security, notice.facts.effective)}
+    issuer_windows = [_issuer_merger_windows(notice, keys, has_session) for notice in structural]
+    closed.update(key for targets in issuer_windows for key in targets)
+    return closed, closed if issuer_windows and all(issuer_windows) else keys
+
+
+def _division_notice(notice):
+    return notice.final and notice.facts.kind != "rename" and bool(STRUCTURAL.search(_reason(notice)))
+
+
+def issuer_merger_boundaries(notices, keys, has_session):
+    """Map recipient windows and dates to the original merger Notices."""
+    issuer_keys = defaultdict(set)
+    for key in keys:
+        issuer_keys[key.code[:5]].add(key)
+    direct = {(n.security, n.facts.effective) for n in notices if _division_notice(n)
+              or n.final and merger_facts(n.facts.kind, n.facts.reason)}
+    boundaries = defaultdict(lambda: defaultdict(list))
+    for notice in notices:
+        day = notice.facts.effective
+        for key in _issuer_merger_windows(notice, issuer_keys.get(notice.company_id[:5], ()), has_session):
+            if (key, day) not in direct:
+                boundaries[key][day].append(notice)
+    return boundaries
+
+
+def issuer_merger_resolution(security, day, source_notices):
+    require(source_notices and all(
+        notice.security != security and notice.facts.effective == day
+        and _issuer_merger_windows(notice, (security,), lambda _, __: True) for notice in source_notices),
+        "Issuer merger evidence does not cover the recipient security and session")
+    return _result(security, day, Resolution.SEGMENT_BREAK, ISSUER_MERGER_REASON, source_notices)
 
 
 def _result(security, day, kind, reason, notices=(), *, factors=None, evidence=(), review=False):
@@ -238,15 +291,16 @@ def _official_transfer(security, raw, at, candidate, events):
                     and n.facts.shares_after == candidate.shares_after for n in events))
 
 
-def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all_listings, complete, blocked, unparsed):
+def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all_listings, complete, blocked, unparsed,
+                 issuer_mergers):
     day = days[at].date().isoformat()
     final = [notice for notice in notices if notice.final]
     nonfinal = len(final) != len(notices)
     events = [notice for notice in final if notice.facts.kind != "rename"]
     action_evidence = _action_evidence(action) if action else ()
-    if any(STRUCTURAL.search(_reason(notice)) for notice in events):
+    if any(_division_notice(notice) for notice in events):
         return _result(security, day, Resolution.SEGMENT_BREAK, "official_division", final, evidence=action_evidence)
-    merger = [notice for notice in events if notice.facts.kind in {"listing", "auction"} and MERGER.search(_reason(notice))]
+    merger = [notice for notice in events if merger_facts(notice.facts.kind, notice.facts.reason)]
     if merger:
         spac = [notice for notice in merger if _spac_issuer(notice, final)]
         if spac:
@@ -256,6 +310,8 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
             return _result(security, day, Resolution.SEGMENT_BREAK, "spac_merger_share_observation_disagrees", final,
                            evidence=action_evidence, review=True)
         return _result(security, day, Resolution.SEGMENT_BREAK, "official_merger", final, evidence=action_evidence)
+    if issuer_mergers:
+        return issuer_merger_resolution(security, day, issuer_mergers)
     if candidate is None:
         return None
     if blocked:
@@ -354,13 +410,14 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
 
 def resolve_events(security, raw, expected_dates, notices, *, actions=(), coverage_complete=False,
                    covered_dates=frozenset(), blocked_dates=frozenset(), unparsed_dates=None, transfer_anchor=None,
-                   transfer_source=None):
+                   transfer_source=None, issuer_mergers=None):
     """Produce one canonical outcome per observed candidate and confirmed structure date."""
     days, base, mask = _observations(raw, expected_dates)
     require(not days.empty and all(security.active(day.date().isoformat()) for day in days),
             "KRX prices lie outside the official listing interval")
     require(all(notice.security == security for notice in notices), "KIND notices mix listing identities")
     unparsed_dates = unparsed_dates or {}
+    issuer_mergers = issuer_mergers or {}
     notices = _valid_notices(notices)
     terms = tuple(n for n in notices if n.facts.kind.endswith("_terms"))
     on_date = defaultdict(list)
@@ -402,7 +459,8 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
             STRUCTURAL.search(_reason(notice)) or MERGER.search(_reason(notice)) for notice in on_date[day]
         ):
             incomplete.append(day)
-    dates = set(on_date) | set(indexed_actions) | {days[at].date().isoformat() for at in mask.to_numpy().nonzero()[0]}
+    dates = (set(on_date) | set(indexed_actions) | issuer_mergers.keys()
+             | {days[at].date().isoformat() for at in mask.to_numpy().nonzero()[0]})
     if transfer_source and transfer_source.isin != security.isin:
         dates.add(first_day)
     for day in sorted(day for day in dates & by_date.keys() if day >= first_day):
@@ -416,7 +474,8 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
         current = on_date.get(day, [])
         complete = coverage_complete or day in covered_dates
         row = _resolve_day(security, raw, days, at, candidate, indexed_actions.get(day), current,
-                           terms, on_date, complete, day in blocked_dates, unparsed_dates.get(day, ()))
+                           terms, on_date, complete, day in blocked_dates, unparsed_dates.get(day, ()),
+                           issuer_mergers.get(day, ()))
         if (anchored_transfer and transfer_source and transfer_source.isin != security.isin
                 and (row is None or row.kind in ADJUSTMENTS or row.kind == Resolution.SHARES_ONLY)):
             row = _result(security, day, Resolution.SEGMENT_BREAK, "separate_verified_listing_units", current)

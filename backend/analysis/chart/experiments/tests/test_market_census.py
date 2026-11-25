@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 from experiments.dataset.census_actions import _collect_notices, main
 from experiments.dataset.freeze_resolution_snapshot import freeze_resolution_snapshot
-from experiments.dataset.pipeline import write_review_queue
+from experiments.dataset.pipeline import training_metadata, write_review_queue
 from shared.data.disclosures import DisclosureError, Evidence
 from shared.data.kind_market import (
     DAILY_URL,
@@ -23,6 +23,7 @@ from shared.data.kind_market import (
 from shared.data.market_notices import SecurityKey, kind_topic, normal_company
 from shared.data.market_resolutions import Resolution
 from shared.data.resolution_snapshot import kind_document_url, read_resolution_snapshot
+from shared.data.segmented_prices import adjust_training_window
 from shared.io import sha256
 
 
@@ -132,13 +133,15 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
     fixtures = Path(__file__).parents[2] / "shared/tests/fixtures/market_actions"
     sources = json.loads((fixtures / "sources.json").read_text())
     documents = {}
-    for accession in (accession for rows in filings.values() for accession in rows):
+    accessions = [accession for rows in filings.values() for accession in rows]
+    flags = {sources[accession]["document_no"]: "Y" if sources[accession]["final"] else "N" for accession in accessions}
+    for accession in accessions:
         source = sources[accession]
         viewer, document, url = kind_document_url(accession), source["document_no"], source["body_url"]
-        documents[viewer] = (
-            f'<input name="acptNo" id="acptNo" value="{accession}">'
-            f'<select id="mainDoc"><option value="{document}|Y" selected></option></select>'
-        ).encode()
+        options = "".join(f'<option value="{number}|{flags.get(number, "N")}"'
+                          f'{" selected" if number == document else ""}></option>' for number in source["family"])
+        documents[viewer] = (f'<input name="acptNo" id="acptNo" value="{accession}">'
+                             f'<select id="mainDoc">{options}</select>').encode()
         documents[viewer.split("?")[0] + f"?method=searchContents&docNo={document}"] = (
             f"parent.setPath('', '{url}')"
         ).encode()
@@ -296,7 +299,7 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
     assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)
 
 
-def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False):
+def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=()):
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
@@ -314,11 +317,112 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=Fa
     main(["--start", str(start), "--end", str(end), "--published-start", str(start - timedelta(days=7)),
           "--published-end", str(end + timedelta(days=3)), "--krx-days", str(days), "--active-master", str(active_path),
           "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output),
-          "--request-budget", str(budget), *(["--preview"] if preview else [])])
+          "--request-budget", str(budget), *(["--preview"] if preview else []),
+          *(arg for code in codes for arg in ("--code", code))])
     path = freeze_resolution_snapshot(output, tmp_path / "official_actions", krx_days=days,
                                        active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
     notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
     return read_resolution_snapshot(path, verify_archive=True), notices
+
+
+@pytest.mark.parametrize("original,final,common,preferred,active,raw", [
+    ("20171121000053", "20171123000384", "005720", "005725", [
+        ("005720", "KR7005720008", "넥센보통주", "넥센", "KOSPI", "주권", "1987/12/19", "보통주"),
+        ("005725", "KR7005721006", "넥센1우선주", "넥센우", "KOSPI", "주권", "1989/09/23", "구형우선주"),
+    ], [
+        ("2017-11-23", "005720", "넥센", "KOSPI", 8090, 8090, 7990, 7990, -100, 23733, 190265690, 50880170),
+        ("2017-11-24", "005720", "넥센", "KOSPI", 8050, 8050, 7800, 7830, -160, 74316, 585849820, 53543977),
+        ("2017-11-23", "005725", "넥센우", "KOSPI", 5280, 5470, 5280, 5440, 90, 624, 3311410, 3600600),
+        ("2017-11-24", "005725", "넥센우", "KOSPI", 5490, 5540, 5250, 5440, 0, 209, 1144440, 3600600),
+    ]),
+    ("20200413000258", "20200413000763", "145990", "145995", [
+        ("145990", "KR7145990008", "삼양사보통주", "삼양사", "KOSPI", "주권", "2011/12/05", "보통주"),
+        ("145995", "KR7145991006", "삼양사1우선주", "삼양사우", "KOSPI", "주권", "2011/12/05", "구형우선주"),
+    ], [
+        ("2020-04-13", "145990", "삼양사", "KOSPI", 35900, 36200, 35400, 35700, -50, 25832, 924849250, 10289803),
+        ("2020-04-14", "145990", "삼양사", "KOSPI", 35700, 36150, 35300, 35950, 250, 25565, 916725800, 10313449),
+        ("2020-04-13", "145995", "삼양사우", "KOSPI", 24000, 24700, 23900, 24000, -250, 1099, 26419200, 370070),
+        ("2020-04-14", "145995", "삼양사우", "KOSPI", 24050, 25400, 24000, 24900, 900, 5568, 136678950, 370070),
+    ]),
+])
+def test_census_freezes_issuer_merger_for_common_and_preferred(tmp_path, monkeypatch, capsys,
+                                                       original, final, common, preferred, active, raw):
+    filings = defaultdict(list)
+    for accession in (original, final):
+        day = f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}"
+        filings[day].append(accession)
+    use_archived_kind_bodies(monkeypatch, filings, issuer=common[:5], submitter="유가증권시장본부")
+    codes = (common, preferred) if common == "005720" else ()
+    snapshot, notices = freeze_kind_case(tmp_path, raw, active=active, codes=codes)
+    assert list(notices.index) == [final] and notices.loc[final, "Code"] == common
+    family, = snapshot.coverage["kind_final_families"]
+    assert (family["AcptNo"], family["FinalAcptNo"]) == (original, final)
+    assert {item["Code"] for item in family["ClosedWindows"]} == {common, preferred}
+
+    start, end = raw[0][0], raw[1][0]
+    days = pd.DatetimeIndex([start, end])
+    if not codes:
+        selected = training_metadata(snapshot, {"tickers": [preferred], "markets": ["KOSPI"], "include_delisted": False},
+                                     {"trading_days": [start, end]})
+        assert selected.Code.tolist() == [preferred]
+    for key, ledger in snapshot.ledgers.items():
+        event, = ledger.resolutions
+        reason = "official_merger" if key.code == common else "official_issuer_merger"
+        assert not ledger.candidates
+        assert (event.date, event.kind, event.reason, event.review, event.price_factor, event.volume_factor) == (
+            end, Resolution.SEGMENT_BREAK, reason, False, None, None)
+        assert {item.accession for item in event.evidence} == {final}
+        bars = pd.concat([pd.read_parquet(tmp_path / "days" / f"{day}.parquet") for day in (start, end)])
+        bars = bars.loc[bars.Code.eq(key.code)].reset_index(drop=True)
+        adjusted, actions = adjust_training_window(key, bars, days, end, snapshot)
+        assert actions.empty and adjusted.SegmentId.nunique() == 2 and adjusted.Change.isna().all()
+        for column in ("Open", "High", "Low", "Close", "Volume"):
+            assert adjusted[column].tolist() == bars[f"Raw{column}"].tolist()
+        assert adjusted.Amount.tolist() == bars.Amount.tolist()
+
+    active_path, delisted_path = tmp_path / "active.parquet", tmp_path / "delisted.parquet"
+    with pytest.raises(SystemExit) as error:
+        main(["--start", start, "--end", end, "--published-start", str(days[0].date() - timedelta(days=7)),
+              "--published-end", str(days[-1].date() + timedelta(days=3)), "--krx-days", str(tmp_path / "days"),
+              "--active-master", str(active_path), "--delisted-master", str(delisted_path),
+              "--kind-root", str(tmp_path / "kind"), "--output", str(tmp_path / "preferred_only"), "--code", preferred])
+    assert error.value.code == 1
+    assert f"Issuer merger source is outside the bounded census; include --code for {common}" in capsys.readouterr().err
+
+    output = tmp_path / "output"
+    coverage_path, resolutions_path, manifest_path = (output / name for name in ("coverage.json", "resolutions.csv", "manifest.json"))
+    original_coverage = coverage_path.read_bytes()
+    manifest = json.loads(manifest_path.read_bytes())
+    coverage = json.loads(original_coverage)
+    coverage["kind_final_families"][0]["ClosedWindows"] = [item for item in family["ClosedWindows"] if item["Code"] == common]
+    coverage_path.write_text(json.dumps(coverage))
+    manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+    manifest_path.write_text(json.dumps(manifest))
+    inputs = {"krx_days": tmp_path / "days", "active_master": active_path, "delisted_master": delisted_path,
+              "evidence_archives": [tmp_path / "kind"]}
+    with pytest.raises(DisclosureError, match="leaves an affected window unconfirmed"):
+        freeze_resolution_snapshot(output, tmp_path / "invalid_closure", **inputs)
+
+    coverage_path.write_bytes(original_coverage)
+    manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+    resolutions = pd.read_csv(resolutions_path, dtype=str, keep_default_na=False)
+    resolutions[resolutions.Code.eq(common)].to_csv(resolutions_path, index=False)
+    manifest["resolutions_without_price_observation"] -= 1
+    manifest["market_resolution_counts"][Resolution.SEGMENT_BREAK] -= 1
+    manifest["table_sha256"]["resolutions"] = sha256(resolutions_path)
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(DisclosureError, match=f"{preferred}: census omits a verified resolution"):
+        freeze_resolution_snapshot(output, tmp_path / "missing_boundary", **inputs)
+
+    manifest["resolutions_without_price_observation"] += 1
+    manifest["market_resolution_counts"][Resolution.SEGMENT_BREAK] += 1
+    changed = resolutions.copy()
+    changed.loc[changed.Code.eq(preferred), "Reason"] = "official_merger"
+    changed.to_csv(resolutions_path, index=False)
+    manifest["table_sha256"]["resolutions"] = sha256(resolutions_path)
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(DisclosureError, match="Resolution evidence refers to another notice or security"):
+        freeze_resolution_snapshot(output, tmp_path / "false_direct_evidence", **inputs)
 
 
 def test_census_freezes_headingless_listing_and_reference_for_actual_market_transfer(tmp_path, monkeypatch):

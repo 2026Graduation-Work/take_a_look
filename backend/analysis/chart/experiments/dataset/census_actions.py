@@ -28,10 +28,12 @@ from shared.data.market_notices import (
 )
 from shared.data.market_resolutions import (
     Resolution,
+    issuer_merger_boundaries,
+    merger_facts,
     observe_candidates,
     raw_window_fingerprint,
     resolve_events,
-    structural_notice,
+    structural_closure,
 )
 from shared.data.resolution_archive import notice_facts_columns
 from shared.data.resolution_snapshot import (
@@ -231,6 +233,10 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     parsed, blocked, unparsed, failures = defaultdict(list), defaultdict(set), defaultdict(lambda: defaultdict(list)), []
     structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
     selected, fetched, verified, families = set(), set(), {}, []
+    missing_merger_sources = set()
+
+    def has_session(key, day):
+        return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
 
     def bind(filing, form, body, acquired, issuer, keys):
         sections = parse_notice(filing, form, body)
@@ -244,9 +250,13 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                 possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
             else:
                 possible = keys if issuer else keys | by_name[normal_company(facts.company)]
-            if not any(key.active(facts.effective) and (
-                (facts.share_label in {"보통주", "보통주식"}) == (key.share_class == "common")
-            ) for key in possible):
+            common = facts.share_label in {"보통주", "보통주식"}
+            if not any(key.active(facts.effective) and common == (key.share_class == "common") for key in possible):
+                if (bounded and body.final and filing.company_id[:5] == issuer and issuer
+                        and merger_facts(facts.kind, facts.reason)
+                        and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
+                        and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)):
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
                 continue
             notice = match_notice(filing, form, facts, body, acquired, {key: aliases[key] for key in possible})
             parsed[notice.security].append(notice)
@@ -309,10 +319,9 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             rows = [row for row in verified[accession] if row.security in keys and row.document_no == target_body.document_no
                     and row.evidence[1:] == target_refs]
             require(rows, "KIND final document identifies no affected stock")
-            closed = {row.security for row in rows if structural and structural_notice(row)
-                      and (expected_days is None or pd.Timestamp(row.facts.effective) in expected_days[row.security])}
+            closed, affected_keys = structural_closure(rows, keys, has_session) if structural else (set(), set())
             require(not structural or closed, "KIND final document does not confirm an affected structural event")
-            for key in keys - closed if structural else ():
+            for key in affected_keys - closed:
                 structural_gaps[key].add(filing.accession)
             families.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
                              "FinalDocNo": target_body.document_no, "FormId": target_form,
@@ -335,6 +344,9 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                 else:
                     unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
                                                         for ref in refs)
+    require(not missing_merger_sources,
+            "Issuer merger source is outside the bounded census; include --code for "
+            + ", ".join(sorted(missing_merger_sources)))
     return parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, nonstock, families, len(selected), len(fetched)
 
 
@@ -543,6 +555,9 @@ def build_census(args, client):
                                 spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
                                 registered=registered, daily=daily, expected_days=expected_days)
     notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families, selected, fetched = acquired
+    issuer_mergers = issuer_merger_boundaries(
+        [notice for rows in notices.values() for notice in rows], securities,
+        lambda key, day: key in expected_days and pd.Timestamp(day) in expected_days[key])
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []
     for key, bars in securities.items():
@@ -552,7 +567,8 @@ def build_census(args, client):
             require(key in fingerprints, "Official KRX raw window failed validation")
             ledger = resolve_events(key, bars, expected_days[key], notices[key], actions=actions[key],
                                     covered_dates=covered, blocked_dates=blocked[key], unparsed_dates=unparsed[key],
-                                    transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key))
+                                    transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key),
+                                    issuer_mergers=issuer_mergers.get(key))
         except ValueError as exc:
             failed_windows.append({"Code": key.code, "Stage": "resolver", "Reason": str(exc)})
         coverage_spans = [*company[key.code], *targeted[key.code]]
@@ -681,7 +697,8 @@ def main(argv=None):
     cli.add_argument("--action-snapshot", type=Path, action="append", default=[])
     cli.add_argument("--review-confirmations", type=Path)
     cli.add_argument("--sample", type=Path, help="CSV with Code and Date columns")
-    cli.add_argument("--code", action="append", default=[], help="Restrict to one or more verified securities")
+    cli.add_argument("--code", action="append", default=[],
+                     help="Restrict to verified securities; include the merger notice's source code for the same issuer")
     cli.add_argument("--request-budget", type=int, default=0)
     cli.add_argument("--preview", action="store_true", help="Allow an incomplete market ledger to exit successfully")
     args = cli.parse_args(argv)

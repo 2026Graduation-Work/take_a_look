@@ -28,7 +28,7 @@ from .kind_market import (
     viewer_documents,
 )
 from .market_notices import Notice, SecurityKey, kind_topic, parse_notice
-from .market_resolutions import structural_notice
+from .market_resolutions import structural_closure
 
 
 def _response(archive, ref):
@@ -113,7 +113,7 @@ def _security(row):
                        row["Market"], row["ShareClass"])
 
 
-def _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices):
+def _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices, has_session):
     accession, target = row["AcptNo"], row["FinalAcptNo"]
     original = filings.get((accession, refs[0]))
     matches = daily_targets.get(target, ())
@@ -139,17 +139,17 @@ def _verify_final_family(archive, row, refs, filings, daily_targets, windows, fi
                if notice.evidence[1:] == refs[4:]]
     require(matched, "KIND correction target has no verified stock facts")
     closed = {_security(item) for item in row["ClosedWindows"]}
-    confirmed = {notice.security for notice in matched if notice.security in windows and structural_notice(notice)
-                 and windows[notice.security]["first_session"] <= notice.facts.effective <= windows[notice.security]["last_session"]}
-    require(closed <= confirmed and all(key.code.startswith(issuer) for key in closed),
+    keys = {key for key in windows if key.code.startswith(issuer)}
+    confirmed, affected = structural_closure(matched, keys, has_session)
+    require(closed <= confirmed,
             "KIND correction closure lacks an affected structural fact")
     if kind_topic(original) == "structural":
-        require(closed == {key for key in windows if key.code.startswith(issuer)},
+        require(closed and closed == affected,
                 "KIND structural correction leaves an affected window unconfirmed")
     return closed
 
 
-def verify_archive_bindings(folder, coverage, archive):
+def verify_archive_bindings(folder, coverage, archive, session_dates):
     with (folder / "notices.csv").open(encoding="utf-8", newline="") as stream:
         notices = [(row, tuple(Evidence(**raw) for raw in json.loads(row["Evidence"]))) for row in csv.DictReader(stream)]
     nonstock = [(row, tuple(Evidence(**raw) for raw in row["Evidence"])) for row in coverage.get("nonstock_notices", ())]
@@ -157,6 +157,11 @@ def verify_archive_bindings(folder, coverage, archive):
     needed = {(row["AcptNo"], refs[0]) for row, refs in (*notices, *nonstock)}
     needed.update((row["AcptNo"], refs[0]) for row, refs in families)
     windows = {_security(row): row for row in coverage["windows"]}
+
+    def has_session(key, day):
+        return (key in windows and day in session_dates
+                and windows[key]["first_session"] <= day <= windows[key]["last_session"])
+
     issuers = {key.code[:5] for key in windows}
     expected, proved, daily_targets = {}, set(), {}
     final_accessions = {row["FinalAcptNo"] for row, _ in families}
@@ -216,7 +221,7 @@ def verify_archive_bindings(folder, coverage, archive):
         if notice.final:
             final_notices.setdefault((notice.accession, notice.document_no, notice.form), []).append(notice)
     for row, refs in families:
-        if _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices):
+        if _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices, has_session):
             proved.add((row["AcptNo"], refs[0]))
     missing = sorted(f"{row.accession} ({row.published})" for row in expected.values()
                      if (row.accession, row.evidence) not in proved)

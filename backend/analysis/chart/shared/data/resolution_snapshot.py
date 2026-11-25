@@ -20,10 +20,14 @@ from .calendar import scheduled_sessions
 from .disclosures import KIND_VIEWER, Evidence, put_immutable, require
 from .market_notices import SecurityKey
 from .market_resolutions import (
+    ISSUER_MERGER_REASON,
     Candidate,
     Resolution,
     ResolvedEvent,
     WindowLedger,
+    issuer_merger_boundaries,
+    issuer_merger_resolution,
+    merger_facts,
     raw_window_fingerprint,
 )
 from .resolution_archive import verify_archive_bindings
@@ -321,7 +325,7 @@ def _load_tables(folder, manifest):
                 and windows[security]["first_session"] <= day <= windows[security]["last_session"]
                 and prev < day and min(quantities) > 0, "Invalid candidate identity, date, or prices")
         _insert(candidates, (security, day), Candidate(security, day, prev, *quantities, _bool(row["Paused"])))
-    notice_refs = {}
+    notice_refs, merger_refs = {}, defaultdict(dict)
     for row in _csv(folder / "notices.csv", NOTICE_COLUMNS):
         security = _security(row)
         accession, form, section = row["AcptNo"], row["FormId"], int(row["Section"])
@@ -334,6 +338,9 @@ def _load_tables(folder, manifest):
                 and section > 0 and re.fullmatch(r"[0-9]{14}", row["DocNo"]) and evidence and evidence[-1].sha256 == row["Sha256"],
                 "Invalid or duplicate official notice")
         _insert(notice_refs, key, set(evidence))
+        if (row["Final"] == "True" and merger_facts(row["Kind"], row["Reason"]) and applied in price_hashes
+                and windows[security]["first_session"] <= applied <= windows[security]["last_session"]):
+            merger_refs[(security.code[:5], applied, accession, form, section)][security] = set(evidence)
         refs.update(evidence)
         notices[security].append((accession, published, applied))
 
@@ -341,9 +348,11 @@ def _load_tables(folder, manifest):
         security, day = _security(row), _day(row["Date"])
         key = (security, day)
         kind, review = Resolution(row["Resolution"]), _bool(row["Review"])
+        inherited_merger = row["Reason"] == ISSUER_MERGER_REASON
         require(security in windows and day in price_hashes and
                 windows[security]["first_session"] <= day <= windows[security]["last_session"] and row["Reason"]
-                and (not review or kind == Resolution.SEGMENT_BREAK and key in candidates),
+                and (not review or kind == Resolution.SEGMENT_BREAK and key in candidates)
+                and (not inherited_merger or kind == Resolution.SEGMENT_BREAK and not review),
                 "Invalid resolution identity, date or review flag")
         fields, raw_days, ticks = [], set(), 0
         for item in json.loads(row["Evidence"]):
@@ -354,8 +363,15 @@ def _load_tables(folder, manifest):
                 require(re.fullmatch(r"[0-9]{14}", accession) and isinstance(field, str) and field,
                         "Invalid official field evidence")
                 if match := re.fullmatch(r"KIND ([0-9]{5})/([0-9]+)", field):
-                    require(ref in notice_refs.get((security, accession, match[1], int(match[2])), set()),
-                            "Resolution evidence refers to another notice or security")
+                    form, section = match[1], int(match[2])
+                    if inherited_merger:
+                        bound = merger_refs.get((security.code[:5], day, accession, form, section), {})
+                        valid = any(source != security and ref in refs for source, refs in bound.items())
+                    else:
+                        valid = ref in notice_refs.get((security, accession, form, section), ())
+                    require(valid, "Resolution evidence refers to another notice or security")
+                else:
+                    require(not inherited_merger, "Issuer merger evidence must reference the original KIND notice")
                 fields.append(FieldEvidence(accession, ref, field))
                 refs.add(ref)
             elif source == "KRX raw":
@@ -479,7 +495,8 @@ def seal_resolution_snapshot(census_dir, destination, manifest, files, names, re
     archive = destination / "archive"
     refs = refs.union(*(set(_refs(json.loads(Path(path).read_bytes()))) for path in action_snapshots))
     _archive_receipts(refs, [*map(Path, evidence_archives), *action_archives], archive)
-    official = verify_archive_bindings(census_dir, json.loads(files["coverage.json"].read_bytes()), archive)
+    official = verify_archive_bindings(census_dir, json.loads(files["coverage.json"].read_bytes()), archive,
+                                       set(sources["krx_sessions"]))
     if verify_ledger is not None:
         verify_ledger(official)
     for path, digest in zip(action_snapshots, sources["official_action_snapshots"]):
@@ -530,7 +547,16 @@ def read_resolution_snapshot(path, *, verify_archive=False):
             "Resolution snapshot evidence inventory differs")
     if verify_archive:
         _archive_receipts(refs, [archive])
-        verify_archive_bindings(folder, coverage, archive)
+        session_dates = set(manifest["sources"]["krx_sessions"])
+        official = verify_archive_bindings(folder, coverage, archive, session_dates)
+        inherited = issuer_merger_boundaries(
+            official, windows, lambda key, day: key in windows and day in session_dates
+            and windows[key]["first_session"] <= day <= windows[key]["last_session"])
+        expected = {(key, day): set(issuer_merger_resolution(key, day, sources).evidence)
+                    for key, days in inherited.items() for day, sources in days.items()}
+        actual = {(key, row.date): set(row.evidence) for key, ledger in ledgers.items()
+                  for row in ledger.resolutions if row.reason == ISSUER_MERGER_REASON}
+        require(actual == expected, "Issuer merger resolutions differ from the official source archive")
     return ResolutionSnapshot(path, manifest, coverage, windows, sessions, ledgers, names, notices,
                               refs, root["evidence_sha256"], root["segmentation_sha256"])
 

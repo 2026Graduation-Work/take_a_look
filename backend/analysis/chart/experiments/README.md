@@ -95,6 +95,8 @@ python -m experiments.dataset.census_actions \
 
 완료한 조회에서 근거를 확인할 수 없으면 검토가 필요한 `segment_break`를 기록한다. 누락된 KIND 목록이나 본문은 미완료 조회로 남긴다. `--preview`, `--code`, `--sample`은 부분 검증에 쓴다. 전체 범위를 조회했을 때 장부가 미완료면 명령은 종료 코드 2를 반환한다. 이 명령은 학습 입력과 라벨을 바꾸지 않는다.
 
+합병 시행일에 같은 발행사의 거래일 범위에 포함된 보통주와 우선주에 각각 구간 경계를 둔다. 공식 공시는 원문에 명시된 증권 키로 보존하고, 합병 경계의 가격과 거래량 계수는 비워 둔다. `--code`로 우선주를 수집할 때 해당 합병 공시가 보통주에 연결되면 보통주 코드도 `--code`에 함께 지정한다.
+
 `notices.csv`의 `Published`는 KIND 목록에 표시된 날짜다. 접수번호는 원문 조회 키로 보존한다. 당시 공개 자료만 쓴 분석에는 최초 공개 시점을 별도로 확인해야 한다.
 
 주주배정 유상증자는 거래소가 확인한 권리락 기준가를 사용한다. 무상증자와 주식배당은 공식 공시의 1주당 배정 비율로 조정한다. 2023-01-25 전후의 거래소 호가표를 적용하며, 공시가 가격 차이를 설명하지 않는 경우에 호가 올림을 확인한다. [KRX 기준가격](https://regulation.krx.co.kr/contents/RGL/03/03010100/RGL03010100T6.jsp) · [KRX 권리락](https://regulation.krx.co.kr/contents/RGL/03/03010401/RGL03010401.jsp) · [KRX 과거 호가표](https://global.krx.co.kr/contents/GLB/01/0109/0109000000/guide_to_trading_in_the_korean_stock_market.pdf) · [KRX 개정 호가표](https://regulation.krx.co.kr/contents/RGL/03/03020100/RGL03020100.jsp)
