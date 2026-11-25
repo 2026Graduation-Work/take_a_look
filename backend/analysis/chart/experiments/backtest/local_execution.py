@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
+from experiments.train_src.labels import reached_down, reached_up
 from shared.io import atomic_json
 
 TRADING_DAYS_PER_YEAR = 252
@@ -158,9 +159,9 @@ def simulate(config, entries, price_df):
             stop, profit, _ = lines(pos)
             if pos["pending"]:
                 sell(code, rows[0], open_price, "close_stop_next_open")
-            elif open_price <= stop:
+            elif reached_down(open_price, stop):
                 sell(code, rows[0], open_price, "stop_gap")
-            elif open_price >= profit:
+            elif reached_up(open_price, profit):
                 sell(code, rows[0], open_price, "profit_gap")
 
         # 10:00 opening entries. Budget is snapshotted so ticker order cannot change sizes.
@@ -184,7 +185,7 @@ def simulate(config, entries, price_df):
             price = fields["Open"].loc[day, code]
             candidate = {"anchor": anchor, "sigma": sigma}
             stop, profit, _ = lines(candidate)
-            if price <= stop or price >= profit:
+            if reached_down(price, stop) or reached_up(price, profit):
                 # An open beyond a barrier exits at that same open: a forced fee-only round trip.
                 exclusions.append({"date": str(day.date()), "code": code, "reason": "open_beyond_barrier"})
                 continue
@@ -210,10 +211,12 @@ def simulate(config, entries, price_df):
             pos["sessions"] += 1
             stop, profit, _ = lines(pos)
             open_price = fields["Open"].loc[day, code]
-            if fields["Low"].loc[day, code] <= stop:
-                sell(code, rows[2], min(open_price, stop), "intraday_stop")
-            elif fields["High"].loc[day, code] >= profit:
-                sell(code, rows[2], max(open_price, profit), "intraday_profit")
+            low, high = fields["Low"].loc[day, code], fields["High"].loc[day, code]
+            # Fills stay inside the day's range when the line equals the low or high.
+            if reached_down(low, stop):
+                sell(code, rows[2], max(low, min(open_price, stop)), "intraday_stop")
+            elif reached_up(high, profit):
+                sell(code, rows[2], min(high, max(open_price, profit)), "intraday_profit")
 
         # 16:00 closing exits: horizon expiry and period end sell at the close.
         for code in list(positions):
@@ -225,7 +228,7 @@ def simulate(config, entries, price_df):
                 sell(code, rows[3], close_price, "holding_expiry")
             elif last_day:
                 sell(code, rows[3], close_price, "period_end")
-            elif close_price <= lines(pos)[2]:
+            elif reached_down(close_price, lines(pos)[2]):
                 pos["pending"] = True
 
         equity_at_close.append(

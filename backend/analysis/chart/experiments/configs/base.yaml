@@ -59,7 +59,7 @@ backtest:
   exit_price: rule
   fee: 0.00105
   max_holding_days: 5
-  up_mult: 1.8
+  up_mult: 1.5
   down_mult: 1.2
   hard_sl_mult: 1.5
 evaluation:

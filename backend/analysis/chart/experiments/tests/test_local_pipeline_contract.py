@@ -957,3 +957,13 @@ def test_previous_builder_processed_data_is_preserved(local_dataset):
     with pytest.raises(ValueError, match="new dataset root"):
         preprocess_dataset(dataset_path)
     assert {path: sha256(path) for path in before} == before
+
+
+@pytest.mark.parametrize("key,value", [("up_mult", 9.9), ("down_mult", 9.9), ("max_holding_days", 1)])
+def test_backtest_barriers_must_match_the_label(local_dataset, key, value):
+    config_path = local_dataset[3]
+    invalid = yaml.safe_load(config_path.read_text())
+    invalid["backtest"][key] = value
+    config_path.write_text(yaml.safe_dump(invalid))
+    with pytest.raises(ValueError, match="must equal labels"):
+        load_experiment_config(config_path)

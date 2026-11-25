@@ -61,7 +61,8 @@ def check_ledger(result, cfg, prices):
                 pnl = event.quantity * (event.price - entry_price) - entry_fee - event.fee
                 rebuilt.append({"code": event.code, "entry_date": entry_day, "exit_date": day,
                                 "quantity": event.quantity, "entry_price": entry_price,
-                                "exit_price": event.price, "pnl": pnl,
+                                "exit_price": event.price, "entry_fee": entry_fee,
+                                "exit_fee": event.fee, "pnl": pnl,
                                 "return": pnl / (event.quantity * entry_price + entry_fee),
                                 "exit_reason": event.reason})
                 if event.side == "sell":
@@ -78,8 +79,8 @@ def check_ledger(result, cfg, prices):
     # The trade ledger must be exactly what the orders alone imply, return included.
     trades = result.trades
     expected = pd.DataFrame(rebuilt, columns=["code", "entry_date", "exit_date", "quantity",
-                                              "entry_price", "exit_price", "pnl", "return",
-                                              "exit_reason"])
+                                              "entry_price", "exit_price", "entry_fee",
+                                              "exit_fee", "pnl", "return", "exit_reason"])
     pd.testing.assert_frame_equal(
         trades[expected.columns].reset_index(drop=True), expected,
         check_dtype=False, check_datetimelike_compat=True, rtol=1e-12)
