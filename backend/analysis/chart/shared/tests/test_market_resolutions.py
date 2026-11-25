@@ -41,19 +41,23 @@ CELLTRION = SecurityKey("068270", "KR7068270008", "2018-02-09", None, "KOSPI", "
 DOBU = SecurityKey("227420", "KR7227420007", "2016-12-28", None, "KONEX", "common")
 
 
+def official_body(accession):
+    info = SOURCES[accession]
+    body = gzip.decompress((FIXTURES / f"{accession}.html.gz").read_bytes())
+    assert hashlib.sha256(body).hexdigest() == info["sha256"]
+    published = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
+    source = Evidence(info["sha256"], "c" * 64)
+    response = KindBody(body, info["charset"], source, info["document_no"], tuple(info["family"]), info["final"])
+    return MarketFiling(accession, published, info["title"], TEST_SOURCE, company=info["company"]), info["form"], response
+
+
 def actual_notices(security, *accessions, aliases=()):
     notices = []
     for accession in accessions:
-        info = SOURCES[accession]
-        body = gzip.decompress((FIXTURES / f"{accession}.html.gz").read_bytes())
-        assert hashlib.sha256(body).hexdigest() == info["sha256"]
-        published = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
-        source = Evidence(info["sha256"], "c" * 64)
-        response = KindBody(body, info["charset"], source, info["document_no"], tuple(info["family"]), info["final"])
-        filing = MarketFiling(accession, published, info["title"], TEST_SOURCE, company=info["company"])
-        scope = {security: {normal_company(name) for name in (info["company"], *aliases)}}
-        notices.extend(match_notice(filing, info["form"], facts, response, (source,), scope)
-                       for facts in parse_notice(filing, info["form"], response))
+        filing, form, response = official_body(accession)
+        scope = {security: {normal_company(name) for name in (filing.company, *aliases)}}
+        notices.extend(match_notice(filing, form, facts, response, (response.evidence,), scope)
+                       for facts in parse_notice(filing, form, response))
     return notices
 
 
@@ -387,6 +391,7 @@ def test_historical_fixed_reference_notice_binds_a_compound_price_without_a_lone
         ("20160804000125", SecurityKey("248170", "KR7248170003", "2016-08-09", None, "KOSPI", "common"), 4_568_286),
         ("20160826000199", SecurityKey("249420", "KR7249420001", "2016-08-31", None, "KOSPI", "common"), 17_845_253),
         ("20170502000545", SecurityKey("267270", "KR7267270007", "2017-05-10", None, "KOSPI", "common"), 3_584_046),
+        ("20170518000349", SecurityKey("268280", "KR7268280005", "2017-05-22", None, "KOSPI", "common"), 5_179_111),
     ],
 )
 def test_official_new_and_relisting_forms_keep_exact_identity_and_session(accession, security, shares):
@@ -583,3 +588,72 @@ def test_official_lockup_quantity_does_not_duplicate_additional_listing_shares()
     assert (notice.facts.kind, notice.facts.reason, notice.facts.effective, notice.facts.added_shares) == (
         "listing", "유상증자(제3자배정)", "2017-04-12", 3_170_612,
     )
+
+
+def test_official_merger_without_a_quantity_colon_retains_both_security_sections():
+    filing, form, raw = official_body("20160118000186")
+    assert [(f.section, f.code, f.isin, f.share_label, f.effective, f.added_shares)
+            for f in parse_notice(filing, form, raw)] == [
+        (1, "145990", "KR7145990008", "보통주", "2016-01-21", 4_153_184),
+        (2, "145995", "KR7145991006", "우선주", "2016-01-21", 205_390),
+    ]
+
+
+def test_official_split_binds_per_round_dates_to_both_real_security_paths():
+    filing, form, raw = official_body("20170515000565")
+    common = SecurityKey("013360", "KR7013360003", "1989-12-02", None, "KOSPI", "common")
+    preferred = SecurityKey("013367", "KR7013362009", "1989-12-02", None, "KOSPI", "preferred")
+    facts = parse_notice(filing, form, raw)
+    assert [(f.section, f.code, f.effective, f.shares_before, f.shares_after) for f in facts] == [
+        (1, common.code, "2017-05-18", 5_340_364, 53_403_640),
+        (2, preferred.code, "2017-05-18", 62_124, 621_240),
+    ]
+    observed = {
+        common: [("2017-05-17", 0, 0, 0, 15_950, 0, 0, 0, 5_340_364),
+                 ("2017-05-18", 1750, 1780, 1355, 1370, -225, 10_852_930, 16_828_555_580, 53_403_640)],
+        preferred: [("2017-05-17", 0, 0, 0, 104_000, 0, 0, 0, 62_124),
+                    ("2017-05-18", 12_000, 12_450, 8750, 9580, -820, 645_289, 6_769_059_060, 621_240)],
+    }
+    for section in facts:
+        notice = match_notice(filing, form, section, raw, (raw.evidence,), {common: set(), preferred: set()})
+        event, = resolve(notice.security, bars(notice.security, observed[notice.security]), [notice]).resolutions
+        assert (event.kind, event.price_factor, event.volume_factor, event.review) == (
+            Resolution.UNIT_CHANGE, Fraction(1, 10), 10, False,
+        )
+
+
+@pytest.mark.parametrize("accession,security,observed", [
+    ("20170704000174", SecurityKey("001800", "KR7001800002", "1975-06-27", None, "KOSPI", "common"), [
+        ("2017-07-06", 0, 0, 0, 798_000, 0, 0, 0, 6_008_435),
+        ("2017-07-07", 39_200, 42_000, 32_900, 32_900, -6300, 4_263_126, 157_721_013_850, 20_550_849),
+    ]),
+    ("20171130000199", SecurityKey("029460", "KR7029460003", "1997-11-25", None, "KOSPI", "common"), [
+        ("2017-12-04", 0, 0, 0, 24_000, 0, 0, 0, 33_393_384),
+        ("2017-12-05", 20_000, 25_600, 19_650, 23_200, 3200, 1_675_999, 39_106_596_300, 13_554_044),
+    ]),
+])
+def test_official_surviving_division_takes_identity_and_date_only_from_the_common_section(accession, security, observed):
+    notice, = actual_notices(security, accession)
+    assert notice.facts.code == security.code and notice.facts.isin == security.isin
+    assert notice.facts.shares_after is notice.facts.par_after is None
+    event, = resolve(security, bars(security, observed), [notice]).resolutions
+    assert (event.kind, event.date, event.reason, event.price_factor, event.volume_factor, event.review) == (
+        Resolution.SEGMENT_BREAK, observed[-1][0], "official_division", None, None, False,
+    )
+
+
+@pytest.mark.parametrize("accession,old,new,reason", [
+    ("20170518000349", "보통주 5,179,111주", "우선주 5,179,111주", "security identity differs"),
+    ("20170515000565", "제27회 : 2017년05월18일", "제28회 : 2017년05월18일", "identities or dates differ"),
+    ("20170704000174", "KR7001800002", "KR7001800000", "common identity is ambiguous"),
+    ("20171025000484", "기명식 우선주 987,623주", "기명식 보통주 987,623주", "quantity does not match its class"),
+])
+def test_official_text_variants_reject_conflicting_fields(accession, old, new, reason):
+    filing, form, raw = official_body(accession)
+    # Alter the normalized fields without depending on the source's exact HTML whitespace.
+    from shared.data.market_notices import _document_text
+
+    original = _document_text(raw.text())
+    assert old in original
+    with pytest.raises(DisclosureError, match=reason):
+        parse_notice(filing, form, replace(raw, body=original.replace(old, new).encode(), charset="utf-8"))

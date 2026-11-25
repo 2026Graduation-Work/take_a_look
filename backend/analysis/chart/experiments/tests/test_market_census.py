@@ -123,7 +123,7 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
     fixtures = Path(__file__).parents[2] / "shared/tests/fixtures/market_actions"
     sources = json.loads((fixtures / "sources.json").read_text())
     documents = {}
-    for accession in filings.values():
+    for accession in (accession for rows in filings.values() for accession in rows):
         source = sources[accession]
         viewer, document, url = kind_document_url(accession), source["document_no"], source["body_url"]
         documents[viewer] = (
@@ -137,11 +137,13 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
 
     def archived_get(self, url, *, form=None, referer=None, parse=None, **kwargs):
         if url == DAILY_URL:
-            accession = filings.get(form["selDate"])
-            rows = (f"<tr><td>12:00</td><td><a onclick=\"companysummary_open('{issuer}')\">{sources[accession]['company']}</a></td>"
-                    f"<td><a onclick=\"openDisclsViewer('{accession}','')\">{sources[accession]['title']}</a></td>"
-                    f"<td>{submitter}</td><td></td></tr>" if accession else "조회된 결과값이 없습니다.")
-            body = f"<table>{rows}</table>전체 <em>{int(bool(accession))}</em>건 : <strong>1</strong>/1".encode()
+            accessions = filings.get(form["selDate"], ())
+            rows = "".join(
+                f"<tr><td>12:00</td><td><a onclick=\"companysummary_open('{issuer}')\">{sources[accession]['company']}</a></td>"
+                f"<td><a onclick=\"openDisclsViewer('{accession}','')\">{sources[accession]['title']}</a></td>"
+                f"<td>{submitter}</td><td></td></tr>" for accession in accessions
+            ) or "조회된 결과값이 없습니다."
+            body = f"<table>{rows}</table>전체 <em>{len(accessions)}</em>건 : <strong>1</strong>/1".encode()
         else:
             body = documents[url]
         response = self._store({"url": url, "form": form, "referer": referer}, body, "utf-8", None, "fixture")
@@ -152,7 +154,7 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
 
 @pytest.mark.parametrize("base_price", [100, 125])
 def test_census_freezes_merger_review_with_or_without_a_raw_observation(tmp_path, monkeypatch, capsys, base_price):
-    use_archived_kind_bodies(monkeypatch, {"2022-01-17": "20220117000675", "2022-01-19": "20220119000510"},
+    use_archived_kind_bodies(monkeypatch, {"2022-01-17": ("20220117000675",), "2022-01-19": ("20220119000510",)},
                             issuer="37320", submitter="코스닥시장본부")
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
@@ -189,7 +191,7 @@ def test_census_freezes_merger_review_with_or_without_a_raw_observation(tmp_path
 
 def test_census_freezes_both_share_classes_from_one_official_merger_notice(tmp_path, monkeypatch):
     accession = "20170112000046"
-    use_archived_kind_bodies(monkeypatch, {"2017-01-12": accession}, issuer="05191", submitter="유가증권시장본부")
+    use_archived_kind_bodies(monkeypatch, {"2017-01-12": (accession,)}, issuer="05191", submitter="유가증권시장본부")
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Code", "ISU_ABBRV", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange", "RawVolume",
@@ -230,3 +232,54 @@ def test_census_freezes_both_share_classes_from_one_official_merger_notice(tmp_p
             "2017-01-17", Resolution.SEGMENT_BREAK, "official_merger", False,
         )
         assert {proof.accession for proof in event.evidence} == {accession}
+
+
+def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listings(tmp_path, monkeypatch):
+    use_archived_kind_bodies(monkeypatch, {
+        "2017-10-25": ("20171025000180", "20171025000484"),
+        "2017-10-27": ("20171027000317", "20171027000382"),
+    }, issuer="00499", submitter="유가증권시장본부")
+    days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
+    days.mkdir()
+    columns = ["Code", "ISU_ABBRV", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange", "RawVolume",
+               "Amount", "ListedShares"]
+    for day, rows in (
+        ("2017-10-27", [("004990", "롯데제과", 0, 0, 0, 166_000, 0, 0, 0, 14_214_000)]),
+        ("2017-10-30", [("004990", "롯데지주", 64_000, 82_000, 58_100, 70_400, 6400, 6_470_827, 451_025_934_200, 73_683_000),
+                        ("00499K", "롯데지주우", 68_000, 88_400, 68_000, 88_400, 20_400, 268_264, 22_862_661_200, 987_623),
+                        ("280360", "롯데제과", 225_500, 225_500, 185_500, 190_000, -35_500, 173_576, 33_853_710_000, 4_209_102)]),
+    ):
+        dates = pd.DatetimeIndex([day] * len(rows), dtype="datetime64[ns]")
+        pd.DataFrame(rows, columns=columns).assign(Date=dates, MKT_NM="KOSPI", SECT_TP_NM="").to_parquet(
+            days / f"{day}.parquet", index=False)
+    active, delisted = tmp_path / "active.parquet", tmp_path / "delisted.parquet"
+    pd.DataFrame([
+        ("004990", "KR7004990008", "롯데지주보통주", "롯데지주", "KOSPI", "주권", "1974/02/16", "보통주"),
+        ("00499K", "KR700499K014", "롯데지주1우선주", "롯데지주우", "KOSPI", "주권", "2017/10/30", "구형우선주"),
+        ("280360", "KR7280360009", "롯데웰푸드보통주", "롯데웰푸드", "KOSPI", "주권", "2017/10/30", "보통주"),
+    ], columns=["ISU_SRT_CD", "ISU_CD", "ISU_NM", "ISU_ABBRV", "MKT_TP_NM", "SECUGRP_NM", "LIST_DD",
+                "KIND_STKCERT_TP_NM"]).to_parquet(active, index=False)
+    pd.DataFrame(columns=["Symbol", "ISIN", "Name", "Market", "SecuGroup", "ListingDate",
+                          "DelistingDate", "KIND_STKCERT_TP_NM"]).to_parquet(delisted, index=False)
+
+    main(["--start", "2017-10-27", "--end", "2017-10-30", "--published-start", "2017-10-20",
+          "--published-end", "2017-11-02", "--krx-days", str(days), "--active-master", str(active),
+          "--delisted-master", str(delisted), "--kind-root", str(cache), "--output", str(output)])
+    path = freeze_resolution_snapshot(output, tmp_path / "official_actions", krx_days=days,
+                                       active_master=active, delisted_master=delisted, evidence_archives=[cache])
+    snapshot = read_resolution_snapshot(path, verify_archive=True)
+    notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
+    survivor = notices.loc["20171027000382"]
+    assert (survivor.Code, survivor.EvaluationPrice, survivor.Low, survivor.High) == ("004990", 47_100, 23_550, 94_200)
+    preferred = notices.loc["20171027000317"]
+    assert (preferred.Code, preferred.EvaluationPrice, preferred.Low, preferred.High) == ("00499K", 34_000, 17_000, 68_000)
+    listing = notices.loc["20171025000484"]
+    assert (listing.Code, listing.ShareClass, listing.SharesAfter) == ("00499K", "preferred", 987_623)
+    ledgers = {key.code: ledger for key, ledger in snapshot.ledgers.items()}
+    event, = ledgers["004990"].resolutions
+    assert (event.date, event.kind, event.reason, event.price_factor, event.volume_factor) == (
+        "2017-10-30", Resolution.SEGMENT_BREAK, "official_division", None, None,
+    )
+    assert ledgers["004990"].candidates[0].base_price == 64_000
+    assert ledgers["00499K"].candidates == ledgers["280360"].resolutions == ()
+    assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)

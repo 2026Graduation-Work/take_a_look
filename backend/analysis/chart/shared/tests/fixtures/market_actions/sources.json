@@ -424,5 +424,122 @@
       "20170502001152"
     ],
     "final": true
+  },
+  "20160118000186": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "삼양사",
+    "body_url": "https://kind.krx.co.kr/external/2016/01/18/000186/20160118000575/68154.htm",
+    "charset": "utf-8",
+    "sha256": "b6b5e1119c64964dc025648bc12f2ea1bf84fc43ad676942531124cbe922dc60",
+    "document_no": "20160118000575",
+    "family": [
+      "20160118000575"
+    ],
+    "final": true
+  },
+  "20170518000349": {
+    "form": "68156",
+    "title": "재상장(미원스페셜티케미칼(주), 상장일 2017.05.22)",
+    "company": "미원스페셜티케미칼",
+    "body_url": "https://kind.krx.co.kr/external/2017/05/18/000349/20170518000812/68156.htm",
+    "charset": "utf-8",
+    "sha256": "6fe6f041ed9105715cefc3e9ca0a862cb838ec598dfca988fb1d5b8d97b8bcba",
+    "document_no": "20170518000812",
+    "family": [
+      "20170518000812"
+    ],
+    "final": true
+  },
+  "20170515000565": {
+    "form": "68155",
+    "title": "변경상장(액면분할)",
+    "company": "일성건설",
+    "body_url": "https://kind.krx.co.kr/external/2017/05/15/000565/20170515001286/68155.htm",
+    "charset": "utf-8",
+    "sha256": "dfb1ee54362c09e5cfd87563c1e5fa2a16687a04c5f95aeee5c69d8e8796d4d6",
+    "document_no": "20170515001286",
+    "family": [
+      "20170515001286"
+    ],
+    "final": true
+  },
+  "20170704000174": {
+    "form": "68151",
+    "title": "상장안내(액면분할, 회사분할(존속) 및 상호변경)",
+    "company": "오리온홀딩스",
+    "body_url": "https://kind.krx.co.kr/external/2017/07/04/000174/20170704000345/68151.htm",
+    "charset": "utf-8",
+    "sha256": "9fc031ec5887f858f4cc16887b271eadf2db96e624b591b88df93ec8d11bafd6",
+    "document_no": "20170704000345",
+    "family": [
+      "20170704000345"
+    ],
+    "final": true
+  },
+  "20171130000199": {
+    "form": "68151",
+    "title": "상장안내(회사분할(존속) 및 상호변경)",
+    "company": "케이씨",
+    "body_url": "https://kind.krx.co.kr/external/2017/11/30/000199/20171130000542/68151.htm",
+    "charset": "utf-8",
+    "sha256": "1c95aa0292225b488d67298f5a3a2e8f88c961efec069b9438865b1b8362e95d",
+    "document_no": "20171130000542",
+    "family": [
+      "20171130000542"
+    ],
+    "final": true
+  },
+  "20171025000180": {
+    "form": "68154",
+    "title": "추가상장(회사분할합병)",
+    "company": "롯데지주",
+    "body_url": "https://kind.krx.co.kr/external/2017/10/25/000180/20171025000429/68154.htm",
+    "charset": "utf-8",
+    "sha256": "456a6551463c05c439f1ca95594b3b3fe6a4f6abde9f1975462e8a74fb65f0fa",
+    "document_no": "20171025000429",
+    "family": [
+      "20171025000429"
+    ],
+    "final": true
+  },
+  "20171025000484": {
+    "form": "68157",
+    "title": "종류주권 신규상장(롯데지주(주) 종류주식,  상장일 2017.10.30)",
+    "company": "롯데지주",
+    "body_url": "https://kind.krx.co.kr/external/2017/10/25/000484/20171025001237/68157.htm",
+    "charset": "utf-8",
+    "sha256": "d5f8828282c0612f3ebbff64d0b140fdf777d380259e1fe39815893de31f9b91",
+    "document_no": "20171025001237",
+    "family": [
+      "20171025001237"
+    ],
+    "final": true
+  },
+  "20171027000317": {
+    "form": "99323",
+    "title": "우선주 신주상장 기준가격결정방법 안내(롯데지주우)",
+    "company": "롯데지주",
+    "body_url": "https://kind.krx.co.kr/external/2017/10/27/000317/20171027000091/99323.htm",
+    "charset": "utf-8",
+    "sha256": "77ad6249627468c75cafb5b7e8484ce3af46d45416c745a18b9a3baf0debca37",
+    "document_no": "20171027000091",
+    "family": [
+      "20171027000091"
+    ],
+    "final": true
+  },
+  "20171027000382": {
+    "form": "99362",
+    "title": "회사분할합병 및 액면분할에 따른 기준가격결정방법 안내(분할합병존속법인)",
+    "company": "롯데지주",
+    "body_url": "https://kind.krx.co.kr/external/2017/10/27/000382/20171027000867/99362.htm",
+    "charset": "utf-8",
+    "sha256": "a111f8c6e3badc68085f7b1634a0d27e1f923f0c6330bbdb66361d1c39a1a2f0",
+    "document_no": "20171027000867",
+    "family": [
+      "20171027000867"
+    ],
+    "final": true
   }
 }
