@@ -142,6 +142,61 @@ def test_stock_dividend_uses_per_share_terms_and_not_treasury_adjusted_share_cou
     assert resolve(KAON, raw, stale, coverage_complete=True).resolutions[0].kind == Resolution.SEGMENT_BREAK
 
 
+@pytest.mark.parametrize("accession,record,shares,added,ratio", [
+    ("20161212000116", "2016-12-31", 37_387_521, 7_176_963, "0.20"),
+    ("20161213000252", "2016-12-31", 15_378_717, 1_512_065, "0.10"),
+    ("20161215000330", "2016-12-31", 85_000_000, 8_500_000, "0.10"),
+    ("20161215000596", "2016-12-31", 21_646_800, 216_468, "0.01"),
+    ("20161215001046", "2016-12-30", 8_881_471, 85_925, "0.01"),
+    ("20161215001212", "2016-12-31", 2_294_311, 41_475, "0.025"),
+])
+def test_legacy_stock_dividend_reads_explicit_proposal_terms(accession, record, shares, added, ratio):
+    filing, form, body = official_body(accession)
+    assert form == "61474" and body.final
+    facts, = parse_notice(filing, form, body)
+    assert (facts.kind, facts.company, facts.share_label, facts.listing) == (
+        "dividend_terms", filing.company, "보통주식", None)
+    assert (facts.effective, facts.shares_before, facts.added_shares, facts.ratio) == (
+        record, shares, added, Fraction(ratio))
+
+
+def test_final_legacy_dividend_proposal_alone_cannot_adjust_prices():
+    security = SecurityKey("003000", "KR7003000007", "1988-08-05", None, "KOSPI", "common")
+    raw = bars(security, [
+        ("2016-12-27", 31000, 31000, 30200, 31000, 50, 393929, 12_140_001_200, 37_387_521),
+        ("2016-12-28", 26550, 26650, 25700, 25800, -250, 265425, 6_931_590_350, 37_387_521),
+    ])
+    proposal, = actual_notices(security, "20161212000116")
+    row, = resolve(security, raw, [proposal], coverage_complete=True).resolutions
+    assert (row.kind, row.review, row.price_factor, row.volume_factor) == (Resolution.SEGMENT_BREAK, True, None, None)
+
+
+@pytest.mark.parametrize("accession", ["20161216000832", "20161219000279", "20171215000527"])
+def test_stock_dividend_rejects_subsidiary_terms_even_without_listing_caption(accession):
+    filing, form, body = official_body(accession)
+    for title in (filing.title, "주식배당결정"):
+        with pytest.raises(DisclosureError, match="terms belong to a subsidiary"):
+            parse_notice(replace(filing, title=title), form, body)
+
+
+@pytest.mark.parametrize("accession,record,shares,added,ratio,listing", [
+    ("20160419000452", "2016-05-04", 10_607_725, 3_182_146, "0.3", "2016-05-31"),
+    ("20161109000570", "2016-11-29", 22_504_880, 45_009_760, "2", "2016-12-28"),
+])
+def test_final_bonus_correction_reads_only_the_operative_terms(accession, record, shares, added, ratio, listing):
+    filing, form, body = official_body(accession)
+    assert form == "11307" and body.final
+    facts, = parse_notice(filing, form, body)
+    assert (facts.kind, facts.share_label) == ("bonus_terms", "보통주식")
+    assert (facts.effective, facts.shares_before, facts.added_shares, facts.ratio, facts.listing) == (
+        record, shares, added, Fraction(ratio), listing)
+
+    missing_declaration = body.text().replace("금융위원회 / 한국거래소 귀중", "정정 비교 안내").encode(body.charset)
+    assert missing_declaration != body.body
+    with pytest.raises(DisclosureError, match="lacks a unique operative declaration"):
+        parse_notice(filing, form, replace(body, body=missing_declaration))
+
+
 def test_spac_merger_discovered_without_price_candidate_or_raw_sector_column():
     raw = bars(IBKS, [
         ("2022-01-19", 2550, 3270, 2540, 2995, 355, 4_948_758, 14_746_746_210, 3_520_000),

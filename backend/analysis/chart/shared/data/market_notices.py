@@ -655,8 +655,9 @@ def _terms(filing, form, rows):
     listed = _field(rows, r"8\.신주의상장예정일", required=False) if bonus else ""
     listed = official_date(listed) if listed not in {"", "-"} else None
     sections = []
+    dividend_total = r"3\.발행주식총수" if form == "61474" else r"3\.발행주식총수\(주\)"
     labels = (r"5\.1주당신주배정주식수", r"3\.증자전발행주식총수", r"1\.신주의종류와수") if bonus else (
-        r"1\.1주당배당주식수\(주\)", r"3\.발행주식총수\(주\)", r"2\.배당주식총수\(주\)")
+        r"1\.1주당배당주식수\(주\)", dividend_total, r"2\.배당주식총수\(주\)")
     for share_label in ("보통주식", "종류주식"):
         values = []
         for label in labels:
@@ -680,6 +681,22 @@ def _terms(filing, form, rows):
                                       added_shares=_integer(added), ratio=Fraction(ratio), listing=listed))
     require(sections, "KIND terms contain no positive per-share allocation")
     return sections
+
+
+def _final_bonus_terms_rows(rows):
+    comparison = [index for index, row in enumerate(rows)
+                  if list(map(_compact, row)) == ["항목", "정정사유", "정정전", "정정후"]]
+    # One older comparison layout repeats the exact three-cell quantity field of the operative table.
+    quantity_rows = [index for index, row in enumerate(rows)
+                     if len(row) == 3 and _compact(row[0]) == "3.증자전발행주식총수"]
+    if not comparison or len(quantity_rows) < 2:
+        return rows
+    declarations = [index for index, row in enumerate(rows)
+                    if len(row) == 2 and _compact(row[0]) == "금융위원회/한국거래소귀중"]
+    require(len(comparison) == len(declarations) == 1 and len(quantity_rows) == 2
+            and comparison[0] < quantity_rows[0] < declarations[0] < quantity_rows[1],
+            "KIND bonus correction lacks a unique operative declaration")
+    return rows[declarations[0]:]
 
 
 def _halted_division_auction(text, final):
@@ -726,8 +743,15 @@ def parse_notice(filing, form, body):
         return _price_table(form, rows)
     if form in TABLE_LISTINGS:
         return _listed_table(filing, form, rows)
-    if form in {"71474", "11307"}:
-        return _terms(filing, form, [row for row in rows if any(row)])
+    if form in {"61474", "71474", "11307"}:
+        rows = [row for row in rows if any(row)]
+        if form in {"61474", "71474"}:
+            require("자회사의주요경영사항" not in _compact(filing.title)
+                    and not any(_compact(row[0]) == "자회사인" for row in rows),
+                    "KIND stock dividend terms belong to a subsidiary")
+        if form == "11307" and getattr(body, "final", False):
+            rows = _final_bonus_terms_rows(rows)
+        return _terms(filing, form, rows)
     raise DisclosureError(f"Unsupported KIND market-action form {form}")
 
 

@@ -947,5 +947,150 @@
       "20210823001331"
     ],
     "final": true
+  },
+  "20160419000452": {
+    "form": "11307",
+    "title": "무상증자결정",
+    "company": "투비소프트",
+    "body_url": "https://kind.krx.co.kr/external/2016/04/19/000452/20160419001042/11307.htm",
+    "charset": "utf-8",
+    "sha256": "83c3b521dd110a464cf51ba787f53e27738878961cec1bddfa653c5c94387023",
+    "document_no": "20160419001042",
+    "family": [
+      "20160404000131",
+      "20160419001042"
+    ],
+    "final": true
+  },
+  "20161109000570": {
+    "form": "11307",
+    "title": "무상증자결정",
+    "company": "더코디",
+    "body_url": "https://kind.krx.co.kr/external/2016/11/09/000570/20161109001191/11307.htm",
+    "charset": "utf-8",
+    "sha256": "8f3ac026c12026976b874909f0fc65caefef7de3d0af660205a47be06b01ca26",
+    "document_no": "20161109001191",
+    "family": [
+      "20161108001289",
+      "20161109001191"
+    ],
+    "final": true
+  },
+  "20161212000116": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "부광약품",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/12/000116/20161122000477/61474.htm",
+    "charset": "utf-8",
+    "sha256": "3468f558b109fda0c298ed82d649f19d3465a90ba8e4acde53e649fd3c6304ca",
+    "document_no": "20161122000477",
+    "family": [
+      "20161122000477"
+    ],
+    "final": true
+  },
+  "20161213000252": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "에이블씨엔씨",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/13/000252/20161213000146/61474.htm",
+    "charset": "utf-8",
+    "sha256": "23ae1130c3196babfc1f189c592a906ae7d56088f6ce5eb32d801fdcd3acea64",
+    "document_no": "20161213000146",
+    "family": [
+      "20161213000146"
+    ],
+    "final": true
+  },
+  "20161215000330": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "한국자산신탁",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/15/000330/20161213001632/61474.htm",
+    "charset": "utf-8",
+    "sha256": "de9a5d08854df459daa173e01a478dcf8ac95628d1b020ce63a87289cfd202f9",
+    "document_no": "20161213001632",
+    "family": [
+      "20161213001632"
+    ],
+    "final": true
+  },
+  "20161215000596": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "핸즈코퍼레이션",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/15/000596/20161215000950/61474.htm",
+    "charset": "utf-8",
+    "sha256": "05d10ee50cd74689aaf4bc1e956302b88b1cdcc4c4982cf5ef018bd75c0a5294",
+    "document_no": "20161215000950",
+    "family": [
+      "20161215000950"
+    ],
+    "final": true
+  },
+  "20161215001046": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "SK가스",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/15/001046/20161212001718/61474.htm",
+    "charset": "utf-8",
+    "sha256": "32334b38e4a3acfc1aeeb39315cd28527955f0f732d6c36a602f4d45fe37c3c7",
+    "document_no": "20161212001718",
+    "family": [
+      "20161212001718"
+    ],
+    "final": true
+  },
+  "20161215001212": {
+    "form": "61474",
+    "title": "주식배당결정",
+    "company": "디아이동일",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/15/001212/20161213000643/61474.htm",
+    "charset": "utf-8",
+    "sha256": "40226bf7080d1cb70e6f7e3d906a940a8f29a5067aa3162b68b1ad7b672a3e17",
+    "document_no": "20161213000643",
+    "family": [
+      "20161213000643"
+    ],
+    "final": true
+  },
+  "20161216000832": {
+    "form": "61474",
+    "title": "주식배당결정(자회사의 주요경영사항)",
+    "company": "DRB동일",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/16/000832/20161216001246/61474.htm",
+    "charset": "utf-8",
+    "sha256": "c68879ed212ab806ff5cea6527e48a85f412a81b1535859c2ff3c02c410b3fbf",
+    "document_no": "20161216001246",
+    "family": [
+      "20161216001246"
+    ],
+    "final": true
+  },
+  "20161219000279": {
+    "form": "71474",
+    "title": "주식배당결정(자회사의 주요경영사항)",
+    "company": "휴온스글로벌",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/19/000279/20161219000774/71474.htm",
+    "charset": "utf-8",
+    "sha256": "b60d559a8bd316a006a97534c8622108afa9abae406cdfc96a951b48311fdfc3",
+    "document_no": "20161219000774",
+    "family": [
+      "20161219000774"
+    ],
+    "final": true
+  },
+  "20171215000527": {
+    "form": "71474",
+    "title": "주식배당결정(자회사의 주요경영사항)",
+    "company": "휴온스글로벌",
+    "body_url": "https://kind.krx.co.kr/external/2017/12/15/000527/20171215000816/71474.htm",
+    "charset": "utf-8",
+    "sha256": "bea1e21cb2c85e9f472a5354b1b1dc67e586b8611345dd874766120710f69938",
+    "document_no": "20171215000816",
+    "family": [
+      "20171215000816"
+    ],
+    "final": true
   }
 }
