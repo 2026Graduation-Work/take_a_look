@@ -2,18 +2,12 @@
 
 import { CHART } from "@/lib/chart-colors";
 import { useEffect, useRef, useState } from "react";
-import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
-import type { ReturnBand } from "@/lib/types";
 
-// 오늘 종가와 범위 양 끝을 잇는 보조선은 두지 않는다. 범위는 과거 비슷한 경우의
-// 수익률 분포인데, 오늘 점에서 뻗는 선이 있으면 모델이 예측한 경로처럼 읽힌다.
-
-const VB_W = 860;
+const VB_W = 560;
 const VB_H = 264;
 const PAD = { top: 20, bottom: 34 };
 const X0 = 14;
-const X1 = 668;
-const XH = 780;
+const X1 = 460;
 const XAXIS = X1 + 10;
 
 function niceStep(rough: number) {
@@ -29,19 +23,13 @@ function niceStep(rough: number) {
 
 interface PriceHistoryChartProps {
   prices: number[];
-  band?: ReturnBand;
-  signal: SignalMeta;
   asOfLabel: string;
-  horizonLabel: string;
   avgBuyPrice?: number;
 }
 
 export default function PriceHistoryChart({
   prices,
-  band,
-  signal,
   asOfLabel,
-  horizonLabel,
   avgBuyPrice,
 }: PriceHistoryChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -54,18 +42,15 @@ export default function PriceHistoryChart({
 
   if (
     prices.length < 2 ||
-    prices.some((price) => !Number.isFinite(price)) ||
-    (band && (!Number.isFinite(band.low) || !Number.isFinite(band.high) || band.low > band.high))
+    prices.some((price) => !Number.isFinite(price))
   ) {
     return null;
   }
 
   const last = prices[prices.length - 1];
-  const bandHighPrice = band ? last * (1 + band.high / 100) : last;
-  const bandLowPrice = band ? last * (1 + band.low / 100) : last;
   const avg = avgBuyPrice && Number.isFinite(avgBuyPrice) && avgBuyPrice > 0 ? avgBuyPrice : null;
-  const rawMin = Math.min(...prices, bandLowPrice, avg ?? Infinity);
-  const rawMax = Math.max(...prices, bandHighPrice, avg ?? -Infinity);
+  const rawMin = Math.min(...prices, avg ?? Infinity);
+  const rawMax = Math.max(...prices, avg ?? -Infinity);
   const rawRange = rawMax - rawMin;
   const padValue = rawRange > 0 ? rawRange * 0.08 : Math.max(Math.abs(rawMax) * 0.01, 1);
   const vMin = rawMin - padValue;
@@ -85,8 +70,6 @@ export default function PriceHistoryChart({
   const minIndex = prices.indexOf(Math.min(...prices));
   const clampX = (x: number) => Math.min(Math.max(x, X0 + 40), X1 - 40);
   const yLast = y(last);
-  const yHigh = y(bandHighPrice);
-  const yLow = y(bandLowPrice);
 
   const handleMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -103,13 +86,13 @@ export default function PriceHistoryChart({
   return (
     <div className="min-w-0">
     <div ref={scrollRef} role="region" aria-label="주가 차트 좌우 탐색" tabIndex={0} className="overflow-x-auto [scrollbar-width:thin]">
-    <div className="relative min-w-[860px]">
+    <div className="relative min-w-[560px]">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         className="block w-full"
         role="img"
-        aria-label={`최근 60거래일 주가 흐름. ${band ? `${horizonLabel} 수익률 범위 ${formatSignedPercent(band.low)}부터 ${formatSignedPercent(band.high)}까지` : "수익률 범위 미제공"}`}
+        aria-label="최근 주가 흐름"
         onMouseMove={handleMove}
         onMouseLeave={() => setHovered(null)}
       >
@@ -129,7 +112,7 @@ export default function PriceHistoryChart({
           3개월 전
         </text>
         <text x={X1} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }} textAnchor="end">
-          오늘 ({asOfLabel})
+          {asOfLabel || "최근 종가"}
         </text>
 
         {avg !== null && (
@@ -163,60 +146,6 @@ export default function PriceHistoryChart({
           </text>
         )}
 
-        {band && <>
-        <rect
-          x={XH - 8}
-          y={yHigh}
-          width={16}
-          height={yLow - yHigh}
-          rx={8}
-          style={{ fill: signal.ink }}
-          opacity={0.16}
-        />
-        <line
-          x1={XH - 11}
-          y1={yHigh}
-          x2={XH + 11}
-          y2={yHigh}
-          style={{ stroke: signal.ink }}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-        />
-        <line
-          x1={XH - 11}
-          y1={yLow}
-          x2={XH + 11}
-          y2={yLow}
-          style={{ stroke: signal.ink }}
-          strokeWidth={2.5}
-          strokeLinecap="round"
-        />
-        <line x1={XH} y1={yHigh + 3} x2={XH} y2={yLow - 3} style={{ stroke: signal.ink }} strokeWidth={1.5} />
-        <text
-          x={XH}
-          y={yHigh - 9}
-          fontSize={14}
-          fontWeight={600}
-          style={{ fill: changeMeta(band.high, 1).color }}
-          textAnchor="middle"
-        >
-          {formatSignedPercent(band.high)}
-        </text>
-        <text
-          x={XH}
-          y={yLow + 17}
-          fontSize={14}
-          fontWeight={600}
-          style={{ fill: changeMeta(band.low, 1).color }}
-          textAnchor="middle"
-        >
-          {formatSignedPercent(band.low)}
-        </text>
-        <text x={XH} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
-          {horizonLabel}
-        </text>
-        </>}
-
         {hovered !== null && (
           <g pointerEvents="none">
             <line
@@ -248,7 +177,7 @@ export default function PriceHistoryChart({
           }}
         >
           <span className="text-xs text-muted">
-            {hovered === prices.length - 1 ? "오늘" : `${prices.length - 1 - hovered}거래일 전`}
+            {hovered === prices.length - 1 ? "최근 종가" : `${prices.length - 1 - hovered}거래일 전`}
           </span>
           <span className="ml-2 text-xs font-medium tabular-nums">
             {prices[hovered].toLocaleString("ko-KR")}원
@@ -257,7 +186,7 @@ export default function PriceHistoryChart({
       )}
     </div>
     </div>
-    <p className="m-0 mt-2 text-2xs text-muted lg:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
+    <p className="m-0 mt-2 text-2xs text-muted xl:hidden">차트를 좌우로 밀면 지난 주가와 최근 종가를 볼 수 있어요.</p>
     </div>
   );
 }

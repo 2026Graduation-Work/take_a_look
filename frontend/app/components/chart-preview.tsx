@@ -17,6 +17,6 @@ export default function ChartPreviewDetail({ data, insights }: {
   return <StockDetailView {...data} detail={detail}
     insights={{ ...insights, provenance: { ...insights.provenance, contributions: detail.provenance } }}
     chartSnapshots={snapshots ?? null} loading={loading} signalHorizon={signalHorizon} onHorizonChange={chooseHorizon}
-    dataError={error || (!loading && !snapshots ? "이 종목의 게시된 예측 결과가 아직 없어요." : "")}
+    dataError={error}
     onRetry={retry} />;
 }

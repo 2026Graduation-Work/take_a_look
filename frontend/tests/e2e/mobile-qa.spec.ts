@@ -60,12 +60,15 @@ test("M02: a one-week dashboard signal opens the same model, band and feature ba
   const tile = page.getByRole("listitem", { name: /^삼성전자,.*앞으로 1주 하락 신호$/ });
   await expect(tile).toBeVisible();
   await tile.click();
-  await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 1주$/ })).toBeVisible();
+  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
   const band = snapshots.find((p: typeof snapshots[number]) => p.horizon === 5).distribution.histogram.central_68;
-  const glance = page.locator('section[aria-labelledby="glance-title"]');
+  const glance = page.getByRole("region", { name: /과거 비슷한 신호/ });
   await expect(glance).toContainText(`${Math.abs(band.low).toFixed(1)}%`);
   await page.getByRole("tab", { name: "4주", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /^모델 신호 상승\s*앞으로 4주$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "모델 신호 상승" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "4주", selected: true })).toBeVisible();
   await page.getByRole("link", { name: "대시보드", exact: true }).click();
   await expect(page.getByRole("tab", { name: "4주", exact: true })).toHaveAttribute("aria-selected", "true");
 });
@@ -85,14 +88,16 @@ test("M02: searched stock rows use the selected horizon before opening detail", 
   await expect(row).toContainText("1주,");
   await expect(row).toContainText("하락");
   await row.click();
-  await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 1주$/ })).toBeVisible();
+  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
 });
 
 for (const width of [320, 390, 430]) test(`M03: chart labels remain readable without page overflow at ${width}px`, async ({ page }) => {
   await charts(page);
   await page.setViewportSize({ width, height: 844 });
   await page.goto("/stocks/005930");
-  const chart = page.getByRole("img", { name: /^최근 60거래일 주가 흐름/ });
+  const chart = page.getByRole("img", { name: "최근 주가 흐름" });
   await expect(chart).toBeVisible();
   const fontSizes = await chart.locator("text").evaluateAll(nodes => nodes.map(node => {
     const text = node as SVGTextElement;
@@ -135,7 +140,7 @@ test("M06: clicked sentiment tooltip stays within the visible scrolled chart and
   await ready(page);
   await charts(page);
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "시장 분위기", exact: true }).click();
+  await page.getByRole("tab", { name: "뉴스", exact: true }).click();
   const timeline = page.getByLabel("감성 시점 탐색", { exact: true });
   await timeline.scrollIntoViewIfNeeded();
   const dots = timeline.locator("circle[data-sentiment-mood], circle[data-sentiment-few]");
@@ -211,5 +216,7 @@ test("M02: horizon still changes when storage is readable but writes fail", asyn
   await page.getByRole("tab", { name: "1주", exact: true }).click();
   await expect(page.getByRole("tab", { name: "1주", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("listitem", { name: /^삼성전자,.*앞으로 1주 하락 신호$/ }).click();
-  await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 1주$/ })).toBeVisible();
+  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
 });

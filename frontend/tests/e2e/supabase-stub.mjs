@@ -58,6 +58,18 @@ createServer((request, response) => {
   const basisSupply = basisFixture && url.pathname === "/rest/v1/supply_demand" ? [
     { trade_date: "2026-09-21", retail: 10, foreign_investor: -5, institution: -5 },
   ] : null;
+  const basisFinancial = basisFixture && url.pathname === "/rest/v1/financial_snapshots" ? [{
+    id: "e2e-basis", as_of: "2026-09-21", fiscal_year: 2026, report_code: "11012",
+    statement: "CFS", receipt_no: "20260921000001", filed_at: "2026-08-14", shares_basis: "보고서",
+    price: null, price_as_of: "2026-09-21", price_source: "KRX",
+  }] : null;
+  const basisMetrics = url.searchParams.get("snapshot_id") === "eq.e2e-basis" && url.pathname === "/rest/v1/financial_metrics"
+    ? [["revenue_growth", 5.6], ["operating_margin", 6.6], ["roe", 9.4], ["debt_ratio", 104.8], ["per", 8.6], ["pbr", 0.8]]
+        .map(([metric_key, value]) => ({ metric_key, value, unit: ["per", "pbr"].includes(metric_key) ? "multiple" : "percent", basis: "가상 보고서", note: null }))
+    : null;
+  const basisDisclosures = basisFixture && url.pathname === "/rest/v1/disclosures" ? [
+    { rcept_no: "20260921000001", title: "가상 공시 테스트", kind: "other", filed_on: "2026-09-21" },
+  ] : null;
   const basisMaster = basisFixture && url.pathname === "/rest/v1/stocks" ? [{
     code: BASIS_CODE, name: "SK하이닉스", market: "KOSPI", risk_grade: 3, risk_flags: [],
     volatility_annual: 0.2, volatility_percentile: 0.5, risk_as_of: "2026-09-21",
@@ -71,5 +83,5 @@ createServer((request, response) => {
     scores: { down: 0.1, neutral: 0.2, up: 0.7 }, why: null });
   const codes = url.pathname === "/rest/v1/stocks" && url.searchParams.get("code")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
   const master = codes && codes.map(code => ({ code, market: "KOSPI", risk_grade: 3, risk_flags: [], ...STOCKS[code] }));
-  response.end(rest && request.method === "GET" ? JSON.stringify(basisChart ?? basisSignals ?? basisSupply ?? basisMaster ?? catalog ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
+  response.end(rest && request.method === "GET" ? JSON.stringify(basisChart ?? basisSignals ?? basisSupply ?? basisFinancial ?? basisMetrics ?? basisDisclosures ?? basisMaster ?? catalog ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
 }).listen(54321, "127.0.0.1");
