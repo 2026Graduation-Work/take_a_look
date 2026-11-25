@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 from experiments.backtest.engine import configured_benchmark
 from experiments.evaluation.backtest_metrics import calculate_trading_metrics
+from experiments.evaluation.random_baseline import compare_with_random
 from experiments.experiment_utils import (
     find_processed_dir,
     load_predictions,
@@ -40,6 +41,11 @@ def _run_local_period(config, predictions, prices, out):
     metrics["initial_cash"] = config["backtest"]["initial_cash"]
     metrics["final_equity"] = float(result.value().iloc[-1])
     metrics["unclosed_positions"] = len(result.open_positions)
+    runs = config.get("evaluation", {}).get("random_baseline_runs", 0)
+    if runs:
+        summary, distribution = compare_with_random(config, predictions, prices, result, metrics, runs)
+        metrics.update(summary)
+        distribution.to_csv(Path(out) / "random_baseline.csv", index=False)
     atomic_json(Path(out) / "backtest_metrics.json", metrics)
     (Path(out) / "execution_error.json").unlink(missing_ok=True)
     pd.DataFrame({"Portfolio": returns, "Benchmark": benchmark}).to_csv(

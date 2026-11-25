@@ -73,6 +73,7 @@ backtest:
   up_mult: 1.75
 evaluation:
   benchmark_file: workspace/experiments/datasets/shared_v3_kospi_2016/benchmarks/KOSPI.parquet
+  random_baseline_runs: 30
   benchmark_strategies:
   - market_index
   probability_bins:

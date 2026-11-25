@@ -96,11 +96,16 @@ def test_slippage_worsens_both_fills_and_sizes_on_the_slipped_price():
     assert result.value().iloc[-1] == pytest.approx(3000 - 9 * buy + 9 * sell)
 
 
-def test_locked_lower_limit_on_the_final_day_leaves_the_position_open():
-    result = run([SIGNAL, FLAT, (70.7, 70.7, 70.7, 70.7)], max_holding_days=10)
+@pytest.mark.parametrize("final_bar", [(70.7, 70.7, 70.7, 70.7), (70.7, 75.0, 70.7, 74.0)])
+def test_sale_blocked_at_the_final_open_leaves_the_position_open(final_bar):
+    result = run([SIGNAL, FLAT, final_bar], max_holding_days=10)
+    assert result.events.side.tolist() == ["buy"]
     assert result.trades.empty
-    assert [position["code"] for position in result.open_positions] == ["000001"]
-    assert result.value().iloc[-1] == pytest.approx(3000 - 2 * 101 + 2 * 70.7)  # 300 slot: 2 shares.
+    position, = result.open_positions
+    assert position["code"] == "000001"
+    assert position["pending"] == "limit_down_locked"
+    assert position["valuation_price"] == final_bar[3]
+    assert result.value().iloc[-1] == pytest.approx(3000 - 2 * 101 + 2 * final_bar[3])
 
 
 def test_order_is_capped_at_share_of_prior_average_traded_value():

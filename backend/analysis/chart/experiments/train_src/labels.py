@@ -5,7 +5,7 @@ import pandas as pd
 
 LABEL_VERSION = 4
 # A barrier computed as close × (1 + m × σ) carries float rounding (100 × 1.1 = 110.00000000000001).
-# Prices that equal the line must count as touching it; real misses are at least a tick away.
+# Count prices within the relative tolerance as touches because barriers are not rounded to ticks.
 BARRIER_RTOL = 1e-9
 
 
