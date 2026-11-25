@@ -111,3 +111,20 @@ def test_undefined_metrics_are_not_counted_as_losses():
     assert math.isnan(metrics["sharpe_ratio"])
     assert math.isnan(summary["sharpe_ratio_percentile_vs_random"])
     assert summary["sharpe_ratio_valid_runs"] == 0
+
+
+def test_valid_runs_counts_only_runs_actually_compared_with_the_model():
+    # The model always buys a stock that never moves, so its Sharpe is undefined, while random
+    # runs buy moving stocks and get a finite Sharpe. Nothing is compared, so 0 and NaN.
+    flat_code = "000009"
+    prices = pd.concat([market(halted=None), market(codes=[flat_code], halted=None, flat=True)])
+    cfg = model_config(top_n=1)
+    preds = predictions(lambda day, code: 0.95 if code == flat_code else 0.85,
+                        codes=[*CODES, flat_code])
+    model, metrics = run_model(cfg, preds, prices)
+    assert not model.events.empty and math.isnan(metrics["sharpe_ratio"])
+    summary, distribution = compare_with_random(cfg, preds, prices, model, metrics, runs=4)
+    assert np.isfinite(distribution.sharpe_ratio).any()
+    assert summary["sharpe_ratio_valid_runs"] == 0
+    assert math.isnan(summary["sharpe_ratio_percentile_vs_random"])
+    assert np.isfinite(summary["random_sharpe_ratio_median"])
