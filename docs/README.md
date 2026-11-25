@@ -55,6 +55,7 @@
 |---|---|
 | [research/psychology-ab-2019-2025/README.md](research/psychology-ab-2019-2025/README.md) | 심리 피처 A/B, 2019~2025 표본 밖 평가 |
 | [research/flow-161-vs-170-2019-2026/README.md](research/flow-161-vs-170-2019-2026/README.md) | 기본 모델과 수급 모델 비교 |
+| [research/e0-baseline/README.md](research/e0-baseline/README.md) | 코딥 E0 기준선 재현, 수익률 기준 순위 지표, 피처 A와 B 비교 검정 |
 | [research/horizon-selection.md](research/horizon-selection.md) | 1주, 4주를 남기고 H10을 뺀 근거 |
 | [research/2026-06-selection-report.md](research/2026-06-selection-report.md) | H5, H10, H20 라벨 배수 후보 비교와 최종 후보 선정(2026-06-29) |
 | [research/2026-06-progress-roadmap.md](research/2026-06-progress-roadmap.md) | 6월 실험 기록. Multiplier Screener, 기간 확장, Factor Attribution, Factor-Neutral Backtest |
