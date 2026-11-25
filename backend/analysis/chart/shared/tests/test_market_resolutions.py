@@ -29,6 +29,7 @@ from shared.data.market_notices import (
     match_notice,
     normal_company,
     parse_notice,
+    superseded_merger_facts,
 )
 from shared.data.market_resolutions import (
     Resolution,
@@ -320,6 +321,20 @@ def test_initial_listing_correction_only_closes_the_exact_original_market_window
         role_correction_windows(filing, form, [start], [replace(final, security=later)], keys, has_session)
     with pytest.raises(DisclosureError, match="source role or listing window"):
         role_correction_windows(filing, form, [replace(start, shares_after=1)], [final], keys, has_session)
+
+
+def test_nonfinal_merger_review_reads_only_reconcilable_two_rounds_and_same_identity():
+    filing, form, body = official_body("20201116000323")
+    filing = replace(filing, submitter="유가증권시장본부", company_id="00509")
+    facts = superseded_merger_facts(filing, form, body)
+    assert (facts.code, facts.isin, facts.effective, facts.added_shares, facts.shares_after) == (
+        "005090", "KR7005090006", "2020-11-19", 9_822_586, 14_677_004)
+    for old, wrong in [(b"9,822,586", b"9,822,587"), (b"4,841,814", b"4,841,815"),
+                       (b"A005090", b"A006120"), ("분할합병".encode(), "유상증자".encode())]:
+        altered = body.body.replace(old, wrong, 1)
+        assert altered != body.body
+        with pytest.raises(DisclosureError, match="KIND structural review|KIND additional listing quantity"):
+            superseded_merger_facts(filing, form, replace(body, body=altered))
 
 
 def test_resumption_keeps_actual_return_and_halted_share_change_has_no_factors():

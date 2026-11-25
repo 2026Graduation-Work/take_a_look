@@ -733,8 +733,65 @@ def _halted_division_auction(text, final):
                           evaluation=evaluation, low=low, high=high)]
 
 
+def _hangul_name_change(text):
+    company, old, label, old_english, new, new_english, old_short, old_short_en, new_short, new_short_en, day = one(
+        rf"\A◎\s*(.+?)\s+변경상장\(한글종목명\s*변경\)\s+①\s*구분\(변경전\s*→\s*변경후\)\s+"
+        rf"㉮\s*상장종목\(영문명\)\s*-\s*(\S+?)(?P<label>보통주(?:식)?)\(영문명:\s*([^()]+)\)\s*→\s*"
+        rf"(\S+?)(?P=label)\(영문명:\s*([^()]+)\)\s+㉯\s*상장종목약명\(영문약명\)\s*-\s*"
+        rf"(\S+)\(영문약명:\s*([^()]+)\)\s*→\s*(\S+)\(영문약명:\s*([^()]+)\)\s+"
+        rf"②\s*변경상장\s*적용일\s*:\s*({DAY})\Z", text,
+        "KIND Korean security name change is ambiguous",
+    )
+    require(normal_company(company) == normal_company(old) == normal_company(old_short)
+            and normal_company(new) == normal_company(new_short) != normal_company(old)
+            and old_english.strip() == new_english.strip() and old_short_en.strip() == new_short_en.strip(),
+            "KIND Korean security name change has inconsistent names")
+    return [NoticeSection(1, "rename", company, label, official_date(day), f"{new} · {new_short}")]
+
+
+def superseded_merger_facts(filing, form, body):
+    """Read the non-final implementation fields solely as evidence for a review boundary."""
+    require(form == "68151" and not body.final and kind_topic(filing) == "structural",
+            "KIND structural review requires the original non-final implementation")
+    text = _document_text(body.text())
+    require(text.startswith("◎") and text.count("◎") == 2, "KIND structural review requires two listing blocks")
+    addition, rename = [block.strip() for block in text.split("◎")[1:]]
+    company, label, lots = one(r"^(.+?)\s+(보통주)\s+추가상장\s+①\s*주식의\s*종류와\s*수\s*:\s*총\s+(.+?)\s+②",
+                                addition, "KIND structural review lacks official additional share quantities")
+    added = _additional_quantity_total(lots, label)
+    requires_total = re.match(rf"{NUMBER}주\s*[-▶]", lots)
+    methods, day = one(rf"⑤\s*증자방법\s*:\s*(.+?)\s+⑥\s*상장일\s*:\s*({DAY})\s+⑦",
+                       addition, "KIND structural review lacks the implementation date or method")
+    rounds = re.findall(r"\(제\s*(\d+)회\)", lots)
+    methods = re.fullmatch(r"분할합병\(제\s*(\d+)회\)\s*,\s*합병\(제\s*(\d+)회\)", methods)
+    require(requires_total and methods and rounds == list(methods.groups()),
+            "KIND structural review share rounds do not match the merger methods")
+    identities = list(re.finditer(IDENTITY, addition))
+    require(len(identities) == 1, "KIND structural review additional listing identity is ambiguous")
+    identity, = identities
+
+    heading, old_name, interim_name = one(
+        r"^(.+?)\s+변경상장\(상호변경\)\s+①.*?㉯\s*상장종목약명\(영문약명\)\s*-\s*"
+        r"(\S+)\(영문약명:[^()]+\)\s*→\s*(\S+)\(영문약명:[^()]+\)\s*㉰",
+        rename, "KIND structural review lacks the same-day official company rename",
+    )
+    final_count, = _listed_text(f"◎ {rename}", form, final=False)
+    require(normal_company(company) == normal_company(heading) == normal_company(old_name)
+            and normal_company(interim_name) != normal_company(old_name)
+            and final_count.kind == "listing" and final_count.share_label == label
+            and final_count.code == identity["code"] and final_count.isin == identity["isin"]
+            and final_count.effective == official_date(day) and final_count.shares_after is not None
+            and added < final_count.shares_after and final_count.shares_before is None,
+            "KIND structural review listing and effective ownership do not agree")
+    return replace(final_count, added_shares=added, renamed_company=normal_company(interim_name))
+
+
 def parse_notice(filing, form, body):
     text = body.text()
+    if form == "68155":
+        flattened = _document_text(text)
+        if re.match(r"^◎\s*[^◎]+?\s+변경상장\(한글종목명\s*변경\)", flattened):
+            return _hangul_name_change(flattened)
     if form == "70780":
         return _halted_division_auction(_document_text(text), getattr(body, "final", False))
     if form in {"68152", "68156"}:

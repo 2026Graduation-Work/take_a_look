@@ -21,7 +21,7 @@ from shared.data.kind_market import (
     MarketFiling,
 )
 from shared.data.market_notices import SecurityKey, kind_topic, normal_company
-from shared.data.market_resolutions import Resolution
+from shared.data.market_resolutions import STRUCTURAL_REVIEW_REASON, Resolution
 from shared.data.resolution_snapshot import kind_document_url, read_resolution_snapshot
 from shared.data.segmented_prices import adjust_training_window
 from shared.io import sha256
@@ -42,7 +42,7 @@ def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
     client = Mock()
     client.document.side_effect = KindUnavailable("outside this test's document cache")
 
-    _, _, _, gaps, unattributed, _, _, _, selected, _ = _collect_notices(
+    _, _, _, gaps, unattributed, _, _, _, _, selected, _ = _collect_notices(
         client, filings, aliases, defaultdict(tuple), anchors={}, spac_keys=set(), bounded=False,
     )
 
@@ -370,6 +370,84 @@ def test_spac_rename_correction_closes_only_the_name_change(tmp_path, monkeypatc
             freeze_resolution_snapshot(output, tmp_path / f"tampered_role_{index}", krx_days=tmp_path / "days",
                                        active_master=tmp_path / "active.parquet", delisted_master=tmp_path / "delisted.parquet",
                                        evidence_archives=[tmp_path / "kind"])
+
+
+def test_official_nonfinal_merger_and_krx_shares_derive_only_a_review_boundary(tmp_path, monkeypatch):
+    original, final, event_day = "20201116000323", "20201119000393", "2020-11-19"
+    use_archived_kind_bodies(monkeypatch, {"2020-11-16": (original,), "2020-11-19": (final,)},
+                            issuer="00509", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2020-11-17", "005090", "삼광글라스", "KOSPI", 38000, 38700, 37600, 38500, 100, 17086, 655396200, 4854418),
+        ("2020-11-18", "005090", "삼광글라스", "KOSPI", 38500, 40750, 38500, 39850, 1350, 99458, 3940092850, 4854418),
+        ("2020-11-19", "005090", "에스지씨에너지", "KOSPI", 36500, 37200, 33900, 36750, -3100, 534698, 19041017350, 14677004),
+        ("2020-11-20", "005090", "SGC에너지", "KOSPI", 36800, 37150, 35300, 35950, -800, 107180, 3850331700, 14677004),
+    ], active=[("005090", "KR7005090006", "SGC에너지", "SGC에너지", "KOSPI", "주권", "1993/01/06", "보통주")])
+    assert list(notices.index) == [final]
+    assert (notices.loc[final, "Kind"], notices.loc[final, "AppliedDate"]) == ("rename", "2020-11-20")
+    family, = snapshot.coverage["kind_final_families"]
+    assert family["ClosedWindows"] == [] and family["ReviewWitness"]["Date"] == event_day
+    assert snapshot.manifest["market_observations_before_identity"] == 0
+    assert snapshot.manifest["review_candidates_without_market_observation"] == 1
+    security, = snapshot.windows
+    candidate, = snapshot.ledgers[security].candidates
+    event, = snapshot.ledgers[security].resolutions
+    assert (candidate.prev_close, candidate.base_price, candidate.shares_before, candidate.shares_after) == (
+        39_850, 39_850, 4_854_418, 14_677_004)
+    assert (event.date, event.kind, event.reason, event.review, event.price_factor, event.volume_factor) == (
+        event_day, Resolution.SEGMENT_BREAK, STRUCTURAL_REVIEW_REASON, True, None, None)
+    assert len(event.evidence) == 9 and {item.accession for item in event.evidence} == {original, final}
+    assert {item.source for item in event.evidence} <= snapshot.archive_refs
+    review, = snapshot.review_rows()
+    assert (review["Code"], review["Date"], review["SharesAfter"] - review["SharesBefore"]) == ("005090", event_day, 9_822_586)
+    days = snapshot.days(security)
+    raw = pd.concat([pd.read_parquet(tmp_path / "days" / f"{day:%Y-%m-%d}.parquet") for day in days], ignore_index=True)
+    adjusted, factors = adjust_training_window(security, raw, days, days[-1], snapshot)
+    before, same_before, after, same_after = adjusted.SegmentId.tolist()
+    assert factors.empty and before == same_before and before != after and after == same_after
+    assert adjusted.Change.isna().tolist() == [True, False, True, False]
+    assert adjusted.Close.tolist() == raw.RawClose.tolist() and adjusted.Volume.tolist() == raw.RawVolume.tolist()
+    assert adjusted.Amount.tolist() == raw.Amount.tolist()
+
+    output = tmp_path / "output"
+    paths = {key: output / filename for key, filename in
+             [("candidates", "candidates.csv"), ("resolutions", "resolutions.csv"), ("coverage", "coverage.json")]}
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    inputs = {"krx_days": tmp_path / "days", "active_master": tmp_path / "active.parquet",
+              "delisted_master": tmp_path / "delisted.parquet", "evidence_archives": [tmp_path / "kind"]}
+
+    def freeze_invalid(destination, reason):
+        manifest["table_sha256"] = {**manifest["table_sha256"], **{key: sha256(path) for key, path in paths.items()}}
+        manifest_path.write_text(json.dumps(manifest))
+        with pytest.raises(DisclosureError, match=reason):
+            freeze_resolution_snapshot(output, tmp_path / destination, **inputs)
+
+    candidates = pd.read_csv(paths["candidates"], dtype=str, keep_default_na=False)
+    altered = candidates.assign(SharesBefore="4854419")
+    altered.to_csv(paths["candidates"], index=False)
+    freeze_invalid("altered_candidate", "census candidates differ from KRX replay")
+    resolutions = pd.read_csv(paths["resolutions"], dtype=str, keep_default_na=False)
+
+    candidates.assign(PrevDate="2020-11-17").to_csv(paths["candidates"], index=False)
+    evidence = json.loads(resolutions.Evidence.iloc[0])
+    for item in evidence:
+        if item["source"] == "KRX raw" and item["session"] == "2020-11-18":
+            item.update(session="2020-11-17", sha256=manifest["sources"]["krx_sessions"]["2020-11-17"])
+    resolutions.assign(Evidence=json.dumps(evidence)).to_csv(paths["resolutions"], index=False)
+    freeze_invalid("nonadjacent_krx_receipt", "structural review requires adjacent actual KRX sessions")
+
+    candidates.to_csv(paths["candidates"], index=False)
+    resolutions.assign(Reason="completed_search_without_official_proof").to_csv(paths["resolutions"], index=False)
+    freeze_invalid("generic_review_attack", "structural review resolution differs from its witness")
+
+    candidates.iloc[:0].to_csv(paths["candidates"], index=False)
+    resolutions.iloc[:0].to_csv(paths["resolutions"], index=False)
+    freeze_invalid("omitted_candidate_and_resolution", "omits a witnessed structural review")
+    paths["coverage"].write_text(json.dumps({**snapshot.coverage, "kind_final_families": []}))
+    manifest.update(superseded_documents=0, market_candidates=0, training_candidates=0, candidates_with_resolution=0,
+                    review_candidates_without_market_observation=0)
+    manifest["market_resolution_counts"][Resolution.SEGMENT_BREAK] = 0
+    freeze_invalid("omitted_all_proof", f"Missing official structural notice evidence: {original}")
 
 
 @pytest.mark.parametrize("accession,code,isin,name,old_listing,day,base,raw", [

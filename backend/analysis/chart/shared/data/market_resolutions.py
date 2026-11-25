@@ -15,7 +15,7 @@ from .actions import Action, FieldEvidence, compatible_base, tick_size
 from .calendar import scheduled_sessions
 from .disclosures import require
 from .events import _observations, verify_action
-from .market_notices import SecurityKey, kind_topic, normal_company
+from .market_notices import SecurityKey, kind_topic, normal_company, superseded_merger_facts
 from .validation import validate_krx_raw
 
 
@@ -40,6 +40,7 @@ ACTION_KIND = {"split": Resolution.UNIT_CHANGE, "merge": Resolution.UNIT_CHANGE,
 STRUCTURAL = re.compile(r"인적분할|회사분할|분할합병|분할\(존속\)|분할존속")
 MERGER = re.compile(r"합병")
 ISSUER_MERGER_REASON = "official_issuer_merger"
+STRUCTURAL_REVIEW_REASON = "superseded_implementation_requires_review"
 DISALLOWED_LISTING = re.compile(r"분할|병합|감자|합병|액면|무상증자|주식배당")
 RESUME = re.compile(r"장기간매매정지|장기매매거래정지|장기거래정지|매매거래재개")
 RIGHTS = {"유상증자", "권리락(유상증자)", "주주배정유상증자", "권리락(주주배정유상증자)"}
@@ -84,6 +85,15 @@ class ResolvedEvent:
 
 
 @dataclass(frozen=True)
+class StructuralReview:
+    security: SecurityKey
+    date: str
+    shares_after: int
+    added_shares: int
+    evidence: tuple[FieldEvidence, ...]
+
+
+@dataclass(frozen=True)
 class WindowLedger:
     candidates: tuple[Candidate, ...]
     resolutions: tuple[ResolvedEvent, ...]
@@ -120,6 +130,45 @@ def _observed_candidate(security, raw, days, at, base):
 def observe_candidates(security, raw, days):
     days, base, candidates = _observations(raw, days)
     return tuple(_observed_candidate(security, raw, days, at, base) for at in candidates.to_numpy().nonzero()[0])
+
+
+def structural_review_evidence(original, final, family_refs, original_body_refs):
+    original_refs = (*family_refs[:3], *original_body_refs)
+    return tuple(FieldEvidence(original, ref, "KIND superseded structural implementation") for ref in original_refs) + tuple(
+        FieldEvidence(final, ref, "KIND final name correction") for ref in family_refs[3:])
+
+
+def superseded_merger_review(filing, form, body, final, keys, has_session, evidence):
+    require(len(final) == 1, "KIND final name correction identifies multiple listing intervals")
+    notice, = final
+    facts = superseded_merger_facts(filing, form, body)
+    security, day = notice.security, facts.effective
+    rename_day = notice.facts.effective
+    require(notice.form == "68155" and notice.final and notice.facts.kind == "rename"
+            and filing.company_id and filing.company_id == notice.company_id and security.code.startswith(filing.company_id)
+            and security in keys and (facts.code, facts.isin, security.share_class) == (security.code, security.isin, "common")
+            and security.active(day) and security.active(rename_day) and has_session(security, day)
+            and has_session(security, rename_day) and day < rename_day
+            and len(scheduled_sessions(pd.Timestamp(day), pd.Timestamp(rename_day))) == 2
+            and facts.renamed_company == normal_company(notice.facts.company),
+            "KIND final name correction cannot identify the original implementation window")
+    return StructuralReview(security, day, facts.shares_after, facts.added_shares, evidence)
+
+
+def verify_structural_review_quantities(candidate, review):
+    require(candidate.security == review.security and candidate.date == review.date
+            and candidate.shares_after == review.shares_after
+            and candidate.shares_after - candidate.shares_before == review.added_shares,
+            "KIND superseded implementation quantities differ from actual KRX observations")
+
+
+def observed_structural_review_candidate(security, raw, days, day):
+    days, base, _ = _observations(raw, days)
+    at = days.get_indexer([pd.Timestamp(day)])[0]
+    require(at > 0 and security.active(days[at - 1].date().isoformat()) and security.active(day)
+            and len(scheduled_sessions(days[at - 1], days[at])) == 2,
+            "KIND structural review requires adjacent actual KRX sessions in one listing")
+    return _observed_candidate(security, raw, days, at, base)
 
 
 def _reason(notice):
@@ -431,12 +480,19 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
 
 def resolve_events(security, raw, expected_dates, notices, *, actions=(), coverage_complete=False,
                    covered_dates=frozenset(), blocked_dates=frozenset(), unparsed_dates=None, transfer_anchor=None,
-                   transfer_source=None, issuer_mergers=None):
+                   transfer_source=None, issuer_mergers=None, structural_reviews=()):
     """Produce one canonical outcome per observed candidate and confirmed structure date."""
     days, base, mask = _observations(raw, expected_dates)
     require(not days.empty and all(security.active(day.date().isoformat()) for day in days),
             "KRX prices lie outside the official listing interval")
     require(all(notice.security == security for notice in notices), "KIND notices mix listing identities")
+    reviews = {review.date: review for review in structural_reviews}
+    require(len(reviews) == len(structural_reviews), "Multiple proofs of an unresolved structural implementation")
+    review_candidates = {}
+    for day, review in reviews.items():
+        candidate = observed_structural_review_candidate(security, raw, days, day)
+        verify_structural_review_quantities(candidate, review)
+        review_candidates[day] = candidate
     unparsed_dates = unparsed_dates or {}
     issuer_mergers = issuer_mergers or {}
     notices = _valid_notices(notices)
@@ -485,7 +541,7 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
             STRUCTURAL.search(_reason(notice)) or MERGER.search(_reason(notice)) for notice in on_date[day]
         ):
             incomplete.append(day)
-    dates = (set(on_date) | set(indexed_actions) | issuer_mergers.keys()
+    dates = (set(on_date) | set(indexed_actions) | issuer_mergers.keys() | reviews.keys()
              | {days[at].date().isoformat() for at in mask.to_numpy().nonzero()[0]})
     if transfer_source and transfer_source.isin != security.isin:
         dates.add(first_day)
@@ -505,6 +561,11 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
         if (anchored_transfer and transfer_source and transfer_source.isin != security.isin
                 and (row is None or row.kind in ADJUSTMENTS or row.kind == Resolution.SHARES_ONLY)):
             row = _result(security, day, Resolution.SEGMENT_BREAK, "separate_verified_listing_units", current)
+        if proof := reviews.get(day):
+            require(row is None or row.review, "KIND structural review conflicts with a verified resolution")
+            candidate = review_candidates[day]
+            row = _result(security, day, Resolution.SEGMENT_BREAK, STRUCTURAL_REVIEW_REASON,
+                          evidence=proof.evidence, review=True)
         if row is not None and row.review and not observed:
             if not at:
                 incomplete.append(day)

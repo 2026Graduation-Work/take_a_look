@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from shared.data.actions import FieldEvidence, action_from_record, read_snapshot
 from shared.data.calendar import scheduled_sessions
-from shared.data.disclosures import DisclosureError, DocumentFormatError, require
+from shared.data.disclosures import DisclosureError, DocumentFormatError, Evidence, require
 from shared.data.events import observation_mask
 from shared.data.kind_market import KindMarket, KindUnavailable
 from shared.data.market_notices import (
@@ -40,6 +40,8 @@ from shared.data.market_resolutions import (
     role_correction_kind,
     role_correction_windows,
     structural_closure,
+    structural_review_evidence,
+    superseded_merger_review,
 )
 from shared.data.resolution_archive import notice_facts_columns
 from shared.data.resolution_snapshot import (
@@ -241,6 +243,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     selected, fetched, verified, families = set(), set(), {}, []
     missing_merger_sources = set()
     pending_auctions, pending_families = [], []
+    structural_reviews = defaultdict(list)
 
     def has_session(key, day):
         return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
@@ -376,22 +379,36 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             rows = [row for row in verified[accession] if row.security in keys and row.document_no == family["FinalDocNo"]
                     and row.evidence[1:] == target_refs]
             require(rows, "KIND final document identifies no affected stock")
+            review = None
             if structural and form == family["FormId"] and role_correction_kind(filing, form):
                 closed = affected_keys = role_correction_windows(
                     filing, form, parse_notice(filing, form, body), rows, keys, has_session)
                 family["OriginalNoticeEvidence"] = [asdict(ref) for ref in refs[2:]]
+            elif structural and form == "68151" and family["FormId"] == "68155" and all(
+                notice.facts.kind == "rename" for notice in rows
+            ):
+                evidence = structural_review_evidence(filing.accession, accession,
+                                                      tuple(Evidence(**ref) for ref in family["Evidence"]), refs[2:])
+                review = superseded_merger_review(filing, form, body, rows, keys, has_session, evidence)
+                family["ReviewWitness"] = {"Security": _security_columns(review.security), "Date": review.date,
+                                           "OriginalFormId": form,
+                                           "OriginalNoticeEvidence": [asdict(ref) for ref in refs[2:]]}
+                closed, affected_keys = set(), keys - {review.security}
             else:
                 closed, affected_keys = structural_closure(rows, keys, has_session) if structural else (set(), set())
-            require(not structural or closed, "KIND final document does not confirm an affected structural event")
+            require(not structural or closed or review, "KIND final document does not confirm an affected structural event")
             for key in affected_keys - closed:
                 structural_gaps[key].add(filing.accession)
             families.append({**family, "ClosedWindows": [_security_columns(key) for key in sorted(closed, key=str)]})
+            if review:
+                structural_reviews[review.security].append(review)
         except (ValueError, OSError) as exc:
             failed(filing, structural, keys, affected, refs, exc)
     require(not missing_merger_sources,
             "Issuer merger source is outside the bounded census; include --code for "
             + ", ".join(sorted(missing_merger_sources)))
-    return parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, nonstock, families, len(selected), len(fetched)
+    return (parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, nonstock, families,
+            structural_reviews, len(selected), len(fetched))
 
 
 def _official_action_snapshots(paths):
@@ -598,7 +615,8 @@ def build_census(args, client):
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
                                 spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
                                 registered=registered, daily=daily, expected_days=expected_days)
-    notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families, selected, fetched = acquired
+    (notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families,
+     structural_reviews, selected, fetched) = acquired
     issuer_mergers = issuer_merger_boundaries(
         [notice for rows in notices.values() for notice in rows], securities,
         lambda key, day: key in expected_days and pd.Timestamp(day) in expected_days[key])
@@ -612,7 +630,7 @@ def build_census(args, client):
             ledger = resolve_events(key, bars, expected_days[key], notices[key], actions=actions[key],
                                     covered_dates=covered, blocked_dates=blocked[key], unparsed_dates=unparsed[key],
                                     transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key),
-                                    issuer_mergers=issuer_mergers.get(key))
+                                    issuer_mergers=issuer_mergers.get(key), structural_reviews=structural_reviews[key])
         except ValueError as exc:
             failed_windows.append({"Code": key.code, "Stage": "resolver", "Reason": str(exc)})
         coverage_spans = [*company[key.code], *targeted[key.code]]

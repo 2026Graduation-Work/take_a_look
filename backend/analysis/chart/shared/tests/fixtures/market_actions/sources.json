@@ -1373,5 +1373,33 @@
       "20210726000719"
     ],
     "final": true
+  },
+  "20201116000323": {
+    "form": "68151",
+    "title": "상장안내(합병/상호변경)",
+    "company": "SGC에너지",
+    "body_url": "https://kind.krx.co.kr/external/2020/11/16/000323/20201116000649/68151.htm",
+    "charset": "utf-8",
+    "sha256": "bee049890d8713ead12e6393dc5d90e8be89471fd0b68e3f15febed2fb074db7",
+    "document_no": "20201116000649",
+    "family": [
+      "20201116000649",
+      "20201119001204"
+    ],
+    "final": false
+  },
+  "20201119000393": {
+    "form": "68155",
+    "title": "변경상장(한글종목명 변경)",
+    "company": "SGC에너지",
+    "body_url": "https://kind.krx.co.kr/external/2020/11/19/000393/20201119001204/68155.htm",
+    "charset": "utf-8",
+    "sha256": "a14b1e4fd9b1c858a68a253eb557a9a88bfe4ac78e6b43f80d697c72d4c40c35",
+    "document_no": "20201119001204",
+    "family": [
+      "20201116000649",
+      "20201119001204"
+    ],
+    "final": true
   }
 }

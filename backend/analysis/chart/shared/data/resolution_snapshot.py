@@ -21,6 +21,7 @@ from .disclosures import KIND_VIEWER, Evidence, put_immutable, require
 from .market_notices import SecurityKey
 from .market_resolutions import (
     ISSUER_MERGER_REASON,
+    STRUCTURAL_REVIEW_REASON,
     Candidate,
     Resolution,
     ResolvedEvent,
@@ -28,7 +29,10 @@ from .market_resolutions import (
     issuer_merger_boundaries,
     issuer_merger_resolution,
     merger_facts,
+    observed_structural_review_candidate,
     raw_window_fingerprint,
+    structural_review_evidence,
+    verify_structural_review_quantities,
 )
 from .resolution_archive import verify_archive_bindings
 
@@ -177,7 +181,13 @@ class ResolutionSnapshot:
                 f"{security.code}: resolution snapshot requires the entire verified listing window")
         require(raw_window_fingerprint(raw, days) == self.windows[security]["raw_sha256"],
                 f"{security.code}: KRX raw prices differ from the resolution snapshot")
-        return self.ledgers[security]
+        ledger = self.ledgers[security]
+        review_dates = {row.date for row in ledger.resolutions if row.reason == STRUCTURAL_REVIEW_REASON}
+        for candidate in ledger.candidates:
+            if candidate.date in review_dates:
+                require(candidate == observed_structural_review_candidate(security, raw, days, candidate.date),
+                        f"{security.code}: structural review candidate differs from actual KRX prices")
+        return ledger
 
     def segment_starts(self, security):
         first = self.windows[security]["first_session"]
@@ -272,10 +282,11 @@ def _load_tables(folder, manifest):
     families = coverage.get("kind_final_families", [])
     require(isinstance(families, list) and len(families) == manifest.get("superseded_documents", 0),
             "KIND final family count differs from census manifest")
-    sources = set()
+    sources, review_refs = set(), {}
     for row in families:
         identifiers = ("AcptNo", "DocNo", "FinalAcptNo", "FinalDocNo")
-        require(isinstance(row, dict) and set(row) - {"OriginalNoticeEvidence"} == {*identifiers, "FormId", "ClosedWindows", "Evidence"}
+        require(isinstance(row, dict) and set(row) - {"OriginalNoticeEvidence", "ReviewWitness"}
+                == {*identifiers, "FormId", "ClosedWindows", "Evidence"}
                 and all(isinstance(row[name], str) and re.fullmatch(r"[0-9]{14}", row[name]) for name in identifiers)
                 and row["AcptNo"] != row["FinalAcptNo"] and row["DocNo"] != row["FinalDocNo"]
                 and isinstance(row["FormId"], str) and re.fullmatch(r"[0-9]{5}", row["FormId"])
@@ -290,6 +301,17 @@ def _load_tables(folder, manifest):
             require(row["FormId"] in {"70765", "32002"} and isinstance(original, list) and len(original) == 2
                     and closed, "Invalid KIND source role evidence")
             refs.update(map(_evidence, original))
+        if "ReviewWitness" in row:
+            witness = row["ReviewWitness"]
+            require(isinstance(witness, dict) and set(witness) == {"Security", "Date", "OriginalFormId", "OriginalNoticeEvidence"}
+                    and row["FormId"] == "68155" and witness["OriginalFormId"] == "68151" and not closed
+                    and isinstance(witness["OriginalNoticeEvidence"], list) and len(witness["OriginalNoticeEvidence"]) == 2,
+                    "Invalid KIND structural review witness")
+            original = tuple(map(_evidence, witness["OriginalNoticeEvidence"]))
+            refs.update(original)
+            key = _security(witness["Security"]), _day(witness["Date"])
+            _insert(review_refs, key, structural_review_evidence(row["AcptNo"], row["FinalAcptNo"],
+                                                                 tuple(map(_evidence, row["Evidence"])), original))
     published = manifest["scope"]
     first = date.fromisoformat(published["published_start"])
     last = date.fromisoformat(published["published_end"])
@@ -321,6 +343,8 @@ def _load_tables(folder, manifest):
         _insert(windows, security, row)
     require(len(windows) == manifest["security_intervals"] and windows, "Resolution ledger lacks listing windows")
     require(not codes or {key.code for key in windows} == set(codes), "Resolution ledger lacks a requested code")
+    require(all(key in windows and day in price_hashes and windows[key]["first_session"] < day <= windows[key]["last_session"]
+                for key, day in review_refs), "KIND structural review lies outside its listing window")
 
     candidates, notices, resolutions = {}, defaultdict(list), {}
     for row in _csv(folder / "candidates.csv", CANDIDATE_COLUMNS):
@@ -411,6 +435,11 @@ def _load_tables(folder, manifest):
                         "Invalid non-document evidence")
                 ticks += 1
         candidate = candidates.get(key)
+        if key in review_refs or row["Reason"] == STRUCTURAL_REVIEW_REASON:
+            require(review and kind == Resolution.SEGMENT_BREAK and row["Reason"] == STRUCTURAL_REVIEW_REASON
+                    and tuple(fields) == review_refs.get(key), "KIND structural review resolution differs from its witness")
+            previous = sessions[sessions.get_loc(pd.Timestamp(day)) - 1].date().isoformat()
+            require(candidate.prev_date == previous, "KIND structural review requires adjacent actual KRX sessions")
         require(raw_days == ({day, candidate.prev_date} if candidate else {day})
                 and ticks == int(kind == Resolution.TICK_ROUNDING)
                 and (fields or review or kind == Resolution.TICK_ROUNDING),
@@ -425,6 +454,7 @@ def _load_tables(folder, manifest):
                     "Reference or rights factors disagree")
         _insert(resolutions, key, ResolvedEvent(security, day, kind, row["Reason"], tuple(fields), price, volume, review))
 
+    require(review_refs.keys() <= resolutions.keys(), "Resolution ledger omits a witnessed structural review")
     require(len(candidates) == manifest["market_candidates"] and
             sum(key in resolutions for key in candidates) == manifest["candidates_with_resolution"]
             and len(resolutions.keys() - candidates.keys()) == manifest["resolutions_without_price_observation"],
@@ -522,10 +552,11 @@ def seal_resolution_snapshot(census_dir, destination, manifest, files, names, re
     archive = destination / "archive"
     refs = refs.union(*(set(_refs(json.loads(Path(path).read_bytes()))) for path in action_snapshots))
     _archive_receipts(refs, [*map(Path, evidence_archives), *action_archives], archive)
-    official = verify_archive_bindings(census_dir, json.loads(files["coverage.json"].read_bytes()), archive,
-                                       set(sources["krx_sessions"]))
+    official, reviews = verify_archive_bindings(census_dir, json.loads(files["coverage.json"].read_bytes()), archive,
+                                                set(sources["krx_sessions"]))
+    require(not reviews or verify_ledger is not None, "KIND structural reviews require actual KRX price replay")
     if verify_ledger is not None:
-        verify_ledger(official)
+        verify_ledger(official, reviews)
     for path, digest in zip(action_snapshots, sources["official_action_snapshots"]):
         put_immutable(archive / "objects" / digest, Path(path).read_bytes())
     content = {
@@ -575,7 +606,7 @@ def read_resolution_snapshot(path, *, verify_archive=False):
     if verify_archive:
         _archive_receipts(refs, [archive])
         session_dates = set(manifest["sources"]["krx_sessions"])
-        official = verify_archive_bindings(folder, coverage, archive, session_dates)
+        official, reviews = verify_archive_bindings(folder, coverage, archive, session_dates)
         inherited = issuer_merger_boundaries(
             official, windows, lambda key, day: key in windows and day in session_dates
             and windows[key]["first_session"] <= day <= windows[key]["last_session"])
@@ -584,6 +615,10 @@ def read_resolution_snapshot(path, *, verify_archive=False):
         actual = {(key, row.date): set(row.evidence) for key, ledger in ledgers.items()
                   for row in ledger.resolutions if row.reason == ISSUER_MERGER_REASON}
         require(actual == expected, "Issuer merger resolutions differ from the official source archive")
+        for key, proofs in reviews.items():
+            candidates = {candidate.date: candidate for candidate in ledgers[key].candidates}
+            for proof in proofs:
+                verify_structural_review_quantities(candidates[proof.date], proof)
     return ResolutionSnapshot(path, manifest, coverage, windows, sessions, ledgers, names, notices,
                               refs, root["evidence_sha256"], root["segmentation_sha256"])
 

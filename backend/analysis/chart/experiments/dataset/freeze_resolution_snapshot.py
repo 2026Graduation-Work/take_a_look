@@ -11,6 +11,7 @@ from shared.data.kind_market import MarketFiling
 from shared.data.market_notices import SecurityKey, match_notice, notice_section_key
 from shared.data.market_resolutions import (
     ISSUER_MERGER_REASON,
+    STRUCTURAL_REVIEW_REASON,
     issuer_merger_boundaries,
     raw_window_fingerprint,
     resolve_events,
@@ -80,7 +81,7 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
     actions = _official_action_snapshots(action_snapshots)
     anchor_sources = _anchor_sources(securities, anchors)
 
-    def verify_ledger(official):
+    def verify_ledger(official, reviews):
         by_security = defaultdict(list)
         sections = {notice_section_key(notice): notice for notice in official}
         links = {tuple(row["Auction"]): tuple(sections[tuple(witness)] for witness in row["Witnesses"])
@@ -99,21 +100,21 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
             replay = resolve_events(key, securities[key], expected[key], by_security[key],
                                     actions=actions[key], coverage_complete=True,
                                     transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key),
-                                    issuer_mergers=issuer_mergers.get(key))
+                                    issuer_mergers=issuer_mergers.get(key), structural_reviews=reviews.get(key, ()))
             require(set(ledger.candidates) == set(replay.candidates),
                     f"{key.code}: census candidates differ from KRX replay")
             resolutions = {row.date: row for row in replay.resolutions}
             have = {row.date for row in ledger.resolutions}
-            require(all(row.date in have for row in replay.resolutions if not row.review),
+            require(all(row.date in have for row in replay.resolutions if not row.review or row.reason == STRUCTURAL_REVIEW_REASON),
                     f"{key.code}: census omits a verified resolution")
             for row in ledger.resolutions:
                 audited = resolutions.get(row.date)
-                if row.review:
+                if row.review and row.reason != STRUCTURAL_REVIEW_REASON:
                     require(not audited or audited.reason != ISSUER_MERGER_REASON,
                             f"{key.code} {row.date}: census replaces a verified issuer merger with review")
                     continue
-                require(audited and (row.kind, row.price_factor, row.volume_factor, row.reason) ==
-                        (audited.kind, audited.price_factor, audited.volume_factor, audited.reason)
+                require(audited and (row.kind, row.price_factor, row.volume_factor, row.reason, row.review) ==
+                        (audited.kind, audited.price_factor, audited.volume_factor, audited.reason, audited.review)
                         and set(row.evidence) == set(audited.evidence),
                         f"{key.code} {row.date}: resolution differs from the official source replay")
 

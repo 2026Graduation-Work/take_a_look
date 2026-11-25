@@ -38,7 +38,12 @@ from .market_notices import (
     notice_section_key,
     parse_notice,
 )
-from .market_resolutions import role_correction_windows, structural_closure
+from .market_resolutions import (
+    role_correction_windows,
+    structural_closure,
+    structural_review_evidence,
+    superseded_merger_review,
+)
 
 
 def _response(archive, ref):
@@ -150,19 +155,29 @@ def _verify_final_family(archive, row, refs, filings, daily_targets, windows, fi
     require(matched, "KIND correction target has no verified stock facts")
     closed = {_security(item) for item in row["ClosedWindows"]}
     keys = {key for key in windows if key.code.startswith(issuer)}
+    if witness := row.get("ReviewWitness"):
+        original_body_refs = tuple(Evidence(**ref) for ref in witness["OriginalNoticeEvidence"])
+        source, _, _ = _official_body(archive, original, row["DocNo"], witness["OriginalFormId"],
+                                      (*refs[:2], *original_body_refs))
+        evidence = structural_review_evidence(accession, target, refs, original_body_refs)
+        review = superseded_merger_review(original, witness["OriginalFormId"], source, matched,
+                                          keys, has_session, evidence)
+        require(not closed and (_security(witness["Security"]), witness["Date"]) == (review.security, review.date),
+                "KIND superseded implementation review identity or date differs from the archived source")
+        return closed, review
     if "OriginalNoticeEvidence" in row:
         original_refs = (*refs[:2], *(Evidence(**ref) for ref in row["OriginalNoticeEvidence"]))
         sections, _, source_final = _official_sections(archive, original, row["DocNo"], row["FormId"], original_refs)
         require(not source_final and closed == role_correction_windows(original, row["FormId"],
                 list(sections.values()), matched, keys, has_session), "KIND source role closure differs")
-        return closed
+        return closed, None
     confirmed, affected = structural_closure(matched, keys, has_session)
     require(closed <= confirmed,
             "KIND correction closure lacks an affected structural fact")
     if kind_topic(original) == "structural":
         require(closed and closed == affected,
                 "KIND structural correction leaves an affected window unconfirmed")
-    return closed
+    return closed, None
 
 
 def _verify_auction_identities(coverage, windows, official, documents, filings):
@@ -279,10 +294,14 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
     for notice in official:
         if notice.final:
             final_notices.setdefault((notice.accession, notice.document_no, notice.form), []).append(notice)
+    reviews = defaultdict(list)
     for row, refs in families:
-        if _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices, has_session):
+        closed, review = _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices, has_session)
+        if closed or review:
             proved.add((row["AcptNo"], refs[0]))
+        if review:
+            reviews[review.security].append(review)
     missing = sorted(f"{row.accession} ({row.published})" for row in expected.values()
                      if (row.accession, row.evidence) not in proved)
     require(not missing, f"Missing official structural notice evidence: {', '.join(missing[:10])}")
-    return official
+    return official, reviews
