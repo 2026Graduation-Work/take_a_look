@@ -16,6 +16,7 @@
 | [../README.md](../README.md) | 서비스 소개, 빠른 시작, 구조 |
 | [../AGENTS.md](../AGENTS.md) | 공통 지침·제품 원칙·운영과 안전·작업별 정본 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 블록 구분·브랜치·커밋·PR·머지·훅 변경 절차 |
+| [issue-writing.md](issue-writing.md) | 버그·기능 이슈의 사용자 문제·선택 이유·완료 조건·검증·결정 이력 작성 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경과 초기 기록(서비스명, 레포 이름) |
 
 ## 운영

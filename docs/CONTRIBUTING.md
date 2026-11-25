@@ -25,6 +25,10 @@ gh pr checks "${pr_number:?PR 번호를 지정하세요}" --required --watch --f
 
 맡을 만한 일은 [good first issue](https://github.com/2026Graduation-Work/take_a_look/labels/good%20first%20issue)와 [help wanted](https://github.com/2026Graduation-Work/take_a_look/labels/help%20wanted) 라벨에 모아 둔다. 시작 전에 이슈에 댓글을 남기면 담당자로 함께 지정한다. 실제 계좌나 보유 종목이 보이는 캡처는 올리지 않는다.
 
+## 이슈 작성
+
+정해진 동작과 실제 동작이 다르면 [버그 보고](../.github/ISSUE_TEMPLATE/bug_report.md)를, 새 동작이나 기존 기능 개선은 [기능 추가·고도화](../.github/ISSUE_TEMPLATE/feature_request.md)를 쓴다. [이슈 작성 안내](issue-writing.md)에 따라 사용자 문제·선택 이유·완료 조건을 구체화하고, 구현 뒤 실제 검증 결과와 결정 변경 이력을 남긴다. 처음 제보할 때 모르는 내용은 `미확인`으로 두고 담당자가 보완한다.
+
 ## 블록과 커밋
 
 | 블록·커밋 범위 | 경로 |
