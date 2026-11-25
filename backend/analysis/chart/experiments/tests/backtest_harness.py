@@ -16,7 +16,7 @@ def bars(path, code="000001", days=DAYS):
         bar = bar if isinstance(bar, dict) else dict(zip("OHLC", bar, strict=True))
         rows.append({"Date": day, "Code": code, "Open": bar["O"], "High": bar["H"],
                      "Low": bar["L"], "Close": bar["C"], "Sigma": bar.get("sigma", 0.1),
-                     "Trading_Halt": bar.get("halt", 0)})
+                     "Trading_Halt": bar.get("halt", 0), "Amount": bar.get("amount", 1e12)})
     return pd.DataFrame(rows)
 
 
@@ -31,15 +31,22 @@ def signals(prices, entry_days):
 
 def config(**backtest):
     return {"strategy": {"top_n": backtest.pop("top_n", 1)}, "backtest": {
-        "initial_cash": 1000.0, "fee": 0.0, "slippage_bps": 0, "max_holding_days": 3, "signal_lag_days": 1,
+        "initial_cash": 1000.0, "fee": 0.0, "slippage_bps": 0, "max_participation": None,
+        "max_holding_days": 3, "signal_lag_days": 1,
         "up_mult": 1.0, "down_mult": 1.0, "hard_sl_mult": 1.5, **backtest}}
 
 
 def check_ledger(result, cfg, prices):
     bt = cfg["backtest"]
     fee = bt["fee"]
+    participation = bt.get("max_participation")
     slippage = bt["slippage_bps"] / 10_000
-    bar = prices.assign(Date=pd.to_datetime(prices.Date)).set_index(["Date", "Code"])
+    bar = prices.assign(Date=pd.to_datetime(prices.Date)).sort_values("Date")
+    bar["PreviousClose"] = bar.groupby("Code").Close.shift(1)
+    # Traded value known before the session: mean of up to 20 prior sessions, never today's.
+    bar["PriorValue"] = bar.groupby("Code").Amount.transform(
+        lambda values: values.shift(1).rolling(20, min_periods=1).mean())
+    bar = bar.set_index(["Date", "Code"])
     cash, held, lots, rebuilt = float(bt["initial_cash"]), {}, {}, []
     events = result.events
     days = result.value().index
@@ -53,6 +60,9 @@ def check_ledger(result, cfg, prices):
                 assert event.code not in held, "bought a held code"
                 assert row.Trading_Halt == 0, "filled on a halted session"
                 assert event.reference_price == row.Open, "entry must fill at the open"
+                assert not row.Open >= 1.29 * row.PreviousClose, "bought an upper-limit open"
+                if participation is not None:
+                    assert notional <= participation * row.PriorValue + 1e-9, "liquidity cap exceeded"
                 assert event.price == pytest.approx(event.reference_price * (1 + slippage))
                 cash -= notional + event.fee
                 held[event.code] = event.quantity
@@ -69,6 +79,11 @@ def check_ledger(result, cfg, prices):
                                 "exit_reason": event.reason})
                 if event.side == "sell":
                     assert row.Trading_Halt == 0, "filled on a halted session"
+                    assert not (row.High == row.Low and row.Close <= 0.71 * row.PreviousClose), \
+                        "sold into a locked lower limit"
+                    opening = pd.Timestamp(event.date).hour == 9
+                    assert not (opening and row.Open <= 0.71 * row.PreviousClose), \
+                        "sold at an open already at the lower limit"
                     assert row.Low <= event.reference_price <= row.High, "fill outside the day's range"
                     assert event.price == pytest.approx(event.reference_price * (1 - slippage))
                     cash += notional - event.fee
@@ -90,6 +105,8 @@ def check_ledger(result, cfg, prices):
     if trades.empty:
         return
     assert (trades.holding_sessions >= 1).all()
-    assert (trades.holding_sessions <= bt["max_holding_days"]).all()
+    # Only a sale deferred by a lower-limit lock may outlive the horizon.
+    overdue = trades.holding_sessions > bt["max_holding_days"]
+    assert trades.loc[overdue, "exit_reason"].eq("limit_down_locked").all()
     if not result.open_positions:
         assert trades.pnl.sum() == pytest.approx(result.value().iloc[-1] - bt["initial_cash"])

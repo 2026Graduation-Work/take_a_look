@@ -58,7 +58,8 @@ def run_local_backtest(config, predictions_path=None):
     start, end = test_date_bounds(splits)
     prices = load_parquet_data(
         find_processed_dir(config, __file__), start, end,
-        columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt"],
+        columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt",
+                      "Amount"],
         tickers=resolve_tickers(config, __file__), strict=True,
         universe_intervals=load_universe_intervals(config),
     )
