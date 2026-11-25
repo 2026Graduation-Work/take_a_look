@@ -17,6 +17,10 @@ SCENARIOS = {
     # name: (path from day 0, backtest overrides, [(entry, exit, exit price, reason, sessions)])
     "expiry_sells_at_close_of_last_session": (
         [SIGNAL, FLAT, FLAT, FLAT, FLAT], {}, [(1, 3, 101, "holding_expiry", 3)]),
+    "high_exactly_at_the_profit_line_takes_profit": (
+        [SIGNAL, (100, 110, 100, 100), FLAT, FLAT], {}, [(1, 1, 110, "intraday_profit", 1)]),
+    "high_just_below_the_profit_line_does_not": (
+        [SIGNAL, (100, 109.99, 100, 100), FLAT, FLAT, FLAT], {}, [(1, 3, 101, "holding_expiry", 3)]),
     "intraday_profit_fills_at_line": (
         [SIGNAL, FLAT, (101, 112, 100, 105), FLAT], {}, [(1, 2, 110, "intraday_profit", 2)]),
     "dual_touch_takes_the_stop": (
