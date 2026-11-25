@@ -697,6 +697,13 @@ def test_official_surviving_division_takes_identity_and_date_only_from_the_commo
     ("20170515000565", "제27회 : 2017년05월18일", "제28회 : 2017년05월18일", "identities or dates differ"),
     ("20170704000174", "KR7001800002", "KR7001800000", "common identity is ambiguous"),
     ("20171025000484", "기명식 우선주 987,623주", "기명식 보통주 987,623주", "quantity does not match its class"),
+    ("20190308000743", "더블유게임즈보통주", "다른게임즈보통주", "issuer differs from the publication list"),
+    ("20190308000743", "KR7192080000", "KR7192080001", "numbered listing security identity differs"),
+    ("20190430000089", "변경일자: 2019년05월02일", "변경일자: 2019년05월03일", "differs from the preceding split listing"),
+    ("20191016000448", "- 보통주 14,406,898주", "- 우선주 14,406,898주", "numbered listing security identity differs"),
+    ("20191015000306", "2019년 10월 18일", "2019년 10월 21일", "class relisting effective dates differ"),
+    ("20191015000308", "두산퓨얼셀2우선주(신형)", "두산퓨얼셀3우선주(신형)", "numbered listing security identity differs"),
+    ("20191015000308", "KR733626K021 (단축코드:A33626L)", "KR733626K013 (단축코드:A33626K)", "identifiers are duplicated"),
 ])
 def test_official_text_variants_reject_conflicting_fields(accession, old, new, reason):
     filing, form, raw = official_body(accession)
@@ -706,4 +713,12 @@ def test_official_text_variants_reject_conflicting_fields(accession, old, new, r
     original = _document_text(raw.text())
     assert old in original
     with pytest.raises(DisclosureError, match=reason):
-        parse_notice(filing, form, replace(raw, body=original.replace(old, new).encode(), charset="utf-8"))
+        parse_notice(filing, form, replace(raw, body=original.replace(old, new, 1).encode(), charset="utf-8"))
+
+
+def test_quarterly_dividend_reference_rejects_ambiguous_official_effective_date():
+    filing, form, raw = official_body("20190327001145")
+    duplicated = raw.text().replace("2019-03-28", "2019-03-28 / 2019-03-29")
+    assert duplicated != raw.text()
+    with pytest.raises(DisclosureError, match="date"):
+        parse_notice(filing, form, replace(raw, body=duplicated.encode(), charset="utf-8"))

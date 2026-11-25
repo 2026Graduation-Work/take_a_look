@@ -1,7 +1,9 @@
 import gzip
+import hashlib
 import json
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
+from fractions import Fraction
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -133,7 +135,9 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
         documents[viewer.split("?")[0] + f"?method=searchContents&docNo={document}"] = (
             f"parent.setPath('', '{url}')"
         ).encode()
-        documents[url] = gzip.decompress((fixtures / f"{accession}.html.gz").read_bytes())
+        body = gzip.decompress((fixtures / f"{accession}.html.gz").read_bytes())
+        assert hashlib.sha256(body).hexdigest() == source["sha256"]
+        documents[url] = body
 
     def archived_get(self, url, *, form=None, referer=None, parse=None, **kwargs):
         if url == DAILY_URL:
@@ -283,3 +287,146 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
     assert ledgers["004990"].candidates[0].base_price == 64_000
     assert ledgers["00499K"].candidates == ledgers["280360"].resolutions == ()
     assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)
+
+
+def freeze_kind_case(tmp_path, raw, *, active, delisted=()):
+    days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
+    days.mkdir()
+    columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
+               "RawVolume", "Amount", "ListedShares"]
+    bars = pd.DataFrame(raw, columns=columns).assign(SECT_TP_NM="")
+    bars["Date"] = pd.DatetimeIndex(bars.Date, dtype="datetime64[ns]")
+    for day, rows in bars.groupby("Date"):
+        rows.to_parquet(days / f"{day:%Y-%m-%d}.parquet", index=False)
+    active_path, delisted_path = tmp_path / "active.parquet", tmp_path / "delisted.parquet"
+    pd.DataFrame(active, columns=["ISU_SRT_CD", "ISU_CD", "ISU_NM", "ISU_ABBRV", "MKT_TP_NM", "SECUGRP_NM", "LIST_DD",
+                                  "KIND_STKCERT_TP_NM"]).to_parquet(active_path, index=False)
+    pd.DataFrame(delisted, columns=["Symbol", "ISIN", "Name", "Market", "SecuGroup", "ListingDate", "DelistingDate",
+                                    "KIND_STKCERT_TP_NM"]).to_parquet(delisted_path, index=False)
+    start, end = bars.Date.min().date(), bars.Date.max().date()
+    main(["--start", str(start), "--end", str(end), "--published-start", str(start - timedelta(days=7)),
+          "--published-end", str(end + timedelta(days=3)), "--krx-days", str(days), "--active-master", str(active_path),
+          "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output)])
+    path = freeze_resolution_snapshot(output, tmp_path / "official_actions", krx_days=days,
+                                       active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
+    notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
+    return read_resolution_snapshot(path, verify_archive=True), notices
+
+
+def test_census_freezes_headingless_listing_and_reference_for_actual_market_transfer(tmp_path, monkeypatch):
+    listing, pricing = "20190308000743", "20190311000683"
+    use_archived_kind_bodies(monkeypatch, {"2019-03-08": (listing,), "2019-03-11": (pricing,)},
+                            issuer="19208", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2019-03-11", "192080", "더블유게임즈", "KOSDAQ", 61_500, 62_600, 59_500, 62_500, 1000, 479_859, 29_579_552_300, 18_260_502),
+        ("2019-03-12", "192080", "더블유게임즈", "KOSPI", 63_500, 63_500, 61_500, 62_000, -500, 68_657, 4_295_510_100, 18_260_502),
+    ], active=[("192080", "KR7192080000", "더블유게임즈보통주", "더블유게임즈", "KOSPI", "주권", "2019/03/12", "보통주")],
+        delisted=[("192080", "KR7192080000", "더블유게임즈", "KOSDAQ", "주권", "2015/11/04", "2019/03/12", "보통주")])
+    assert (notices.loc[listing].Code, notices.loc[listing].AppliedDate, notices.loc[listing].SharesAfter) == (
+        "192080", "2019-03-12", 18_260_502,
+    )
+    source, target = sorted(snapshot.ledgers, key=lambda key: key.listing)
+    assert source.isin == target.isin and (source.market, target.market) == ("KOSDAQ", "KOSPI")
+    assert not snapshot.ledgers[source].resolutions and not snapshot.ledgers[target].candidates
+    event, = snapshot.ledgers[target].resolutions
+    assert (event.date, event.kind, event.price_factor, event.volume_factor, event.review) == (
+        "2019-03-12", Resolution.REFERENCE_RESET, 1, 1, False,
+    )
+    assert {proof.accession for proof in event.evidence} == {listing, pricing}
+
+
+def test_nearby_unchanged_quarterly_dividend_does_not_become_the_bonus_review_reason(tmp_path, monkeypatch):
+    dividend, bonus = "20190327001145", "20190328000862"
+    use_archived_kind_bodies(monkeypatch, {"2019-03-27": (dividend,), "2019-03-28": (bonus,)},
+                            issuer="00284", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2019-03-27", "002840", "미원상사", "KOSPI", 393_000, 393_000, 383_000, 390_500, -3000, 1950, 754_539_500, 774_940),
+        ("2019-03-28", "002840", "미원상사", "KOSPI", 388_000, 391_000, 376_000, 388_000, -2500, 3265, 1_258_945_000, 774_940),
+        ("2019-03-29", "002840", "미원상사", "KOSPI", 77_700, 77_700, 55_000, 55_000, -4800, 104_550, 6_932_625_000, 774_940),
+    ], active=[("002840", "KR7002840007", "미원상사보통주", "미원상사", "KOSPI", "주권", "1989/09/25", "보통주")])
+    notice = notices.loc[dividend]
+    assert (notice.AppliedDate, notice.BasePrice, notice.Reason) == (
+        "2019-03-28", 390_500, "중간(분기)배당락(기준가격 변동없음)",
+    )
+    ledger, = snapshot.ledgers.values()
+    candidate, = ledger.candidates
+    assert (candidate.date, candidate.prev_close, candidate.base_price) == ("2019-03-29", 388_000, 59_800)
+    event, = ledger.resolutions
+    assert (event.date, event.kind, event.reason, event.review, event.price_factor, event.volume_factor) == (
+        "2019-03-29", Resolution.SEGMENT_BREAK, "official_facts_conflict_or_lack_terms", True, None, None,
+    )
+    assert {proof.accession for proof in event.evidence} == {bonus}
+
+
+def test_census_freezes_sambu_split_with_separate_same_day_english_name_change(tmp_path, monkeypatch):
+    listing, pricing = "20190430000089", "20190430000477"
+    use_archived_kind_bodies(monkeypatch, {"2019-04-30": (listing, pricing)}, issuer="00147", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2019-04-30", "001470", "삼부토건", "KOSPI", 0, 0, 0, 4685, 0, 0, 0, 24_803_131),
+        ("2019-05-02", "001470", "삼부토건", "KOSPI", 910, 1060, 905, 976, 39, 3_500_464, 3_483_743_665, 124_015_655),
+    ], active=[("001470", "KR7001470004", "삼부토건보통주", "삼부토건", "KOSPI", "주권", "1976/06/26", "보통주")])
+    notice = notices.loc[listing]
+    assert (notice.Code, notice.AppliedDate, notice.Reason, notice.ParBefore, notice.ParAfter) == (
+        "001470", "2019-05-02", "액면분할", 5000, 1000,
+    )
+    ledger, = snapshot.ledgers.values()
+    candidate, = ledger.candidates
+    assert (candidate.prev_close, candidate.base_price, candidate.shares_before, candidate.shares_after) == (
+        4685, 937, 24_803_131, 124_015_655,
+    )
+    event, = ledger.resolutions
+    assert (event.date, event.kind, event.price_factor, event.volume_factor, event.review) == (
+        "2019-05-02", Resolution.UNIT_CHANGE, Fraction(1, 5), 5, False,
+    )
+    assert {proof.accession for proof in event.evidence} == {listing, pricing}
+
+
+def test_census_freezes_jcontentree_transfer_with_explicit_standard_code_and_share_class(tmp_path, monkeypatch):
+    listing, pricing = "20191016000448", "20191017000221"
+    use_archived_kind_bodies(monkeypatch, {"2019-10-16": (listing,), "2019-10-17": (pricing,)},
+                            issuer="03642", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2019-10-17", "036420", "제이콘텐트리", "KOSDAQ", 34_650, 36_200, 33_250, 34_000, -550, 631_833, 21_770_879_900, 14_406_898),
+        ("2019-10-18", "036420", "제이콘텐트리", "KOSPI", 34_700, 34_950, 33_900, 34_400, 400, 136_680, 4_702_076_250, 14_406_898),
+    ], active=[("036420", "KR7036420008", "콘텐트리중앙보통주", "콘텐트리중앙", "KOSPI", "주권", "2019/10/18", "보통주")],
+        delisted=[("036420", "KR7036420008", "한길무역", "KOSDAQ", "주권", "2000/03/23", "2019/10/18", "보통주")])
+    row = notices.loc[listing]
+    assert (row.Code, row.ISIN, row.ShareClass, row.AppliedDate, row.SharesAfter) == (
+        "036420", "KR7036420008", "common", "2019-10-18", 14_406_898,
+    )
+    target, = [key for key in snapshot.ledgers if key.market == "KOSPI"]
+    event, = snapshot.ledgers[target].resolutions
+    assert (event.kind, event.reason, event.price_factor, event.volume_factor) == (
+        Resolution.REFERENCE_RESET, "official_continuous_transfer", 1, 1,
+    )
+    assert {ref.accession for ref in event.evidence} == {listing, pricing}
+
+
+@pytest.mark.parametrize("accession,original,current,stock_rows", [
+    ("20191015000306", "두산솔루스", "솔루스첨단소재", [
+        ("336370", "KR7336370002", 4240, 5510, 1270, 43_470, 225_493_820, 30_457_400),
+        ("33637K", "KR733637K010", 3240, 4210, 970, 13_113, 54_767_290, 7_366_400),
+        ("33637L", "KR733637K028", 3570, 4640, 1070, 433, 1_825_080, 1_646_050),
+    ]),
+    ("20191015000308", "두산퓨얼셀", "두산퓨얼셀", [
+        ("336260", "KR7336260005", 4240, 5510, 1270, 370_645, 2_026_883_140, 55_255_950),
+        ("33626K", "KR733626K013", 3240, 4210, 970, 27_177, 113_474_270, 13_364_200),
+        ("33626L", "KR733626K021", 3570, 4640, 1070, 2385, 10_732_560, 2_986_300),
+    ]),
+])
+def test_census_freezes_all_three_dated_classes_of_one_official_relisting(tmp_path, monkeypatch, accession, original,
+                                                                 current, stock_rows):
+    use_archived_kind_bodies(monkeypatch, {"2019-10-15": (accession,)}, issuer=stock_rows[0][0][:5],
+                            submitter="유가증권시장본부")
+    raw, active, expected = [], [], []
+    for section, ((code, isin, opening, close, change, volume, amount, shares), label, short, class_name) in enumerate(
+        zip(stock_rows, ("보통주", "1우선주", "2우선주(신형)"), ("", "1우", "2우B"), ("보통주", "구형우선주", "신형우선주")), 1,
+    ):
+        raw.append(("2019-10-18", code, original + short, "KOSPI", opening, close, opening, close, change, volume, amount, shares))
+        active.append((code, isin, current + label, current + short, "KOSPI", "주권", "2019/10/18", class_name))
+        expected.append((section, code, isin, "common" if section == 1 else "preferred", "2019-10-18", shares))
+    snapshot, notices = freeze_kind_case(tmp_path, raw, active=active)
+    assert list(notices.sort_values("Section")[["Section", "Code", "ISIN", "ShareClass", "AppliedDate", "SharesAfter"]]
+                .itertuples(index=False, name=None)) == expected
+    assert len(snapshot.ledgers) == 3 and all(not ledger.resolutions for ledger in snapshot.ledgers.values())
+    assert all(key.listing == "2019-10-18" for key in snapshot.ledgers)

@@ -541,5 +541,135 @@
       "20171027000867"
     ],
     "final": true
+  },
+  "20190308000743": {
+    "form": "68152",
+    "title": "신규상장((주)더블유게임즈, 상장일 2019.03.12)",
+    "company": "더블유게임즈",
+    "body_url": "https://kind.krx.co.kr/external/2019/03/08/000743/20190308001742/68152.htm",
+    "charset": "utf-8",
+    "sha256": "7e7b67ca969d2bc397f7e5ecf91ad92b41265ed9f0f2577a798ba26c8a15f0da",
+    "document_no": "20190308001742",
+    "family": [
+      "20190308001742"
+    ],
+    "final": true
+  },
+  "20190311000683": {
+    "form": "99343",
+    "title": "주권 등 신규상장 기준가격 안내 (이전상장)",
+    "company": "더블유게임즈",
+    "body_url": "https://kind.krx.co.kr/external/2019/03/11/000683/20190311001805/99343.htm",
+    "charset": "utf-8",
+    "sha256": "341ee4abc43faf56828e96ace1fdebd9d5dc1a973b4524d5ff8d8c36d1f7eaa7",
+    "document_no": "20190311001805",
+    "family": [
+      "20190311001805"
+    ],
+    "final": true
+  },
+  "20190327001145": {
+    "form": "99335",
+    "title": "중간(분기)배당락 기준가격 안내",
+    "company": "미원상사",
+    "body_url": "https://kind.krx.co.kr/external/2019/03/27/001145/20190327002633/99335.htm",
+    "charset": "utf-8",
+    "sha256": "f5059b76e3a1026c35dde52524ec355683ea38eedd152c8075c3d0a5dad39540",
+    "document_no": "20190327002633",
+    "family": [
+      "20190327002633"
+    ],
+    "final": true
+  },
+  "20190328000862": {
+    "form": "99301",
+    "title": "권리락 기준가격 안내",
+    "company": "미원상사",
+    "body_url": "https://kind.krx.co.kr/external/2019/03/28/000862/20190328002592/99301.htm",
+    "charset": "utf-8",
+    "sha256": "a3f174cc1d9c7cf70be2d2df2aaec688b4bcb11b26b2319620a67c75f9b0c116",
+    "document_no": "20190328002592",
+    "family": [
+      "20190328002592"
+    ],
+    "final": true
+  },
+  "20190430000089": {
+    "form": "68155",
+    "title": "변경상장(액면분할 및 영문상호변경)",
+    "company": "삼부토건",
+    "body_url": "https://kind.krx.co.kr/external/2019/04/30/000089/20190430000203/68155.htm",
+    "charset": "utf-8",
+    "sha256": "27f87b7e53e972b41bdaa0873abf47f7c3def0972a6d0271c588a24fc9c2ba99",
+    "document_no": "20190430000203",
+    "family": [
+      "20190430000203"
+    ],
+    "final": true
+  },
+  "20190430000477": {
+    "form": "99322",
+    "title": "액면분할 기준가격 안내",
+    "company": "삼부토건",
+    "body_url": "https://kind.krx.co.kr/external/2019/04/30/000477/20190430001236/99322.htm",
+    "charset": "utf-8",
+    "sha256": "67e9f1baf473834d9b900295d5eda8a55fc676f9a19643235e3e37ca3046a0f4",
+    "document_no": "20190430001236",
+    "family": [
+      "20190430001236"
+    ],
+    "final": true
+  },
+  "20191015000306": {
+    "form": "68156",
+    "title": "재상장(두산솔루스 주식회사, 상장일 2019.10.18)",
+    "company": "솔루스첨단소재",
+    "body_url": "https://kind.krx.co.kr/external/2019/10/15/000306/20191015000783/68156.htm",
+    "charset": "utf-8",
+    "sha256": "68f9753e20f7e040c37c2ca931a818708379c8b42857564bc910f60c4e40cf2f",
+    "document_no": "20191015000783",
+    "family": [
+      "20191015000783"
+    ],
+    "final": true
+  },
+  "20191015000308": {
+    "form": "68156",
+    "title": "재상장(두산퓨얼셀 주식회사, 상장일 2019.10.18)",
+    "company": "두산퓨얼셀",
+    "body_url": "https://kind.krx.co.kr/external/2019/10/15/000308/20191015000786/68156.htm",
+    "charset": "utf-8",
+    "sha256": "c495261948993e1b9596b78bb5cb837390abc59190c6429630609cc04d90d31c",
+    "document_no": "20191015000786",
+    "family": [
+      "20191015000786"
+    ],
+    "final": true
+  },
+  "20191016000448": {
+    "form": "68152",
+    "title": "신규상장((주)제이콘텐트리, 상장일 2019.10.18)",
+    "company": "콘텐트리중앙",
+    "body_url": "https://kind.krx.co.kr/external/2019/10/16/000448/20191016001185/68152.htm",
+    "charset": "utf-8",
+    "sha256": "fe98703726d8604ac95ba998471850065f8651b4eaa3e7870f84181f99dc7a56",
+    "document_no": "20191016001185",
+    "family": [
+      "20191016001185"
+    ],
+    "final": true
+  },
+  "20191017000221": {
+    "form": "99343",
+    "title": "주권 등 신규상장 기준가격 안내 (이전상장)",
+    "company": "콘텐트리중앙",
+    "body_url": "https://kind.krx.co.kr/external/2019/10/17/000221/20191017000663/99343.htm",
+    "charset": "utf-8",
+    "sha256": "78dea270173fe064dee86a488cde3ba0d882c5fd125019106a68bddc34bb1b41",
+    "document_no": "20191017000663",
+    "family": [
+      "20191017000663"
+    ],
+    "final": true
   }
 }
