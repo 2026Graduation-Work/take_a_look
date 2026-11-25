@@ -478,6 +478,7 @@ def test_historical_fixed_reference_notice_binds_a_compound_price_without_a_lone
         ("20160826000199", SecurityKey("249420", "KR7249420001", "2016-08-31", None, "KOSPI", "common"), 17_845_253),
         ("20170502000545", SecurityKey("267270", "KR7267270007", "2017-05-10", None, "KOSPI", "common"), 3_584_046),
         ("20170518000349", SecurityKey("268280", "KR7268280005", "2017-05-22", None, "KOSPI", "common"), 5_179_111),
+        ("20210702000621", SecurityKey("097520", "KR7097520001", "2021-07-06", None, "KOSPI", "common"), 17_863_482),
     ],
 )
 def test_official_new_and_relisting_forms_keep_exact_identity_and_session(accession, security, shares):
@@ -685,6 +686,86 @@ def test_official_merger_without_a_quantity_colon_retains_both_security_sections
     ]
 
 
+@pytest.mark.parametrize("accession,effective,common,preferred", [
+    ("20200519000452", "2020-05-21", ("353200", "KR7353200009", "보통주", 49_416_925),
+     ("35320K", "KR735320K011", "우선주", 2_095_519)),
+    ("20200918000556", "2020-09-22", ("363280", "KR7363280009", "보통주", 37_500_902),
+     ("36328K", "KR736328K013", "1우선주", 1_255_338)),
+    ("20210121000538", "2021-01-25", ("375500", "KR7375500006", "보통주", 19_358_738),
+     ("37550K", "KR737550K011", "1우선주", 2_113_885)),
+    ("20210525000477", "2021-05-27", ("383800", "KR7383800000", "보통주", 76_280_690),
+     ("38380K", "KR738380K012", "1우선주", 1_465_285)),
+])
+def test_official_relisting_and_preferred_initial_listing_share_one_dated_notice(accession, effective, common, preferred):
+    filing, form, body = official_body(accession)
+    facts = parse_notice(filing, form, body)
+    assert [(row.section, row.kind, row.effective) for row in facts] == [
+        (1, "new_listing", effective), (2, "new_listing", effective),
+    ]
+    assert [(row.code, row.isin, row.share_label, row.shares_after) for row in facts] == [common, preferred]
+
+
+@pytest.mark.parametrize("accession,observed,added,expected", [
+    ("20220224001140", [("2022-02-24", 0, 0, 0, 108, 0, 0, 0, 174_440_126),
+                       ("2022-02-25", 0, 0, 0, 1335, 0, 0, 0, 13_601_878)], 11_800_000, Resolution.SEGMENT_BREAK),
+    ("20220303000948", [("2022-03-03", 0, 0, 0, 1335, 0, 0, 0, 13_601_878),
+                       ("2022-03-04", 0, 0, 0, 1335, 0, 0, 0, 32_801_878)], 19_200_000, Resolution.SHARES_ONLY),
+])
+def test_official_additional_listing_total_alias_keeps_actual_krx_reconciliation(accession, observed, added, expected):
+    security = SecurityKey("141020", "KR7141020008", "2013-01-29", "2024-01-03", "KOSDAQ", "common")
+    listing, = actual_notices(security, accession)
+    facts = listing.facts
+    assert (facts.code, facts.share_label, facts.effective, facts.added_shares, facts.shares_after) == (
+        security.code, "보통주", observed[-1][0], added, observed[-1][-1],
+    )
+    event, = resolve(security, bars(security, observed), [listing], coverage_complete=True).resolutions
+    assert (event.kind, event.review, event.price_factor, event.volume_factor) == (
+        expected, expected == Resolution.SEGMENT_BREAK, None, None,
+    )
+
+
+def test_official_additional_listing_total_alias_still_rejects_unreconciled_tranches():
+    filing, form, body = official_body("20220303000948")
+    altered = body.body.replace(b"32,801,878", b"32,801,879", 1)
+    assert altered != body.body
+    with pytest.raises(DisclosureError, match="tranche totals do not reconcile"):
+        parse_notice(filing, form, replace(body, body=altered))
+
+
+@pytest.mark.parametrize("accession,code,isin,effective,added", [
+    ("20200515002607", "145210", "KR7145210001", "2020-05-20", 5_519_167),
+    ("20200515002809", "145210", "KR7145210001", "2020-05-20", 5_519_167),
+    ("20200521000228", "145210", "KR7145210001", "2020-05-26", 12_602_499),
+    ("20201116000173", "007630", "KR7007630007", "2020-11-19", 5_000_140),
+    ("20210106000089", "007630", "KR7007630007", "2021-01-11", 695_983),
+    ("20210114000153", "012170", "KR7012170007", "2021-01-15", 25_011_036),
+    ("20210409000126", "307950", "KR7307950006", "2021-04-14", 6_423_982),
+    ("20211111000275", "161000", "KR7161000005", "2021-11-16", 16_608_709),
+    ("20180411000675", "084670", "KR7084670009", "2018-04-17", 122_937),
+])
+def test_official_multi_round_or_corrected_additional_listing_keeps_one_operative_fact(accession, code, isin, effective, added):
+    filing, form, body = official_body(accession)
+    row, = parse_notice(filing, form, body)
+    assert (row.code, row.isin, row.effective, row.added_shares) == (code, isin, effective, added)
+
+
+def test_official_par_value_reduction_does_not_change_either_share_count():
+    filing, form, body = official_body("20210805000135")
+    facts = parse_notice(filing, form, body)
+    assert [(f.section, f.code, f.isin, f.share_label, f.effective, f.shares_before, f.shares_after,
+             f.par_before, f.par_after, f.reason) for f in facts] == [
+        (1, "010140", "KR7010140002", "보통주", "2021-08-10", 630_000_000, 630_000_000, 5000, 1000, "액면가액 감액"),
+        (2, "010145", "KR7010141000", "1우선주", "2021-08-10", 114_845, 114_845, 5000, 1000, "액면가액 감액"),
+    ]
+
+
+def test_official_single_class_par_value_reduction_keeps_its_existing_form():
+    row, = parse_notice(*official_body("20201201000101"))
+    assert (row.code, row.isin, row.effective, row.par_before, row.par_after, row.shares_after, row.reason) == (
+        "003410", "KR7003410008", "2020-12-04", 1000, 100, 503_859_595, "감자(액면변경)",
+    )
+
+
 def test_official_split_binds_per_round_dates_to_both_real_security_paths():
     filing, form, raw = official_body("20170515000565")
     common = SecurityKey("013360", "KR7013360003", "1989-12-02", None, "KOSPI", "common")
@@ -740,6 +821,13 @@ def test_official_surviving_division_takes_identity_and_date_only_from_the_commo
     ("20191015000306", "2019년 10월 18일", "2019년 10월 21일", "class relisting effective dates differ"),
     ("20191015000308", "두산퓨얼셀2우선주(신형)", "두산퓨얼셀3우선주(신형)", "numbered listing security identity differs"),
     ("20191015000308", "KR733626K021 (단축코드:A33626L)", "KR733626K013 (단축코드:A33626K)", "identifiers are duplicated"),
+    ("20210525000477", "엘엑스홀딩스1우선주", "엘엑스홀딩스보통주", "numbered listing security identity differs"),
+    ("20210525000477", "엘엑스홀딩스1우선주", "다른회사1우선주", "relisting issuer differs"),
+    ("20210702000621", "수 - 보통주 17,863,482주", "수 - 우선주 17,863,482주", "numbered listing security identity differs"),
+    ("20200515002809", "5,519,167주", "5,519,168주", "additional listing quantity total does not reconcile"),
+    ("20201116000173", "제53회", "제52회", "additional listing quantity total does not reconcile"),
+    ("20180411000675", "→ 2018년04월17일", "→ 2018년04월18일", "corrected listing date differs"),
+    ("20210805000135", "114,845,000원", "114,845,001원", "par change capital does not reconcile"),
 ])
 def test_official_text_variants_reject_conflicting_fields(accession, old, new, reason):
     filing, form, raw = official_body(accession)
@@ -758,3 +846,22 @@ def test_quarterly_dividend_reference_rejects_ambiguous_official_effective_date(
     assert duplicated != raw.text()
     with pytest.raises(DisclosureError, match="date"):
         parse_notice(filing, form, replace(raw, body=duplicated.encode(), charset="utf-8"))
+
+
+def test_official_oqp_division_reference_applies_while_stock_is_still_halted():
+    key = SecurityKey("078590", "KR7078590007", "2005-10-27", None, "KOSDAQ", "common")
+    notice, = actual_notices(key, "20210823000471", aliases=("OQP",))
+    assert (notice.facts.effective, notice.facts.kind, notice.facts.evaluation, notice.facts.low, notice.facts.high) == (
+        "2021-08-24", "auction", 2380, 1190, 4760,
+    )
+    raw = bars(key, [("2021-08-23", 0, 0, 0, 3890, 0, 0, 0, 83_006_958),
+                     ("2021-08-24", 0, 0, 0, 2380, 0, 0, 0, 83_006_958)])
+    event, = resolve(key, raw, [notice]).resolutions
+    assert (event.kind, event.reason, event.date, event.price_factor, event.volume_factor) == (
+        Resolution.SEGMENT_BREAK, "official_division", "2021-08-24", None, None,
+    )
+    filing, form, body = official_body("20210823000471")
+    altered = body.text().replace("정지가 계속됨", "정지가 해제됨")
+    assert altered != body.text()
+    with pytest.raises(DisclosureError, match="suspension terms differ"):
+        parse_notice(filing, form, replace(body, body=altered.encode(), charset="utf-8"))

@@ -2,7 +2,6 @@
 
 import csv
 import json
-import re
 from datetime import date
 
 from .disclosures import (
@@ -24,9 +23,12 @@ from .kind_market import (
     company_page,
     daily_form,
     daily_page,
-    kind_route,
+    document_route,
+    final_document_number,
+    viewer_documents,
 )
-from .market_notices import Notice, SecurityKey, parse_notice
+from .market_notices import Notice, SecurityKey, kind_topic, parse_notice
+from .market_resolutions import structural_notice
 
 
 def _response(archive, ref):
@@ -83,31 +85,81 @@ def notice_facts_columns(facts):
     return {key: getattr(facts, attribute) for key, attribute in fields.items()}
 
 
-def _official_sections(archive, filing, document, form, refs):
+def _official_body(archive, filing, document, form, refs):
     accession = filing.accession
     viewer = f"https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno={accession}"
     selection = f"https://kind.krx.co.kr/common/disclsviewer.do?method=searchContents&docNo={document}"
     viewer_request, shell = _response(archive, refs[-3])
     route_request, route = _response(archive, refs[-2])
-    options = re.search(r"""<select\b[^>]*\bid=['"]mainDoc['"][^>]*>(.*?)</select>""", shell.text(), re.S)
-    require(options and viewer_request["url"] == viewer and route_request["url"] == selection
+    require(viewer_request["url"] == viewer and route_request["url"] == selection
             and route_request.get("referer") == viewer, "KIND notice viewer differs from official receipt")
-    selected = re.search(r"""value=['"]""" + document + r"""\|([YN])['"]\s*selected""", options[1])
-    expected_url, expected_form = kind_route(accession, route)
+    (number, flag), family = viewer_documents(accession, shell)
+    target = document_route(route)
     body_request, body = _response(archive, refs[-1])
-    require(selected and expected_form == form and f"/{document}/" in expected_url
-            and body_request["url"] == expected_url and body_request.get("referer") == viewer,
+    require(number == target.document_no == document and target.accession == accession and target.form == form
+            and body_request["url"] == target.url and body_request.get("referer") == viewer,
             "KIND notice body receipt differs from its official document or form")
-    family = tuple(re.findall(r"""value=['"]([0-9]{14})\|[YN]['"]""", options[1]))
-    response = KindBody(body.body, body.charset, body.evidence, document, family, selected[1] == "Y")
-    return {facts.section: facts for facts in parse_notice(filing, form, response)}, family, response.final
+    response = KindBody(body.body, body.charset, body.evidence, document, tuple(number for number, _ in family), flag == "Y")
+    return response, target, family
 
+
+def _official_sections(archive, filing, document, form, refs):
+    response, _, _ = _official_body(archive, filing, document, form, refs)
+    return {facts.section: facts for facts in parse_notice(filing, form, response)}, response.family, response.final
+
+
+def _security(row):
+    return SecurityKey(row["Code"], row["ISIN"], row["ListingDate"], row["DelistingDate"] or None,
+                       row["Market"], row["ShareClass"])
+
+
+def _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices):
+    accession, target = row["AcptNo"], row["FinalAcptNo"]
+    original = filings.get((accession, refs[0]))
+    matches = daily_targets.get(target, ())
+    require(original and len(matches) == 1 and matches[0].evidence == refs[3],
+            "KIND correction family is absent from its pinned publication lists")
+    final, = matches
+    issuer = (original.company_id or original.stock_code)[:5]
+    require(issuer and issuer == (final.company_id or final.stock_code)[:5], "KIND correction family issuer differs")
+    viewer = f"https://kind.krx.co.kr/common/disclsviewer.do?method=search&acptno={accession}"
+    viewer_request, shell = _response(archive, refs[1])
+    selected, family = viewer_documents(accession, shell)
+    require(viewer_request["url"] == viewer and selected == (row["DocNo"], "N"), "KIND correction source viewer differs")
+    number = final_document_number(selected, family)
+    route_request, response = _response(archive, refs[2])
+    lookup = f"https://kind.krx.co.kr/common/disclsviewer.do?method=searchContents&docNo={number}"
+    require(route_request["url"] == lookup and route_request.get("referer") == viewer,
+            "KIND correction discovery receipt differs")
+    discovered = document_route(response)
+    final_body, final_route, final_family = _official_body(archive, final, row["FinalDocNo"], row["FormId"], refs[3:])
+    require(discovered == final_route and discovered.document_no == number and final_body.final and set(family) == set(final_family),
+            "KIND correction destination route or family differs")
+    matched = [notice for notice in final_notices.get((target, number, row["FormId"]), ())
+               if notice.evidence[1:] == refs[4:]]
+    require(matched, "KIND correction target has no verified stock facts")
+    closed = {_security(item) for item in row["ClosedWindows"]}
+    confirmed = {notice.security for notice in matched if notice.security in windows and structural_notice(notice)
+                 and windows[notice.security]["first_session"] <= notice.facts.effective <= windows[notice.security]["last_session"]}
+    require(closed <= confirmed and all(key.code.startswith(issuer) for key in closed),
+            "KIND correction closure lacks an affected structural fact")
+    if kind_topic(original) == "structural":
+        require(closed == {key for key in windows if key.code.startswith(issuer)},
+                "KIND structural correction leaves an affected window unconfirmed")
+    return closed
 
 
 def verify_archive_bindings(folder, coverage, archive):
     with (folder / "notices.csv").open(encoding="utf-8", newline="") as stream:
         notices = [(row, tuple(Evidence(**raw) for raw in json.loads(row["Evidence"]))) for row in csv.DictReader(stream)]
-    needed = {(row["AcptNo"], refs[0]) for row, refs in notices}
+    nonstock = [(row, tuple(Evidence(**raw) for raw in row["Evidence"])) for row in coverage.get("nonstock_notices", ())]
+    families = [(row, tuple(Evidence(**raw) for raw in row["Evidence"])) for row in coverage.get("kind_final_families", ())]
+    needed = {(row["AcptNo"], refs[0]) for row, refs in (*notices, *nonstock)}
+    needed.update((row["AcptNo"], refs[0]) for row, refs in families)
+    windows = {_security(row): row for row in coverage["windows"]}
+    issuers = {key.code[:5] for key in windows}
+    expected, proved, daily_targets = {}, set(), {}
+    final_accessions = {row["FinalAcptNo"] for row, _ in families}
     filings = {}
 
     def add(rows):
@@ -117,11 +169,23 @@ def verify_archive_bindings(folder, coverage, archive):
                 filings[key] = row
 
     for entry in coverage["daily"]:
-        add(_publication(archive, entry))
+        rows = _publication(archive, entry)
+        add(rows)
+        for row in rows:
+            if row.accession in final_accessions:
+                daily_targets.setdefault(row.accession, []).append(row)
+            if row.company_id[:5] in issuers and kind_topic(row) == "structural":
+                expected.setdefault(row.accession, row)
     for table in ("company", "archived_market_actions"):
         for code, entries in coverage[table].items():
             for entry in entries:
                 add(_publication(archive, entry, code))
+    for row, refs in nonstock:
+        filing = filings.get((row["AcptNo"], refs[0]))
+        require(filing is not None, "KIND non-stock notice is not in its pinned publication list")
+        sections, _, final = _official_sections(archive, filing, row["DocNo"], row["FormId"], refs)
+        require(not sections and final, "KIND non-stock notice does not verify as an exclusive warrant change")
+        proved.add((filing.accession, filing.evidence))
     documents, official = {}, []
     for row, refs in notices:
         accession, document, form = (row[key] for key in ("AcptNo", "DocNo", "FormId"))
@@ -133,8 +197,7 @@ def verify_archive_bindings(folder, coverage, archive):
             documents[key] = _official_sections(archive, filing, document, form, refs)
         sections, family, final = documents[key]
         facts = sections.get(int(row["Section"]))
-        security = SecurityKey(row["Code"], row["ISIN"], row["ListingDate"], row["DelistingDate"] or None,
-                               row["Market"], row["ShareClass"])
+        security = _security(row)
         issuer = (filing.company_id or filing.stock_code)[:5]
         require(facts is not None and (not issuer or security.code.startswith(issuer))
                 and (facts.code is None or facts.code == security.code)
@@ -146,4 +209,16 @@ def verify_archive_bindings(folder, coverage, archive):
                 "KIND notice facts or identity differ from the official body")
         official.append(Notice(security, accession, form, row["Published"], filing.company_id, filing.title,
                                facts, refs, document, family, final))
+        if final:
+            proved.add((filing.accession, filing.evidence))
+    final_notices = {}
+    for notice in official:
+        if notice.final:
+            final_notices.setdefault((notice.accession, notice.document_no, notice.form), []).append(notice)
+    for row, refs in families:
+        if _verify_final_family(archive, row, refs, filings, daily_targets, windows, final_notices):
+            proved.add((row["AcptNo"], refs[0]))
+    missing = sorted(f"{row.accession} ({row.published})" for row in expected.values()
+                     if (row.accession, row.evidence) not in proved)
+    require(not missing, f"Missing official structural notice evidence: {', '.join(missing[:10])}")
     return official

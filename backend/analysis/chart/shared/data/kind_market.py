@@ -60,6 +60,21 @@ class KindBody(Response):
     final: bool
 
 
+@dataclass(frozen=True)
+class DocumentRoute:
+    accession: str
+    document_no: str
+    url: str
+    form: str
+
+
+@dataclass(frozen=True)
+class FinalReferral:
+    route: DocumentRoute
+    family: tuple[tuple[str, str], ...]
+    evidence: Evidence
+
+
 class DailyRows(TableRows):
     def __init__(self):
         super().__init__()
@@ -135,14 +150,37 @@ def company_page(response, code, start, end, page):
     return total, last, rows, response.evidence
 
 
-def kind_route(accession, lookup):
+def document_route(lookup):
     source = one(r"parent\.setPath\(\s*'[^']*'\s*,\s*'([^']+)'", lookup.text(), "KIND document path missing")
     parsed = urlsplit(source)
     match = re.fullmatch(r"/external/(\d{4})/(\d{2})/(\d{2})/(\d{6})/(\d{14})/(\d+)\.htm", parsed.path)
     require(parsed.scheme == "https" and parsed.netloc == "kind.krx.co.kr" and not parsed.query
-            and not parsed.fragment and match and "".join(match.groups()[:4]) == accession,
-            "KIND document route does not identify the selected accession")
-    return source, match[6]
+            and not parsed.fragment and match, "KIND document route does not identify the selected accession")
+    return DocumentRoute("".join(match.groups()[:4]), match[5], source, match[6])
+
+
+def kind_route(accession, lookup):
+    route = document_route(lookup)
+    require(route.accession == accession, "KIND document route does not identify the selected accession")
+    return route.url, route.form
+
+
+def viewer_documents(accession, shell):
+    text = shell.text()
+    require(set(re.findall(r'name="acptNo"\s+id="acptNo"\s+value="([0-9]{14})"', text)) == {accession},
+            "KIND viewer does not identify the requested accession")
+    options = one(r'<select\b[^>]*\bid=[\'"]mainDoc[\'"][^>]*>(.*?)</select>', text, "KIND viewer main document missing")
+    selected = one(r"value=['\"]([0-9]{14})\|([YN])['\"]\s*selected", options, "KIND selected document is ambiguous")
+    family = tuple(re.findall(r"value=['\"]([0-9]{14})\|([YN])['\"]", options))
+    require(len(family) == len({number for number, _ in family}), "KIND document family is ambiguous")
+    return selected, family
+
+
+def final_document_number(selected, family):
+    require(selected[1] == "N", "KIND final referral requires a non-final selection")
+    finals = [number for number, flag in family if flag == "Y"]
+    require(len(finals) == 1, "KIND correction family does not identify one final document")
+    return finals[0]
 
 
 class KindMarket:
@@ -180,6 +218,9 @@ class KindMarket:
 
     def _cached(self, path, request, archive, *, copy=False):
         evidence = Evidence(**json.loads(path.read_text()))
+        return self._verified_response(evidence, request, archive, copy=copy)
+
+    def _verified_response(self, evidence, request, archive, *, copy=False):
         require(all(re.fullmatch(r"[0-9a-f]{64}", digest) for digest in vars(evidence).values()),
                 "Invalid KIND evidence identifier")
         receipt = archive / "receipts" / f"{evidence.receipt}.json"
@@ -369,7 +410,34 @@ class KindMarket:
         return [MarketFiling(**{**vars(row), "stock_code": code}, displayed=row.published,
                              submitter="한국거래소") for row in rows], span
 
-    def document(self, filing):
+    def dated_filing(self, span, accession):
+        day = span.start
+        require(span.source == "KIND daily disclosure list" and day == span.end,
+                "KIND correction requires a complete daily list")
+
+        def page_at(page):
+            require(page <= len(span.pages), "KIND correction daily list lacks a page")
+            request = {"url": DAILY_URL, "form": daily_form(day, page), "referer": DAILY_MAIN}
+            return daily_page(self._verified_response(span.pages[page - 1], request, self.root), day, page)
+
+        rows, audited = collect_pages(span.source, day, day, DAILY_SIZE, page_at)
+        matches = [row for row in rows if row.accession == accession]
+        require(audited == span and len(matches) <= 1, "KIND correction is duplicated in the verified daily list")
+        return matches[0] if matches else None
+
+    def final_referral(self, filing, body, refs):
+        viewer = KIND_VIEWER + "?" + urlencode({"method": "search", "acptno": filing.accession})
+        shell = self._verified_response(refs[0], {"url": viewer, "form": None, "referer": DAILY_MAIN}, self.root)
+        selected, family = viewer_documents(filing.accession, shell)
+        require(selected == (body.document_no, "N") and not body.final, "KIND correction source selection differs")
+        final_no = final_document_number(selected, family)
+        lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": final_no})
+        response = self._get(lookup, referer=viewer)
+        route = document_route(response)
+        require(route.document_no == final_no and route.accession != filing.accession, "KIND correction route differs")
+        return FinalReferral(route, family, response.evidence)
+
+    def document(self, filing, *, expected=None):
         accession = filing.accession
         require(re.fullmatch(r"[0-9]{14}", accession), "Invalid KIND accession")
         folder = next((path for path in self.legacy_docs if all((path / f"{accession}_{name}").is_file()
@@ -382,22 +450,21 @@ class KindMarket:
         shell = self._get(viewer, referer=DAILY_MAIN, legacy=cached("viewer.html"))
         refs = [shell.evidence]
         try:
-            require(set(re.findall(r'name="acptNo"\s+id="acptNo"\s+value="([0-9]{14})"', shell.text()))
-                    == {accession}, "KIND viewer does not identify the requested accession")
-            options = one(r'<select\b[^>]*\bid=[\'"]mainDoc[\'"][^>]*>(.*?)</select>',
-                          shell.text(), "KIND viewer main document missing")
-            doc_no, final = one(r"value=['\"]([0-9]{14})\|([YN])['\"]\s*selected", options,
-                                "KIND selected document is ambiguous")
-            family = tuple(re.findall(r"value=['\"]([0-9]{14})\|[YN]['\"]", options))
-            require(len(family) == len(set(family)), "KIND document family is ambiguous")
+            (doc_no, final), family = viewer_documents(accession, shell)
+            if expected:
+                require((doc_no, final) == (expected.route.document_no, "Y") and set(family) == set(expected.family),
+                        "KIND final viewer selection or correction family differs")
             lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": doc_no})
             route = self._get(lookup, referer=viewer, legacy=cached("contents.html"))
             refs.append(route.evidence)
             source, form = kind_route(accession, route)
             require(f"/{doc_no}/" in urlsplit(source).path, "KIND route document identifier changed")
+            if expected:
+                require((source, form) == (expected.route.url, expected.route.form), "KIND final route differs from referral")
         except KindUnavailable:
             raise
         except DisclosureError as exc:
             raise DocumentFormatError(str(exc), tuple(refs)) from None
         body = self._get(source, referer=viewer, legacy=cached("doc.htm"))
-        return form, KindBody(body.body, body.charset, body.evidence, doc_no, family, final == "Y"), (*refs, body.evidence)
+        family_numbers = tuple(number for number, _ in family)
+        return form, KindBody(body.body, body.charset, body.evidence, doc_no, family_numbers, final == "Y"), (*refs, body.evidence)

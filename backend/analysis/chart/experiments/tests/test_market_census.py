@@ -5,18 +5,25 @@ from collections import defaultdict
 from datetime import date, timedelta
 from fractions import Fraction
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
 from experiments.dataset.census_actions import _collect_notices, main
 from experiments.dataset.freeze_resolution_snapshot import freeze_resolution_snapshot
 from experiments.dataset.pipeline import write_review_queue
-from shared.data.disclosures import Evidence
-from shared.data.kind_market import DAILY_URL, KindMarket, KindUnavailable, MarketFiling
+from shared.data.disclosures import DisclosureError, Evidence
+from shared.data.kind_market import (
+    DAILY_URL,
+    KIND_VIEWER,
+    KindMarket,
+    KindUnavailable,
+    MarketFiling,
+)
 from shared.data.market_notices import SecurityKey, kind_topic, normal_company
 from shared.data.market_resolutions import Resolution
 from shared.data.resolution_snapshot import kind_document_url, read_resolution_snapshot
+from shared.io import sha256
 
 
 def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
@@ -34,7 +41,7 @@ def test_fnf_holdings_disclosure_scope_excludes_spin_off_with_same_name():
     client = Mock()
     client.document.side_effect = KindUnavailable("outside this test's document cache")
 
-    _, _, _, gaps, unattributed, _, selected, _ = _collect_notices(
+    _, _, _, gaps, unattributed, _, _, _, selected, _ = _collect_notices(
         client, filings, aliases, defaultdict(tuple), anchors={}, spac_keys=set(), bounded=False,
     )
 
@@ -289,7 +296,7 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
     assert all(row.price_factor is None and row.volume_factor is None for row in ledgers["00499K"].resolutions)
 
 
-def freeze_kind_case(tmp_path, raw, *, active, delisted=()):
+def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False):
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
@@ -306,7 +313,8 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=()):
     start, end = bars.Date.min().date(), bars.Date.max().date()
     main(["--start", str(start), "--end", str(end), "--published-start", str(start - timedelta(days=7)),
           "--published-end", str(end + timedelta(days=3)), "--krx-days", str(days), "--active-master", str(active_path),
-          "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output)])
+          "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output),
+          "--request-budget", str(budget), *(["--preview"] if preview else [])])
     path = freeze_resolution_snapshot(output, tmp_path / "official_actions", krx_days=days,
                                        active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
     notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
@@ -430,3 +438,214 @@ def test_census_freezes_all_three_dated_classes_of_one_official_relisting(tmp_pa
                 .itertuples(index=False, name=None)) == expected
     assert len(snapshot.ledgers) == 3 and all(not ledger.resolutions for ledger in snapshot.ledgers.values())
     assert all(key.listing == "2019-10-18" for key in snapshot.ledgers)
+
+
+@pytest.mark.parametrize("tamper,reason", [
+    ("stock", "warrant-only fields do not cover both instruments"),
+    ("mixed", "warrant change mixes listing blocks"),
+    ("partial", "warrant-only fields do not cover both instruments"),
+    ("missing", "missing official non-stock notice evidence"),
+    ("omitted", "Missing official structural notice evidence: 20210720000217"),
+])
+def test_warrant_only_disclosure_preserves_evidence_but_not_a_stock_coverage_gap(tmp_path, monkeypatch, tamper, reason):
+    warrant, auction = "20210720000217", "20210720000265"
+    use_archived_kind_bodies(monkeypatch, {"2021-07-20": (warrant, auction)}, issuer="04267", submitter="유가증권시장본부")
+    snapshot, notices = freeze_kind_case(tmp_path, [
+        ("2021-07-20", "042670", "두산인프라코어", "KOSPI", 0, 0, 0, 14_450, 0, 0, 0, 231_195_460),
+        ("2021-07-21", "042670", "두산인프라코어", "KOSPI", 15_350, 19_350, 14_900, 16_950, 1600, 40_010_263,
+         706_775_904_050, 78_309_228),
+    ], active=[], delisted=[("042670", "KR7042670000", "HD현대인프라코어", "KOSPI", "주권", "2001/02/02",
+                              "2026/01/26", "보통주")])
+    assert list(notices.index) == [auction]
+    price = notices.loc[auction]
+    assert (price.EvaluationPrice, price.Low, price.High) == (13_250, 6630, 26_500)
+    window, = snapshot.windows.values()
+    assert window["complete"] and window["structural_documents_incomplete"] == []
+    proof, = snapshot.coverage["nonstock_notices"]
+    assert proof["AcptNo"] == warrant and len(proof["Evidence"]) == 4
+    assert {Evidence(**ref) for ref in proof["Evidence"]} <= snapshot.archive_refs
+    ledger, = snapshot.ledgers.values()
+    candidate, = ledger.candidates
+    assert candidate.base_price == 15_350
+    event, = ledger.resolutions
+    assert (event.date, event.kind, event.reason, event.review, event.price_factor, event.volume_factor) == (
+        "2021-07-21", Resolution.SEGMENT_BREAK, "official_division", False, None, None,
+    )
+    assert {ref.accession for ref in event.evidence} == {auction}
+
+    output, cache = tmp_path / "output", tmp_path / "kind"
+    coverage_path = output / "coverage.json"
+    coverage = json.loads(coverage_path.read_bytes())
+    refs = coverage["nonstock_notices"][0]["Evidence"]
+    old = Evidence(**refs.pop())
+    if tamper == "omitted":
+        coverage["nonstock_notices"].clear()
+    elif tamper != "missing":
+        receipt = json.loads((cache / "receipts" / f"{old.receipt}.json").read_bytes())
+        body = (cache / "objects" / old.sha256).read_bytes()
+        if tamper == "stock":
+            encoded = body.replace(b"KRA0340221B1", b"KR7034021000").replace(b"J0340221B", b"A034020")
+        elif tamper == "mixed":
+            fixtures = Path(__file__).parents[2] / "shared/tests/fixtures/market_actions"
+            encoded = body + gzip.decompress((fixtures / "20190430000089.html.gz").read_bytes())
+        else:
+            encoded = body.replace(b"KRA0340221B1 (", b"(", 1)
+        assert encoded != body
+        replaced = KindMarket(cache)._store(receipt["request"], encoded, receipt["charset"], None, "fixture")
+        refs.append(vars(replaced.evidence))
+    coverage_path.write_text(json.dumps(coverage))
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    if tamper == "omitted":
+        manifest["nonstock_notices"] = 0
+    manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(DisclosureError, match=reason):
+        freeze_resolution_snapshot(output, tmp_path / "tampered_official_actions", krx_days=tmp_path / "days",
+                                   active_master=tmp_path / "active.parquet", delisted_master=tmp_path / "delisted.parquet",
+                                   evidence_archives=[cache])
+
+
+@pytest.mark.parametrize("case,calls", [
+    ("cold", 7), ("warm", 4), ("warm_target", 1), ("displayed_before_prefix", 4), ("wrong_issuer", 1),
+    ("wrong_family", 2), ("family_flags", 2),
+    ("unlisted", 1), ("wrong_route", 1), ("same_accession", 1), ("target_is_n", 2), ("budget", 3), ("rename_only", 4),
+])
+def test_correction_referral_uses_verified_route_daily_listing_and_final_viewer(tmp_path, monkeypatch, case, calls):
+    from contextlib import nullcontext
+
+    original, target = "20170112000045", "20170112000046"
+    old_doc, new_doc = "20170112000099", "20170112000215"
+    listing_day = date(2017, 1, 12)
+    target_day = date(2017, 1, 11) if case == "displayed_before_prefix" else listing_day
+    old_viewer, new_viewer = map(kind_document_url, (original, target))
+    target_form = "70765" if case == "rename_only" else "68154"
+    new_url = f"https://kind.krx.co.kr/external/2017/01/12/000046/{new_doc}/{target_form}.htm"
+    old_url = f"https://kind.krx.co.kr/external/2017/01/12/000045/{old_doc}/68151.htm"
+    fixture = Path(__file__).parents[2] / "shared/tests/fixtures/market_actions"
+    final_body = gzip.decompress((fixture / f"{target}.html.gz").read_bytes())
+    if case == "rename_only":
+        final_body = ("<table><tr><td>1.변경전 상호</td><td>LG화학</td></tr>"
+                      "<tr><td>2.변경후 상호</td><td>한글</td><td>LG케미칼</td></tr>"
+                      "<tr><td>4.상장일</td><td>2017-01-17</td></tr></table>").encode()
+
+    def listing(accession, issuer, title):
+        return (f"<tr><td>12:00</td><td><a onclick=\"companysummary_open('{issuer}')\">LG화학</a></td>"
+                f"<td><a onclick=\"openDisclsViewer('{accession}','')\">{title}</a></td><td>유가증권시장본부</td><td></td></tr>")
+
+    def viewer(acpt, selected):
+        prior = "20170112000098" if case == "wrong_family" and acpt == target else old_doc
+        old_flag = "Y" if case == "family_flags" and acpt == target else "N"
+        items = ''.join(f'<option value="{number}|{flag}"{" selected" if number == selected else ""}></option>'
+                        for number, flag in ((prior, old_flag), (new_doc, 'Y')))
+        return f'<input name="acptNo" id="acptNo" value="{acpt}"><select id="mainDoc">{items}</select>'.encode()
+
+    detected_url = new_url.replace("kind.krx.co.kr", "not-kind.krx.co.kr") if case == "wrong_route" else new_url
+    if case == "same_accession":
+        detected_url = new_url.replace("/000046/", "/000045/")
+    responses = {
+        old_viewer: viewer(original, old_doc), new_viewer: viewer(target, old_doc if case == "target_is_n" else new_doc),
+        f"{KIND_VIEWER}?method=searchContents&docNo={old_doc}": f"parent.setPath('', '{old_url}')".encode(),
+        f"{KIND_VIEWER}?method=searchContents&docNo={new_doc}": f"parent.setPath('', '{detected_url}')".encode(),
+        old_url: b"Obsolete body intentionally does not supply resolution facts.", new_url: final_body,
+    }
+
+    def respond(method, url, *, data, headers, **kwargs):
+        if url == DAILY_URL:
+            listed = []
+            if data["selDate"] == str(listing_day):
+                listed.append(listing(original, "05191", "추가상장(합병)"))
+            if data["selDate"] == str(target_day) and case != "unlisted":
+                listed.append(listing(target, "00001" if case == "wrong_issuer" else "05191", "변경상장(상호변경)"))
+            rows = "".join(listed) or "조회된 결과값이 없습니다."
+            payload = f"<table>{rows}</table>전체 <em>{len(listed)}</em>건 : <strong>1</strong>/1".encode()
+        else:
+            payload = responses[url]
+        reply = MagicMock(status_code=200, headers={})
+        reply.iter_content.return_value = [payload]
+        return nullcontext(reply)
+
+    session = Mock()
+    session.request.side_effect = respond
+    monkeypatch.setattr("shared.data.kind_market.requests.Session", lambda: session)
+    monkeypatch.setattr("shared.data.kind_market.time.sleep", lambda _: None)
+    cache = tmp_path / "kind"
+    seeded = KindMarket(cache, budget=20)
+    filings = []
+    for day in pd.date_range("2017-01-09", "2017-01-20"):
+        rows, _ = seeded.day(day.date())
+        filings.extend(rows)
+    if case != "cold":
+        before = seeded.calls
+        seeded.document(next(row for row in filings if row.accession == original))
+        assert seeded.calls - before == 3
+    if case == "warm_target":
+        before = seeded.calls
+        seeded.document(next(row for row in filings if row.accession == target))
+        assert seeded.calls - before == 3
+    session.request.reset_mock()
+    actual_rows = [
+        ("2017-01-16", "051910", "LG화학", "KOSPI", 282_000, 283_500, 278_000, 278_500, -4500, 198_568, 55_506_248_500, 66_271_100),
+        ("2017-01-17", "051910", "LG화학", "KOSPI", 278_000, 284_000, 276_000, 278_500, 0, 218_884, 61_049_828_500, 70_592_343),
+    ]
+    master = [("051910", "KR7051910008", "LG화학", "LG화학", "KOSPI", "주권", "2001/04/25", "보통주")]
+    if case not in {"cold", "warm", "warm_target", "displayed_before_prefix"}:
+        with pytest.raises(DisclosureError, match="incomplete source or identity coverage"):
+            freeze_kind_case(tmp_path, actual_rows, active=master, budget=3 if case == "budget" else 4, preview=True)
+        coverage = json.loads((tmp_path / "output/coverage.json").read_bytes())
+        window, = coverage["windows"]
+        assert window["structural_documents_incomplete"] == [original]
+        assert not coverage["kind_final_families"] and session.request.call_count == calls
+        return
+    snapshot, notices = freeze_kind_case(tmp_path, actual_rows, active=master, budget=calls)
+    assert session.request.call_count == snapshot.manifest["kind_http_calls_this_run"] == calls
+    assert snapshot.manifest["selected_documents"] == snapshot.manifest["retrieved_documents"] == 2
+    assert snapshot.manifest["superseded_documents"] == 1 and list(notices.index) == [target]
+    assert notices.loc[target, "Published"] == target_day.isoformat()
+    family, = snapshot.coverage["kind_final_families"]
+    assert (family["AcptNo"], family["DocNo"], family["FinalAcptNo"], family["FinalDocNo"]) == (
+        original, old_doc, target, new_doc,
+    )
+    assert len(family["Evidence"]) == 7 and family["ClosedWindows"][0]["Code"] == "051910"
+    assert {Evidence(**row) for row in family["Evidence"]} <= snapshot.archive_refs
+    ledger, = snapshot.ledgers.values()
+    resolution, = ledger.resolutions
+    assert (resolution.date, resolution.reason, resolution.review) == ("2017-01-17", "official_merger", False)
+
+    active, delisted, days = (tmp_path / item for item in ("active.parquet", "delisted.parquet", "days"))
+    replay = tmp_path / "cached_census"
+    session.request.reset_mock()
+    main(["--start", "2017-01-16", "--end", "2017-01-17", "--published-start", "2017-01-09", "--published-end",
+          "2017-01-20", "--krx-days", str(days), "--active-master", str(active), "--delisted-master", str(delisted),
+          "--kind-root", str(cache), "--output", str(replay)])
+    pinned = freeze_resolution_snapshot(replay, tmp_path / "cached_snapshot", krx_days=days, active_master=active,
+                                        delisted_master=delisted, evidence_archives=[cache])
+    reread = read_resolution_snapshot(pinned, verify_archive=True)
+    assert session.request.call_count == reread.manifest["kind_http_calls_this_run"] == 0
+    assert reread.ledgers == snapshot.ledgers and reread.archive_refs == snapshot.archive_refs
+
+    coverage_path, manifest_path = replay / "coverage.json", replay / "manifest.json"
+    coverage = json.loads(coverage_path.read_bytes())
+    manifest = json.loads(manifest_path.read_bytes())
+    if case == "cold":
+        coverage["kind_final_families"] = []
+        manifest["superseded_documents"] = 0
+        error = f"Missing official structural notice evidence: {original}"
+    elif case == "warm":
+        refs = coverage["kind_final_families"][0]["Evidence"]
+        refs[2] = refs[5]
+        error = "KIND correction discovery receipt differs"
+    else:
+        refs = coverage["kind_final_families"][0]["Evidence"]
+        prior = Evidence(**refs[-1])
+        receipt = json.loads((cache / "receipts" / f"{prior.receipt}.json").read_bytes())
+        altered = (cache / "objects" / prior.sha256).read_bytes() + b" "
+        replacement = KindMarket(cache)._store(receipt["request"], altered, receipt["charset"], None, "fixture")
+        refs[-1] = vars(replacement.evidence)
+        error = "KIND correction target has no verified stock facts"
+    coverage_path.write_text(json.dumps(coverage))
+    manifest["table_sha256"]["coverage"] = sha256(coverage_path)
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(DisclosureError, match=error):
+        freeze_resolution_snapshot(replay, tmp_path / "tampered_snapshot", krx_days=days, active_master=active,
+                                   delisted_master=delisted, evidence_archives=[cache])

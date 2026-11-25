@@ -18,7 +18,7 @@ from shared.data.actions import FieldEvidence, action_from_record, read_snapshot
 from shared.data.calendar import scheduled_sessions
 from shared.data.disclosures import DisclosureError, DocumentFormatError, require
 from shared.data.events import observation_mask
-from shared.data.kind_market import KindMarket
+from shared.data.kind_market import KindMarket, KindUnavailable
 from shared.data.market_notices import (
     SecurityKey,
     kind_topic,
@@ -31,6 +31,7 @@ from shared.data.market_resolutions import (
     observe_candidates,
     raw_window_fingerprint,
     resolve_events,
+    structural_notice,
 )
 from shared.data.resolution_archive import notice_facts_columns
 from shared.data.resolution_snapshot import (
@@ -220,7 +221,7 @@ def _kind_inventory(client, start, end, company_cache, codes, registered=frozens
 
 
 def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded,
-                     unresolved_issuers=frozenset(), registered=frozenset()):
+                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None):
     by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
     for key, names in aliases.items():
         for name in names:
@@ -228,9 +229,34 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
         by_code[key.code].add(key)
         by_company[key.code[:5]].add(key)
     parsed, blocked, unparsed, failures = defaultdict(list), defaultdict(set), defaultdict(lambda: defaultdict(list)), []
-    structural_gaps, unattributed_structure = defaultdict(set), set()
-    selected, fetched = 0, 0
-    for filing in sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession)):
+    structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
+    selected, fetched, verified, families = set(), set(), {}, []
+
+    def bind(filing, form, body, acquired, issuer, keys):
+        sections = parse_notice(filing, form, body)
+        if not sections:
+            require(form == "68155" and body.final, "KIND notice lacks verified listing sections")
+            nonstock.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FormId": form,
+                             "Evidence": [asdict(ref) for ref in (filing.evidence, *acquired)]})
+        matched = []
+        for facts in sections:
+            if facts.code:
+                possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
+            else:
+                possible = keys if issuer else keys | by_name[normal_company(facts.company)]
+            if not any(key.active(facts.effective) and (
+                (facts.share_label in {"보통주", "보통주식"}) == (key.share_class == "common")
+            ) for key in possible):
+                continue
+            notice = match_notice(filing, form, facts, body, acquired, {key: aliases[key] for key in possible})
+            parsed[notice.security].append(notice)
+            matched.append(notice)
+        verified[filing.accession] = matched
+
+    ordered = sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession))
+    for filing in ordered:
+        if filing.accession in selected:
+            continue
         topic = kind_topic(filing)
         if topic is None and filing.accession not in registered:
             continue
@@ -255,25 +281,46 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                                 and term_type in notice.facts.reason for notice in parsed[key])]
         if not affected and not structural and filing.accession not in registered:
             continue
-        selected += 1
+        selected.add(filing.accession)
         refs = (filing.evidence,)
         try:
             form, body, acquired = client.document(filing)
             refs += acquired
-            fetched += 1
-            for facts in parse_notice(filing, form, body):
-                if facts.code:
-                    possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
-                else:
-                    possible = keys if issuer else keys | by_name[normal_company(facts.company)]
-                if not any(key.active(facts.effective) and (
-                    (facts.share_label in {"보통주", "보통주식"}) == (key.share_class == "common")
-                ) for key in possible):
-                    continue
-                notice = match_notice(filing, form, facts, body, acquired, {key: aliases[key] for key in possible})
-                parsed[notice.security].append(notice)
+            fetched.add(filing.accession)
+            if body.final:
+                bind(filing, form, body, acquired, issuer, keys)
+                continue
+            referral = client.final_referral(filing, body, acquired)
+            accession = referral.route.accession
+            route_day = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
+            hints = {route_day, *(row.published for row in ordered if row.accession == accession)}
+            matches = [target for day in sorted(hints) if (span := (daily or {}).get(day))
+                       and (target := client.dated_filing(span, accession))]
+            require(len(matches) == 1, "KIND final document is absent or ambiguous in verified daily lists")
+            target, = matches
+            require(issuer and (target.company_id or target.stock_code)[:5] == issuer,
+                    "KIND final document identifies another issuer")
+            require(accession not in selected or accession in verified, "KIND final document was not verified when selected")
+            selected.add(accession)
+            target_form, target_body, target_refs = client.document(target, expected=referral)
+            fetched.add(accession)
+            if accession not in verified:
+                bind(target, target_form, target_body, target_refs, issuer, keys)
+            rows = [row for row in verified[accession] if row.security in keys and row.document_no == target_body.document_no
+                    and row.evidence[1:] == target_refs]
+            require(rows, "KIND final document identifies no affected stock")
+            closed = {row.security for row in rows if structural and structural_notice(row)
+                      and (expected_days is None or pd.Timestamp(row.facts.effective) in expected_days[row.security])}
+            require(not structural or closed, "KIND final document does not confirm an affected structural event")
+            for key in keys - closed if structural else ():
+                structural_gaps[key].add(filing.accession)
+            families.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
+                             "FinalDocNo": target_body.document_no, "FormId": target_form,
+                             "ClosedWindows": [_security_columns(key) for key in sorted(closed, key=str)],
+                             "Evidence": [asdict(ref) for ref in (filing.evidence, acquired[0], referral.evidence,
+                                                                  target.evidence, *target_refs)]})
         except (ValueError, OSError) as exc:
-            stage = "kind_document" if isinstance(exc, DocumentFormatError) or len(refs) == 1 else "kind_notice"
+            stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
             if isinstance(exc, DocumentFormatError):
                 refs += exc.evidence
             failures.append({"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
@@ -288,7 +335,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                 else:
                     unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
                                                         for ref in refs)
-    return parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, selected, fetched
+    return parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, nonstock, families, len(selected), len(fetched)
 
 
 def _official_action_snapshots(paths):
@@ -494,8 +541,8 @@ def build_census(args, client):
     unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
                                 spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
-                                registered=registered)
-    notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, selected, fetched = acquired
+                                registered=registered, daily=daily, expected_days=expected_days)
+    notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families, selected, fetched = acquired
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []
     for key, bars in securities.items():
@@ -552,6 +599,8 @@ def build_census(args, client):
                 "missing_daily_dates": sorted(map(str, requested - set(daily))),
                 "incomplete_candidates": unresolved, "unassigned_market_observations": unassigned,
                 "market_observations_outside_ledger_scope": market_exclusions,
+                "nonstock_notices": nonstock,
+                "kind_final_families": sorted(families, key=lambda row: row["AcptNo"]),
                 "failures": [*failures, *source_errors, *document_errors, *failed_windows]}
     tables = {
         "candidates": (CANDIDATE_COLUMNS, map(_candidate_columns, all_candidates)),
@@ -587,6 +636,8 @@ def build_census(args, client):
         "unmatched_sample_keys": sorted(sample - {(r.security.code, r.date) for r in all_candidates}),
         "kind_list_dates": len(daily), "requested_kind_list_dates": len(requested),
         "selected_documents": selected, "retrieved_documents": fetched,
+        "nonstock_notices": len(nonstock),
+        "superseded_documents": len(families),
         "unattributed_structural_documents": len(unattributed_structure),
         "kind_http_calls_this_run": client.calls, "dart_http_calls_this_run": 0,
         "whole_tickers_excluded_by_resolver": None, "training_policy_active": False,

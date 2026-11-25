@@ -253,6 +253,34 @@ def _load_tables(folder, manifest):
             "Manual review registrations differ from producer lineage")
     windows, refs = {}, set()
     daily, bounded = _publication_spans(coverage, refs)
+    nonstock = coverage.get("nonstock_notices", [])
+    require(isinstance(nonstock, list) and len(nonstock) == manifest.get("nonstock_notices", 0),
+            "Non-stock notice count differs from census manifest")
+    nonstock_keys = set()
+    for row in nonstock:
+        require(isinstance(row, dict) and set(row) == {"AcptNo", "DocNo", "FormId", "Evidence"}
+                and all(isinstance(row[name], str) and re.fullmatch(r"[0-9]{14}", row[name])
+                        for name in ("AcptNo", "DocNo")) and row["FormId"] == "68155"
+                and isinstance(row["Evidence"], list) and len(row["Evidence"]) == 4
+                and row["AcptNo"] not in nonstock_keys, "Invalid or missing official non-stock notice evidence")
+        nonstock_keys.add(row["AcptNo"])
+        refs.update(map(_evidence, row["Evidence"]))
+    families = coverage.get("kind_final_families", [])
+    require(isinstance(families, list) and len(families) == manifest.get("superseded_documents", 0),
+            "KIND final family count differs from census manifest")
+    sources = set()
+    for row in families:
+        identifiers = ("AcptNo", "DocNo", "FinalAcptNo", "FinalDocNo")
+        require(isinstance(row, dict) and set(row) == {*identifiers, "FormId", "ClosedWindows", "Evidence"}
+                and all(isinstance(row[name], str) and re.fullmatch(r"[0-9]{14}", row[name]) for name in identifiers)
+                and row["AcptNo"] != row["FinalAcptNo"] and row["DocNo"] != row["FinalDocNo"]
+                and isinstance(row["FormId"], str) and re.fullmatch(r"[0-9]{5}", row["FormId"])
+                and isinstance(row["ClosedWindows"], list) and isinstance(row["Evidence"], list)
+                and len(row["Evidence"]) == 7 and row["AcptNo"] not in sources, "Invalid KIND final family evidence")
+        closed = {_security(item) for item in row["ClosedWindows"]}
+        require(len(closed) == len(row["ClosedWindows"]), "Duplicate KIND final family closure window")
+        sources.add(row["AcptNo"])
+        refs.update(map(_evidence, row["Evidence"]))
     published = manifest["scope"]
     first = date.fromisoformat(published["published_start"])
     last = date.fromisoformat(published["published_end"])

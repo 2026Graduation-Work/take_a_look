@@ -125,6 +125,11 @@ def _reason(notice):
     return re.sub(r"\s+", "", notice.facts.reason)
 
 
+def structural_notice(notice):
+    return (notice.final and notice.facts.kind in {"listing", "auction"}
+            and bool(STRUCTURAL.search(_reason(notice)) or MERGER.search(_reason(notice))))
+
+
 def _result(security, day, kind, reason, notices=(), *, factors=None, evidence=(), review=False):
     price, volume = factors if factors is not None else (None, None)
     return ResolvedEvent(security, day, kind, reason, tuple(dict.fromkeys((*evidence, *_facts_evidence(notices)))),

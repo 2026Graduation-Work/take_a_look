@@ -671,5 +671,281 @@
       "20191017000663"
     ],
     "final": true
+  },
+  "20200519000452": {
+    "form": "68156",
+    "title": "재상장(대덕전자(주), 상장일 2020.05.21)",
+    "company": "대덕전자",
+    "body_url": "https://kind.krx.co.kr/external/2020/05/19/000452/20200519001121/68156.htm",
+    "charset": "utf-8",
+    "sha256": "4f4fae960bfa08457774bd17be320e6f3089f3dab3c29226dc42f21088b70418",
+    "document_no": "20200519001121",
+    "family": [
+      "20200519001121"
+    ],
+    "final": true
+  },
+  "20200918000556": {
+    "form": "68156",
+    "title": "재상장((주)티와이홀딩스, 상장일 2020.09.22)",
+    "company": "티와이홀딩스",
+    "body_url": "https://kind.krx.co.kr/external/2020/09/18/000556/20200918001282/68156.htm",
+    "charset": "utf-8",
+    "sha256": "9215ef68a633313b7ffc64ff0c5f2050790c92aa7cd2e369b6280a4701619901",
+    "document_no": "20200918001282",
+    "family": [
+      "20200918001282"
+    ],
+    "final": true
+  },
+  "20210121000538": {
+    "form": "68156",
+    "title": "재상장(디엘이앤씨(주), 상장일 2021.01.25)",
+    "company": "DL이앤씨",
+    "body_url": "https://kind.krx.co.kr/external/2021/01/21/000538/20210121001465/68156.htm",
+    "charset": "utf-8",
+    "sha256": "975f021c141c2911442606b9981c7669dadf054031bac2c6fc304a107ee23f77",
+    "document_no": "20210121001465",
+    "family": [
+      "20210121001465"
+    ],
+    "final": true
+  },
+  "20210525000477": {
+    "form": "68156",
+    "title": "재상장((주)엘엑스홀딩스, 상장일 2021.05.27)",
+    "company": "LX홀딩스",
+    "body_url": "https://kind.krx.co.kr/external/2021/05/25/000477/20210525001181/68156.htm",
+    "charset": "utf-8",
+    "sha256": "a508038e86ccd2cfad97e30d76a435ea744680226e9ae92e1f83b95d6754ac8e",
+    "document_no": "20210525001181",
+    "family": [
+      "20210525001181"
+    ],
+    "final": true
+  },
+  "20210702000621": {
+    "form": "68152",
+    "title": "신규상장((주)엠씨넥스, 상장일 2021.07.06)",
+    "company": "엠씨넥스",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/02/000621/20210702001489/68152.htm",
+    "charset": "utf-8",
+    "sha256": "c682e9044fbf021993851685ce43067421bd73a9ed599f4e84b8141fa56b91cf",
+    "document_no": "20210702001489",
+    "family": [
+      "20210702001489"
+    ],
+    "final": true
+  },
+  "20220224001140": {
+    "form": "70791",
+    "title": "추가상장(유상증자(제3자배정))",
+    "company": "디에스앤엘",
+    "body_url": "https://kind.krx.co.kr/external/2022/02/24/001140/20220224002585/70791.htm",
+    "charset": "utf-8",
+    "sha256": "f390d7b0ffe9a367f0859536a1a1a0ea6074609602b29c5fc6f27e7936c5fe70",
+    "document_no": "20220224002585",
+    "family": [
+      "20220224002585"
+    ],
+    "final": true
+  },
+  "20220303000948": {
+    "form": "70791",
+    "title": "추가상장(유상증자(제3자배정))",
+    "company": "디에스앤엘",
+    "body_url": "https://kind.krx.co.kr/external/2022/03/03/000948/20220303002302/70791.htm",
+    "charset": "utf-8",
+    "sha256": "b082baa734cad351c963f34c2a615ad4c8002ca23a8af7759f7817e63e4a8ce9",
+    "document_no": "20220303002302",
+    "family": [
+      "20220303002302"
+    ],
+    "final": true
+  },
+  "20180411000675": {
+    "form": "68154",
+    "title": "추가상장(주식배당)",
+    "company": "동양고속",
+    "body_url": "https://kind.krx.co.kr/external/2018/04/11/000675/20180411001623/68154.htm",
+    "charset": "utf-8",
+    "sha256": "ddf55d1014d1be7bc13be3e9f23fa0005d79e2868f6012109218627d0ad27b62",
+    "document_no": "20180411001623",
+    "family": [
+      "20180411000210",
+      "20180411001623"
+    ],
+    "final": true
+  },
+  "20200515002607": {
+    "form": "68154",
+    "title": "추가상장(국내CB전환)",
+    "company": "다이나믹디자인",
+    "body_url": "https://kind.krx.co.kr/external/2020/05/15/002607/20200515005859/68154.htm",
+    "charset": "utf-8",
+    "sha256": "e2276b70b4888825cf22f255618e8b8e50f3e4819f4cf79bb867dd9a9ee7adcf",
+    "document_no": "20200515005859",
+    "family": [
+      "20200515005859",
+      "20200515006356"
+    ],
+    "final": false
+  },
+  "20200515002809": {
+    "form": "68154",
+    "title": "추가상장(국내CB전환)",
+    "company": "다이나믹디자인",
+    "body_url": "https://kind.krx.co.kr/external/2020/05/15/002809/20200515006356/68154.htm",
+    "charset": "utf-8",
+    "sha256": "4681a8039a89a5095222e329813dfe797452ff7fdfdb47d9cc8eccb0978d5513",
+    "document_no": "20200515006356",
+    "family": [
+      "20200515005859",
+      "20200515006356"
+    ],
+    "final": true
+  },
+  "20200521000228": {
+    "form": "68154",
+    "title": "추가상장(국내CB전환)",
+    "company": "다이나믹디자인",
+    "body_url": "https://kind.krx.co.kr/external/2020/05/21/000228/20200521000745/68154.htm",
+    "charset": "utf-8",
+    "sha256": "51e3758337a39e81fc9932d139ac38a8d3b719992fb7d3269c25d51f54244b7d",
+    "document_no": "20200521000745",
+    "family": [
+      "20200521000745"
+    ],
+    "final": true
+  },
+  "20201116000173": {
+    "form": "68154",
+    "title": "추가상장(국내CB전환)",
+    "company": "폴루스바이오팜",
+    "body_url": "https://kind.krx.co.kr/external/2020/11/16/000173/20201116000336/68154.htm",
+    "charset": "utf-8",
+    "sha256": "ebd5d5747771780b5413dee78c39505d48bee2f550cbbd73563d93e623e8a671",
+    "document_no": "20201116000336",
+    "family": [
+      "20201116000336"
+    ],
+    "final": true
+  },
+  "20210106000089": {
+    "form": "68154",
+    "title": "추가상장(국내CB전환)",
+    "company": "폴루스바이오팜",
+    "body_url": "https://kind.krx.co.kr/external/2021/01/06/000089/20210106000195/68154.htm",
+    "charset": "utf-8",
+    "sha256": "a50cadd7013a695fd2c0ab513f26c9ca0d5c4c8b6e495b35245bfee88a2739db",
+    "document_no": "20210106000195",
+    "family": [
+      "20210106000195"
+    ],
+    "final": true
+  },
+  "20210114000153": {
+    "form": "68154",
+    "title": "추가상장(유상증자(제3자배정))",
+    "company": "아센디오",
+    "body_url": "https://kind.krx.co.kr/external/2021/01/14/000153/20210114000500/68154.htm",
+    "charset": "utf-8",
+    "sha256": "e4d64bb3f9c5266a78ee5cac52dd1c297901b8e49fa39711149419e4780b2b07",
+    "document_no": "20210114000500",
+    "family": [
+      "20210114000500"
+    ],
+    "final": true
+  },
+  "20210409000126": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "현대오토에버",
+    "body_url": "https://kind.krx.co.kr/external/2021/04/09/000126/20210409000316/68154.htm",
+    "charset": "utf-8",
+    "sha256": "e9da10e3a3d5342c9462e89bf9f0814f1fda82ca8434722e488b1e8d87084a9e",
+    "document_no": "20210409000316",
+    "family": [
+      "20210409000316"
+    ],
+    "final": true
+  },
+  "20210720000217": {
+    "form": "68155",
+    "title": "변경상장(회사분할합병)",
+    "company": "HD현대인프라코어",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/20/000217/20210720000739/68155.htm",
+    "charset": "utf-8",
+    "sha256": "435d8f3e7bae9cd2bf2d9d116e0c65ef2150a547de5c936ca2ad49b77ff401ac",
+    "document_no": "20210720000739",
+    "family": [
+      "20210720000739"
+    ],
+    "final": true
+  },
+  "20210720000265": {
+    "form": "99360",
+    "title": "회사분할합병으로 인한 변경상장 기준가격결정방법 안내(분할합병존속법인)",
+    "company": "HD현대인프라코어",
+    "body_url": "https://kind.krx.co.kr/external/2021/07/20/000265/20210720000827/99360.htm",
+    "charset": "utf-8",
+    "sha256": "9841002d64925c89177fd7e2e6dd404f6d88eed06fd63b34d6a6ea4ba5bfc2be",
+    "document_no": "20210720000827",
+    "family": [
+      "20210720000827"
+    ],
+    "final": true
+  },
+  "20210805000135": {
+    "form": "68151",
+    "title": "상장안내(감자(액면가액 감액))",
+    "company": "삼성중공업",
+    "body_url": "https://kind.krx.co.kr/external/2021/08/05/000135/20210805000309/68151.htm",
+    "charset": "utf-8",
+    "sha256": "d7c05a8ecee317a5da727c664d256089576103529050cba8c9a7a6f1496f3119",
+    "document_no": "20210805000309",
+    "family": [
+      "20210805000309"
+    ],
+    "final": true
+  },
+  "20211111000275": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "애경케미칼",
+    "body_url": "https://kind.krx.co.kr/external/2021/11/11/000275/20211111000566/68154.htm",
+    "charset": "utf-8",
+    "sha256": "a1716be1e45d6805388292a32e6ef579ce44a845b185327063365db9f4151e91",
+    "document_no": "20211111000566",
+    "family": [
+      "20211111000566"
+    ],
+    "final": true
+  },
+  "20201201000101": {
+    "form": "68151",
+    "title": "상장안내(감자(액면변경))",
+    "company": "쌍용씨앤이",
+    "body_url": "https://kind.krx.co.kr/external/2020/12/01/000101/20201201000196/68151.htm",
+    "charset": "utf-8",
+    "sha256": "2645af0951e93fc49dce4dcc099ffbe2c41a9dc633068180e2fbabda89a3da5c",
+    "document_no": "20201201000196",
+    "family": [
+      "20201201000196"
+    ],
+    "final": true
+  },
+  "20210823000471": {
+    "form": "70780",
+    "title": "기타시장안내(기준가 산정 등에 관한 안내(회사분할(인적분할)))",
+    "company": "휴림에이텍",
+    "body_url": "https://kind.krx.co.kr/external/2021/08/23/000471/20210823001331/70780.htm",
+    "charset": "utf-8",
+    "sha256": "5e86a3ccd2987eb8315196e56b01803b561bdafed32dd9d7cf271139cbbca3df",
+    "document_no": "20210823001331",
+    "family": [
+      "20210823001331"
+    ],
+    "final": true
   }
 }
