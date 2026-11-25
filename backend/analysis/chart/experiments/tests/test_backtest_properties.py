@@ -61,6 +61,17 @@ def test_random_markets_keep_an_exact_ledger(seed):
 
 
 LABEL = {"horizon": 5, "up_mult": 1.75, "down_mult": 1.5}
+
+
+def test_label_counts_a_price_exactly_at_the_barrier_as_touching_it():
+    # 100 × (1 + 1 × 0.1) is 110.00000000000001 in floating point; a high of 110 must still count.
+    days = pd.bdate_range("2024-01-02", periods=5)
+    prices = pd.DataFrame({"Date": days, "Code": "000001", "Open": 100.0, "Close": 100.0,
+                           "High": [100.0, 110.0, 100.0, 100.0, 100.0], "Low": 100.0,
+                           "Sigma": 0.1, "Trading_Halt": 0})
+    assert barrier_labels(prices, 3, up_mult=1.0, down_mult=1.0).iloc[0] == 1
+    below = prices.assign(High=[100.0, 109.99, 100.0, 100.0, 100.0])
+    assert barrier_labels(below, 3, up_mult=1.0, down_mult=1.0).iloc[0] == 0
 UP_EXITS = {"intraday_profit", "profit_gap"}
 HARD_STOP_EXITS = {"intraday_stop", "stop_gap"}
 
