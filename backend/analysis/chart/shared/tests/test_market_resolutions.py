@@ -383,13 +383,16 @@ def test_historical_fixed_reference_notice_binds_a_compound_price_without_a_lone
         ("20151021000366", SecurityKey("229000", "KR7229000005", "2015-10-27", "2020-06-25", "KONEX", "common"), 2_390_000),
         ("20150902000142", SecurityKey("225650", "KR7225650001", "2015-09-04", "2019-09-16", "KOSDAQ", "common"), 10_686_277),
         ("20151020000422", SecurityKey("227840", "KR7227840006", "2015-10-23", None, "KOSPI", "common"), 9_100_836),
+        ("20160706000436", SecurityKey("034830", "KR7034830000", "2016-07-11", None, "KOSPI", "common"), 252_489_230),
+        ("20160804000125", SecurityKey("248170", "KR7248170003", "2016-08-09", None, "KOSPI", "common"), 4_568_286),
+        ("20160826000199", SecurityKey("249420", "KR7249420001", "2016-08-31", None, "KOSPI", "common"), 17_845_253),
     ],
 )
 def test_official_new_and_relisting_forms_keep_exact_identity_and_session(accession, security, shares):
     notice, = actual_notices(security, accession)
     facts = notice.facts
     assert (facts.kind, facts.isin, facts.code) == ("new_listing", security.isin, security.code)
-    assert (facts.effective, facts.shares_after) == (security.listing, shares)
+    assert (facts.effective, facts.share_label, facts.shares_after) == (security.listing, "보통주", shares)
 
 
 def test_official_fixed_reference_and_listing_agree_on_the_share_unit_change():
@@ -440,3 +443,55 @@ def test_official_long_halt_auction_cannot_reset_on_a_zero_open_volume_bar():
     event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
     assert event.kind == Resolution.SEGMENT_BREAK and event.review
     assert event.price_factor is None and event.volume_factor is None
+
+
+
+def test_official_paid_rights_and_consolidation_reference_stays_unresolved():
+    security = SecurityKey("103130", "KR7103130001", "2010-06-30", "2020-06-01", "KOSPI", "common")
+    notice, = actual_notices(security, "20160829000348")
+    assert (notice.facts.kind, notice.facts.effective, notice.facts.base) == ("listing_price", "2016-08-30", 8_450)
+    assert notice.facts.reason == "권리락(유상증자), 액면병합"
+    raw = bars(security, [
+        ("2016-08-29", 0, 0, 0, 1_065, 0, 0, 0, 108_075_159),
+        ("2016-08-30", 8_320, 10_950, 7_550, 8_840, 390, 2_152_679, 20_923_926_320, 10_807_515),
+    ])
+    event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review
+    assert event.price_factor is None and event.volume_factor is None
+
+
+def test_official_additional_listing_reconciles_only_its_own_tranches():
+    security = SecurityKey("050320", "KR7050320001", "2002-01-15", "2022-05-31", "KOSDAQ", "common")
+    notice, = actual_notices(security, "20160829000468")
+    facts = notice.facts
+    assert (facts.effective, facts.code, facts.share_label) == ("2016-08-30", security.code, "보통주")
+    assert (facts.added_shares, facts.shares_after) == (506_000, 10_097_141)
+    raw = bars(security, [
+        ("2016-08-29", 0, 0, 0, 14_850, 0, 0, 0, 9_591_141),
+        ("2016-08-30", 3_510, 3_745, 3_160, 3_240, 270, 15_927_189, 56_080_852_895, 50_485_705),
+    ])
+    event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review
+    info = SOURCES[notice.accession]
+    sample = gzip.decompress((FIXTURES / f"{notice.accession}.html.gz").read_bytes()).decode(info["charset"])
+    assert "10,097,141" in sample
+    malformed = sample.replace("10,097,141", "10,097,142")
+    filing = MarketFiling(notice.accession, date(2016, 8, 29), notice.title, TEST_SOURCE)
+    with pytest.raises(DisclosureError, match="tranche totals do not reconcile"):
+        parse_notice(filing, notice.form, Response(malformed.encode(), "utf-8", TEST_SOURCE))
+
+
+def test_official_konex_rights_form_matches_krx_and_changes_price_only():
+    security = SecurityKey("229480", "KR7229480009", "2016-06-10", "2019-06-10", "KONEX", "common")
+    notice, = actual_notices(security, "20161026000294")
+    facts = notice.facts
+    assert (facts.kind, facts.code, facts.effective, facts.base) == ("ex_price", "229480", "2016-10-27", 4_510)
+    raw = bars(security, [
+        ("2016-10-26", 4_300, 4_550, 4_300, 4_550, -440, 241, 1_036_550, 10_344_680),
+        ("2016-10-27", 5_000, 5_000, 5_000, 5_000, 490, 1, 5_000, 10_344_680),
+    ])
+    event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
+    assert (event.kind, event.price_factor, event.volume_factor) == (Resolution.RIGHTS, Fraction(451, 455), 1)
+    adjusted = apply_events(raw, adjustment_events([event]))
+    assert adjusted.Close.tolist() == [4_510, 5_000]
+    assert adjusted.Volume.tolist() == raw.RawVolume.tolist()

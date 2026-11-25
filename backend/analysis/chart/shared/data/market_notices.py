@@ -20,7 +20,7 @@ IDENTITY = (
 )
 FIXED_REFERENCE_FORMS = frozenset({"70795", "32103"})
 PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70793", "72100", "99301", "99302", "99321", "99322", "99326", "99328",
-                                         "99331", "99332", "99334", "99343", "99409", "32108"}
+                                         "99331", "99332", "99334", "99336", "99343", "99409", "32108"}
 TABLE_LISTINGS = frozenset({"32002", "32003", "32004", "32005", "32006", "70760", "70763", "70764", "70765", "70779", "70791"})
 TEXT_LISTINGS = frozenset({"68151", "68152", "68154", "68155"})
 
@@ -208,7 +208,29 @@ def _price_table(form, rows):
     return sections
 
 
-def _listed_table(filing, rows):
+def _combined_additional_listing(rows, securities):
+    identities = {(row[0], row[1]) for row in securities}
+    require(len(identities) == 1 and all(len(row) == 3 for row in securities),
+            "KIND additional listing tranches mix securities or quantities")
+    share_class, code = next(iter(identities))
+    amounts = [_integer(row[2]) for row in securities]
+    start = [i for i, row in enumerate(rows)
+             if [_compact(field) for field in row] == ["4.추가상장후총발행주식수", "주권종류", "주식수(주)", "배당기산일"]]
+    require(len(start) == 1, "KIND additional listing tranche totals are missing")
+    offset = start[0] + 1
+    totals_rows = rows[offset:offset + len(amounts)]
+    require(len(totals_rows) == len(amounts) and all(
+        len(row) == 3 and row[0] == share_class and re.fullmatch(DAY, row[2]) for row in totals_rows
+    ) and offset + len(amounts) < len(rows) and _compact(rows[offset + len(amounts)][0]) == "5.상장일",
+            "KIND additional listing tranche totals are ambiguous")
+    totals = [_integer(row[1]) for row in totals_rows]
+    require(totals[0] > amounts[0] and all(
+        current - previous == added for previous, current, added in zip(totals, totals[1:], amounts[1:])
+    ), "KIND additional listing tranche totals do not reconcile")
+    return (share_class, code, str(sum(amounts))), totals[-1]
+
+
+def _listed_table(filing, form, rows):
     if any(row[0].startswith("1.변경전 상호") for row in rows):
         company = _field(rows, r"1\.변경전상호")
         day = official_date(_field(rows, r"4\.상장일"))
@@ -229,13 +251,19 @@ def _listed_table(filing, rows):
     securities = [row for row in rows if len(row) in {2, 3} and re.fullmatch(CLASS, row[0])
                   and re.fullmatch(r"A[0-9A-Z]{6}", row[1])]
     require(securities, "KIND listing table lacks security codes")
+    combined_total = None
+    if form == "70791" and len({(row[0], row[1]) for row in securities}) < len(securities):
+        tranche, combined_total = _combined_additional_listing(rows, securities)
+        securities = [tranche]
     par = [row for row in rows if len(row) == 5 and row[1] == "변경전액면가(원)" and row[3] == "변경후액면가(원)"]
     require(len(par) <= 1, "KIND listing face values are ambiguous")
     listing_reason = _field(rows, r"[34]\.변경상장사유", required=False)
     sections = []
     for index, (share_class, code, *added) in enumerate(securities, 1):
-        after = [_integer(row[1]) for row in rows if len(row) == 3 and row[0] == share_class
-                 and re.fullmatch(NUMBER, row[1]) and re.fullmatch(DAY, row[2])]
+        after = [combined_total] if combined_total is not None else [
+            _integer(row[1]) for row in rows if len(row) == 3 and row[0] == share_class
+            and re.fullmatch(NUMBER, row[1]) and re.fullmatch(DAY, row[2])
+        ]
         require(len(after) <= 1, "KIND listing total is ambiguous")
         reason = sorted({row[1] for row in rows if len(row) >= 5 and row[0] == share_class})
         sections.append(NoticeSection(index, "listing", company, share_class, day,
@@ -250,6 +278,31 @@ def _listed_table(filing, rows):
 def _document_text(html):
     html = re.sub(r"(?is)<(?:script|style)\b[^>]*>.*?</(?:script|style)>", " ", html)
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
+
+
+def _circled_listing_text(filing, text, form):
+    relisting = form == "68156"
+    heading = "재상장" if relisting else "신규상장"
+    company = one(rf"^[-◎]\s*(.+?)\s+주권\s+{heading}\s+내역", text,
+                  "KIND numbered listing company is missing")
+    named_class = one(rf"①\s*상장종목명\s*-\s*한글종목명\s*:\s*\S+?({CLASS})(?=\s|\()",
+                      text, "KIND numbered listing share class is missing")
+    effective = one(rf"②\s*상장일\s*:\s*({DAY})(?=\s+③)", text, "KIND numbered listing date is missing")
+    standard = "" if relisting else r"표준코드\s+"
+    short = r"단축코드\s+" if relisting else r"단축코드\s*:\s*"
+    isin, code = one(
+        rf"④\s*종목코드\s*:\s*{standard}([A-Z0-9]{{12}})\s*\({short}(A[0-9A-Z]{{6}})\)(?=\s+⑤)",
+        text, "KIND numbered listing identifiers are missing",
+    )
+    registered = r"기명식\s*" if relisting else r"(?:기명식\s*)?"
+    label, shares = one(
+        rf"⑤\s*주식의\s*종류와\s*수\s*:\s*{registered}({CLASS})\s*({NUMBER})주(?=\s+⑥)",
+        text, "KIND numbered listing share quantity is missing",
+    )
+    require(valid_isin(isin) and named_class.removesuffix("식") == label.removesuffix("식"),
+            "KIND numbered listing security identity differs")
+    return [NoticeSection(1, "new_listing", company, label, official_date(effective), filing.title,
+                          code=_short(code), isin=isin, shares_after=_integer(shares))]
 
 
 def _relisting_text(filing, html):
@@ -353,17 +406,23 @@ def _terms(filing, form, rows):
 
 def parse_notice(filing, form, body):
     text = body.text()
+    if form in {"68152", "68156"}:
+        flattened = _document_text(text)
+        circled = (r"①\s*상장종목명" if form == "68156"
+                   else r"④\s*종목코드\s*:\s*표준코드\s+(?=[A-Z]{2})")
+        if re.search(circled, flattened):
+            return _circled_listing_text(filing, flattened, form)
     if form in TEXT_LISTINGS:
         return _listed_text(text)
     if form == "68156":
         return _relisting_text(filing, text)
     rows = deal_table(text)
-    if form in {"70766", "70767"}:
+    if form in {"70766", "70767", "32101"}:
         return _flat_rights(rows)
     if form in PRICE_FORMS:
         return _price_table(form, rows)
     if form in TABLE_LISTINGS:
-        return _listed_table(filing, rows)
+        return _listed_table(filing, form, rows)
     if form in {"71474", "11307"}:
         return _terms(filing, form, [row for row in rows if any(row)])
     raise DisclosureError(f"Unsupported KIND market-action form {form}")

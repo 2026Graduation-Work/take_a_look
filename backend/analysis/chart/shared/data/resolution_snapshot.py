@@ -518,4 +518,3 @@ def pin_resolution_snapshot(snapshot, root):
         put_immutable(target.with_suffix("") / name, (snapshot.path.with_suffix("") / name).read_bytes())
     put_immutable(target, snapshot.path.read_bytes())
     return read_resolution_snapshot(target, verify_archive=True)
-

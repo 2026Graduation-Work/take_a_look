@@ -268,5 +268,83 @@
       "20151020000897"
     ],
     "final": true
+  },
+  "20160706000436": {
+    "form": "68152",
+    "title": "신규상장((주)한국토지신탁, 상장일 2016.07.11)",
+    "company": "한국토지신탁",
+    "body_url": "https://kind.krx.co.kr/external/2016/07/06/000436/20160706001032/68152.htm",
+    "charset": "utf-8",
+    "sha256": "f8cf4a1258dce321fa06bae880d33fffc4e706ab6109cfd447620d5e3c7437fe",
+    "document_no": "20160706001032",
+    "family": [
+      "20160706001032"
+    ],
+    "final": true
+  },
+  "20160804000125": {
+    "form": "68156",
+    "title": "재상장(샘표식품(주), 상장일 2016.08.09)",
+    "company": "샘표식품",
+    "body_url": "https://kind.krx.co.kr/external/2016/08/04/000125/20160804000283/68156.htm",
+    "charset": "utf-8",
+    "sha256": "c11ab9b6b180a521ac80b298fc88e1692ea28a0461f0acc54eb270d547580abe",
+    "document_no": "20160804000283",
+    "family": [
+      "20160804000283"
+    ],
+    "final": true
+  },
+  "20160826000199": {
+    "form": "68156",
+    "title": "재상장(일동제약(주), 상장일 2016.08.31)",
+    "company": "일동제약",
+    "body_url": "https://kind.krx.co.kr/external/2016/08/26/000199/20160826000560/68156.htm",
+    "charset": "utf-8",
+    "sha256": "80a2faa2d70e2cad90c65181902b2e636fc712d1ee239877da82b5d94e867e4d",
+    "document_no": "20160826000560",
+    "family": [
+      "20160826000560"
+    ],
+    "final": true
+  },
+  "20160829000348": {
+    "form": "99336",
+    "title": "권리락 및 액면병합 기준가격 안내",
+    "company": "웅진에너지",
+    "body_url": "https://kind.krx.co.kr/external/2016/08/29/000348/20160829000924/99336.htm",
+    "charset": "utf-8",
+    "sha256": "d61e52cb2e161b3dd9b089534df4171de034d3385d142c89da88456352ac23f9",
+    "document_no": "20160829000924",
+    "family": [
+      "20160829000924"
+    ],
+    "final": true
+  },
+  "20160829000468": {
+    "form": "70791",
+    "title": "추가상장(제3자배정 유상증자)",
+    "company": "에스아이티글로벌",
+    "body_url": "https://kind.krx.co.kr/external/2016/08/29/000468/20160829001287/70791.htm",
+    "charset": "utf-8",
+    "sha256": "44e818dc1b00abe01c6127c4a79d539f45f2066909e08c571e9565fda1cafb7c",
+    "document_no": "20160829001287",
+    "family": [
+      "20160829001287"
+    ],
+    "final": true
+  },
+  "20161026000294": {
+    "form": "32101",
+    "title": "권리락(유상증자)",
+    "company": "줌인터넷",
+    "body_url": "https://kind.krx.co.kr/external/2016/10/26/000294/20161026000861/32101.htm",
+    "charset": "utf-8",
+    "sha256": "58649aceb5db04c06f851cdb69125a234fb63b18e17393515b5ca8711ffbd920",
+    "document_no": "20161026000861",
+    "family": [
+      "20161026000861"
+    ],
+    "final": true
   }
 }
