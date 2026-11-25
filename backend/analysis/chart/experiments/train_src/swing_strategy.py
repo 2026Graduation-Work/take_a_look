@@ -22,12 +22,6 @@ class SwingStrategy:
         market = price_df.copy()
         market["Date"] = pd.to_datetime(market["Date"]).dt.tz_localize(None)
         score = self.strat_cfg.get("score_column", "Prob")
-        if (
-            score == "prob_up"
-            and score not in predictions
-            and self.config.get("contract_version") != 3
-        ):
-            score = "Prob"
         prediction_frame = (
             predictions[["Date", "Code", score]].rename(columns={score: "Prob"}).copy()
         )
@@ -82,7 +76,6 @@ class SwingStrategy:
         for offset in range(1, lag + 1):
             entries &= prediction_dates.shift(offset).fillna(False)
 
-        # VectorBT는 빈칸이 아니면 매일 비중을 조절하려 하므로, 매수 진입일 외에는 NaN으로 둠
         weights = weights.where(entries, np.nan)
 
         signal_sigma = (
