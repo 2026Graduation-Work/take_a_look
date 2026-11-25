@@ -1,5 +1,5 @@
 """Daily long-only executor. Rules live in backtest/EXECUTION_SPEC.md."""
-from math import floor
+from math import floor, fsum
 from pathlib import Path
 
 import numpy as np
@@ -59,7 +59,7 @@ def simulate(config, entries, price_df):
     slippage = bt["slippage_bps"] / 10_000
     participation = bt["max_participation"]
     top_n = config["strategy"]["top_n"]
-    codes = list(entries.columns)
+    codes = sorted(entries.columns)
     days = pd.DatetimeIndex(entries.index)
     if days.min() < PRICE_LIMIT_START:
         raise ValueError("Price-limit rules assume the ±30% regime from 2015-06-15")
@@ -194,8 +194,12 @@ def simulate(config, entries, price_df):
             elif reached_up(open_price, profit):
                 sell(code, rows[0], open_price, "profit_gap")
 
-        # 10:00 opening entries. Budget is snapshotted so ticker order cannot change sizes.
-        budget = cash / top_n
+        # 10:00 opening entries. Each signal gets one of top_n × horizon equal slots of equity,
+        # so every day's picks are held side by side; cash / top_n keeps the day within cash.
+        # Both are snapshotted so ticker order cannot change sizes.
+        equity_at_open = cash + fsum(
+            pos["quantity"] * fields["Open"].loc[day, code] for code, pos in positions.items())
+        budget = min(equity_at_open / (top_n * horizon), cash / top_n)
         selected = [code for code in codes if entries.loc[day, code] and code not in positions]
         if len(selected) > top_n:
             raise ValueError("Entry count exceeds top_n")
