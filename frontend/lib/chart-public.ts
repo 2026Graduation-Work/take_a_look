@@ -1,4 +1,5 @@
 import { featureLabel } from "./featureLabels.ts";
+import { isCalendarDate, PRICE_EVENT_HISTORY_SIZE, PRICE_EVENT_METHOD, type DatedClose, type PriceEventBasis } from "./price-events.ts";
 import { getSupabaseClient } from "./supabase.ts";
 
 export type ChartProfile = "stable" | "aggressive";
@@ -41,7 +42,8 @@ export interface ChartSnapshot {
   prices: {
     basis: "adjusted_close";
     source: string;
-    history: { date: string; close: number; volume: number }[];
+    history: DatedClose[];
+    eventBasis?: PriceEventBasis;
   };
 }
 
@@ -57,6 +59,34 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const number = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 const date = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+function parseEventBasis(value: unknown, first: DatedClose | undefined, asOf: string, sourceHash: unknown): PriceEventBasis | undefined {
+  if (!record(value) || value.method !== PRICE_EVENT_METHOD ||
+      !number(value.daily_sigma) || value.daily_sigma <= 0 ||
+      !number(value.return_count) || !Number.isInteger(value.return_count) ||
+      value.return_count < 60 || value.return_count > 250 ||
+      !isCalendarDate(value.period_start) || !isCalendarDate(value.period_end) ||
+      value.period_start >= value.period_end || value.period_end !== asOf || !first ||
+      value.period_start > first.date ||
+      typeof value.input_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(value.input_sha256) ||
+      value.input_sha256 !== sourceHash) return undefined;
+  const previous = value.previous_bar;
+  let previousBar: DatedClose | null = null;
+  if (previous !== null) {
+    if (!record(previous) || !isCalendarDate(previous.date) || previous.date >= first.date ||
+        !number(previous.close) || previous.close <= 0 || !number(previous.volume) || previous.volume < 0) return undefined;
+    previousBar = { date: previous.date, close: previous.close, volume: previous.volume };
+  }
+  return {
+    method: value.method,
+    dailySigma: value.daily_sigma,
+    returnCount: value.return_count,
+    periodStart: value.period_start,
+    periodEnd: value.period_end,
+    inputSha256: value.input_sha256,
+    previousBar,
+  };
+}
 
 export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
   const p = row.payload;
@@ -117,8 +147,15 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
       > inference.contribution_abs_sum + 1e-8
   )) throw new Error("전체 피처 기여도 기준값이 올바르지 않아요.");
   const snapshot = p as unknown as ChartSnapshot;
-  return { ...snapshot, inference: { ...snapshot.inference, features: snapshot.inference.features.map((feature) =>
-    ({ ...feature, label_ko: featureLabel(feature.name, feature.label_ko) })) } };
+  const eventBasis = history.length === PRICE_EVENT_HISTORY_SIZE && history.at(-1)?.date === p.data_asof
+    ? parseEventBasis(prices.event_basis, history[0], p.data_asof, record(p.sources) ? p.sources.prices_sha256 : undefined)
+    : undefined;
+  return {
+    ...snapshot,
+    prices: { basis: "adjusted_close", source: snapshot.prices.source, history, eventBasis },
+    inference: { ...snapshot.inference, features: snapshot.inference.features.map((feature) =>
+      ({ ...feature, label_ko: featureLabel(feature.name, feature.label_ko) })) },
+  };
 }
 
 export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map<ChartHorizon, ChartSnapshot>>> {
@@ -152,6 +189,18 @@ export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map
   if (asOfDates.size > 1) throw new Error("서로 다른 차트 기준일이 섞였어요.");
   for (const horizons of result.values()) {
     if (horizons.size !== 2) throw new Error("두 기간의 차트가 모두 준비되지 않았어요.");
+    const short = horizons.get(5)!.prices;
+    const long = horizons.get(20)!.prices;
+    if (short.eventBasis || long.eventBasis) {
+      const sameHistory = short.history.length === long.history.length && short.history.every((point, index) => {
+        const other = long.history[index];
+        return point.date === other.date && point.close === other.close && point.volume === other.volume;
+      });
+      if (!sameHistory || JSON.stringify(short.eventBasis) !== JSON.stringify(long.eventBasis)) {
+        delete short.eventBasis;
+        delete long.eventBasis;
+      }
+    }
   }
   return result;
 }

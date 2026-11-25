@@ -219,6 +219,25 @@
         "source": {
           "type": "string"
         },
+        "event_basis": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "daily_sigma", "return_count", "period_start", "period_end", "input_sha256", "previous_bar"],
+          "properties": {
+            "method": {"const": "daily-log-std-250-v1"},
+            "daily_sigma": {"type": "number", "exclusiveMinimum": 0},
+            "return_count": {"type": "integer", "minimum": 60, "maximum": 250},
+            "period_start": {"type": "string", "format": "date"},
+            "period_end": {"type": "string", "format": "date"},
+            "input_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "previous_bar": {
+              "anyOf": [
+                {"type": "null"},
+                {"$ref": "#/properties/prices/properties/history/items"}
+              ]
+            }
+          }
+        },
         "history": {
           "type": "array",
           "maxItems": 60,
