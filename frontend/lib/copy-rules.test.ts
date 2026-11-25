@@ -38,8 +38,8 @@ test("사용자 노출 문구에 금지 표현이 없다", () => {
     const raw = readFileSync(path.join(ROOT, file), "utf8");
     const lines = stripComments(raw).split("\n");
     lines.forEach((line, index) => {
-      for (const { pattern, reason, allowIn } of FORBIDDEN_COPY) {
-        if (allowIn?.includes(file)) continue;
+      for (const { pattern, reason, allowIn, onlyIn } of FORBIDDEN_COPY) {
+        if (allowIn?.includes(file) || (onlyIn && !onlyIn.includes(file))) continue;
         if (pattern.test(line)) hits.push(`${file}:${index + 1} ${reason} — ${line.trim()}`);
       }
     });
@@ -84,6 +84,7 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   ]) {
     assert.ok(caught(text), text);
   }
+  assert.ok(caught("공시 때문에 올랐어요."));
   assert.ok(!caught("과거 유사 신호 중 상승 비율 61%"));
   assert.ok(!caught("하락 점수를 높였어요. 영향 비중 12.0%"));
   assert.ok(!caught("getSupabaseClient()"));

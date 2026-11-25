@@ -1,6 +1,7 @@
 // 서버 렌더링이 부르는 REST 조회에 빈 결과를 바로 돌려준다(연결 실패 재시도로 느려지지 않게).
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
+import { priceEventsFixture } from "./price-events-fixture.mjs";
 import { sentimentHistoryFixture } from "./sentiment-history-fixture.mjs";
 
 const snapshots = JSON.parse(readFileSync("../backend/analysis/chart/serving/previews/2026-09-21/snapshots.json", "utf8"));
@@ -44,6 +45,7 @@ createServer((request, response) => {
   const chart = request.url?.startsWith("/rest/v1/latest_chart_signal_snapshots?");
   const url = new URL(request.url || "/", "http://localhost");
   const sentiment = sentimentHistoryFixture(url);
+  const priceEvents = process.env.PRICE_EVENTS_FIXTURE === "1" ? priceEventsFixture(url) : null;
   const basisFixture = url.searchParams.get("stock_code") === `eq.${BASIS_CODE}` || url.searchParams.get("code") === `eq.${BASIS_CODE}`;
   const signalCode = chart && [BASIS_CODE, NO_BASIS_CODE].find(code => url.searchParams.get("stock_code") === `in.(${code})`);
   const basisSignals = signalCode
@@ -71,5 +73,5 @@ createServer((request, response) => {
     scores: { down: 0.1, neutral: 0.2, up: 0.7 }, why: null });
   const codes = url.pathname === "/rest/v1/stocks" && url.searchParams.get("code")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
   const master = codes && codes.map(code => ({ code, market: "KOSPI", risk_grade: 3, risk_flags: [], ...STOCKS[code] }));
-  response.end(rest && request.method === "GET" ? JSON.stringify(basisChart ?? basisSignals ?? basisSupply ?? basisMaster ?? catalog ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
-}).listen(54321, "127.0.0.1");
+  response.end(rest && request.method === "GET" ? JSON.stringify(priceEvents ?? basisChart ?? basisSignals ?? basisSupply ?? basisMaster ?? catalog ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
+}).listen(Number(process.env.SUPABASE_STUB_PORT ?? "54321"), "127.0.0.1");

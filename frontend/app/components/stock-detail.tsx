@@ -21,6 +21,8 @@ import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
+import PriceEventPanel from "./price-event-panel";
+import { usePriceEvents } from "@/lib/use-price-events";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
 import {
@@ -77,6 +79,7 @@ interface StockDetailViewProps {
   dataError?: string;
   onRetry?: () => void;
   chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
+  chartRevision?: number;
 }
 
 export default function StockDetailView({
@@ -91,6 +94,7 @@ export default function StockDetailView({
   dataError = "",
   onRetry,
   chartSnapshots,
+  chartRevision = 0,
   signalHorizon = 20,
   onHorizonChange,
 }: StockDetailViewProps) {
@@ -120,6 +124,7 @@ export default function StockDetailView({
 
   const preview = chartSnapshots !== undefined;
   const chart = chartSnapshots?.get(signalHorizon);
+  const events = usePriceEvents(chartSnapshots?.get(20), chartRevision);
   const direction = chartDirection(chart);
   const signal = preview
     ? { ...SIGNAL_META[direction === "up" ? "positive" : direction === "down" ? "negative" : "neutral"],
@@ -255,6 +260,7 @@ export default function StockDetailView({
               asOfLabel={formatDate(detail.asOf).slice(5)}
               horizonLabel={HORIZON_LABEL[horizon]}
               avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
+              priceEvents={{ dates: detail.priceDates ?? [], moves: events.moves, selectedDate: events.move?.date, select: events.select }}
             />
           ) : (
             <p className="m-0 text-xs text-muted">
@@ -264,6 +270,7 @@ export default function StockDetailView({
           <p className="m-0 max-w-2xl text-2xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>{preview && detail.asOf && staleLabel(detail.asOf) && `${formatDate(detail.asOf)} 기준. `}{similar
             ? similarCasesLine(similar.period_start!, similar.period_end!, similar.sample_count, similar.stock_count)
             : `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}{hasBand && hasCurrentPrice && " 원은 오늘 종가 기준이에요."}</p>
+          {chart && <PriceEventPanel events={events} />}
         </section>
 
         <Checkpoints demo={demo} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
