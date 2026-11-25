@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from backtest_harness import bars, signals
 from experiments.backtest.local_execution import simulate
 from experiments.config import CHART_ROOT, atomic_json, atomic_parquet, load_experiment_config
 from experiments.dataset.pipeline import preprocess_dataset, sha256, validate_flow, validate_prices
@@ -337,19 +338,25 @@ def test_flow_ab_matching_preserves_price_paths(local_dataset):
     assert set(FLOW_FEATURES).issubset(treatment["feature_columns"])
 
 
-@pytest.mark.parametrize("with_flow", [False, True])
-def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
+@pytest.mark.parametrize("horizon,with_flow", [(5, False), (5, True), (20, False)])
+def test_cli_train_ml_and_backtest_share_predictions(local_dataset, horizon, with_flow):
     import os
     import subprocess
 
     from experiments.experiment_utils import (
         generate_predictions_hash,
+        load_predictions,
         predictions_cache_path,
         resolve_splits,
         result_dir,
     )
+    from experiments.run_backtest import run_local_backtest
 
     raw, settings, dataset_path, config_path = local_dataset
+    cfg = yaml.safe_load(config_path.read_text())
+    if horizon == 20:
+        h20 = yaml.safe_load((CHART_ROOT / "experiments/configs/local_h20.yaml").read_text())
+        cfg.update(labels=h20["labels"], backtest=h20["backtest"])
     if with_flow:
         raw.loc[300, "Individual_BuyAmount"] = np.nan
         root = Path(settings["root"])
@@ -359,9 +366,8 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
         manifest["raw_files"][path.name] = sha256(path)
         atomic_json(root / "dataset_manifest.json", manifest)
         preprocess_dataset(dataset_path)
-        cfg = yaml.safe_load(config_path.read_text())
         cfg["features"]["groups"] = ["base", "flow"]
-        config_path.write_text(yaml.safe_dump(cfg))
+    config_path.write_text(yaml.safe_dump(cfg))
     config = load_experiment_config(config_path)
     prepare_local_panel(config)
     environment = {**os.environ, "KRX_ID": "", "KRX_PW": ""}
@@ -387,8 +393,16 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
     predictions = pd.read_parquet(path)
     assert {"prob_up", "prob_down", "prob_neutral", "fold_id"} <= set(predictions)
     assert np.allclose(predictions[["prob_down", "prob_neutral", "prob_up"]].sum(axis=1), 1)
-    manifest = json.loads(Path(path + ".manifest.json").read_text())
+    manifest_path = Path(path + ".manifest.json")
+    manifest = json.loads(manifest_path.read_text())
     assert manifest["predictions_hash"] == generate_predictions_hash(config, splits)
+    assert manifest["config"]["labels"] == config["labels"]
+    recorded_labels = {**config["labels"], "down_class": 0.0, "neutral_class": 1.0, "up_class": 2.0}
+    atomic_json(
+        manifest_path, {**manifest, "config": {**manifest["config"], "labels": recorded_labels}}
+    )
+    pd.testing.assert_frame_equal(load_predictions(config, splits, __file__, path), predictions)
+    atomic_json(manifest_path, manifest)
     output = Path(result_dir(config, str(CHART_ROOT / "experiments/train.py")))
     assert (output / "backtest_metrics.json").exists()
     assert (output / "execution_report.json").exists()
@@ -399,7 +413,41 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, with_flow):
     assert len(history) == len(predictions)
     assert "label_observed" in history
 
+    cfg["labels"].update(up_mult=1.5, down_mult=1.2)
+    cfg["backtest"].update(up_mult=1.5, down_mult=1.2)
+    config_path.write_text(yaml.safe_dump(cfg))
+    changed = load_experiment_config(config_path)
+    with pytest.raises(ValueError, match="Trained prediction labels.*requested") as exc:
+        run_local_backtest(changed, path)
+    assert str(config["labels"]) in str(exc.value)
+    assert str(changed["labels"]) in str(exc.value)
 
+    atomic_json(
+        manifest_path, {**manifest, "config": {**manifest["config"], "labels": changed["labels"]}}
+    )
+    with pytest.raises(ValueError, match="Trained prediction labels.*requested"):
+        load_predictions(config, splits, __file__, path)
+
+    for mismatched_labels in (
+        {**config["labels"], "horizon": True},
+        {**config["labels"], "up_mult": float("inf")},
+        {**config["labels"], "down_class": 2},
+    ):
+        atomic_json(manifest_path, {**manifest, "config": {"labels": mismatched_labels}})
+        with pytest.raises(ValueError, match="Trained prediction labels.*requested"):
+            load_predictions(config, splits, __file__, path)
+
+    for invalid_labels in (
+        None,
+        {"type": "dynamic_sigma", "horizon": horizon},
+    ):
+        atomic_json(manifest_path, {**manifest, "config": {"labels": invalid_labels}})
+        with pytest.raises(ValueError, match=r"Invalid prediction manifest config\.labels"):
+            load_predictions(config, splits, __file__, path)
+    manifest_path.write_text('{"config":')
+    with pytest.raises(ValueError, match="Invalid prediction manifest JSON"):
+        load_predictions(config, splits, __file__, path)
+    atomic_json(manifest_path, manifest)
 
 def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
@@ -1007,8 +1055,34 @@ def test_random_baseline_runs_must_be_set_explicitly(local_dataset, value):
 @pytest.mark.parametrize("key,value", [("up_mult", 9.9), ("down_mult", 9.9), ("max_holding_days", 1)])
 def test_backtest_barriers_must_match_the_label(local_dataset, key, value):
     config_path = local_dataset[3]
+    config = load_experiment_config(config_path)
     invalid = yaml.safe_load(config_path.read_text())
     invalid["backtest"][key] = value
     config_path.write_text(yaml.safe_dump(invalid))
     with pytest.raises(ValueError, match="must equal labels"):
         load_experiment_config(config_path)
+    prices = bars([(100, 100, 100, 100)] * 6, code="005930")
+    entries = signals(prices, [(1, "005930")])
+    config["backtest"][key] = value
+    with pytest.raises(ValueError, match="must equal labels"):
+        simulate(config, entries, prices)
+
+
+def test_fixed_labels_are_supported_for_training_but_rejected_by_execution(local_dataset):
+    _, _, _, config_path = local_dataset
+    settings = yaml.safe_load(config_path.read_text())
+    settings["labels"] = {"type": "fixed", "horizon": 3, "tp": 5.0, "sl": 5.0}
+    settings["backtest"]["max_holding_days"] = 3
+    config_path.write_text(yaml.safe_dump(settings))
+    config = load_experiment_config(config_path)
+
+    prices = bars([(100, 100, 100, 100), (100, 106, 100, 100)] + [(100, 100, 100, 100)] * 2,
+                  code="005930")
+    price_dir = config_path.parent / "fixed-prices"
+    atomic_parquet(price_dir / "005930.parquet", prices)
+    training = load_parquet_data(price_dir, label_params=config["labels"], training=True)
+    assert training.Y_Label.tolist() == [2]
+
+    entries = signals(prices, [(1, "005930")])
+    with pytest.raises(ValueError, match="dynamic_sigma"):
+        simulate(config, entries, prices)

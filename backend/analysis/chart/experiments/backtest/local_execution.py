@@ -1,16 +1,17 @@
 """Daily long-only executor. Rules live in backtest/EXECUTION_SPEC.md."""
-from math import floor
+from math import floor, fsum
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import vectorbt as vbt
+from experiments.config import validate_backtest_label_alignment
 from experiments.train_src.labels import reached_down, reached_up
 from shared.io import atomic_json
 
 TRADING_DAYS_PER_YEAR = 252
-# KRX daily price limit is ±30% of the base price since 2015-06-15. Rounding the limit to a
-# tick moves it by at most ~0.5%, so these ratios to the previous adjusted close detect it.
+# Ratios to the previous adjusted close approximate prices near the KRX limits.
+# Exact limits require the exchange's base price.
 PRICE_LIMIT_START = pd.Timestamp("2015-06-15")
 LIMIT_UP_RATIO = 1.29
 LIMIT_DOWN_RATIO = 0.71
@@ -56,14 +57,18 @@ class ExecutionResult:
 def simulate(config, entries, price_df, priority=None, daily_buys=None):
     """entries: candidate stocks per day. With priority and daily_buys, candidates are tried in
     priority order until that day's buy count is reached (the random baseline uses this)."""
+    labels = config.get("labels", {})
+    if labels.get("type") == "fixed":
+        raise ValueError("Backtest requires labels.type=dynamic_sigma. Fixed labels are supported for training.")
     bt = config["backtest"]
+    validate_backtest_label_alignment(bt, labels)
     lag = bt.get("signal_lag_days", 1)
     horizon = bt["max_holding_days"]
     fee = bt["fee"]
     slippage = bt["slippage_bps"] / 10_000
     participation = bt["max_participation"]
     top_n = config["strategy"]["top_n"]
-    codes = list(entries.columns)
+    codes = sorted(entries.columns)
     days = pd.DatetimeIndex(entries.index)
     if days.min() < PRICE_LIMIT_START:
         raise ValueError("Price-limit rules assume the ±30% regime from 2015-06-15")
@@ -202,7 +207,7 @@ def simulate(config, entries, price_df, priority=None, daily_buys=None):
         # 10:00 opening entries. Each signal gets one of top_n × horizon equal slots of equity,
         # so every day's picks are held side by side; cash / top_n keeps the day within cash.
         # Both are snapshotted so ticker order cannot change sizes.
-        equity_at_open = cash + sum(
+        equity_at_open = cash + fsum(
             pos["quantity"] * fields["Open"].loc[day, code] for code, pos in positions.items())
         budget = min(equity_at_open / (top_n * horizon), cash / top_n)
         selected = [code for code in codes if entries.loc[day, code] and code not in positions]

@@ -40,6 +40,20 @@ def positive_int(value, name):
         raise ValueError(f"{name} must be a positive integer")
 
 
+def validate_backtest_label_alignment(backtest: dict, labels: dict) -> None:
+    if labels.get("type") == "dynamic_sigma":
+        for label_key, backtest_key in (
+            ("horizon", "max_holding_days"),
+            ("up_mult", "up_mult"),
+            ("down_mult", "down_mult"),
+        ):
+            actual, expected = backtest.get(backtest_key), labels[label_key]
+            if actual != expected:
+                raise ValueError(
+                    f"backtest.{backtest_key} ({actual}) must equal labels.{label_key} ({expected})"
+                )
+
+
 def load_dataset_config(path):
     config = read_yaml(path)
     keys(config, "contract_version dataset_id root collection preprocessing", "dataset")
@@ -266,12 +280,7 @@ def load_experiment_config(path):
     if bt["signal_lag_days"] != 1:
         # Labels observe T+1..T+H; any other lag would trade a window the label never saw.
         raise ValueError("backtest.signal_lag_days must be 1 to match the label window")
-    if labels["type"] == "dynamic_sigma":
-        # Execution resolves the same barriers the model was trained on (hard stop is extra).
-        for label_key, backtest_key in (("horizon", "max_holding_days"), ("up_mult", "up_mult"),
-                                        ("down_mult", "down_mult")):
-            if bt.get(backtest_key) != labels[label_key]:
-                raise ValueError(f"backtest.{backtest_key} must equal labels.{label_key}")
+    validate_backtest_label_alignment(bt, labels)
     if (
         not math.isfinite(bt["initial_cash"])
         or not math.isfinite(bt["fee"])
