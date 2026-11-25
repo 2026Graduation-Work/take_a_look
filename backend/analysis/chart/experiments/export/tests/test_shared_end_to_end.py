@@ -70,7 +70,8 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch, with_flow
                   "training_period": {"start": str(frame.Date.iloc[60].date()), "end": str(frame.Date.iloc[160].date())},
                   "data_period": {"start": str(days[0].date()), "end": str(days[-1].date()), "partial_years": []}}
     root, archive, report = build_pack(pack_id="mock_e2e", output=tmp_path / "packs", models=models,
-        predictions=predictions, processed_dir=processed, calendar_file=calendar_path, research_manifest=provenance)
+        predictions=predictions, processed_dir=processed, calendar_file=calendar_path, research_manifest=provenance,
+        allow_legacy_artifacts=True)
     pack, paths = load_pack(root)
     assert archive.is_file() and all(report[f"h{h}"]["sample_rows"] > 0 for h in (5, 20))
     for horizon in (5, 20):

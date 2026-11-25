@@ -27,9 +27,9 @@ from shared.data.validation import (  # noqa: F401
     validate_index,
     validate_prices,
 )
-from shared.features.builder import build_feature_frame
 from shared.io import sha256
-from shared.settings import PRICE_BASIS, VALIDATION_VERSION, processing_contract
+from shared.processing import build_feature_frame, processing_contract
+from shared.settings import PRICE_BASIS, VALIDATION_VERSION
 
 
 def reject_price_revision(root, code, previous, current):
@@ -147,6 +147,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
     from shared.data import providers as source
 
     config = load_dataset_config(config_path)
+    contract = processing_contract(config["preprocessing"])
     root = Path(config["root"])
     if rebuild and mode != "full":
         raise ValueError("--rebuild requires full")
@@ -330,7 +331,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "flows_complete": False,
         "flow_queries_complete": False,
         "price_basis": PRICE_BASIS,
-        "processing_contract": processing_contract(config["preprocessing"]),
+        "processing_contract": contract,
     }
     atomic_json(manifest_path, checkpoint)
     atomic_json(
@@ -453,7 +454,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "raw_files": files,
         "prices_complete": not failed,
         "price_basis": PRICE_BASIS,
-        "processing_contract": processing_contract(config["preprocessing"]),
+        "processing_contract": contract,
         "flow_queries_complete": bool(config["collection"]["investor_flows"])
         and not report["flow_failures"]
         and report.get("flow_progress", {}).get("completed_days") == len(calendar["trading_days"]),
@@ -492,10 +493,11 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         dtype={"Code": str},
         parse_dates=["ListingDate", "DelistingDate"],
     )
+    contract = processing_contract(config["preprocessing"])
     previous_processed = root / "processed_manifest.json"
     if previous_processed.exists():
         previous = json.loads(previous_processed.read_text())
-        if previous.get("processing_contract") != processing_contract(config["preprocessing"]):
+        if previous.get("processing_contract") != contract:
             raise ValueError("Preserve the previous processed data; use a new dataset root for this builder")
     reports = []
     outputs = {}
@@ -550,14 +552,14 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         {
             "contract_version": VALIDATION_VERSION,
             "settings": config["preprocessing"],
-            "processing_contract": processing_contract(config["preprocessing"]),
+            "processing_contract": contract,
             "raw_files": (
                 {name: manifest["raw_files"][name] for name in outputs}
                 if allow_partial else manifest["raw_files"]
             ),
             "allow_partial": allow_partial,
             "files": outputs,
-            "implementation_sha256": sha256(Path(__file__).parents[2] / "shared/features/builder.py"),
+            "implementation_sha256": contract["implementation_sha256"]["features/builder.py"],
         },
     )
     print(f"Processed {len(outputs)} files; retained warmup and full price paths")
@@ -580,11 +582,12 @@ def validate_processed_inputs(config):
     expected_raw = dataset["raw_files"]
     if processed.get("allow_partial"):
         expected_raw = {name: expected_raw.get(name) for name in processed["raw_files"]}
-    if processed.get("processing_contract") != processing_contract(config["preprocessing"]):
+    contract = processing_contract(config["preprocessing"])
+    if processed.get("processing_contract") != contract:
         raise ValueError("Shared processing changed; rerun preprocessing in a new dataset root")
     if processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw:
         raise ValueError("Dataset changed; rerun preprocessing before preparing features")
-    if processed["implementation_sha256"] != sha256(Path(__file__).parents[2] / "shared/features/builder.py"):
+    if processed["implementation_sha256"] != contract["implementation_sha256"]["features/builder.py"]:
         raise ValueError("Feature implementation changed; rerun preprocessing")
     for directory, fingerprints in (
         ("raw", processed["raw_files"]),

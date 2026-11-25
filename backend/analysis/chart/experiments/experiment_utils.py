@@ -372,6 +372,8 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
                 "Run python -m experiments.features.build_feature_panel --config first"
             )
         manifest = json.loads(manifest_path.read_text())
+        if manifest.get("config", {}).get("processing_contract") != config["processing_contract"]:
+            raise ValueError("Shared processing changed; prepare features again")
         if manifest["feature_columns"] != config["feature_columns"]:
             raise ValueError("Feature list changed; prepare features again")
         for name, digest in manifest["file_hashes"].items():
