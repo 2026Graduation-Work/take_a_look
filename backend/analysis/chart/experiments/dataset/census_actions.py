@@ -499,7 +499,6 @@ def build_census(args, client):
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []
     for key, bars in securities.items():
-        targets = {c.date for c in candidates[key]}
         covered = {candidate.date for candidate in candidates[key] if _covered(candidate, daily, company[key.code])}
         ledger = None
         try:
@@ -516,9 +515,8 @@ def build_census(args, client):
             unattributed_structure=bool(unattributed_structure)))
         if ledger is None:
             continue
-        if key in anchors:
-            candidates[key] = tuple(c for c in ledger.candidates if not sample or (key.code, c.date) in sample)
-            targets = {c.date for c in candidates[key]}
+        candidates[key] = tuple(c for c in ledger.candidates if not sample or (key.code, c.date) in sample)
+        targets = {c.date for c in candidates[key]}
         resolved.extend(row for row in ledger.resolutions if not sample or row.date in targets or
                         row.kind in {Resolution.SEGMENT_BREAK, Resolution.SPAC_PREMERGER} and not row.review)
         unresolved.extend({**_security_columns(key), "Date": day, "Reason": "Official search or document incomplete"}
@@ -532,6 +530,9 @@ def build_census(args, client):
     observations = {(c.security, c.date): c for c in all_candidates}
     resolution_count = sum((c.security, c.date) in resolutions_by_key for c in all_candidates)
     identity_bound = {(c.security.code, c.date) for c in all_candidates}
+    market_candidates_observed = sum((c.security.code, c.date) in market_observed for c in all_candidates)
+    review_candidates_unobserved = sum(row.review and (row.security, row.date) in observations
+                                       and (row.security.code, row.date) not in market_observed for row in resolved)
     unassigned, market_exclusions = [], []
     for code, day in sorted(market_observed.keys() - identity_bound):
         prior = market_observed[code, day]
@@ -579,6 +580,8 @@ def build_census(args, client):
         "market_observations_before_identity": len(market_observed), "unassigned_market_observations": len(unassigned),
         "market_observations_outside_ledger_scope": len(market_exclusions),
         "market_candidates": len(all_candidates), "training_candidates": sum(c.security in training for c in all_candidates),
+        "market_candidates_with_market_observation": market_candidates_observed,
+        "review_candidates_without_market_observation": review_candidates_unobserved,
         "candidates_with_resolution": resolution_count, "incomplete_candidates": len(unresolved),
         "resolutions_without_price_observation": len(resolutions_by_key - observations.keys()),
         "unmatched_sample_keys": sorted(sample - {(r.security.code, r.date) for r in all_candidates}),

@@ -4,12 +4,6 @@ from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
-from experiments.dataset.census_actions import (
-    _candidate_columns,
-    _resolution_columns,
-    _security_columns,
-    _write_csv,
-)
 from shared.data.actions import Action, FieldEvidence, valid_isin
 from shared.data.disclosures import Evidence
 from shared.data.market_notices import SecurityKey
@@ -47,6 +41,13 @@ def fake_isin(code):
 
 
 def fixture_snapshot(root, codes, dates, actions=(), *, raw=None, keys=None, events=(), spac_codes=()):
+    from experiments.dataset.census_actions import (
+        _candidate_columns,
+        _resolution_columns,
+        _security_columns,
+        _write_csv,
+    )
+
     root = Path(root)
     start, end = dates[0].date(), dates[-1].date()
     left, right = start - timedelta(days=7), end + timedelta(days=3)

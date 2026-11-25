@@ -19,7 +19,7 @@ IDENTITY = (
     r"\s*\(\s*단축코드\s*:\s*A(?P<code>[0-9A-Z]{6})\s*\)"
 )
 FIXED_REFERENCE_FORMS = frozenset({"70795", "32103"})
-PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70793", "72100", "99301", "99302", "99321", "99322", "99326", "99328",
+PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70793", "72100", "99301", "99302", "99311", "99321", "99322", "99326", "99328",
                                          "99331", "99332", "99334", "99336", "99343", "99409", "32108"}
 TABLE_LISTINGS = frozenset({"32002", "32003", "32004", "32005", "32006", "70760", "70763", "70764", "70765", "70779", "70791"})
 TEXT_LISTINGS = frozenset({"68151", "68152", "68154", "68155"})
@@ -201,7 +201,7 @@ def _price_table(form, rows):
             if form in FIXED_REFERENCE_FORMS:
                 base = fields.get("기준가(원)")
             require(base is not None, "KIND fixed reference price missing")
-            kind = "ex_price" if form in {"99301", "99302"} else "listing_price"
+            kind = "ex_price" if form in {"99301", "99302", "99311"} else "listing_price"
             sections.append(NoticeSection(index, kind, company, values[0], day, reason,
                                           base=_integer(base), previous_market=previous_market,
                                           previous_close=previous_close, **identity))
@@ -288,13 +288,13 @@ def _circled_listing_text(filing, text, form):
     named_class = one(rf"①\s*상장종목명\s*-\s*한글종목명\s*:\s*\S+?({CLASS})(?=\s|\()",
                       text, "KIND numbered listing share class is missing")
     effective = one(rf"②\s*상장일\s*:\s*({DAY})(?=\s+③)", text, "KIND numbered listing date is missing")
-    standard = "" if relisting else r"표준코드\s+"
-    short = r"단축코드\s+" if relisting else r"단축코드\s*:\s*"
+    identifiers = (r"(?:종목코드|표준코드)\s*:\s*" if relisting else r"종목코드\s*:\s*표준코드\s+")
+    short = r"단축코드(?:\s+|\s*:\s*)" if relisting else r"단축코드\s*:\s*"
     isin, code = one(
-        rf"④\s*종목코드\s*:\s*{standard}([A-Z0-9]{{12}})\s*\({short}(A[0-9A-Z]{{6}})\)(?=\s+⑤)",
+        rf"④\s*{identifiers}([A-Z0-9]{{12}})\s*\({short}(A[0-9A-Z]{{6}})\)(?=\s+⑤)",
         text, "KIND numbered listing identifiers are missing",
     )
-    registered = r"기명식\s*" if relisting else r"(?:기명식\s*)?"
+    registered = r"(?:기명식\s*|-\s*)" if relisting else r"(?:기명식\s*)?"
     label, shares = one(
         rf"⑤\s*주식의\s*종류와\s*수\s*:\s*{registered}({CLASS})\s*({NUMBER})주(?=\s+⑥)",
         text, "KIND numbered listing share quantity is missing",
@@ -319,14 +319,91 @@ def _relisting_text(filing, html):
                           filing.title, code=_short(code), isin=isin, shares_after=_integer(shares))]
 
 
-def _listed_text(html):
+def _class_relisting_text(filing, text):
+    marker = r"\((\d+)\)\s*(보통주|종류주식)\s*(?=①\s*상장종목명)"
+    company = one(r"^◎\s*(.+?)\s+주권\s+재상장\s+내역\(인적분할\)\s*(?=\(1\))",
+                  text, "KIND class relisting company is missing")
+    spans = list(re.finditer(marker, text))
+    require([match.groups() for match in spans] == [("1", "보통주"), ("2", "종류주식")],
+            "KIND class relisting sections do not reconcile")
+    sections = []
+    for index, match in enumerate(spans):
+        block = text[match.end():spans[index + 1].start() if index + 1 < len(spans) else len(text)]
+        label = match[2]
+        name_class = label if label == "보통주" else r"[0-9]+우선주"
+        one(rf"①\s*상장종목명\s*-\s*한글종목명\s*:\s*\S+?{name_class}(?=\s+-)", block,
+            "KIND class relisting share name is missing")
+        day = one(rf"②\s*상장일\s*:\s*({DAY})(?=\s+③)", block, "KIND class relisting date is missing")
+        isin, code = one(r"④\s*표준코드\s*:\s*([A-Z0-9]{12})\s*\(단축코드\s*:\s*(A[0-9A-Z]{6})\)(?=\s+⑤)",
+                         block, "KIND class relisting identifiers are missing")
+        shares = one(rf"⑤\s*주식의\s*종류와\s*수\s*:\s*기명식\s*{label}\s*({NUMBER})주(?=\s+⑥)",
+                     block, "KIND class relisting share quantity differs")
+        require(valid_isin(isin), "KIND class relisting ISIN is invalid")
+        sections.append(NoticeSection(index + 1, "new_listing", company, label, official_date(day), filing.title,
+                                      code=_short(code), isin=isin, shares_after=_integer(shares)))
+    require(len({row.isin for row in sections}) == len({row.code for row in sections}) == len(sections),
+            "KIND class relisting identifiers are duplicated")
+    return sections
+
+
+def _numbered_merger_listing(block, first_section):
+    company = one(rf"^(.+?)\s+{CLASS}\s+및\s+{CLASS}\s+추가상장\s+①", block,
+                  "KIND numbered merger listing company is missing")
+    quantities = one(r"①\s*주식의\s*종류와\s*수\s*(.+?)\s+②", block,
+                     "KIND numbered merger listing share quantities are missing")
+    share_row = rf"-\s*기명식\s*({CLASS})\s*({NUMBER})주\s*\(제(\d+)회\)"
+    require(re.fullmatch(rf"(?:\s*{share_row})+", quantities), "Invalid KIND numbered merger quantity rows")
+    shares = re.findall(share_row, quantities)
+    methods = one(r"⑤\s*증자방법\s+(.+?)\s+⑥", block, "KIND numbered merger listing methods are missing")
+    schedule = one(r"⑥\s*상장일\s+(.+?)\s+⑦", block, "KIND numbered merger listing dates are missing")
+    round_field = r"-\s*제(\d+)회\s*:\s*"
+    require(re.fullmatch(rf"(?:\s*{round_field}합병)+", methods)
+            and re.fullmatch(rf"(?:\s*{round_field}{DAY})+", schedule), "Invalid KIND numbered merger methods or dates")
+    merger_rounds = re.findall(round_field + "합병", methods)
+    dates = re.findall(round_field + f"({DAY})", schedule)
+    rounds = {entry[2] for entry in shares}
+    require(len(shares) == len(rounds) == len(merger_rounds) == len(dates)
+            and rounds == set(merger_rounds) == {entry[0] for entry in dates},
+            "KIND numbered merger listing rounds do not reconcile")
+    codes = one(r"⑦\s*코드\s+(.+)", block, "KIND numbered merger listing codes are missing")
+    identities = list(re.finditer(IDENTITY, codes))
+    labels = {entry[0] for entry in shares}
+    require(len(identities) == len(shares) == len(labels) and labels == {entry["class"] for entry in identities}
+            and len({entry["isin"] for entry in identities}) == len(labels)
+            and len({entry["code"] for entry in identities}) == len(labels)
+            and all(valid_isin(entry["isin"]) for entry in identities),
+            "KIND numbered merger listing identities do not reconcile")
+    by_class, by_round = {entry["class"]: entry for entry in identities}, dict(dates)
+    return [
+        NoticeSection(section, "listing", company, label, official_date(by_round[round_no]), "합병",
+                      code=by_class[label]["code"], isin=by_class[label]["isin"], added_shares=_integer(quantity))
+        for section, (label, quantity, round_no) in enumerate(shares, first_section)
+    ]
+
+
+def _merger_quantity_total(field, label):
+    lot = rf"-\s*기명식\s*{re.escape(label)}\s*({NUMBER})주\s*\(제(\d+)회\)"
+    match = re.fullmatch(rf"({NUMBER})주((?:\s*{lot})+)", field)
+    require(match is not None, "Invalid KIND merger quantity lots")
+    lots = re.findall(lot, match[2])
+    total = _integer(match[1])
+    quantities = [_integer(quantity) for quantity, _ in lots]
+    require(len({round_no for _, round_no in lots}) == len(lots) and all(quantity > 0 for quantity in quantities)
+            and sum(quantities) == total, "KIND merger quantity total does not reconcile")
+    return total
+
+
+def _listed_text(html, form):
     text = _document_text(html)
     sections = []
-    for index, block in enumerate(text.split("◎")[1:], 1):
+    for block in text.split("◎")[1:]:
         segment = re.match(rf"(.+?)\s+(?:(?:{CLASS})\s+)?(?:주권\s*)?(추가상장|변경상장|신규상장|재상장)", block)
         if not segment:
             continue
         company, section_type = segment.groups()
+        if form == "68154" and section_type == "추가상장" and re.search(r"⑥\s*상장일\s+-\s*제", block):
+            sections.extend(_numbered_merger_listing(block, len(sections) + 1))
+            continue
         dates = set(re.findall(rf"(?<![신])(?:변경상장일|상장일)\s*:\s*({DAY})", block))
         require(len(dates) == 1, "KIND text listing effective date is ambiguous")
         day = official_date(dates.pop())
@@ -336,10 +413,12 @@ def _listed_text(html):
         require(len(par) <= 1, "KIND listing face value is ambiguous")
         identities = list(re.finditer(IDENTITY, block))
         require(identities, "KIND text listing lacks exact security identifiers")
+        quantity_field = (one(r"①\s*주식의\s*종류와\s*수\s*:\s*(.+?)\s+②", block,
+                              "KIND additional listing share quantities are missing") if form == "68154" else block)
         for identity in identities:
             label = identity["class"]
             if label is None and len(identities) == 1:
-                labels = set(re.findall(rf"기명식\s*({CLASS})\s*[\d,]+주", block))
+                labels = set(re.findall(rf"기명식\s*({CLASS})\s*[\d,]+주", quantity_field))
                 if not labels:
                     ticker_name = re.search(r"상장종목\s*:\s*(\S+)", block)
                     if ticker_name and (match := re.search(rf"{CLASS}$", ticker_name[1])):
@@ -348,10 +427,12 @@ def _listed_text(html):
                 label = labels.pop()
             require(label is not None and valid_isin(identity["isin"]), "KIND text listing security identity differs")
             quantities = re.findall(
-                rf"기명식\s*{re.escape(label)}\s*({NUMBER})주(?:\s*\([^)]*\))?\s*(?:→\s*({NUMBER})주)?", block)
-            require(len(quantities) <= 1, "KIND text listing quantities are ambiguous")
+                rf"기명식\s*{re.escape(label)}\s*({NUMBER})주(?:\s*\([^)]*\))?\s*(?:→\s*({NUMBER})주)?", quantity_field)
             before = after = delta = None
-            if quantities:
+            if len(quantities) > 1 and form == "68154" and reason == "합병" and len(identities) == 1:
+                delta = _merger_quantity_total(quantity_field, label)
+            elif quantities:
+                require(len(quantities) == 1, "KIND text listing quantities are ambiguous")
                 left, right = quantities[0]
                 if right:
                     before, after = _integer(left), _integer(right)
@@ -361,7 +442,7 @@ def _listed_text(html):
                 else:
                     after = _integer(left)
             kind = "new_listing" if section_type == "신규상장" else "listing"
-            sections.append(NoticeSection(index, kind, company, label, day, reason,
+            sections.append(NoticeSection(len(sections) + 1, kind, company, label, day, reason,
                                           code=identity["code"], isin=identity["isin"], shares_before=before,
                                           shares_after=after, added_shares=delta,
                                           par_before=_integer(par[0][0]) if par and par[0][1] else None,
@@ -408,12 +489,14 @@ def parse_notice(filing, form, body):
     text = body.text()
     if form in {"68152", "68156"}:
         flattened = _document_text(text)
+        if form == "68156" and re.search(r"재상장\s+내역\(인적분할\)\s+\(1\)\s*보통주\s*①", flattened):
+            return _class_relisting_text(filing, flattened)
         circled = (r"①\s*상장종목명" if form == "68156"
                    else r"④\s*종목코드\s*:\s*표준코드\s+(?=[A-Z]{2})")
         if re.search(circled, flattened):
             return _circled_listing_text(filing, flattened, form)
     if form in TEXT_LISTINGS:
-        return _listed_text(text)
+        return _listed_text(text, form)
     if form == "68156":
         return _relisting_text(filing, text)
     rows = deal_table(text)

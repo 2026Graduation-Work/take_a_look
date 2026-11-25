@@ -386,6 +386,7 @@ def test_historical_fixed_reference_notice_binds_a_compound_price_without_a_lone
         ("20160706000436", SecurityKey("034830", "KR7034830000", "2016-07-11", None, "KOSPI", "common"), 252_489_230),
         ("20160804000125", SecurityKey("248170", "KR7248170003", "2016-08-09", None, "KOSPI", "common"), 4_568_286),
         ("20160826000199", SecurityKey("249420", "KR7249420001", "2016-08-31", None, "KOSPI", "common"), 17_845_253),
+        ("20170502000545", SecurityKey("267270", "KR7267270007", "2017-05-10", None, "KOSPI", "common"), 3_584_046),
     ],
 )
 def test_official_new_and_relisting_forms_keep_exact_identity_and_session(accession, security, shares):
@@ -495,3 +496,90 @@ def test_official_konex_rights_form_matches_krx_and_changes_price_only():
     adjusted = apply_events(raw, adjustment_events([event]))
     assert adjusted.Close.tolist() == [4_510, 5_000]
     assert adjusted.Volume.tolist() == raw.RawVolume.tolist()
+
+
+def test_official_99311_stock_dividend_price_requires_independent_allocation_terms():
+    security = SecurityKey("004840", "KR7004840005", "1976-05-21", None, "KOSPI", "common")
+    notice, = actual_notices(security, "20161227000637")
+    facts = notice.facts
+    assert (facts.kind, facts.effective, facts.share_label, facts.base, facts.reason) == (
+        "ex_price", "2016-12-28", "보통주식", 12_950, "주식배당",
+    )
+    assert facts.ratio is None
+    raw = bars(security, [
+        ("2016-12-27", 12_850, 13_250, 12_850, 13_250, 300, 40_023, 525_040_500, 18_510_000),
+        ("2016-12-28", 12_800, 12_900, 12_700, 12_750, -200, 13_857, 176_802_300, 18_510_000),
+    ])
+    event, = resolve(security, raw, [notice], coverage_complete=True).resolutions
+    assert event.kind == Resolution.SEGMENT_BREAK and event.review
+    assert event.price_factor is None and event.volume_factor is None
+
+
+def test_official_numbered_merger_rounds_split_common_and_preferred_without_price_candidates():
+    common = SecurityKey("051910", "KR7051910008", "2001-04-25", None, "KOSPI", "common")
+    preferred = SecurityKey("051915", "KR7051911006", "2001-04-25", None, "KOSPI", "preferred")
+    accession = "20170112000046"
+    info = SOURCES[accession]
+    archived = gzip.decompress((FIXTURES / f"{accession}.html.gz").read_bytes())
+    assert hashlib.sha256(archived).hexdigest() == info["sha256"]
+    source = Evidence(info["sha256"], "c" * 64)
+    body = KindBody(archived, info["charset"], source, info["document_no"], tuple(info["family"]), info["final"])
+    filing = MarketFiling(accession, date(2017, 1, 12), info["title"], TEST_SOURCE, company=info["company"])
+    listing = parse_notice(filing, info["form"], body)
+    assert [(facts.share_label, facts.effective, facts.code, facts.isin, facts.added_shares) for facts in listing] == [
+        ("보통주", "2017-01-17", common.code, common.isin, 4_321_243),
+        ("1우선주", "2017-01-17", preferred.code, preferred.isin, 59_879),
+    ]
+    observed = {
+        common: [
+            ("2017-01-16", 282_000, 283_500, 278_000, 278_500, -4_500, 198_568, 55_506_248_500, 66_271_100),
+            ("2017-01-17", 278_000, 284_000, 276_000, 278_500, 0, 218_884, 61_049_828_500, 70_592_343),
+        ],
+        preferred: [
+            ("2017-01-16", 190_000, 191_500, 187_000, 189_500, -500, 10_813, 2_038_075_500, 7_628_921),
+            ("2017-01-17", 188_000, 190_000, 185_000, 187_000, -2_500, 7_501, 1_398_591_000, 7_688_800),
+        ],
+    }
+    for facts in listing:
+        notice = match_notice(filing, info["form"], facts, body, (source,), {common: {"lg화학"}, preferred: {"lg화학"}})
+        ledger = resolve(notice.security, bars(notice.security, observed[notice.security]), [notice])
+        assert ledger.candidates == ()
+        event, = ledger.resolutions
+        assert event.kind == Resolution.SEGMENT_BREAK and event.date == "2017-01-17" and not event.review
+
+
+def test_official_relisting_keeps_separate_numbered_common_and_preferred_blocks():
+    accession = "20170406000265"
+    info = SOURCES[accession]
+    archived = gzip.decompress((FIXTURES / f"{accession}.html.gz").read_bytes())
+    assert hashlib.sha256(archived).hexdigest() == info["sha256"]
+    source = Evidence(info["sha256"], "c" * 64)
+    body = KindBody(archived, info["charset"], source, info["document_no"], tuple(info["family"]), info["final"])
+    filing = MarketFiling(accession, date(2017, 4, 6), info["title"], TEST_SOURCE, company=info["company"])
+    sections = parse_notice(filing, info["form"], body)
+    assert [(f.kind, f.code, f.isin, f.share_label, f.effective, f.shares_after) for f in sections] == [
+        ("new_listing", "264900", "KR7264900002", "보통주", "2017-04-11", 12_523_850),
+        ("new_listing", "26490K", "KR726490K013", "종류주식", "2017-04-11", 773_560),
+    ]
+
+
+def test_official_same_class_merger_total_matches_round_quantities_and_requires_reconciliation():
+    security = SecurityKey("213500", "KR7213500002", "2015-01-26", None, "KOSPI", "common")
+    notice, = actual_notices(security, "20170310000088")
+    assert (notice.facts.kind, notice.facts.reason, notice.facts.effective, notice.facts.added_shares) == (
+        "listing", "합병", "2017-03-15", 3_664_067,
+    )
+    info = SOURCES[notice.accession]
+    original = gzip.decompress((FIXTURES / f"{notice.accession}.html.gz").read_bytes())
+    tampered = original.replace(b"3,664,067", b"3,664,068")
+    filing = MarketFiling(notice.accession, date(2017, 3, 10), info["title"], TEST_SOURCE, company=info["company"])
+    with pytest.raises(DisclosureError, match="quantity total does not reconcile"):
+        parse_notice(filing, info["form"], Response(tampered, info["charset"], TEST_SOURCE))
+
+
+def test_official_lockup_quantity_does_not_duplicate_additional_listing_shares():
+    security = SecurityKey("004740", "KR7004740007", "1988-09-30", None, "KOSPI", "common")
+    notice, = actual_notices(security, "20170411000107")
+    assert (notice.facts.kind, notice.facts.reason, notice.facts.effective, notice.facts.added_shares) == (
+        "listing", "유상증자(제3자배정)", "2017-04-12", 3_170_612,
+    )

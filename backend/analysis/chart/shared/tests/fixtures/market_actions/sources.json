@@ -346,5 +346,83 @@
       "20161026000861"
     ],
     "final": true
+  },
+  "20161227000637": {
+    "form": "99311",
+    "title": "배당락 기준가격 안내",
+    "company": "DRB동일",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/27/000637/20161227001467/99311.htm",
+    "charset": "utf-8",
+    "sha256": "6f7782499f08ed1712bba86a673d4cbd8f430ab3e4e9c9ac3caa6b3de94f8761",
+    "document_no": "20161227001467",
+    "family": [
+      "20161227001467"
+    ],
+    "final": true
+  },
+  "20170112000046": {
+    "form": "68154",
+    "title": "추가상장(보통주 및 1우선주(합병))",
+    "company": "LG화학",
+    "body_url": "https://kind.krx.co.kr/external/2017/01/12/000046/20170112000215/68154.htm",
+    "charset": "utf-8",
+    "sha256": "ef5d350137ef14c954bd37fe9c2bdc00f3fcf775b011413c2a51fae356998f44",
+    "document_no": "20170112000215",
+    "family": [
+      "20170112000215"
+    ],
+    "final": true
+  },
+  "20170310000088": {
+    "form": "68154",
+    "title": "추가상장(합병)",
+    "company": "한솔제지",
+    "body_url": "https://kind.krx.co.kr/external/2017/03/10/000088/20170310000205/68154.htm",
+    "charset": "utf-8",
+    "sha256": "3cf5770c6601395ee9e9b8894e6469e8fcc693b28ce31f2ae9c4527e51e20c60",
+    "document_no": "20170310000205",
+    "family": [
+      "20170310000205"
+    ],
+    "final": true
+  },
+  "20170406000265": {
+    "form": "68156",
+    "title": "재상장((주)크라운제과, 상장일 2017.04.11)",
+    "company": "크라운제과",
+    "body_url": "https://kind.krx.co.kr/external/2017/04/06/000265/20170406000581/68156.htm",
+    "charset": "utf-8",
+    "sha256": "c2cc35cb4eb9d9d81d9fe4d89b0f4ff0d67dda4b28d6ccd02d67b3dd07ef7949",
+    "document_no": "20170406000581",
+    "family": [
+      "20170406000581"
+    ],
+    "final": true
+  },
+  "20170411000107": {
+    "form": "68154",
+    "title": "추가상장(유상증자(제3자배정))",
+    "company": "보루네오가구",
+    "body_url": "https://kind.krx.co.kr/external/2017/04/11/000107/20170411000181/68154.htm",
+    "charset": "utf-8",
+    "sha256": "1abf9bdbea48ab0b6aefa83ae1100cc6162341cbfc6f73179beddb1c07772aa5",
+    "document_no": "20170411000181",
+    "family": [
+      "20170411000181"
+    ],
+    "final": true
+  },
+  "20170502000545": {
+    "form": "68156",
+    "title": "재상장(현대건설기계(주), 상장일 2017.05.10)",
+    "company": "현대건설기계",
+    "body_url": "https://kind.krx.co.kr/external/2017/05/02/000545/20170502001152/68156.htm",
+    "charset": "utf-8",
+    "sha256": "28aa1fdc225b62ce68920fcbfeee06abd6b8e702fa68d3b7c560c1c0f54e62bc",
+    "document_no": "20170502001152",
+    "family": [
+      "20170502001152"
+    ],
+    "final": true
   }
 }
