@@ -43,12 +43,15 @@ _LISTING_PRICE = FormSpec("listing_price", "price_table", (_PRICE_DATE,))
 _FLAT_RIGHTS = FormSpec("ex_price", "flat_rights")
 _TABLE_LISTING = FormSpec("listing", "listed_table")
 _TEXT_LISTING = FormSpec("listing", "listed_text")
-_BONUS_LABELS = (r"5\.1주당신주배정주식수", r"3\.증자전발행주식총수", r"1\.신주의종류와수")
-_DIVIDEND_ALLOCATION = r"1\.1주당배당주식수\(주\)"
+_BONUS_LABELS = (r"(?:5\.)?1주당신주배정주식수(?:\(주\))?", r"3\.증자전발행주식총수", r"1\.신주의종류와수")
+_DIVIDEND_ALLOCATION = r"(?:1\.)?1주당배당주식수(?:\(주\))?"
 _DIVIDEND_QUANTITY = r"2\.배당주식총수\(주\)"
 
 FORMS = {
     "11307": FormSpec("bonus_terms", "terms", _BONUS_LABELS),
+    "11308": FormSpec("bonus_terms", "combined_terms", (
+        r"5\.1주당신주배정주식수(?:\(주\))?", r"3\.증자전발행주식총수(?:\(주\))?", r"1\.신주의종류와수",
+    )),
     "61474": FormSpec("dividend_terms", "terms", (_DIVIDEND_ALLOCATION, r"3\.발행주식총수", _DIVIDEND_QUANTITY)),
     "71474": FormSpec("dividend_terms", "terms", (_DIVIDEND_ALLOCATION, r"3\.발행주식총수\(주\)", _DIVIDEND_QUANTITY)),
     "68151": _TEXT_LISTING,
@@ -57,6 +60,7 @@ FORMS = {
     "68155": FormSpec("listing", "hangul_listing"),
     "68156": FormSpec("new_listing", "relisting"),
     "68157": FormSpec("new_listing", "preferred_initial_listing"),
+    "70768": FormSpec("ex_price", "combined_rights", ("회사명", "주권종류", "단축코드", "기준가(원)")),
     "70780": FormSpec("auction", "halted_division_auction"),
     **dict.fromkeys(("32101", "70766", "70767"), _FLAT_RIGHTS),
     **dict.fromkeys(("32103", "70795"), _FIXED_REFERENCE),
@@ -119,6 +123,8 @@ class NoticeSection:
     previous_market: str | None = None
     previous_close: int | None = None
     renamed_company: str | None = None
+    paid_record_date: str | None = None
+    paid_listing: str | None = None
 
 
 @dataclass(frozen=True)
@@ -215,6 +221,23 @@ def _flat_rights(rows):
     return sections
 
 
+def _combined_rights(spec, rows):
+    require(len(rows) >= 5 and len(rows[0]) == len(rows[1]) == len(rows[-1]) == 2
+            and _compact(rows[0][0]) == "1.권배락실시일" and _compact(rows[1][0]) == "2.권배락사유"
+            and tuple(map(_compact, rows[2])) == ("3.권배락내역", *spec.labels)
+            and _compact(rows[-1][0]) == "4.기타", "Unsupported KIND combined rights/dividend table")
+    day = official_date(rows[0][1])
+    reason = rows[1][1]
+    require(_compact(reason) in {"유상증자및배당", "무상증자및배당"}, "Unsupported KIND combined rights/dividend reason")
+    sections = []
+    for index, row in enumerate(rows[3:-1], 1):
+        require(len(row) == 4 and bool(row[0]) and re.fullmatch(CLASS, row[1]), "Invalid KIND combined rights/dividend row")
+        company, share_label, code, base = row
+        sections.append(NoticeSection(index, spec.kind, company, share_label, day, reason,
+                                      code=_short(code), base=_integer(base)))
+    return sections
+
+
 def _price_table_day(spec, rows):
     return official_date(_field(rows, spec.labels[0]))
 
@@ -308,14 +331,28 @@ def _combined_additional_listing(rows, securities):
     return (share_class, code, str(sum(amounts))), totals[-1]
 
 
+def _additional_listing_rows(rows):
+    starts = [index for index, row in enumerate(rows) if _compact(row[0]) == "2.추가주식의종류와수"]
+    require(len(starts) == 1, "KIND additional listing security header is missing or ambiguous")
+    start, = starts
+    require([_compact(cell) for cell in rows[start][1:]] == ["주권종류", "단축코드", "추가주식수(주)"],
+            "KIND additional listing security columns are invalid")
+    tail = rows[start + 1:]
+    end = next((index for index, row in enumerate(tail) if _compact(row[0]) == "3.1주당액면가/자본금(원)"), None)
+    require(end and all(len(row) == 3 and re.fullmatch(CLASS, row[0])
+                        and re.fullmatch(r"A[0-9A-Z]{6}", row[1]) for row in tail[:end]),
+            "KIND additional listing security rows are invalid")
+    return tail[:end]
+
+
 def _listed_table(filing, form, rows):
-    if any(row[0].startswith("1.변경전 상호") for row in rows):
+    if form != "70791" and any(row[0].startswith("1.변경전 상호") for row in rows):
         company = _field(rows, r"1\.변경전상호")
         day = official_date(_field(rows, r"4\.상장일"))
         new_names = [row[-1] for row in rows if len(row) >= 3 and row[-2] == "한글"]
         require(new_names, "KIND name change lacks the new issuer name")
         return [NoticeSection(1, "rename", company, "보통주", day, " · ".join(new_names))]
-    new_listings = [row for row in rows if len(row) == 4 and re.fullmatch(CLASS, row[0])
+    new_listings = [row for row in rows if form != "70791" and len(row) == 4 and re.fullmatch(CLASS, row[0])
                     and valid_isin(row[1]) and re.fullmatch(r"A[0-9A-Z]{6}", row[2])]
     if new_listings:
         company = [row[-1] for row in rows if len(row) == 4 and _compact(row[0]) == "1.회사명" and row[2] == "한글"]
@@ -326,8 +363,9 @@ def _listed_table(filing, form, rows):
                 for i, (label, isin, code, shares) in enumerate(new_listings, 1)]
     company = _field(rows, r"1\.회사명")
     day = official_date(_field(rows, r"[456]\.(?:상장일|변경상장일|상장일\(매매개시일\))"))
-    securities = [row for row in rows if len(row) in {2, 3} and re.fullmatch(CLASS, row[0])
-                  and re.fullmatch(r"A[0-9A-Z]{6}", row[1])]
+    securities = _additional_listing_rows(rows) if form == "70791" else [
+        row for row in rows if len(row) in {2, 3} and re.fullmatch(CLASS, row[0]) and re.fullmatch(r"A[0-9A-Z]{6}", row[1])
+    ]
     require(securities, "KIND listing table lacks security codes")
     combined_total = None
     if form == "70791" and len({(row[0], row[1]) for row in securities}) < len(securities):
@@ -777,6 +815,28 @@ def _final_bonus_terms_rows(rows):
     return rows[declarations[0]:]
 
 
+def _combined_terms(filing, spec, rows, final):
+    require(final, "KIND combined rights and bonus terms lack a final document")
+    declarations = [index for index, row in enumerate(rows)
+                    if len(row) == 2 and _compact(row[0]) in {"금융위원회/한국거래소귀중", "금융위원회귀중"}]
+    require(len(declarations) == 1, "KIND combined terms lack a unique operative declaration")
+    operative = rows[declarations[0] + 1:]
+    paid = [index for index, row in enumerate(operative) if len(row) == 1 and _compact(row[0]) == "Ⅰ.유상증자"]
+    bonus = [index for index, row in enumerate(operative) if len(row) == 1 and _compact(row[0]) == "Ⅱ.무상증자"]
+    require(len(paid) == len(bonus) == 1 and paid[0] < bonus[0], "KIND combined terms lack ordered paid and bonus sections")
+    company = _field(operative[:paid[0]], r"회사명:")
+    require(bool(company), "KIND combined terms lack an issuer name")
+    paid_rows = operative[paid[0] + 1:bonus[0]]
+    paid_record = official_date(_field(paid_rows, r"8\.신주배정기준일"))
+    paid_listing = official_date(_field(paid_rows, r"1[56]\.신주의상장예정일"))
+    require(paid_record <= paid_listing, "KIND combined terms paid listing precedes its record date")
+    bonus_rows = operative[bonus[0] + 1:]
+    require(_field(bonus_rows, r"4\.신주배정기준일"), "KIND combined terms lack a bonus record date")
+    sections = _terms(filing, spec, [("회사명:", company), *bonus_rows])
+    require(all(row.listing and row.effective <= row.listing for row in sections), "KIND combined terms lack a valid bonus listing date")
+    return [replace(row, paid_record_date=paid_record, paid_listing=paid_listing) for row in sections]
+
+
 def _halted_division_auction(text, final):
     require(final and re.search(r"기준가 산정 등에 관한 안내\(회사분할\(인적분할\)\)", text),
             "KIND market announcement lacks a final division auction")
@@ -879,10 +939,14 @@ def parse_notice(filing, form, body):
     rows = deal_table(text)
     if layout == "flat_rights":
         return _flat_rights(rows)
+    if layout == "combined_rights":
+        return _combined_rights(spec, rows)
     if layout in {"price_table", "fixed_reference"}:
         return _price_table(form, spec, rows)
     if layout == "listed_table":
         return _listed_table(filing, form, rows)
+    if layout == "combined_terms":
+        return _combined_terms(filing, spec, [row for row in rows if any(row)], getattr(body, "final", False))
     if layout == "terms":
         rows = [row for row in rows if any(row)]
         if spec.kind == "dividend_terms":

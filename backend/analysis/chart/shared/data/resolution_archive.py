@@ -26,6 +26,7 @@ from .kind_market import (
     daily_page,
     document_route,
     final_document_number,
+    kind_withdrawal,
     viewer_documents,
 )
 from .market_notices import (
@@ -96,7 +97,8 @@ def notice_facts_columns(facts):
               "BasePrice": "base", "EvaluationPrice": "evaluation", "Low": "low", "High": "high",
               "ParBefore": "par_before", "ParAfter": "par_after", "SharesBefore": "shares_before",
               "SharesAfter": "shares_after", "AddedShares": "added_shares", "Ratio": "ratio",
-              "Listing": "listing", "PreviousMarket": "previous_market", "PreviousClose": "previous_close"}
+              "Listing": "listing", "PreviousMarket": "previous_market", "PreviousClose": "previous_close",
+              "PaidRecordDate": "paid_record_date", "PaidListing": "paid_listing"}
     return {key: getattr(facts, attribute) for key, attribute in fields.items()}
 
 
@@ -120,6 +122,8 @@ def _official_body(archive, filing, document, form, refs):
 
 def _official_sections(archive, filing, document, form, refs):
     response, _, _ = _official_body(archive, filing, document, form, refs)
+    require(not response.final or not (filing.withdrawn or kind_withdrawal(filing.title)),
+            "KIND final disclosure is withdrawn or cancelled")
     return {facts.section: facts for facts in parse_notice(filing, form, response)}, response.family, response.final
 
 
@@ -282,7 +286,7 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
                 and (facts.isin is None or facts.isin == security.isin)
                 and (facts.share_label in {"보통주", "보통주식"}) == (security.share_class == "common")
                 and list(family) == json.loads(row["Family"]) and str(final) == row["Final"]
-                and all(row[field] == (str(value) if value is not None else "")
+                and all(row.get(field, "") == (str(value) if value is not None else "")
                         for field, value in notice_facts_columns(facts).items()),
                 "KIND notice facts or identity differ from the official body")
         official.append(Notice(security, accession, form, row["Published"], filing.company_id, filing.title,

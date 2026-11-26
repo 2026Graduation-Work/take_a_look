@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from enum import StrEnum
 from fractions import Fraction
+from typing import Literal
 
 import pandas as pd
 
@@ -48,6 +49,8 @@ RIGHTS_FORMS = {"70766", "99301", "32101"}
 SPAC = re.compile(r"기업인수목적|스팩|(?<![A-Z])SPAC(?![A-Z])", re.I)
 BONUS = {"무상증자", "권리락(무상증자)"}
 DIVIDEND = {"주식배당", "배당락(주식배당)"}
+COMBINED_OFFERING_BONUS_REASON = "combined_offering_bonus_terms"
+COMBINED_LISTING_FAILURE_FIELD = "KIND additional listing awaiting verification"
 PAR_CHANGE = re.compile(r"액면분할|액면병합")
 REDUCTION_REASONS = {"자본감소", "자본감소(액면감액)", "감자(주식병합)", "감자(액면변경)"}
 
@@ -91,6 +94,7 @@ class ResolvedEvent:
 class NoticeFailure:
     evidence: tuple[FieldEvidence, ...]
     failed_check: str
+    scope: Literal["event", "combined_bonus_listing"] = "event"
 
 
 @dataclass(frozen=True)
@@ -295,6 +299,90 @@ def _official_bonus(candidate, terms, listing_notice, market, raw, days):
     return (1 / ratio, ratio), ""
 
 
+def combined_bonus_observation(candidate, record, raw, days):
+    if (not record.ratio or record.ratio <= 0 or not record.added_shares or record.added_shares <= 0
+            or not record.listing or not record.paid_record_date or not record.paid_listing):
+        return None, "combined_bonus_terms_incomplete"
+    if record.paid_record_date == record.effective:
+        return None, "combined_bonus_record_date_overlap"
+    if candidate.shares_before != candidate.shares_after:
+        return None, "ex_price_shares_changed"
+    sessions = scheduled_sessions(pd.Timestamp(candidate.date), pd.Timestamp(record.effective))
+    if len(sessions) != 2 or sessions[-1].date().isoformat() != record.effective:
+        return None, "combined_bonus_record_date_mismatch"
+    price, volume = Fraction(candidate.base_price, candidate.prev_close), 1 + record.ratio
+    if abs(price * volume - 1) > Fraction(1, 50):
+        return None, "combined_bonus_reference_price_mismatch"
+    at = days.get_indexer([pd.Timestamp(record.listing)])[0]
+    if at < 1 or record.listing <= record.effective or len(scheduled_sessions(days[at - 1], days[at])) != 2:
+        return None, "combined_bonus_listing_session_unavailable"
+    before, after = raw.ListedShares.iloc[at - 1:at + 1]
+    return ((price, volume), (before, after)), ""
+
+
+def _listing_counts_reconcile(listings, before, after, overlap):
+    facts = [notice.facts for notice in listings]
+    if any(item.added_shares is None or item.added_shares <= 0 for item in facts):
+        return False
+    if sum(item.added_shares for item in facts) != after - before:
+        return False
+    if not any(item.shares_before is not None for item in facts):
+        expected_totals = {after} if overlap or len(facts) > 1 else {None, after}
+        return all(item.shares_after in expected_totals for item in facts)
+    if any(item.shares_before is None for item in facts):
+        return False
+    for item in sorted(facts, key=lambda item: item.shares_before):
+        next_total = before + item.added_shares
+        if item.shares_before != before or item.shares_after not in {None, next_total}:
+            return False
+        before = next_total
+    return before == after
+
+
+def _combined_listing_check(record, listings, before, after):
+    delta = after - before
+    overlap = record.paid_listing == record.listing
+    if not listings:
+        if overlap:
+            return "combined_bonus_listing_overlap_unproven"
+        if delta != record.added_shares:
+            return "combined_bonus_listing_shares_mismatch"
+    else:
+        if not _listing_counts_reconcile(listings, before, after, overlap):
+            return "combined_bonus_listing_totals_mismatch"
+        bonus_shares = 0
+        has_paid_listing = False
+        for notice in listings:
+            reason = _reason(notice)
+            if reason in BONUS:
+                bonus_shares += notice.facts.added_shares
+            elif DISALLOWED_LISTING.search(reason):
+                return "combined_bonus_listing_reason_conflict"
+            elif re.fullmatch(r"유상증자(?:\([^)]+\))?|주주배정유상증자", reason):
+                has_paid_listing = True
+        if overlap and not has_paid_listing:
+            return "combined_bonus_listing_overlap_unproven"
+        if bonus_shares != record.added_shares:
+            return "combined_bonus_listing_shares_mismatch"
+    return ""
+
+
+def ambiguous_document_claims(claims):
+    finals = set()
+    families = {}
+    for document, family in claims:
+        finals.add(document)
+        members = {document, *family}
+        component = members.union(*(families[member] for member in members if member in families))
+        for member in component:
+            families[member] = component
+    return {document for document in finals if len(finals & families[document]) > 1}
+
+
+def ambiguous_final_documents(notices):
+    return ambiguous_document_claims((notice.document_no, notice.family) for notice in notices if notice.final)
+
+
 def _valid_notices(notices):
     final_doc_nos = {notice.document_no for notice in notices if notice.final}
     return [notice for notice in notices if notice.final or not (final_doc_nos & set(notice.family))]
@@ -423,12 +511,19 @@ def _official_transfer(security, raw, at, candidate, events):
 
 
 def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all_listings, complete, blocked, unparsed,
-                 issuer_mergers):
+                 issuer_mergers, ambiguous_finals):
     day = days[at].date().isoformat()
     final = [notice for notice in notices if notice.final]
     nonfinal = len(final) != len(notices)
     events = [notice for notice in final if notice.facts.kind != "rename"]
     action_evidence = _action_evidence(action) if action else ()
+    if any(notice.document_no in ambiguous_finals for notice in (*final, *issuer_mergers)):
+        if not at or blocked or not complete:
+            return None
+        evidence = tuple(FieldEvidence(notice.accession, ref, "KIND correction family awaiting review")
+                         for notice in issuer_mergers for ref in notice.evidence)
+        return _result(security, day, Resolution.SEGMENT_BREAK, "official_notice_format_requires_review", notices,
+                       evidence=(*action_evidence, *evidence), review=True, failed_check="correction_final_ambiguous")
     if any(_division_notice(notice) for notice in events):
         return _result(security, day, Resolution.SEGMENT_BREAK, "official_division", final, evidence=action_evidence)
     merger = [notice for notice in events if merger_facts(notice.facts.kind, notice.facts.reason)]
@@ -447,6 +542,8 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
         return None
     if blocked:
         return None
+    listing_failures = [failure for failure in unparsed if failure.scope == "combined_bonus_listing"]
+    unparsed = [failure for failure in unparsed if failure.scope == "event"]
     if unparsed:
         if not complete:
             return None
@@ -476,6 +573,8 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
     listings = [notice for notice in events if notice.facts.kind == "listing"]
     market = raw.Market.iloc[at] if "Market" in raw else security.market
     failed_check = "notice_not_final" if nonfinal else ""
+    listing_failure_evidence = ()
+    ambiguous_proof = []
     if not nonfinal:
         reduction_factor, failed_check = _kind_reduction(candidate, prices, listings, market, raw, at)
         if reduction_factor is not None:
@@ -494,13 +593,38 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
             term_kind = "dividend_terms" if reason in DIVIDEND else "bonus_terms" if reason in BONUS else None
             if term_kind:
                 matching = []
-                first_failed_term = ""
+                first_failed_term = combined_failure = ""
                 for term in terms:
                     if (not term.final or term.facts.kind != term_kind or term.facts.effective < day
                         or term.company_id and notice.company_id and term.company_id != notice.company_id):
                         continue
+                    if term.document_no in ambiguous_finals:
+                        ambiguous_proof.append(term)
+                        continue
                     later = [item for item in all_listings.get(term.facts.listing, ())
-                             if item.final and item.facts.kind == "listing" and "무상증자" in _reason(item)]
+                             if item.final and item.facts.kind == "listing"
+                             and (term.form == "11308" or "무상증자" in _reason(item))]
+                    disputed_listings = [item for item in later if item.document_no in ambiguous_finals]
+                    if disputed_listings:
+                        ambiguous_proof.extend(disputed_listings)
+                        continue
+                    if term.form == "11308":
+                        if term_kind == "bonus_terms":
+                            observation, term_failure = combined_bonus_observation(candidate, term.facts, raw, days)
+                            if observation is None:
+                                combined_failure = combined_failure or term_failure
+                                continue
+                            if listing_failures:
+                                combined_failure = listing_failures[0].failed_check
+                                listing_failure_evidence = tuple(ref for failure in listing_failures for ref in failure.evidence)
+                                continue
+                            factors, listing_counts = observation
+                            term_failure = _combined_listing_check(term.facts, later, *listing_counts)
+                            if not term_failure:
+                                matching.append((term, later, factors))
+                            else:
+                                combined_failure = combined_failure or term_failure
+                        continue
                     factors, term_failure = _official_bonus(candidate, term, later, market, raw, days)
                     if factors:
                         matching.append((term, later, factors))
@@ -508,8 +632,11 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
                         first_failed_term = first_failed_term or term_failure
                 if len(matching) == 1:
                     term, later, factors = matching[0]
-                    return _result(security, day, Resolution.BONUS, term_kind, [*final, term, *later], factors=factors)
-                failed_check = "bonus_terms_ambiguous" if matching else first_failed_term or "bonus_terms_missing"
+                    bonus_reason = COMBINED_OFFERING_BONUS_REASON if term.form == "11308" else term_kind
+                    return _result(security, day, Resolution.BONUS, bonus_reason, [*final, term, *later], factors=factors)
+                failed_check = ("bonus_terms_ambiguous" if matching
+                                else "correction_final_ambiguous" if ambiguous_proof
+                                else combined_failure or first_failed_term or "bonus_terms_missing")
             else:
                 failed_check = "ex_price_reason_or_form_unsupported"
         elif facts.kind == "ex_price":
@@ -549,19 +676,20 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
         return _result(security, day, Resolution.TICK_ROUNDING, "krx_reference_rounded_up_to_tick",
                        factors=(Fraction(1), Fraction(1)))
     reason = "official_facts_conflict_or_lack_terms" if notices else "completed_search_without_official_proof"
-    return _result(security, day, Resolution.SEGMENT_BREAK, reason, notices,
-                   evidence=action_evidence, review=True,
+    return _result(security, day, Resolution.SEGMENT_BREAK, reason, [*notices, *ambiguous_proof],
+                   evidence=(*action_evidence, *listing_failure_evidence), review=True,
                    failed_check=failed_check or ("official_terms_unmatched" if notices else "official_evidence_missing"))
 
 
 def resolve_events(security, raw, expected_dates, notices, *, actions=(), coverage_complete=False,
                    covered_dates=frozenset(), blocked_dates=frozenset(), unparsed_dates=None, transfer_anchor=None,
-                   transfer_source=None, issuer_mergers=None, structural_reviews=()):
+                   transfer_source=None, issuer_mergers=None, structural_reviews=(), ambiguous_finals=None):
     """Produce one canonical outcome per observed candidate and confirmed structure date."""
     days, base, mask = _observations(raw, expected_dates)
     require(not days.empty and all(security.active(day.date().isoformat()) for day in days),
             "KRX prices lie outside the official listing interval")
     require(all(notice.security == security for notice in notices), "KIND notices mix listing identities")
+    ambiguous_finals = ambiguous_final_documents(notices) if ambiguous_finals is None else ambiguous_finals
     reviews = {review.date: review for review in structural_reviews}
     require(len(reviews) == len(structural_reviews), "Multiple proofs of an unresolved structural implementation")
     review_candidates = {}
@@ -590,7 +718,8 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
             require(transfer_source.code == security.code and transfer_source.market == transfer_anchor.Market.iloc[0]
                     and transfer_source.active(transfer_anchor.Date.iloc[0].date().isoformat())
                     and transfer_source.delisting == first_day, "Former KRX security does not cover the transfer anchor")
-        elif any(n.final and n.facts.kind in {"listing_price", "auction"} for n in first_session):
+        elif (not any(n.document_no in ambiguous_finals for n in first_session)
+              and any(n.final and n.facts.kind in {"listing_price", "auction"} for n in first_session)):
             pair = pd.concat([transfer_anchor, raw.iloc[:1]], ignore_index=True)
             pair_days = pd.DatetimeIndex(pair.Date)
             pair_base = pair.RawClose - pair.RawChange
@@ -607,7 +736,7 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
     by_date = {day.date().isoformat(): at for at, day in enumerate(days)}
     for notice in notices:
         day = notice.facts.effective
-        if notice.final and notice.form == "70718" and day in by_date:
+        if notice.final and notice.document_no not in ambiguous_finals and notice.form == "70718" and day in by_date:
             require(notice.facts.kind == "listing_price" and notice.facts.base == base.iloc[by_date[day]],
                     f"{security.code} {day}: KIND new-listing reference differs from the KRX base")
     outside = sorted(day for day in set(indexed_actions) | set(on_date)
@@ -633,7 +762,7 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
         complete = coverage_complete or day in covered_dates
         row = _resolve_day(security, raw, days, at, candidate, indexed_actions.get(day), current,
                            terms, on_date, complete, day in blocked_dates, unparsed_dates.get(day, ()),
-                           issuer_mergers.get(day, ()))
+                           issuer_mergers.get(day, ()), ambiguous_finals)
         if (anchored_transfer and transfer_source and transfer_source.isin != security.isin
                 and (row is None or row.kind in ADJUSTMENTS or row.kind == Resolution.SHARES_ONLY)):
             row = _result(security, day, Resolution.SEGMENT_BREAK, "separate_verified_listing_units", current)
@@ -649,7 +778,8 @@ def resolve_events(security, raw, expected_dates, notices, *, actions=(), covera
             candidates.append(candidate or _observed_candidate(security, raw, days, at, base))
         if row is not None:
             resolved.append(row)
-        elif observed or day in indexed_actions or (current and day in blocked_dates):
+        elif (observed or day in indexed_actions or (current and day in blocked_dates)
+              or any(n.document_no in ambiguous_finals for n in (*current, *issuer_mergers.get(day, ())))):
             incomplete.append(day)
     return WindowLedger(tuple(candidates), tuple(resolved), tuple(incomplete))
 

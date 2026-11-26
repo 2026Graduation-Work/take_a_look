@@ -1542,5 +1542,76 @@
       "20211228002310"
     ],
     "final": true
+  },
+  "20161108000394": {
+    "form": "70768",
+    "title": "권배락(무상증자 및 배당)",
+    "company": "풍국주정",
+    "body_url": "https://kind.krx.co.kr/external/2016/11/08/000394/20161108000865/70768.htm",
+    "charset": "utf-8",
+    "sha256": "01e87e1127ee834ee9eed173854b847038741b663e269846e32ffe6fd2339a88",
+    "document_no": "20161108000865",
+    "family": [
+      "20161108000865"
+    ],
+    "final": true
+  },
+  "20160722000097": {
+    "form": "11308",
+    "title": "유무상증자결정",
+    "company": "제이엔케이히터",
+    "body_url": "https://kind.krx.co.kr/external/2016/07/22/000097/20160722000328/11308.htm",
+    "charset": "utf-8",
+    "sha256": "7cf826b54a29698813018c137d594cab42332eb1c5af0bb44f902a19ef270588",
+    "document_no": "20160722000328",
+    "family": [
+      "20160602001002",
+      "20160621000155",
+      "20160722000328"
+    ],
+    "final": true
+  },
+  "20160428000303": {
+    "form": "11308",
+    "title": "유무상증자결정",
+    "company": "테스",
+    "body_url": "https://kind.krx.co.kr/external/2016/04/28/000303/20160428000806/11308.htm",
+    "charset": "utf-8",
+    "sha256": "c0c825931e82b8dbaaca239ae427738e75a5bee93969fd4abf2653846ab02259",
+    "document_no": "20160428000806",
+    "family": [
+      "20160212001742",
+      "20160215001715",
+      "20160225001842",
+      "20160404000772",
+      "20160428000806"
+    ],
+    "final": true
+  },
+  "20160802000269": {
+    "form": "70766",
+    "title": "권리락(무상증자)",
+    "company": "제이엔케이히터",
+    "body_url": "https://kind.krx.co.kr/external/2016/08/02/000269/20160802000564/70766.htm",
+    "charset": "utf-8",
+    "sha256": "4b4bcca3715eea18086a1cf64e3869f3769d2e542ca4d69706ef0aff4535c0dd",
+    "document_no": "20160802000564",
+    "family": [
+      "20160802000564"
+    ],
+    "final": true
+  },
+  "20160412000324": {
+    "form": "70766",
+    "title": "권리락(무상증자)",
+    "company": "테스",
+    "body_url": "https://kind.krx.co.kr/external/2016/04/12/000324/20160412000741/70766.htm",
+    "charset": "utf-8",
+    "sha256": "84cbb324175498bb6e6edf9c6e9d6ecaf0ffc543961d06c6c6ad99a46da4961f",
+    "document_no": "20160412000741",
+    "family": [
+      "20160412000741"
+    ],
+    "final": true
   }
 }

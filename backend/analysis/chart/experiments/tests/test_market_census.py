@@ -155,7 +155,7 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
             rows = "".join(
                 f"<tr><td>12:00</td><td><a onclick=\"companysummary_open('{issuer}')\">{sources[accession]['company']}</a></td>"
                 f"<td><a onclick=\"openDisclsViewer('{accession}','')\">{sources[accession]['title']}</a></td>"
-                f"<td>{submitter}</td><td></td></tr>" for accession in accessions
+                f"<td>{submitter[accession] if isinstance(submitter, dict) else submitter}</td><td></td></tr>" for accession in accessions
             ) or "조회된 결과값이 없습니다."
             body = f"<table>{rows}</table>전체 <em>{len(accessions)}</em>건 : <strong>1</strong>/1".encode()
         else:

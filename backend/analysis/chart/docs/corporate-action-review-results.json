@@ -33,6 +33,207 @@
     },
     "training_review": 1301
   },
+  "final": {
+    "candidate_automatic": 3704,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        218
+      ],
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_shares_mismatch",
+        10
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 75,
+      "remaining_failed_checks": {
+        "combined_bonus_listing_session_unavailable": 1,
+        "combined_bonus_listing_source_missing": 8,
+        "combined_bonus_reference_price_mismatch": 3,
+        "ex_price_reason_or_form_unsupported": 1,
+        "notice_parse_failed": 8,
+        "notice_security_unresolved": 3
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1103,
+    "new_automatic": 371,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 815,
+      "official_notice_format_requires_review": 174,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 830,
+      "reference_reset": 474,
+      "rights": 655,
+      "segment_break": 1453,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 611
+    },
+    "review_queue": {
+      "rows": 931,
+      "sha256": "eec251aefa955040b08130e7bec7478185c65fa2663d2adbabe6985032b17945"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "936d1ddea3946b558a1685a3df95a6d3ae579115c8adc3f8516a3fb4468d3d98"
+    },
+    "training_review": 931
+  },
+  "final_correction_examples": {
+    "20160428000303": [
+      "20160212000830",
+      "20160215000632",
+      "20160225000785",
+      "20160404000438"
+    ],
+    "20160722000097": [
+      "20160602000426",
+      "20160621000099"
+    ]
+  },
+  "final_seal": {
+    "dart_http_calls": 0,
+    "evidence_sha256": "70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9",
+    "examples_verified": 2,
+    "kind_http_calls": 0,
+    "security_intervals": 3563,
+    "segmentation_sha256": "3b46a39609c3b07dfe674af7f33b6506e16cfca096a0567ebe11898017924411",
+    "snapshot": "workspace/corporate-action-review/final-official-actions/snapshots/ab3796817140a0b88f019e709f7f27c8b018cfd03731b7978d0a971e2356bac8.json",
+    "snapshot_sha256": "ab3796817140a0b88f019e709f7f27c8b018cfd03731b7978d0a971e2356bac8",
+    "training_intervals": 3219,
+    "training_review_queue": {
+      "rows": 931,
+      "sha256": "eec251aefa955040b08130e7bec7478185c65fa2663d2adbabe6985032b17945"
+    },
+    "whole_security_intervals_removed": 0
+  },
   "stage1": {
     "candidate_automatic": 3333,
     "failed_checks": [

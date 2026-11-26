@@ -46,11 +46,20 @@ class KindUnavailable(DisclosureError):
     """The KIND request is incomplete and can be resumed."""
 
 
+class CorrectionError(DisclosureError):
+    failed_check = "correction_final_unresolved"
+
+    def __init__(self, message, evidence=()):
+        super().__init__(message)
+        self.evidence = evidence
+
+
 @dataclass(frozen=True)
 class MarketFiling(Filing):
     displayed: date | None = None
     company_id: str = ""
     submitter: str = ""
+    withdrawn: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,12 @@ class DailyRows(TableRows):
         super().handle_endtag(tag)
 
 
+def kind_withdrawal(title):
+    title = re.sub(r"\s+", "", title)
+    return bool(re.match(r"^(?:\[[^\[\]]+\])*\[(?:철회|취소)\]", title)
+                or re.search(r"\((?:철회|취소)\)\Z", title))
+
+
 def daily_form(day, page):
     return {"method": "searchTodayDisclosureSub", "forward": "todaydisclosure_sub",
             "currentPageSize": str(DAILY_SIZE), "pageIndex": str(page), "orderMode": "", "orderStat": "D",
@@ -130,7 +145,8 @@ def daily_page(response, day, page):
                 "Invalid KIND daily filing row")
         _, company, title, submitter, _ = cells
         rows.append(MarketFiling(accession, day, caption or title, response.evidence,
-                                 company=company, displayed=day, company_id=company_id, submitter=submitter))
+                                 company=company, displayed=day, company_id=company_id, submitter=submitter,
+                                 withdrawn=kind_withdrawal(title) or kind_withdrawal(caption)))
     return total, last, rows, response.evidence
 
 
@@ -146,7 +162,8 @@ def company_page(response, code, start, end, page):
                 "KIND company result lacks a verified issuer-code binding")
         _, _, company, title, submitter, _ = cells
         rows.append(MarketFiling(accession, displayed, caption or title, response.evidence, stock_code=code,
-                                 company=company, displayed=displayed, company_id=company_id, submitter=submitter))
+                                 company=company, displayed=displayed, company_id=company_id, submitter=submitter,
+                                 withdrawn=kind_withdrawal(title) or kind_withdrawal(caption)))
     return total, last, rows, response.evidence
 
 
@@ -170,16 +187,23 @@ def viewer_documents(accession, shell):
     require(set(re.findall(r'name="acptNo"\s+id="acptNo"\s+value="([0-9]{14})"', text)) == {accession},
             "KIND viewer does not identify the requested accession")
     options = one(r'<select\b[^>]*\bid=[\'"]mainDoc[\'"][^>]*>(.*?)</select>', text, "KIND viewer main document missing")
-    selected = one(r"value=['\"]([0-9]{14})\|([YN])['\"]\s*selected", options, "KIND selected document is ambiguous")
+    selections = re.findall(r"value=['\"]([0-9]{14})\|([YN])['\"]\s*selected", options)
+    if len(selections) != 1:
+        raise CorrectionError("KIND selected document is ambiguous", (shell.evidence,))
+    selected, = selections
     family = tuple(re.findall(r"value=['\"]([0-9]{14})\|([YN])['\"]", options))
-    require(len(family) == len({number for number, _ in family}), "KIND document family is ambiguous")
+    if len(family) != len({number for number, _ in family}):
+        raise CorrectionError("KIND document family is ambiguous", (shell.evidence,))
+    if selected[1] == "Y" and [number for number, flag in family if flag == "Y"] != [selected[0]]:
+        raise CorrectionError("KIND viewer does not identify one selected final document", (shell.evidence,))
     return selected, family
 
 
 def final_document_number(selected, family):
     require(selected[1] == "N", "KIND final referral requires a non-final selection")
     finals = [number for number, flag in family if flag == "Y"]
-    require(len(finals) == 1, "KIND correction family does not identify one final document")
+    if len(finals) != 1:
+        raise CorrectionError("KIND correction family does not identify one final document")
     return finals[0]
 
 
@@ -324,7 +348,8 @@ class KindMarket:
                 log.write(json.dumps({**call, "received_at": at}) + "\n")
         return self._store(request, bytes(body), charset, at, "http")
 
-    def _get(self, url, *, referer, form=None, daily=None, legacy=None, parse=lambda response: response, page_caches=None):
+    def _get(self, url, *, referer, form=None, daily=None, legacy=None, parse=lambda response: response, page_caches=None,
+             cache_only=False):
         request = {"url": url, "form": form, "referer": referer}
         pointer = self.root / "requests" / f"{canonical_hash(request)}.json"
         if page_caches is not None:
@@ -337,6 +362,8 @@ class KindMarket:
         if response is None and legacy and legacy.is_file():
             response = self._import_document(legacy, request)
         if response is None:
+            if cache_only:
+                raise KindUnavailable("KIND supplemental response is unavailable in cache")
             response = self._request(request)
         result = parse(response)
         atomic_json(pointer, vars(response.evidence))
@@ -425,19 +452,19 @@ class KindMarket:
         require(audited == span and len(matches) <= 1, "KIND correction is duplicated in the verified daily list")
         return matches[0] if matches else None
 
-    def final_referral(self, filing, body, refs):
+    def final_referral(self, filing, body, refs, *, cache_only=False):
         viewer = KIND_VIEWER + "?" + urlencode({"method": "search", "acptno": filing.accession})
         shell = self._verified_response(refs[0], {"url": viewer, "form": None, "referer": DAILY_MAIN}, self.root)
         selected, family = viewer_documents(filing.accession, shell)
         require(selected == (body.document_no, "N") and not body.final, "KIND correction source selection differs")
         final_no = final_document_number(selected, family)
         lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": final_no})
-        response = self._get(lookup, referer=viewer)
+        response = self._get(lookup, referer=viewer, cache_only=cache_only)
         route = document_route(response)
         require(route.document_no == final_no and route.accession != filing.accession, "KIND correction route differs")
         return FinalReferral(route, family, response.evidence)
 
-    def document(self, filing, *, expected=None):
+    def document(self, filing, *, expected=None, cache_only=False):
         accession = filing.accession
         require(re.fullmatch(r"[0-9]{14}", accession), "Invalid KIND accession")
         folder = next((path for path in self.legacy_docs if all((path / f"{accession}_{name}").is_file()
@@ -447,24 +474,23 @@ class KindMarket:
             return folder / f"{accession}_{suffix}" if folder else None
 
         viewer = KIND_VIEWER + "?" + urlencode({"method": "search", "acptno": accession})
-        shell = self._get(viewer, referer=DAILY_MAIN, legacy=cached("viewer.html"))
+        shell = self._get(viewer, referer=DAILY_MAIN, legacy=cached("viewer.html"), cache_only=cache_only)
         refs = [shell.evidence]
         try:
             (doc_no, final), family = viewer_documents(accession, shell)
-            if expected:
-                require((doc_no, final) == (expected.route.document_no, "Y") and set(family) == set(expected.family),
-                        "KIND final viewer selection or correction family differs")
+            if expected and ((doc_no, final) != (expected.route.document_no, "Y") or set(family) != set(expected.family)):
+                raise CorrectionError("KIND final viewer selection or correction family differs", (shell.evidence,))
             lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": doc_no})
-            route = self._get(lookup, referer=viewer, legacy=cached("contents.html"))
+            route = self._get(lookup, referer=viewer, legacy=cached("contents.html"), cache_only=cache_only)
             refs.append(route.evidence)
             source, form = kind_route(accession, route)
             require(f"/{doc_no}/" in urlsplit(source).path, "KIND route document identifier changed")
             if expected:
                 require((source, form) == (expected.route.url, expected.route.form), "KIND final route differs from referral")
-        except KindUnavailable:
+        except (CorrectionError, KindUnavailable):
             raise
         except DisclosureError as exc:
             raise DocumentFormatError(str(exc), tuple(refs)) from None
-        body = self._get(source, referer=viewer, legacy=cached("doc.htm"))
+        body = self._get(source, referer=viewer, legacy=cached("doc.htm"), cache_only=cache_only)
         family_numbers = tuple(number for number, _ in family)
         return form, KindBody(body.body, body.charset, body.evidence, doc_no, family_numbers, final == "Y"), (*refs, body.evidence)

@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 from experiments.dataset.census_actions import _collect_notices
+from shared.data.actions import valid_isin
 from shared.data.market_notices import SecurityKey, normal_company, parse_notice
 from shared.data.market_resolutions import Candidate
 from shared.tests.test_market_resolutions import official_body
@@ -17,7 +18,8 @@ SOURCES = json.loads((FIXTURES / "sources.json").read_text())
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case["candidate"]["Code"])
 @pytest.mark.parametrize("complete", [True, False])
-def test_company_terms_separate_a_verified_common_allocation_from_an_unlisted_class(case, complete):
+@pytest.mark.parametrize("active_preferred", [False, True])
+def test_company_terms_separate_a_verified_common_allocation_from_an_unlisted_class(case, complete, active_preferred):
     raw = case["candidate"]
     key = SecurityKey(raw["Code"], raw["ISIN"], raw["ListingDate"], raw["DelistingDate"] or None,
                       raw["Market"], raw["ShareClass"])
@@ -35,13 +37,22 @@ def test_company_terms_separate_a_verified_common_allocation_from_an_unlisted_cl
     assert common.share_label == "보통주식" and other.share_label == "종류주식" and other.ratio > 0
     assert other.code is None and other.isin is None
     aliases = {key: {normal_company(common.company)}}
+    universe = dict(aliases)
+    if active_preferred:
+        isin = next(f"KR7{key.code[:5]}100{digit}" for digit in range(10)
+                    if valid_isin(f"KR7{key.code[:5]}100{digit}"))
+        preferred = replace(key, code=key.code[:5] + "5", isin=isin, listing=other.listing or other.effective,
+                            share_class="preferred")
+        universe[preferred] = {normal_company(common.company) + "우"}
+        if other.listing:
+            assert not preferred.active(other.effective) and preferred.active(other.listing)
     client = Mock()
     client.document.side_effect = lambda filing: docs[filing.accession]
     parsed, _, unparsed, _, _, failures, *_ = _collect_notices(
         client, filings, aliases, defaultdict(tuple, {key: (candidate,)}), anchors={}, spac_keys=set(), bounded=True,
-        identity_universe=aliases if complete else None,
+        identity_universe=universe if complete else None,
     )
-    if complete:
+    if complete and (not active_preferred or other.listing is None):
         assert not failures and not unparsed[key]
         assert [notice.facts.kind for notice in parsed[key]] == ["ex_price", common.kind]
     else:
