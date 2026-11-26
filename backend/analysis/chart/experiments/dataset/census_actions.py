@@ -31,6 +31,7 @@ from shared.data.market_notices import (
     parse_notice,
 )
 from shared.data.market_resolutions import (
+    NoticeFailure,
     Resolution,
     issuer_merger_boundaries,
     merger_facts,
@@ -248,12 +249,14 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     def has_session(key, day):
         return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
 
-    def failed(filing, structural, keys, affected, refs, exc):
+    def failed(filing, structural, keys, affected, refs, exc, check="notice_parse_failed"):
+        check = getattr(exc, "failed_check", check)
         stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
         if isinstance(exc, DocumentFormatError):
             refs += exc.evidence
         failures.append({"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
                          "Stage": stage, "Topic": kind_topic(filing), "Reason": str(exc),
+                         "FailedCheck": check,
                          "Evidence": [asdict(ref) for ref in refs]})
         if structural:
             for key in keys:
@@ -262,8 +265,8 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if stage == "kind_document":
                 blocked[key].add(candidate.date)
             else:
-                unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
-                                                    for ref in refs)
+                unparsed[key][candidate.date].append(NoticeFailure(
+                    tuple(FieldEvidence(filing.accession, ref, "KIND notice awaiting review") for ref in refs), check))
 
     def bind(filing, form, body, acquired, issuer, keys, structural, affected):
         sections = parse_notice(filing, form, body)
@@ -327,6 +330,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             continue
         selected.add(filing.accession)
         refs = (filing.evidence,)
+        check = "notice_parse_failed"
         try:
             form, body, acquired = client.document(filing)
             refs += acquired
@@ -334,6 +338,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if body.final:
                 bind(filing, form, body, acquired, issuer, keys, structural, affected)
                 continue
+            check = "correction_final_unresolved"
             referral = client.final_referral(filing, body, acquired)
             accession = referral.route.accession
             route_day = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
@@ -351,6 +356,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if accession not in verified:
                 target_affected = [(key, candidate) for key in keys for candidate in candidates[key]
                                    if _in_scope(target, candidate)]
+                check = "notice_parse_failed"
                 bind(target, target_form, target_body, target_refs, issuer, keys, structural, target_affected)
             family = {"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
                       "FinalDocNo": target_body.document_no, "FormId": target_form,
@@ -358,7 +364,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                                                            target.evidence, *target_refs)]}
             pending_families.append((filing, structural, keys, affected, refs, target_refs, family, form, body))
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc)
+            failed(filing, structural, keys, affected, refs, exc, check)
 
     listings = auction_listing_index(notice for rows in parsed.values() for notice in rows)
     for filing, form, facts, body, acquired, securities, structural, keys, affected, initial_error in pending_auctions:
@@ -403,7 +409,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if review:
                 structural_reviews[review.security].append(review)
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc)
+            failed(filing, structural, keys, affected, refs, exc, "correction_final_unresolved")
     require(not missing_merger_sources,
             "Issuer merger source is outside the bounded census; include --code for "
             + ", ".join(sorted(missing_merger_sources)))
@@ -491,7 +497,7 @@ def _resolution_columns(resolution, observations, price_hashes):
     return {**_security_columns(resolution.security), "Date": resolution.date, "Resolution": resolution.kind,
             "PriceFactor": resolution.price_factor, "VolumeFactor": resolution.volume_factor,
             "Evidence": json.dumps(evidence),
-            "Reason": resolution.reason, "Review": resolution.review}
+            "Reason": resolution.reason, "Review": resolution.review, "FailedCheck": resolution.failed_check}
 
 
 def _write_csv(path, columns, rows):
@@ -722,6 +728,8 @@ def build_census(args, client):
         "whole_tickers_excluded_by_resolver": None, "training_policy_active": False,
         "failed_windows": len(failed_windows), "failed_codes": len({e["Code"] for e in [*failures, *failed_windows]}),
         "complete_windows": sum(window["complete"] for window in window_coverage),
+        "market_review_count": sum(row.review for row in resolved),
+        "training_review_count": sum(row.review for row in resolved if row.security in training),
         "market_resolution_counts": {kind.value: market_counts[kind] for kind in Resolution},
         "training_resolution_counts": {kind.value: training_counts[kind] for kind in Resolution},
         "inventory_complete": len(daily) == len(requested),

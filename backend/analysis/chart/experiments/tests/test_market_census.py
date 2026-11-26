@@ -198,6 +198,7 @@ def test_census_freezes_merger_review_with_or_without_a_raw_observation(tmp_path
     assert (row.Code, row.Date, row.PrevClose, row.BasePrice, row.SharesBefore, row.SharesAfter) == (
         "373200", "2022-01-20", 100, base_price, 3_520_000, 3_520_000)
     assert kind_document_url("20220119000510") in row.NearbyNotices
+    assert row.FailedCheck == "spac_merger_shares_mismatch"
     assert report["market_observations_before_identity"] == report["market_candidates_with_market_observation"] == int(base_price != 100)
     assert report["review_candidates_without_market_observation"] == int(base_price == 100)
     assert report["market_candidates"] == 1 and report["resolutions_without_price_observation"] == 0

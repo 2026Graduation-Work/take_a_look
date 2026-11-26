@@ -1,0 +1,100 @@
+"""Replay a preserved action census without HTTP and compare its decisions with a baseline."""
+
+import argparse
+import csv
+import json
+import socket
+from collections import Counter
+from pathlib import Path
+from unittest.mock import patch
+
+from shared.io import atomic_json, sha256
+
+from .census_actions import main as census
+
+IDENTITY = ("Code", "ISIN", "ListingDate", "DelistingDate", "Market", "ShareClass", "Date")
+DECISION = ("Resolution", "PriceFactor", "VolumeFactor", "Review")
+
+
+def _read(folder, name):
+    with (folder / f"{name}.csv").open(newline="", encoding="utf-8") as stream:
+        return list(csv.DictReader(stream))
+
+
+def summarize(folder, baseline=None):
+    rows = _read(folder, "resolutions")
+    candidates = _read(folder, "candidates")
+    def identity(row):
+        return tuple(row[field] for field in IDENTITY)
+    candidate_keys = {identity(row) for row in candidates}
+    current = {identity(row): row for row in rows}
+    if len(current) != len(rows):
+        raise ValueError("Duplicate census resolution identity")
+    reviews = [row for row in rows if row["Review"] == "True"]
+    manifest = json.loads((folder / "manifest.json").read_text())
+    if manifest["kind_http_calls_this_run"] or manifest["dart_http_calls_this_run"]:
+        raise ValueError("Replay made an HTTP call")
+    result = {
+        "resolution_counts": dict(Counter(row["Resolution"] for row in rows)),
+        "candidate_automatic": sum(identity(row) in candidate_keys and row["Review"] == "False" for row in rows),
+        "market_review": len(reviews), "training_review": manifest.get("training_review_count"),
+        "failed_checks": Counter(row.get("FailedCheck", "") for row in reviews).most_common(),
+        "reasons": dict(Counter(row["Reason"] for row in reviews)),
+        "http_calls": 0, "tables": manifest["table_sha256"],
+    }
+    if baseline:
+        before = {identity(row): row for row in _read(baseline, "resolutions")}
+        if before.keys() != current.keys():
+            raise ValueError("Replay changed the census resolution identity set")
+        changed = [key for key, row in before.items() if row["Review"] == "False"
+                   and any(row[field] != current[key][field] for field in DECISION)]
+        result["previous_automatic_decision_changes"] = changed
+        result["previous_automatic_metadata_changes"] = [
+            {"identity": key, "before": row["Reason"], "after": current[key]["Reason"]}
+            for key, row in before.items() if row["Review"] == "False"
+            and any(row[field] != current[key][field] for field in ("Reason", "Evidence"))
+        ]
+        result["new_automatic"] = sum(row["Review"] == "True" and current[key]["Review"] == "False"
+                                      for key, row in before.items())
+        coverage = json.loads((baseline / "coverage.json").read_text())
+        accessions = {row["AcptNo"] for row in coverage["failures"]
+                      if row.get("FailedCheck") == "unsupported_form:11308"
+                      or row.get("Reason") == "Unsupported KIND market-action form 11308"}
+        blocked = {key for key, row in before.items() if row["Review"] == "True"
+                   and any(ref.get("accession") in accessions and ref.get("field") == "KIND notice awaiting review"
+                           for ref in json.loads(row["Evidence"]))}
+        result["form_11308"] = {
+            "baseline_review": len(blocked),
+            "became_bonus": sum(current[key]["Resolution"] == "bonus" for key in blocked),
+            "remaining_failed_checks": dict(Counter(current[key].get("FailedCheck", "") for key in blocked
+                                                     if current[key]["Review"] == "True")),
+        }
+        if changed:
+            raise ValueError(f"Changed {len(changed)} previously automatic decisions")
+    atomic_json(folder / "review-summary.json", result)
+    return result
+
+
+def main(argv=None):
+    cli = argparse.ArgumentParser(description=__doc__)
+    cli.add_argument("--replay-args", type=Path)
+    cli.add_argument("--kind-root", type=Path)
+    cli.add_argument("--output", required=True, type=Path)
+    cli.add_argument("--baseline", type=Path)
+    cli.add_argument("--summarize-only", action="store_true")
+    args = cli.parse_args(argv)
+    if not args.summarize_only:
+        if not args.replay_args or not args.kind_root:
+            cli.error("--replay-args and an independent --kind-root are required")
+        replay = [*json.loads(args.replay_args.read_text()), "--output", str(args.output),
+                  "--kind-root", str(args.kind_root), "--request-budget", "0", "--preview"]
+        def no_network(*unused, **kwargs):
+            raise AssertionError("Cached action replay attempted a network connection")
+        with patch.object(socket.socket, "connect", no_network), patch.object(socket, "create_connection", no_network):
+            census(replay)
+        atomic_json(args.output / "replay-input.json", {"argv": replay, "source_sha256": sha256(args.replay_args)})
+    print(json.dumps(summarize(args.output, args.baseline), ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

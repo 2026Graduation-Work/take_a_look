@@ -47,9 +47,9 @@ NOTICE_COLUMNS = SECURITY_COLUMNS + ["AcptNo", "FormId", "Section", "Published",
                                     "Reason", "BasePrice", "EvaluationPrice", "Low", "High", "ParBefore", "ParAfter",
                                     "SharesBefore", "SharesAfter", "AddedShares", "Ratio", "Listing", "Sha256",
                                     "Evidence", "DocNo", "Family", "Final", "PreviousMarket", "PreviousClose"]
-RESOLUTION_COLUMNS = SECURITY_COLUMNS + ["Date", "Resolution", "PriceFactor", "VolumeFactor", "Evidence", "Reason", "Review"]
+RESOLUTION_COLUMNS = SECURITY_COLUMNS + ["Date", "Resolution", "PriceFactor", "VolumeFactor", "Evidence", "Reason", "Review", "FailedCheck"]
 CONFIRMATION_COLUMNS = SECURITY_COLUMNS + ["Date", "OfficialURL", "FormId", "Section", "Ratio"]
-REVIEW_COLUMNS = ["Code", "Date", "PrevClose", "BasePrice", "SharesBefore", "SharesAfter", "NearbyNotices", "Reason"]
+REVIEW_COLUMNS = ["Code", "Date", "PrevClose", "BasePrice", "SharesBefore", "SharesAfter", "NearbyNotices", "Reason", "FailedCheck"]
 BOUNDARIES = {Resolution.SEGMENT_BREAK, Resolution.SPAC_PREMERGER}
 
 
@@ -91,13 +91,14 @@ def _refs(value):
             yield from _refs(item)
 
 
-def _csv(path, columns):
+def _csv(path, columns, *, optional=()):
     with path.open(encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream)
-        require(reader.fieldnames == columns, f"Invalid ledger schema: {path.name}")
+        require(reader.fieldnames == [col for col in columns if col not in optional or col in (reader.fieldnames or [])],
+                f"Invalid ledger schema: {path.name}")
         for row in reader:
             require(None not in row and None not in row.values(), f"Invalid ledger row: {path.name}")
-            yield row
+            yield {**dict.fromkeys(optional, ""), **row}
 
 
 def _insert(mapping, key, value):
@@ -220,7 +221,7 @@ class ResolutionSnapshot:
                     candidate.shares_before, candidate.shares_after,
                     " ".join(kind_document_url(item)
                              for item in sorted(accessions)),
-                    row.reason,
+                    row.reason, row.failed_check,
                 )))
 
 
@@ -395,7 +396,7 @@ def _load_tables(folder, manifest):
                 "KIND auction identity link does not reference the same security")
         linked.add(source)
 
-    for row in _csv(folder / "resolutions.csv", RESOLUTION_COLUMNS):
+    for row in _csv(folder / "resolutions.csv", RESOLUTION_COLUMNS, optional=("FailedCheck",)):
         security, day = _security(row), _day(row["Date"])
         key = (security, day)
         kind, review = Resolution(row["Resolution"]), _bool(row["Review"])
@@ -452,7 +453,7 @@ def _load_tables(folder, manifest):
             expected_price = Fraction(candidate.base_price, candidate.prev_close) if kind == Resolution.RIGHTS and candidate else 1
             require(price == expected_price and volume == 1 and (kind != Resolution.RIGHTS or candidate),
                     "Reference or rights factors disagree")
-        _insert(resolutions, key, ResolvedEvent(security, day, kind, row["Reason"], tuple(fields), price, volume, review))
+        _insert(resolutions, key, ResolvedEvent(security, day, kind, row["Reason"], tuple(fields), price, volume, review, row["FailedCheck"]))
 
     require(review_refs.keys() <= resolutions.keys(), "Resolution ledger omits a witnessed structural review")
     require(len(candidates) == manifest["market_candidates"] and

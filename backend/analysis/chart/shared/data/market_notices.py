@@ -32,6 +32,12 @@ CLASS_RELISTING = (
 )
 
 
+class NoticeError(DisclosureError):
+    def __init__(self, failed_check, message):
+        super().__init__(message)
+        self.failed_check = failed_check
+
+
 @dataclass(frozen=True)
 class SecurityKey:
     code: str
@@ -826,7 +832,7 @@ def parse_notice(filing, form, body):
         if form == "11307" and getattr(body, "final", False):
             rows = _final_bonus_terms_rows(rows)
         return _terms(filing, form, rows)
-    raise DisclosureError(f"Unsupported KIND market-action form {form}")
+    raise NoticeError(f"unsupported_form:{form}", f"Unsupported KIND market-action form {form}")
 
 
 def _preferred_name_matches(facts, company, names):
@@ -920,7 +926,8 @@ def match_notice(filing, form, facts, body, evidence, securities, *, identity_wi
                 "KIND auction witness differs from the KRX listing interval")
         matches = [witnessed]
     if len(matches) != 1:
-        raise DisclosureError(f"KIND notice does not identify one KRX security: {facts.company} {facts.share_label}")
+        raise NoticeError("notice_security_unresolved",
+                          f"KIND notice does not identify one KRX security: {facts.company} {facts.share_label}")
     return Notice(matches[0], filing.accession, form, filing.published.isoformat(), filing.company_id,
                   filing.title, replace(facts, company=facts.company.strip()), (filing.evidence, *evidence),
                   body.document_no, body.family, body.final)
