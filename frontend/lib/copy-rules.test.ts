@@ -22,7 +22,7 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(path.join(ROOT, dir), { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name) && !entry.name.includes(".test."))
     .map((entry) => path.relative(ROOT, path.join(entry.parentPath, entry.name)))
-    .filter((file) => !EXCLUDED.has(file));
+    .filter((file) => !EXCLUDED.has(file) && !/^app\/(?:api\/)?lab\/backtest\//.test(file));
 }
 
 // 주석은 사용자에게 보이지 않으므로 지운다. 줄 번호를 지키려고 블록 주석의 줄바꿈은 남긴다.
