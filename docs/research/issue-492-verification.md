@@ -2,6 +2,18 @@
 
 목표는 가격 변동일과 그 날짜의 공시·코스피를 정확히 연결하고, 없는 자료와 조회 실패를 구분하는 것이다. 뉴스의 실제 제공, 운영 보존 설정 전환, 대량 백필은 확인 조건이 충족되기 전까지 실행하지 않는다.
 
+## PR 분리와 최신 main 반영
+
+2026-11-26 PR 준비에서 최신 main `25a484b`의 백테스트 실험실 변경을 충돌 없이 rebase했다. 저장소의 블록별 PR 규칙에 따라 차트·공시 수집·화면을 순서대로 나눈다. 차트 PR은 선택형 서빙 계약과 프론트 소비 타입·검증을 함께 맞춘다. 후속 PR은 선행 브랜치를 base로 사용하며 선행 PR 머지 후 main으로 변경한다.
+
+| 검증한 브랜치 | 기준과 결과 |
+|---|---|
+| `feat/issue-492-chart-basis`의 `e2dd9a4` | 최신 main 위 차트 변경. chart 전체 504 passed, 기존 3 skipped와 Ruff 통과. 프론트 단위 191 passed와 기본 Turbopack production build 통과 |
+| `feat/issue-492-disclosure-collection`의 `b571cbc` | 차트 브랜치 위 공시 변경. text 전체 275 passed, 기존 경고 2개와 Ruff 통과 |
+| `feat/issue-492-price-context`의 `76d67a0` | 전체 기능. 프론트 단위 203 passed와 기본 production build 재확인. 아래 오류 처리 최종 Chromium 35개 검증 때와 프론트 소스 바이트가 같다 |
+
+위 검증 명령은 아래 기존 기록과 같고 실행 로그는 검증 폴더의 `issue492-pr-{chart,text,web}-*.log`다. chart 전체 495개라는 이전 기록은 최신 main의 실험실 테스트 추가 전 결과다. rebase로 원래 차트 `ab0c166`은 `e2dd9a4`, 공시 `e12545e`는 `b571cbc`, 오류 처리 `4adb482`는 `03367c5`가 됐다. 아래 이전 검증 시점과 명령은 당시 기록으로 유지한다.
+
 ## 작업 기준
 
 - 구현 시작점은 `origin/main`의 `551a7be2860fef2856cf36c5007cd273faba268f`다.
