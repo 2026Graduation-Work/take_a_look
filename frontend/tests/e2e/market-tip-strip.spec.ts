@@ -228,9 +228,9 @@ test("좁은 화면에도 두 지수의 절대값, 등락률, 오래된 데이�
   await detail.click();
   const popover = page.getByRole("region", { name: "시장 흔들림 설명" });
   await expect(popover).toContainText("최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 81% 위치예요.");
-  await expect(popover.locator("p").last()).toHaveText("2026.11.20 기준");
-  await expect(bar.getByText("2026.11.20 기준", { exact: true })).toHaveCount(0);
-  await expect(popover.getByText("2026.11.20 기준", { exact: true })).toHaveCount(1);
+  await expect(bar.getByText("시세 2026.11.20 종가 기준", { exact: true })).toBeVisible();
+  await expect(bar.getByText("실시간 아님", { exact: true })).toBeVisible();
+  await expect(popover).not.toContainText("2026.11.20");
 });
 
 test("종목 로딩이 1초를 넘기면 팁을 보여 주고 로딩 완료 후에도 띠가 하나다", async ({ page }) => {

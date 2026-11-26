@@ -138,10 +138,9 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
         ) : (
           <span className="basis-full text-xs text-muted sm:basis-auto">지수 데이터가 아직 없어요.</span>
         )}
-        {stale && <strong className="text-xs font-semibold text-ink">{stale}</strong>}
         {real ? (
           <MarketDetail
-            className="ml-auto flex-none"
+            className="flex-none"
             label={
               <>
                 시장 흔들림 <Level score={status.volatilityScore} />
@@ -156,12 +155,16 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
             </p>
             <p className="m-0 mt-1">최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">{meta.comment}.</p>
-            <p className="m-0 mt-2 text-muted tabular-nums">{date} 기준</p>
           </MarketDetail>
         ) : (
-          <span className="flex-none whitespace-nowrap text-xs text-muted lg:ml-auto">{meta.comment}</span>
+          <span className="flex-none whitespace-nowrap text-xs text-muted">{meta.comment}</span>
         )}
-        {!real && <span className="flex-none text-2xs text-muted tabular-nums">예시 데이터, {date} 기준</span>}
+        <div aria-label="시세 기준" className="ml-auto flex flex-wrap items-baseline justify-end gap-x-3 gap-y-1 text-xs text-muted tabular-nums">
+          {!real && <span>예시 데이터</span>}
+          <span className="whitespace-nowrap">시세 {date} 종가 기준</span>
+          <span className="whitespace-nowrap">실시간 아님</span>
+          {stale && <strong className="font-semibold text-ink">{stale}</strong>}
+        </div>
       </div>
     </section>
   );

@@ -45,7 +45,7 @@ test("model tab retains both periods, source and historical returns", async ({ p
   await expect(history.getByText("1주 뒤", { exact: true })).toBeVisible();
   await overview.getByRole("tab", { name: "4주", exact: true }).click();
   await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
-  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 오늘 종가 기준이에요\.$/);
+  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 2026.09.21 종가 기준이에요\.$/);
   await page.getByRole("button", { name: "모델 신호 설명 보기" }).click();
   await expect(page.getByText(/세 점수를 내고 가장 큰 쪽/)).toBeVisible();
   await page.keyboard.press("Escape");
