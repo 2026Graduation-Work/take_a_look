@@ -10,9 +10,9 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
   });
   await page.goto("/stocks/000660");
   const tabs = page.getByRole("tablist", { name: "종목 상세" }).getByRole("tab");
-  await expect(tabs).toHaveText(["한눈에 보기", "모델이 본 이유", "재무 상태", "시장 분위기", "누가 사고팔았나"]);
+  await expect(tabs).toHaveText(["한눈에 보기", "모델이 본 이유", "회사 상태", "시장 분위기", "누가 사고팔았나"]);
   const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
-  await expect(overview.getByRole("button", { name: /^재무 상태/ })).toContainText("104.8%");
+  await expect(overview.getByRole("button", { name: /^회사 상태/ })).toContainText("104.8%");
   const price = overview.getByRole("region", { name: "최근 주가" });
   const checkpoint = overview.locator('section[aria-labelledby="checkpoint-title"]');
   await expect(price.getByRole("img", { name: "최근 주가 흐름" })).toBeVisible();
@@ -55,16 +55,21 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
 
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowLeft");
-  const company = page.getByRole("tabpanel", { name: "재무 상태" });
-  const financial = company.getByRole("region", { name: "재무 상태" });
-  await expect(financial.getByText("104.8%", { exact: true }).last()).toBeVisible();
+  const company = page.getByRole("tabpanel", { name: "회사 상태" });
+  const financial = company.getByRole("region", { name: "회사 상태" });
+  const earnings = financial.getByRole("region", { name: "매출과 이익" });
+  const debt = financial.getByRole("region", { name: "자산과 빚" });
+  const valuation = financial.getByRole("region", { name: "주가와 비교" });
+  await expect(earnings.getByText("9.4%", { exact: true })).toBeVisible();
+  await expect(debt.getByText("104.8%", { exact: true })).toBeVisible();
+  await expect(valuation.getByText("8.6배", { exact: true })).toBeVisible();
   const basisDate = financial.getByText(/PER\/PBR 주가 2026\.09\.21 종가 기준/);
   await expect(basisDate).toBeHidden();
   await financial.getByText("계산 근거", { exact: true }).click();
   await expect(basisDate).toBeVisible();
   await expect(company.getByRole("heading", { name: "최근 공시" })).toBeVisible();
   await expect(company.getByRole("link", { name: "가상 공시 테스트" })).toHaveAttribute("href", /dart\.fss\.or\.kr/);
-  await tabs.getByText("재무 상태", { exact: true }).press("ArrowRight");
+  await tabs.getByText("회사 상태", { exact: true }).press("ArrowRight");
   const news = page.getByRole("tabpanel", { name: "시장 분위기" });
   await expect(news).toBeVisible();
   await expect(news.getByText("가상 공시 테스트")).toHaveCount(0);
@@ -86,7 +91,7 @@ test("모델 신호가 없는 종목에서도 최근 공시와 뉴스에 접근�
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("한눈에 보기");
   await tabs.getByRole("tab", { name: "모델이 본 이유" }).click();
   await expect(page.getByRole("heading", { name: "모델 신호 미제공" })).toBeVisible();
-  await tabs.getByRole("tab", { name: "재무 상태" }).click();
+  await tabs.getByRole("tab", { name: "회사 상태" }).click();
   await expect(page.getByRole("heading", { name: "최근 공시" })).toBeVisible();
   await tabs.getByRole("tab", { name: "시장 분위기" }).click();
   await expect(page.getByRole("heading", { name: "최근 공시" })).toHaveCount(0);

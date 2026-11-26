@@ -54,7 +54,7 @@ const TAB_LABELS = {
   model: TERM.contribution,
   trading: TERM.supply,
   news: TERM.market,
-  company: TERM.financial,
+  company: "회사 상태",
 };
 
 type StockTab = keyof typeof TAB_LABELS;
@@ -488,7 +488,7 @@ export default function StockDetailView({
                   )}
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
-                      <h2 id="company-financials" className="text-xl font-semibold">{TERM.financial}</h2>
+                      <h2 id="company-financials" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
                       <FinancialPanel financial={financial} />
                     </section>
                     <DisclosureList disclosures={disclosures} />

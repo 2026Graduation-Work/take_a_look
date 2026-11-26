@@ -507,11 +507,23 @@ export const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { max
 // DB에 업종 분류가 없어 코스피 중간값과 비교한다(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
 const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
 
+const FINANCIAL_GROUPS = [
+  { title: "매출과 이익", keys: ["revenue_growth", "operating_margin", "roe"] },
+  { title: "자산과 빚", keys: ["debt_ratio"] },
+  { title: "주가와 비교", keys: ["per", "pbr"] },
+];
+
 export function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");
+  const groups = FINANCIAL_GROUPS.map(({ title, keys }) => ({
+    title,
+    metrics: financial.metrics.filter(({ key }) => keys.includes(key)),
+  }));
+  const otherMetrics = financial.metrics.filter(({ key }) => !FINANCIAL_GROUPS.some(({ keys }) => keys.includes(key)));
+  if (otherMetrics.length) groups.push({ title: "기타 재무 지표", metrics: otherMetrics });
   return (
     <>
       {roe != null && debt != null && (
@@ -521,24 +533,29 @@ export function FinancialPanel({ financial }: { financial: FinancialSnapshot | n
           <strong className="font-semibold">{oneDecimal(debt)}%</strong> 수준이에요.
         </Conclusion>
       )}
-      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-        {financial.metrics.map((metric) => {
-          const median = MEDIANS[metric.key]?.median;
-          return (
-            <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
-              <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
-              <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
-                {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
-              </dd>
-              <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
-                {metric.value === null
-                  ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
-                  : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
-              </dd>
-            </div>
-          );
-        })}
-      </dl>
+      {groups.filter(({ metrics }) => metrics.length > 0).map(({ title, metrics }, index) => (
+        <section key={title} aria-labelledby={`financial-group-${index}`} className="flex flex-col gap-3">
+          <h3 id={`financial-group-${index}`} className="text-lg font-semibold">{title}</h3>
+          <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+            {metrics.map((metric) => {
+              const median = MEDIANS[metric.key]?.median;
+              return (
+                <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+                  <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
+                  <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
+                    {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
+                  </dd>
+                  <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
+                    {metric.value === null
+                      ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
+                      : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </section>
+      ))}
       <Why>가격과 별개로 회사의 기초 체력을 코스피 다른 회사들과 견줘 볼 수 있어요.</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>

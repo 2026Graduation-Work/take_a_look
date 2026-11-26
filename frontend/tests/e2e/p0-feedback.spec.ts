@@ -47,7 +47,7 @@ test("3. 한눈에 보기는 먼저, 판단 근거 탭과 바로가기는 투자
   await demoReady(page);
   await page.goto("/stocks/005930");
   const tabs = page.getByRole("tablist", { name: "종목 상세" });
-  const labels = ["한눈에 보기", "누가 사고팔았나", "시장 분위기", "모델이 본 이유", "재무 상태"];
+  const labels = ["한눈에 보기", "누가 사고팔았나", "시장 분위기", "모델이 본 이유", "회사 상태"];
   await expect(tabs.getByRole("tab")).toHaveText(labels);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => tabs.evaluate((row) => row.scrollWidth - row.clientWidth)).toBe(0);
