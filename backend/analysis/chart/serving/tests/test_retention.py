@@ -1,5 +1,8 @@
-from datetime import date
+import json
+from datetime import date, datetime, timedelta
+from urllib.parse import parse_qs, urlsplit
 
+import pytest
 from serving import retention
 
 
@@ -89,3 +92,78 @@ def test_retention_keeps_shared_objects_referenced_by_retained_batches(monkeypat
                for p in body["prefixes"]]
     assert "b/2026-08-01/0/x.parquet" not in removed
     assert len(removed) == 1199
+
+
+@pytest.mark.parametrize(("today", "cutoff"), [
+    (date(2026, 11, 25), date(2026, 7, 28)),
+    (date(2027, 1, 1), date(2026, 9, 3)),
+    (date(2024, 6, 28), date(2024, 2, 29)),
+])
+def test_120_day_retention_recovers_after_partial_failure(monkeypatch, today, cutoff):
+    kept = [(cutoff + timedelta(days=offset)).isoformat() for offset in range(121)]
+    assert kept[-1] == today.isoformat()
+    first_removed = (cutoff - timedelta(days=1)).isoformat()
+    rows = {
+        "/rest/v1/news_articles": [first_removed, *kept],
+        "/rest/v1/disclosures": [first_removed, *kept],
+    }
+
+    class Store:
+        fail_once = True
+
+        def _request(self, method, path, body=None, **options):
+            endpoint = urlsplit(path)
+            if endpoint.path not in rows:
+                return []
+            assert method == "DELETE"
+            threshold = next(iter(parse_qs(endpoint.query).values()))[0]
+            assert threshold == f"lt.{cutoff.isoformat()}"
+            if endpoint.path.endswith("/disclosures") and self.fail_once:
+                self.fail_once = False
+                raise TimeoutError("mock write failure")
+            rows[endpoint.path] = [day for day in rows[endpoint.path] if day >= threshold[3:]]
+            return []
+
+    store = Store()
+    monkeypatch.setattr(retention, "SupabaseStore", lambda: store)
+    with pytest.raises(TimeoutError):
+        retention.main(today, article_days=120)
+    assert rows["/rest/v1/news_articles"] == kept
+    assert rows["/rest/v1/disclosures"] == [first_removed, *kept]
+    retention.main(today, article_days=120)
+    retention.main(today, article_days=120)
+    assert list(rows.values()) == [kept, kept]
+
+
+def test_dry_run_only_reads_dates_and_uses_kst(monkeypatch, capsys):
+    calls = []
+
+    class Clock:
+        @staticmethod
+        def now(zone):
+            assert str(zone) == "Asia/Seoul"
+            return datetime(2026, 11, 25, 0, 30, tzinfo=zone)
+
+    class Store:
+        def _request(self, method, path):
+            assert method == "GET"
+            endpoint = urlsplit(path)
+            options = parse_qs(endpoint.query)
+            field = options["select"][0]
+            assert options[field] == ["lt.2026-07-28"]
+            offset = int(options["offset"][0])
+            calls.append((endpoint.path, offset))
+            count = 1001 if endpoint.path.endswith("/news_articles") else 1
+            return [{field: "2026-07-27"}] * max(0, min(1000, count - offset))
+
+    monkeypatch.setattr(retention, "SupabaseStore", Store)
+    monkeypatch.setattr(retention, "datetime", Clock)
+    retention.main(article_days=120, dry_run=True)
+    result = json.loads(capsys.readouterr().out)
+    assert result["article_cutoff"] == "2026-07-28"
+    assert result["candidates"] == {
+        "news_articles": {"count": 1001, "by_date": {"2026-07-27": 1001}},
+        "disclosures": {"count": 1, "by_date": {"2026-07-27": 1}},
+    }
+    assert calls == [("/rest/v1/news_articles", 0), ("/rest/v1/news_articles", 1000),
+                     ("/rest/v1/disclosures", 0)]

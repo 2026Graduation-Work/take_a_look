@@ -34,3 +34,55 @@ test("mixed identity, invalid prices and inconsistent distribution are rejected"
     assert.throws(() => parseChartSnapshot(row(payload)));
   }
 });
+
+test("a matching optional public event basis parses independently of legacy prices", () => {
+  const payload = structuredClone(snapshots[0]);
+  const first = payload.prices.history[0].date;
+  const previous = new Date(Date.parse(first) - 86_400_000).toISOString().slice(0, 10);
+  const hash = "a".repeat(64);
+  const basis = {
+    method: "daily-log-std-250-v1", daily_sigma: .025, return_count: 60,
+    period_start: first, period_end: payload.data_asof, input_sha256: hash,
+    previous_bar: { date: previous, close: 100, volume: 10 },
+  };
+  payload.sources = { ...payload.sources, prices_sha256: hash };
+  payload.prices.event_basis = basis;
+  const parsed = parseChartSnapshot(row(payload));
+  assert.deepEqual(parsed.prices.eventBasis, {
+    method: basis.method, dailySigma: .025, returnCount: 60, periodStart: first,
+    periodEnd: payload.data_asof, inputSha256: hash, previousBar: basis.previous_bar,
+  });
+  for (const invalid of [
+    { input_sha256: "b".repeat(64) }, { daily_sigma: 0 }, { return_count: 59 }, { period_end: previous },
+    { previous_bar: { ...basis.previous_bar, date: first } },
+  ]) {
+    payload.prices.event_basis = { ...basis, ...invalid };
+    const parsed = parseChartSnapshot(row(payload));
+    assert.equal(parsed.prices.eventBasis, undefined);
+    assert.deepEqual(parsed.prices.history, payload.prices.history);
+  }
+});
+
+test("a missing displayed trading day disables the event basis for either horizon", () => {
+  for (const payload of structuredClone(snapshots)) {
+    const { history } = payload.prices;
+    const start = history[0].date;
+    const previous = new Date(Date.parse(start) - 86_400_000).toISOString().slice(0, 10);
+    const hash = "a".repeat(64);
+    payload.sources = { ...payload.sources, prices_sha256: hash };
+    payload.prices.event_basis = {
+      method: "daily-log-std-250-v1", daily_sigma: .05, return_count: 60,
+      period_start: start, period_end: payload.data_asof, input_sha256: hash,
+      previous_bar: { date: previous, close: 100, volume: 10 },
+    };
+    for (const [index, bar] of history.entries()) bar.close = index < 21 ? 100 : index === 21 ? 110 : 121;
+    assert.ok(parseChartSnapshot(row(payload)).prices.eventBasis);
+    history.splice(21, 1);
+    assert.equal(history.length, 59);
+    assert.equal(history[20].close, 100);
+    assert.equal(history[21].close, 121);
+    const parsed = parseChartSnapshot(row(payload));
+    assert.deepEqual(parsed.prices.history, history);
+    assert.equal(parsed.prices.eventBasis, undefined);
+  }
+});

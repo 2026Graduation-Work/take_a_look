@@ -7,9 +7,33 @@ from jsonschema import Draft202012Validator, FormatChecker
 V2_SCHEMA = json.loads((Path(__file__).parent / "chart_signal_detail_v2.schema.json").read_text())
 V2_VALIDATOR = Draft202012Validator(V2_SCHEMA, format_checker=FormatChecker())
 
+EVENT_BASIS_VALIDATOR = V2_VALIDATOR.evolve(schema=V2_SCHEMA["properties"]["prices"]["properties"]["event_basis"])
+
+
+def valid_event_basis(basis, history, as_of, input_sha256):
+    if not EVENT_BASIS_VALIDATOR.is_valid(basis) or not history:
+        return False
+    previous = basis["previous_bar"]
+    return (
+        math.isfinite(basis["daily_sigma"])
+        and basis["input_sha256"] == input_sha256
+        and basis["period_end"] == as_of == history[-1]["date"]
+        and basis["period_start"] <= history[0]["date"] < as_of
+        and (previous is None or (
+            previous["date"] < history[0]["date"]
+            and math.isfinite(previous["close"])
+            and math.isfinite(previous["volume"])
+        ))
+    )
+
 
 def validate_snapshot(value):
     V2_VALIDATOR.validate(value)
+    prices = value["prices"]
+    if "event_basis" in prices and not valid_event_basis(
+        prices["event_basis"], prices["history"], value["data_asof"], value["sources"]["prices_sha256"]
+    ):
+        raise ValueError("Price event basis disagrees with the published price source")
     inference, distribution = value["inference"], value["distribution"]
     total = inference.get("contribution_abs_sum")
     if total is not None and (not math.isfinite(total) or total < 0 or
