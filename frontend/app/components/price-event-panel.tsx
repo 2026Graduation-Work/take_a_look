@@ -2,12 +2,11 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import { DISCLOSURE_KIND } from "@/lib/copy-glossary";
-import { formatKstDateTime, formatSignedPercent } from "@/lib/display";
+import { changeMeta, formatKstDateTime, formatSignedPercent } from "@/lib/display";
 import { priceEventSourceMessages, priceMoveMessages, type EventSource } from "@/lib/price-event-messages";
 import { PRICE_EVENT_MULTIPLIER } from "@/lib/price-events";
 import type { SourceResult } from "@/lib/providers/price-event-context";
 import type { usePriceEvents } from "@/lib/use-price-events";
-import ChangeText from "./change-text";
 
 type PriceEvents = ReturnType<typeof usePriceEvents>;
 
@@ -81,11 +80,11 @@ export default function PriceEventPanel({ events }: { events: PriceEvents }) {
     <div className="flex min-w-0 flex-col gap-3">
       <p aria-live="polite" aria-atomic="true" className="m-0 flex flex-wrap items-baseline gap-x-3 text-sm tabular-nums text-ink">
         <time dateTime={move.date}>{formatKstDateTime(move.date)}</time>
-        <strong className="font-semibold">종목 <ChangeText value={move.changePercent} precision={2}>{formatSignedPercent(move.changePercent, 2)}</ChangeText></strong>
+        <strong className="font-semibold">종목 <span style={{ color: changeMeta(move.changePercent, 2).color }}>{formatSignedPercent(move.changePercent, 2)}</span></strong>
       </p>
       <section aria-label="같은 날 코스피">
         <SourceDetails name="market" source={context.market} retry={() => retry("market", move.date)}>
-          {items => <p className="m-0 text-xs tabular-nums text-body">코스피 <ChangeText value={items[0].changePercent} precision={2}>{formatSignedPercent(items[0].changePercent, 2)}</ChangeText></p>}
+          {items => <p className="m-0 text-xs tabular-nums text-body">코스피 <span style={{ color: changeMeta(items[0].changePercent, 2).color }}>{formatSignedPercent(items[0].changePercent, 2)}</span></p>}
         </SourceDetails>
       </section>
       <section aria-label="앞뒤 거래일에 나온 공시" className="flex min-w-0 flex-col gap-1">
