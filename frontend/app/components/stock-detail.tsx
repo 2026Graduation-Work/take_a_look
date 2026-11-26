@@ -30,6 +30,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
 import PriceEventPanel from "./price-event-panel";
+import { priceMoveMessages } from "@/lib/price-event-messages";
 import { usePriceEvents } from "@/lib/use-price-events";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
@@ -153,6 +154,13 @@ export default function StockDetailView({
   const preview = chartSnapshots !== undefined;
   const chart = chartSnapshots?.get(signalHorizon);
   const events = usePriceEvents(chartSnapshots?.get(20), chartRevision);
+  const eventMessages = priceMoveMessages(events.result);
+  const eventStatus = chart && (
+    <p role="status" aria-label="변동일 조회 상태" className="m-0 text-xs text-muted">
+      {eventMessages.message ?? priceMoveMessages({ status: "unavailable", reason: "incomplete_sessions" }).message}
+      {eventMessages.coverageNote && ` ${eventMessages.coverageNote}`}
+    </p>
+  );
   const direction = chartDirection(chart);
   const { close, sigma, barriers } = chart?.inference ?? {};
   const modelBasis = chart?.inference.status === "available" && close && sigma && barriers && [close, sigma, barriers.up, barriers.down].every((value) => Number.isFinite(value) && value > 0)
@@ -362,18 +370,28 @@ export default function StockDetailView({
                     </p>}
                     {priceHistory.length >= 2 ? (
                       <PriceHistoryChart
+                        key={detail.code}
                         prices={priceHistory}
                         band={hasBand ? detail.returnBand : undefined}
                         signal={signal}
                         horizonLabel={HORIZON_LABEL[horizon]}
                         asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
                         avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
-                        priceEvents={{ dates: detail.priceDates ?? [], moves: events.moves, selectedDate: events.move?.date, select: events.select }}
+                        priceEvents={{
+                          dates: detail.priceDates ?? [],
+                          moves: events.moves,
+                          selectedDate: events.move?.date,
+                          select: events.select,
+                          content: <PriceEventPanel events={events} />,
+                          emptyStatus: eventStatus,
+                        }}
                       />
                     ) : (
-                      <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
+                      <>
+                        <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
+                        {eventStatus}
+                      </>
                     )}
-                    {chart && <PriceEventPanel events={events} />}
                     {volatility && (
                       <>
                         <div className="text-sm text-body">
