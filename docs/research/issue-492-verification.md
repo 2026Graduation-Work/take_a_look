@@ -166,3 +166,27 @@ E2E는 키보드·터치 선택, 4개 화면 폭, 공시 더 보기, 실제 코�
 - 보존120일 옵션과 dry-run을 구현하더라도 운영 명령·정기 실행 전환은 별도 확인 뒤 진행한다. 이번 작업에서 실제 보존 기간을 늘렸다고 보고하지 않는다.
 - 기존 공시 workflow는 인자 없이 CLI를 실행하므로 코드가 적용되면 다음 실행부터 3→7일 조회·upsert로 바뀐다. YAML을 수정하지 않았어도 담당자와 DART 잔여 예산을 확인한 뒤 적용해야 한다.
 - main 대비 독립 보안 검토에서 새 권한 확대·비밀 출력·외부 입력 기반 서버 요청·브라우저 쓰기는 발견하지 못했다. 로컬 모의 검증 47건을 통과했으며 운영 호출·쓰기 검증을 대신하지 않는다.
+
+## 2026-11-26 커밋 후 재검증
+
+사용자의 추가 검증 요청으로 `c252589b4f5520be1c84876fdfc897ba4ba6bc96`의 실제 작업 트리에서 다시 실행했다. 시작 시 작업 트리는 깨끗했으며 기능 코드는 바꾸지 않았다. 이번에는 production build를 만든 뒤 같은 빌드에서 Chromium 검증을 실행했다.
+
+| 검사 | 결과 |
+|---|---|
+| chart 전체, 앞서 기록한 전체 명령 | 495 passed, 기존 3 skipped |
+| text 전체, 앞서 기록한 text 명령 | 275 passed, 기존 경고 2개 |
+| web `node --test 'lib/**/*.test.ts'` | 196 passed |
+| web `pnpm build` | Next 16.4.5 production build·TypeScript·23개 정적 페이지 생성 통과 |
+| production Chromium, 아래 명령 | 7 passed, 재시도 0 |
+| chart·text Ruff와 변경 web 파일 ESLint | 통과 |
+| 수정주가 오차 smoke·parquet 바이트 왕복 | 2,820개 검사와 두 거래일 저장·재읽기 통과 |
+
+web 빌드는 `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`, `NEXT_PUBLIC_SUPABASE_ANON_KEY=e2e-anon-key`, `NEXT_PUBLIC_CHART_LOCAL_PREVIEW=0`, `NEXT_TELEMETRY_DISABLED=1`로 실행했다. pinned pnpm 10.33.0을 사용했다. 빌드용 로컬 모의 서버를 종료한 뒤 E2E가 모의 DB와 production 서버를 직접 시작·정리했다. `CI=1`이면 `playwright.config.ts`가 `pnpm start --port 3101`을 실행한다. 로컬 모의 자료의 production 빌드 검증이며 운영 환경 E2E는 아니다. ESLint는 위에 기록한 변경 17파일 명령과 같으며 출력 없이 종료 코드 0이었다.
+
+```sh
+CI=1 NEXT_TELEMETRY_DISABLED=1 PLAYWRIGHT_BROWSERS_PATH=/private/tmp/market-tip-playwright pnpm exec playwright test tests/e2e/price-events.spec.ts --project=chromium --retries=0
+```
+
+로그는 앞서 설명한 검증 폴더의 `issue492-recheck-{chart,text,web-unit,web-build,web-e2e-production,chart-ruff,text-ruff,web-eslint,rounding,parquet}.log`다. 원래 있던 chart 제외 3개는 샘플 processed 패널이 없는 경우다. 테스트를 통과시키기 위해 제외 조건이나 경고 정책을 바꾸지 않았다. 운영 DB 쓰기·외부 공급자 수집·보존 설정 전환·배포는 실행하지 않았다.
+
+Prove It Works 원칙에 따라 production 브라우저에서 동작을 다시 확인했다. 공시·코스피 1차 기능의 로컬 구현과 검증은 끝났으며, 위 운영 확인과 신규 기준의 실데이터 전체 입력 대조·사용자 검토·뉴스 제공 조건은 남아 있다.
