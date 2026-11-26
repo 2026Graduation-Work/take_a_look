@@ -52,7 +52,7 @@ DIVIDEND = {"주식배당", "배당락(주식배당)"}
 COMBINED_OFFERING_BONUS_REASON = "combined_offering_bonus_terms"
 COMBINED_LISTING_FAILURE_FIELD = "KIND additional listing awaiting verification"
 PAR_CHANGE = re.compile(r"액면분할|액면병합")
-REDUCTION_REASONS = {"자본감소", "자본감소(액면감액)", "감자(주식병합)", "감자(액면변경)"}
+REDUCTION_REASONS = {"자본감소", "자본감소(액면감액)", "감자(주식병합)", "감자(액면변경)", "감자(무상)"}
 
 
 @dataclass(frozen=True)

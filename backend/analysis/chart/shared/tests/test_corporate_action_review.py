@@ -62,7 +62,8 @@ def test_compound_reference_reports_the_price_conflict_before_missing_listing():
     )
 
 
-def test_differential_reduction_reports_the_krx_share_mismatch():
+@pytest.mark.parametrize("reason", ["감자(주식병합)", "감자(무상)"])
+def test_differential_reduction_reports_the_krx_share_mismatch(reason):
     security = SecurityKey("000040", "KR7000040006", "2016-01-01", None, "KOSPI", "common")
     raw = bars(security, [
         ("2018-01-11", 0, 0, 0, 325, 0, 0, 0, 188_265_520),
@@ -76,7 +77,7 @@ def test_differential_reduction_reports_the_krx_share_mismatch():
     )
     listing = replace(
         auction, accession="20180111000002", form="68155", title="변경상장(자본감소)", document_no="20180111000002",
-        facts=NoticeSection(1, "listing", "KR모터스", "보통주", "2018-01-12", "감자(주식병합)",
+        facts=NoticeSection(1, "listing", "KR모터스", "보통주", "2018-01-12", reason,
                             shares_before=188_265_520, shares_after=119_759_667),
     )
     event, = resolve(security, raw, [auction, listing], coverage_complete=True).resolutions

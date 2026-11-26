@@ -1613,5 +1613,90 @@
       "20160412000741"
     ],
     "final": true
+  },
+  "20260709000523": {
+    "form": "70763",
+    "title": "변경상장(감자(무상))",
+    "company": "(주)소노스퀘어",
+    "company_id": "00772",
+    "body_url": "https://kind.krx.co.kr/external/2026/07/09/000523/20260709001369/70763.htm",
+    "charset": "utf-8",
+    "sha256": "67be92cd51e50df24c349f53d0c088ac2ed7e67894e34ad856958d4d1d97fa6b",
+    "document_no": "20260709001369",
+    "family": [
+      "20260709001369"
+    ],
+    "final": true
+  },
+  "20260713000666": {
+    "form": "70793",
+    "title": "기준가산정 등에 관한 안내(자본감소)",
+    "company": "(주)소노스퀘어",
+    "company_id": "00772",
+    "body_url": "https://kind.krx.co.kr/external/2026/07/13/000666/20260713001142/70793.htm",
+    "charset": "utf-8",
+    "sha256": "8480541e2e8b1c3d9e955ec1b1dc693f13be9ceab6b80956a95b05b3d161a0cf",
+    "document_no": "20260713001142",
+    "family": [
+      "20260713001142"
+    ],
+    "final": true
+  },
+  "20241210000782": {
+    "form": "32004",
+    "title": "변경상장(무상감자)",
+    "company": "(주)큐엠씨",
+    "company_id": "13666",
+    "body_url": "https://kind.krx.co.kr/external/2024/12/10/000782/20241210002115/32004.htm",
+    "charset": "utf-8",
+    "sha256": "de5a72aaef09d5ff0fc6fd7fc300ffbc914905dba8dfd84e1fd406d8bf1644b1",
+    "document_no": "20241210002115",
+    "family": [
+      "20241210002115"
+    ],
+    "final": true
+  },
+  "20241212000837": {
+    "form": "32108",
+    "title": "기준가산정 등에 관한 안내(자본감소)",
+    "company": "(주)큐엠씨",
+    "company_id": "13666",
+    "body_url": "https://kind.krx.co.kr/external/2024/12/12/000837/20241212002205/32108.htm",
+    "charset": "utf-8",
+    "sha256": "2bfb3908e39a81ee8a32b0101088093d6d88278c4ba4a917857da24ae63888d2",
+    "document_no": "20241212002205",
+    "family": [
+      "20241212002205"
+    ],
+    "final": true
+  },
+  "20250513000818": {
+    "form": "70763",
+    "title": "변경상장(무상감자)",
+    "company": "서울전자통신(주)",
+    "company_id": "02704",
+    "body_url": "https://kind.krx.co.kr/external/2025/05/13/000818/20250513001737/70763.htm",
+    "charset": "utf-8",
+    "sha256": "1609c6237ff9b586a05c2caa5bbc4f443a5b0e65cf54073f5b7c0984ee28489c",
+    "document_no": "20250513001737",
+    "family": [
+      "20250512001861",
+      "20250513001737"
+    ],
+    "final": true
+  },
+  "20250514000900": {
+    "form": "70793",
+    "title": "기준가산정 등에 관한 안내(자본감소(액면감액))",
+    "company": "서울전자통신(주)",
+    "company_id": "02704",
+    "body_url": "https://kind.krx.co.kr/external/2025/05/14/000900/20250514001908/70793.htm",
+    "charset": "utf-8",
+    "sha256": "0a16d41c4f812eb68cc310445583c32e79b7598d7d16a0ba23754b26cbd8d845",
+    "document_no": "20250514001908",
+    "family": [
+      "20250514001908"
+    ],
+    "final": true
   }
 }

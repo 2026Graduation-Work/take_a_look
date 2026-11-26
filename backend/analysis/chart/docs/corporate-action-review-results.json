@@ -234,6 +234,7 @@
     },
     "whole_security_intervals_removed": 0
   },
+  "latest_stage": "unpaid_reduction",
   "stage1": {
     "candidate_automatic": 3333,
     "failed_checks": [
@@ -1029,5 +1030,345 @@
       "resolutions": "3e961b94b892b5f5be48490987cb5fbe6ee832edb95667b2c65b54b1331e38c6"
     },
     "training_review": 1006
+  },
+  "unpaid_reduction": {
+    "candidate_automatic": 3815,
+    "failed_checks": [
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        54
+      ],
+      [
+        "reduction_reason_conflict",
+        45
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "reduction_shares_mismatch",
+        22
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 75,
+      "remaining_failed_checks": {
+        "combined_bonus_listing_session_unavailable": 1,
+        "combined_bonus_listing_source_missing": 8,
+        "combined_bonus_reference_price_mismatch": 3,
+        "ex_price_reason_or_form_unsupported": 1,
+        "notice_parse_failed": 8,
+        "notice_security_unresolved": 3
+      }
+    },
+    "http_calls": 0,
+    "market_review": 992,
+    "new_automatic": 482,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 704,
+      "official_notice_format_requires_review": 174,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 830,
+      "reference_reset": 481,
+      "rights": 655,
+      "segment_break": 1342,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 715
+    },
+    "review_queue": {
+      "rows": 826,
+      "sha256": "2a9f8a0ef4a9f91ef7df4828148c183c879851673cdf6aa053e5db10b29cfa3f"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "8e1e0cab3acf413920cfb4b0ae4e9737b0bb1062f932c492a3186e28c2cd1e11"
+    },
+    "training_review": 826
+  },
+  "unpaid_reduction_previous_pr_comparison": {
+    "all_resolution_identities_equal": true,
+    "candidate_bytes_equal": true,
+    "market_review": 992,
+    "new_automatic": 111,
+    "new_resolution_counts": {
+      "reference_reset": 7,
+      "unit_change": 104
+    },
+    "notice_bytes_equal": true,
+    "only_expected_111_changed": true,
+    "previous_automatic_changes": 0,
+    "previous_pr_commit": "60d98e22d0db7d5cf47e2fa9bb241050dfa5521e",
+    "remaining_failed_checks": [
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        54
+      ],
+      [
+        "reduction_reason_conflict",
+        45
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "reduction_shares_mismatch",
+        22
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "remaining_review_diagnostic_changes": 62,
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "8e1e0cab3acf413920cfb4b0ae4e9737b0bb1062f932c492a3186e28c2cd1e11"
+    },
+    "training_review": 826,
+    "unchanged_previous_automatic": 4080,
+    "unchanged_remaining_review": 992
+  },
+  "unpaid_reduction_seal": {
+    "dart_http_calls": 0,
+    "evidence_sha256": "70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9",
+    "examples_verified": 2,
+    "kind_http_calls": 0,
+    "security_intervals": 3563,
+    "segmentation_sha256": "cb7175a7d76a0f86d8c33d07e42e61acfc54ecf15f425a13af657b49240b2af2",
+    "snapshot": "workspace/corporate-action-review/unpaid-reduction-official-actions/snapshots/10632fce8a293412bade6ec40b81054db1aef9221cec3a879940544485d26cd6.json",
+    "snapshot_sha256": "10632fce8a293412bade6ec40b81054db1aef9221cec3a879940544485d26cd6",
+    "training_intervals": 3219,
+    "training_review_queue": {
+      "rows": 826,
+      "sha256": "2a9f8a0ef4a9f91ef7df4828148c183c879851673cdf6aa053e5db10b29cfa3f"
+    },
+    "unpaid_reduction_examples_verified": 111,
+    "whole_security_intervals_removed": 0
   }
 }

@@ -2,6 +2,16 @@
 
 목표는 공시와 KRX 수치가 함께 맞는 사건만 자동 판정으로 옮기고 기존 자동 판정과 종목 범위를 보존하는 것이다. #478의 `feat/chart-action-segments` (`d99621c`) 위 `feat/chart-action-review`에서 구현했다. 스택 rebase는 하지 않았다.
 
+## 감자(무상) 별도 허용 사유 추가
+
+사용자 승인에 따라 `감자(무상)`을 동의어 치환 없이 별도 허용 사유로 추가했다. 제품 코드 변경은 `REDUCTION_REASONS`의 정확한 문자열 한 개이며, 기존 다섯 검사·허용 오차·최종 공시 확인·실패 처리는 변경하지 않았다. 아래 3단계의 네 사유 유지 기록과 5단계 결과는 추가 전 이력이고, 현재 결과는 6단계다.
+
+시장 검토 **1,474→992건**, 학습 검토 **1,301→826건**이다. 기존 PR 버전(`60d98e2`) 대비 자동 전환은111건(주식 단위 조정104건, 주식수 불변 재개7건), 학습 대기열 감소는105건이다. 후보·공지 CSV는 이전 PR 산출물과 바이트가 같으며, 판정 identity도 모두 같다. 기존 자동4,080행의 종류·계수·Review·사유·증거·실패명은 행 전체가 동일하다. 기존 PR과 비교해 판정이 바뀐 것은 앞서 집중 검토한111건뿐이다.
+
+무상감자 표기의 기존 검토275건 중 나머지164건은 계속 검토다. 공지 쌍 누락, 실제 시가·거래량, 주식수, 다른 사유 충돌, 평가가격 검사를 완화하지 않았다. 사유 검사를 통과해 더 뒤의 검사에 도달하는 경우에는 `FailedCheck`가 구체적인 실패명으로 바뀔 수 있으며 판정·계수는 그대로다. 보관 원문의 정확한 문자열과 KRX 숫자로 판단하며, 주주별 균등 조건을 새로운 자유문구 파서로 검증하는 기능은 추가하지 않았다. 기존 조건으로 실패하는 차등감자 실례도 검토를 유지한다.
+
+실제 보관70763+70793(`007720`,f=5),32004+32108(`136660`,f=4),액면감액(`027040`,f=1)을 fixture로 고정했다. 변경 전 양성3건이 사유 검사에서 실패했고 변경 후 통과한다. 유상·혼합·명시적 차등 사유, 공지 누락, KRX/공시 주식수, 평가가격, 호가 범위, 시가·거래량, 비최종·미파싱 공시 예외를 검사했다. 실제 차등감자`000040`에도 새 표기를 적용해 기존 `reduction_shares_mismatch`가 유지됨을 확인했다. 새 AddedShares 판정 조건은 추가하지 않았다.
+
 ## 측정 범위와 판정 보존
 
 보관 원문과 동일 KRX 입력으로 시장 전체를 단계마다 재판정했다. 파이프라인 HTTP는 각 단계 0회다. `review_corporate_actions`는 request budget 0과 소켓 연결 차단을 함께 적용하며, 기존 자동 행의 Resolution·가격계수·거래량계수·Review와 전체 판정 identity 집합을 비교한다. 사유·증거 변경도 별도로 센다. 기준선의 가격 사건 후보는 4,807건이며 전체 판정 표에는 비가격 구조 사건 376건도 포함된다. 따라서 아래 Resolution 합계는 후보 자동+시장 검토보다 크다.
@@ -15,6 +25,7 @@
 | 4 증권 식별 | 3,629 | 1,178 | 1,006 | 296 | 0 | 0 |
 | 5 레지스트리만 | 3,629 | 1,178 | 1,006 | 296 | 0 | 0 |
 | 5 최종 기능 | 3,704 | 1,103 | 931 | 371 | 0 | 0 |
+| 6 무상감자 표기 | 3,815 | 992 | 826 | 482 | 0 | 0 |
 
 기존 자동의 사유·증거 변경도 모든 수용 단계에서 0건이다. 최종 봉인 검증에서 종목 상장 구간 집합을 기준선과 비교했고 전체 제외는 0건이다. 실패한 4단계 첫 시도는 기존 자동 bonus 42건을 검토로 바꿔 폐기했다. 같은 최종 문서의 보통주 확인과 완전 마스터에서 활성 우선주가 없다는 증거를 모두 요구하도록 고친 뒤 전체 재현을 다시 통과했다.
 
@@ -29,6 +40,7 @@
 | 4 증권 식별 | 611 | 755 | 655 | 474 | 410 | 644 | 1528 | 106 |
 | 5 레지스트리만 | 611 | 755 | 655 | 474 | 410 | 644 | 1528 | 106 |
 | 5 최종 기능 | 611 | 830 | 655 | 474 | 410 | 644 | 1453 | 106 |
+| 6 무상감자 표기 | 715 | 830 | 655 | 481 | 410 | 644 | 1342 | 106 |
 
 ## 단계별 FailedCheck 상위 10개
 
@@ -124,6 +136,21 @@
 | `par_notice_price_mismatch` | 31 |
 | `par_listing_count` | 28 |
 
+### 6 무상감자 표기
+
+| FailedCheck | 시장 검토 |
+|---|---:|
+| `official_terms_unmatched` | 137 |
+| `ex_price_reason_or_form_unsupported` | 115 |
+| `reduction_notice_pair_missing` | 115 |
+| `official_evidence_missing` | 113 |
+| `notice_parse_failed` | 82 |
+| `notice_security_unresolved` | 80 |
+| `bonus_prior_shares_mismatch` | 57 |
+| `reduction_opening_auction_mismatch` | 54 |
+| `reduction_reason_conflict` | 45 |
+| `par_notice_price_mismatch` | 31 |
+
 ## 11308의 기준선 실패 99건
 
 정확한 증거 연결로 다시 찾은 99건 중 75건이 `bonus`로 전환됐다. 남은 검토는 아래와 같다.
@@ -179,9 +206,9 @@ python -m experiments.dataset.review_corporate_actions \
 
 `SOURCE`는 기존 #478의 `workspace/training-krx-validation/market-resolutions/operator-validation/cache-only-tree-7f9518a` 보관 디렉터리다. replay 입력의 절대 경로를 재사용하고 KIND cache는 독립 복제했다. 저장된 `final/replay-input.json`에 실제 argv와 입력 해시가 있다. 감자 사유 가정 비교와 분할 버림 반례는 같은 workspace의 `reduction-reason-counterfactual.py/.log`, `split-floor-counterfactual.py/.log`, 초기 B 분해는 `rule-b-original-audit/`에 보존했다. 단계별 `manifest.json`, `review-summary.json`, 원장 CSV와 테스트 로그는 이 worktree의 `workspace/corporate-action-review/`에 보존했다. 전체 봉인 검증은 보존한 `python workspace/corporate-action-review/final-freeze.py final`로 실행했다. 이 스크립트는 원래 replay 입력의 KRX·마스터·행동 스냅샷·아카이브 경로를 읽어 `freeze_resolution_snapshot`을 호출하고, 소켓을 차단한 상태에서 봉인 재열기와 학습 검토 CSV 및 예제 계수를 assert한다. 크기가 큰 원문·원장은 커밋하지 않았다. 전체 분포와 표 해시는 [기계 판독 결과](corporate-action-review-results.json), 결정 이력은 [정본 로그](corporate-action-review-decisions.tsv)를 본다.
 
-최종 ruff는 통과했다. 전체 pytest 결과는 `1 failed, 643 passed, 3 skipped, 879 warnings in 192.72s (0:03:12)`다. 실패는 기준선에서도 재현된 `serving/tests/test_regular_session_close.py::test_shared_builder_still_matches_the_active_pack` 한 건으로 활성 pack 해시 불일치다. pack을 바꾸지 않았다.
+5단계 ruff는 통과했다. 전체 pytest 결과는 `1 failed, 643 passed, 3 skipped, 879 warnings in 192.72s (0:03:12)`다. 실패는 기준선에서도 재현된 `serving/tests/test_regular_session_close.py::test_shared_builder_still_matches_the_active_pack` 한 건으로 활성 pack 해시 불일치다. pack을 바꾸지 않았다.
 
-전체 시장 산출물을 `freeze_resolution_snapshot`으로 봉인한 뒤 `read_resolution_snapshot(verify_archive=True)`로 읽었다. 3,563개 상장 구간, 학습 3,219개 구간을 보존했고, 봉인 결과의 학습 검토 CSV 931행은 진단 재현 CSV와 바이트 단위로 일치했다. 봉인 중 소켓 연결을 차단했으며 HTTP는 0회였다.
+5단계 시장 산출물을 `freeze_resolution_snapshot`으로 봉인한 뒤 `read_resolution_snapshot(verify_archive=True)`로 읽었다. 3,563개 상장 구간, 학습 3,219개 구간을 보존했고, 봉인 결과의 학습 검토 CSV 931행은 진단 재현 CSV와 바이트 단위로 일치했다. 봉인 중 소켓 연결을 차단했으며 HTTP는 0회였다.
 
 - snapshot SHA-256 `ab3796817140a0b88f019e709f7f27c8b018cfd03731b7978d0a971e2356bac8`
 - evidence SHA-256 `70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9`
@@ -194,3 +221,27 @@ python -m experiments.dataset.review_corporate_actions \
 **Build the Lever**를 적용해 캐시 전수 재현과 기준선 비교를 다시 실행할 수 있는 CLI로 남겼다. **Explain the Number**를 적용해 예상196/204건과 실제233/35건의 차이를 원장·원문·가정 비교로 분해했다. **Sequence Work into Verifiable Units**를 적용해 단계별 커밋과 전수 재현을 분리했다. **Model the Domain**을 적용해 실패 진단·영향 범위·서식 정보를 타입과 레지스트리로 표현했다. **Attack the Premise**를 적용해 보조 공시를 찾기 전에 같은 순수 검사로 후보의 적격성을 확인하고, 초기와 정정 대상의 배정 공시 연결도 실제 순수 권리락 사유로 통일했다. **Prove It Works**를 적용해 전체 원장 비교와 원문 아카이브 봉인·재열기를 완료했다.
 
 운영 DB·서빙·활성 pack·재학습·정기 실행 설정은 변경하지 않았다. 이 결과는 현재 보관 원문과 KRX 범위에 대한 검증이며 이후 새 서식과 복합 사건을 자동 승인하는 보증은 아니다.
+
+## 6단계 실행과 봉인 검증
+
+chart에서 원래 replay 입력과 독립 cache를 재사용했다. 제품 소스를 고정한 뒤 전체 시장 재현은 한 번 실행했다.
+
+```sh
+python -m experiments.dataset.review_corporate_actions \
+  --replay-args "$SOURCE/replay-args.json" \
+  --kind-root workspace/corporate-action-review/cache \
+  --output workspace/corporate-action-review/unpaid-reduction \
+  --baseline workspace/corporate-action-review/baseline
+python /private/tmp/chart-review-compare-unpaid.py
+python workspace/corporate-action-review/unpaid-reduction-review/freeze.py unpaid-reduction
+ruff check .
+pytest -q
+```
+
+위는 실제 실행한 명령이다. 다시 실행할 때는 미발행 출력 경로를 사용한다. `SOURCE`는 앞 절과 같은 원본 보관 경로다. 원장 비교 스크립트는 `unpaid-reduction-review/compare-previous-pr.py`로도 보존했다. 실행 코드·전수/테스트 로그와 원장 비교 JSON은 `workspace/corporate-action-review/unpaid-reduction-review/`에 보존했다. 전체 원장과 봉인은 각각 `unpaid-reduction/`, `unpaid-reduction-official-actions/`에 있다. 원래 baseline과 이전 PR의 `final/`은 그대로 보존했다.
+
+현재 ruff는 통과했다. 전체 pytest는 `1 failed, 686 passed, 3 skipped, 879 warnings in 151.40s (0:02:31)`이며 실패는 앞 절과 동일한 기존 활성 pack 해시 검사1건이다. 봉인 결과를 `read_resolution_snapshot(verify_archive=True)`로 다시 읽고, 상장구간3,563개 보존·학습검토826행 CSV 바이트 일치·새111건의 계수 및 기존11308예제2건을 모두 확인했다. 새 HTTP 호출은0회다.
+
+- snapshot SHA-256 `10632fce8a293412bade6ec40b81054db1aef9221cec3a879940544485d26cd6`
+- evidence SHA-256 `70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9`
+- segmentation SHA-256 `cb7175a7d76a0f86d8c33d07e42e61acfc54ecf15f425a13af657b49240b2af2`
