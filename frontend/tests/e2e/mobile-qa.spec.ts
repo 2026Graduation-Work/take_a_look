@@ -33,6 +33,45 @@ async function charts(page: Page, beforeCloses?: (horizon: number) => Promise<vo
   });
 }
 
+test("stock detail market indices rotate, pause and respect reduced motion on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.clock.install();
+  await page.goto("/stocks/005930");
+  const indices = page.getByRole("region", { name: "시장 지수", exact: true });
+  const visual = indices.locator("div[aria-hidden=true]");
+  const first = visual.getByText("KOSPI", { exact: true }).first();
+  const second = visual.getByText("KOSDAQ", { exact: true });
+  const last = visual.getByText("KOSPI 200", { exact: true });
+  const pause = indices.getByRole("button", { name: "지수 자동 전환 일시 정지" });
+  await expect(first).toBeInViewport();
+  await expect(second).not.toBeInViewport();
+  await expect(pause).toBeVisible();
+
+  await page.clock.runFor(4_200);
+  await expect(second).toBeInViewport({ ratio: 1 });
+  await pause.click();
+  await page.clock.runFor(8_000);
+  await expect(second).toBeInViewport({ ratio: 1 });
+  await expect(last).not.toBeInViewport();
+
+  await indices.getByRole("button", { name: "지수 자동 전환 재생" }).click();
+  await page.clock.runFor(4_200);
+  await expect(last).toBeInViewport({ ratio: 1 });
+  await page.clock.runFor(4_600);
+  await expect(first).toBeInViewport({ ratio: 1 });
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(pause).toHaveCount(0);
+  await expect(indices.getByText("KOSPI", { exact: true })).toBeInViewport();
+  await indices.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => indices.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(indices.getByText("KOSPI 200", { exact: true })).toBeInViewport();
+  await expect.poll(() => indices.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
 test("M01: demo holdings can select a public stock outside the four examples and reject unknown names", async ({ page }) => {
   await ready(page);
   await page.route("**/rest/v1/stocks?**", route => route.fulfill({ json: [

@@ -231,7 +231,7 @@ export default function StockDetailView({
 
   return (
     <div className="w-full">
-      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} />
+      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} rotateQuotesOnMobile />
 
       <main className="page pb-12 pt-6">
       <div className="page-wide flex flex-col gap-6">

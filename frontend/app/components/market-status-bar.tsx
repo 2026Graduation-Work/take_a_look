@@ -1,27 +1,84 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { changeMeta, formatSignedPercent, MARKET_CONDITION_META } from "@/lib/display";
 import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
 
 const SHOWN = new Set(["KOSPI", "KOSDAQ", "KOSPI200"]);
+const MOBILE_QUOTE_MOTION = "(max-width: 39.999rem) and (prefers-reduced-motion: no-preference)";
+
+function subscribeToMobileQuoteMotion(callback: () => void) {
+  const media = window.matchMedia(MOBILE_QUOTE_MOTION);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
 
 function formatValue(quote: MarketIndexQuote): string {
   return quote.value.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function Quote({ quote }: { quote: MarketIndexQuote }) {
+function Quote({ quote, inlineOnMobile }: { quote: MarketIndexQuote; inlineOnMobile: boolean }) {
   const { color, arrow } = changeMeta(quote.changePercent, 2);
   return (
-    <span className="contents sm:flex sm:flex-none sm:items-baseline sm:gap-2 sm:whitespace-nowrap">
+    <span className={inlineOnMobile
+      ? "flex flex-none items-baseline gap-2 whitespace-nowrap"
+      : "contents sm:flex sm:flex-none sm:items-baseline sm:gap-2 sm:whitespace-nowrap"}>
       <span className="text-xs text-muted">{quote.label}</span>
       <span className="justify-self-end text-sm font-medium tabular-nums">{formatValue(quote)}</span>
       <span className="text-xs tabular-nums" style={{ color }}>
         {arrow && `${arrow} `}{formatSignedPercent(quote.changePercent, 2)}
       </span>
     </span>
+  );
+}
+
+function MobileMarketQuotes({ quotes }: { quotes: MarketIndexQuote[] }) {
+  const canAnimate = useSyncExternalStore(
+    subscribeToMobileQuoteMotion,
+    () => window.matchMedia(MOBILE_QUOTE_MOTION).matches,
+    () => false,
+  );
+  const [position, setPosition] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const onLoopCopy = position === quotes.length;
+
+  useEffect(() => {
+    if (!canAnimate || (paused && !onLoopCopy)) return;
+    const timer = window.setTimeout(
+      () => setPosition(onLoopCopy ? 0 : position + 1),
+      onLoopCopy ? 350 : 4_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [canAnimate, onLoopCopy, paused, position]);
+
+  return (
+    <div role="region" aria-label="시장 지수" className="flex min-w-0 basis-full items-center gap-2 motion-reduce:hidden sm:hidden">
+      <ul className="sr-only">
+        {quotes.map((quote) => <li key={quote.symbol}><Quote quote={quote} inlineOnMobile /></li>)}
+      </ul>
+      <div className="min-w-0 flex-1 overflow-hidden" aria-hidden="true">
+        <div
+          className={`flex ${position === 0 ? "" : "transition-transform duration-300 ease-in-out"}`}
+          style={{ transform: `translateX(-${position * 100}%)` }}
+        >
+          {[...quotes, quotes[0]].map((quote, index) => (
+            <div key={`${quote.symbol}-${index}`} className="w-full shrink-0">
+              <Quote quote={quote} inlineOnMobile />
+            </div>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="min-h-11 shrink-0 px-2 text-xs text-muted hover:text-ink"
+        aria-label={paused ? "지수 자동 전환 재생" : "지수 자동 전환 일시 정지"}
+        onClick={() => setPaused(!paused)}
+      >
+        {paused ? "재생" : "멈춤"}
+      </button>
+    </div>
   );
 }
 
@@ -53,20 +110,32 @@ export function useMarketStatus(snapshot: MarketStatus): MarketStatus {
   return status;
 }
 
-export default function MarketStatusBar({ status: snapshot }: { status: MarketStatus }) {
+export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile = false }: {
+  status: MarketStatus;
+  rotateQuotesOnMobile?: boolean;
+}) {
   const status = useMarketStatus(snapshot);
   const stale = staleLabel(status.date);
   const meta = MARKET_CONDITION_META[status.condition];
   const real = status.provenance.kind === "real";
   const quotes = status.indexQuotes.filter(({ symbol }) => SHOWN.has(symbol));
+  const showMobileRotation = rotateQuotesOnMobile && quotes.length > 1;
   const date = status.date.replaceAll("-", ".");
 
   return (
     <section aria-label="시장 브리핑" className="border-t border-line/60 bg-white/70 shadow-[0_1px_0_rgb(0_0_0/0.06)]">
       <div className="mx-auto flex min-h-10 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 sm:px-6 lg:px-8">
+        {showMobileRotation && <MobileMarketQuotes key={quotes.map(({ symbol }) => symbol).join(",")} quotes={quotes} />}
         {quotes.length > 0 ? (
-          <div className="grid grid-cols-[repeat(3,max-content)] items-baseline gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-5">
-            {quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)}
+          <div
+            role={rotateQuotesOnMobile ? "region" : undefined}
+            aria-label={rotateQuotesOnMobile ? "시장 지수" : undefined}
+            tabIndex={showMobileRotation ? 0 : undefined}
+            className={rotateQuotesOnMobile
+              ? `${showMobileRotation ? "hidden motion-reduce:flex sm:flex" : "flex"} min-w-0 basis-full items-baseline gap-x-5 overflow-x-auto py-1 sm:basis-auto sm:flex-wrap sm:overflow-visible sm:py-0`
+              : "grid grid-cols-[repeat(3,max-content)] items-baseline gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-5"}
+          >
+            {quotes.map((quote) => <Quote key={quote.symbol} quote={quote} inlineOnMobile={rotateQuotesOnMobile} />)}
           </div>
         ) : (
           <span className="text-xs text-muted">지수 데이터가 아직 없어요.</span>
