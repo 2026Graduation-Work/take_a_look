@@ -33,6 +33,8 @@ import PriceEventPanel from "./price-event-panel";
 import { usePriceEvents } from "@/lib/use-price-events";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
+import { useMarketStatus } from "./market-status-bar";
+import { showLocalAsOf } from "@/lib/market-status";
 import {
   barrierRule,
   bandSentence,
@@ -121,6 +123,7 @@ export default function StockDetailView({
   signalHorizon = 20,
   onHorizonChange,
 }: StockDetailViewProps) {
+  const currentMarketStatus = useMarketStatus(marketStatus);
   const bit = styleAxes ? classifyBit(styleAxes) : null;
   const [activeTab, setActiveTab] = useState<StockTab>("overview");
   const tabRefs = useRef<Partial<Record<StockTab, HTMLButtonElement | null>>>({});
@@ -234,7 +237,7 @@ export default function StockDetailView({
 
   return (
     <div className="w-full">
-      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} rotateQuotesOnMobile />
+      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} rotateQuotesOnMobile />
 
       <main className="page pb-12 pt-6">
       <div className="flex flex-col gap-6">
@@ -287,7 +290,7 @@ export default function StockDetailView({
                       </span>
                     )}
                   </div>
-                  {priceDate && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
+                  {showLocalAsOf(priceDate, currentMarketStatus.date) && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
                 </>
               ) : (
                 <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
@@ -376,7 +379,7 @@ export default function StockDetailView({
                         <div className="text-sm text-body">
                           최근 1년 <TermLabel term="volatility" /> <strong>{volatility}</strong>
                           {volatilityRank !== null && <span className="block text-xs text-muted">코스피 전 종목 중 큰 쪽 상위 {volatilityRank}%</span>}
-                          {risk?.asOf && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
+                          {risk?.asOf && showLocalAsOf(risk.asOf, currentMarketStatus.date) && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
                         </div>
                         {risk && <dl className="m-0 grid grid-cols-2 gap-3 text-xs text-muted">
                           <div><dt>3개월 최고가 대비</dt><dd className="m-0"><ChangeText value={risk.drawdownFrom3mHigh * 100}>{signedPercent(risk.drawdownFrom3mHigh)}</ChangeText></dd></div>
@@ -447,11 +450,11 @@ export default function StockDetailView({
                       </h2>
                       {!preview || similar ? (
                         <p className="m-0 text-xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>
-                          {detail.asOf && `${formatKstDateTime(detail.asOf)} 기준. `}
+                          {showLocalAsOf(detail.asOf, currentMarketStatus.date) && `${formatKstDateTime(detail.asOf)} 기준. `}
                           {similar?.period_start && similar.period_end
                             ? similarCasesLine(similar.period_start, similar.period_end, similar.sample_count, similar.stock_count)
                             : !preview && `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}
-                          {hasBand && currentPrice !== null && " 원은 오늘 종가 기준이에요."}
+                          {hasBand && currentPrice !== null && showLocalAsOf(priceDate, currentMarketStatus.date) && ` 원은 ${formatKstDateTime(priceDate)} 종가 기준이에요.`}
                         </p>
                       ) : null}
                       {hasBand && realizedReturns.length > 0 ? (
@@ -496,7 +499,7 @@ export default function StockDetailView({
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
                       <h2 id="company-financials" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
-                      <FinancialPanel financial={financial} />
+                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} />
                     </section>
                     <DisclosureList disclosures={disclosures} />
                   </>}
