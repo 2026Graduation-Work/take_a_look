@@ -9,7 +9,9 @@ const chartRows = snapshots.map(payload => ({
   batch_id: payload.batch_id, stock_code: payload.stock_code, horizon: payload.horizon, payload,
 }));
 
+const LOADING_STOCK_CODE = "010130";
 const STOCKS = {
+  [LOADING_STOCK_CODE]: { name: "로딩 확인 종목", market: "KOSPI", risk_grade: 3, risk_flags: [] },
   "418250": { name: "미래에셋비전스팩3호", market: "KOSPI", risk_grade: 3, risk_flags: ["spac"] },
   "035420": { name: "NAVER", market: "KOSPI", risk_grade: 2, risk_flags: [] },
   "247540": { name: "에코프로비엠", market: "KOSDAQ", risk_grade: 1, risk_flags: [] },
@@ -18,6 +20,7 @@ const STOCKS = {
 
 const PUBLIC_CATALOG = [
   { code: "000660", name: "SK하이닉스" },
+  { code: LOADING_STOCK_CODE, name: STOCKS[LOADING_STOCK_CODE].name },
   { code: "005380", name: "현대차" },
   { code: "005930", name: "삼성전자" },
   { code: "035720", name: "카카오" },
@@ -47,7 +50,7 @@ createServer((request, response) => {
   const sentiment = sentimentHistoryFixture(url);
   const priceEvents = process.env.PRICE_EVENTS_FIXTURE === "1" ? priceEventsFixture(url) : null;
   const basisFixture = url.searchParams.get("stock_code") === `eq.${BASIS_CODE}` || url.searchParams.get("code") === `eq.${BASIS_CODE}`;
-  const signalCode = chart && [BASIS_CODE, NO_BASIS_CODE].find(code => url.searchParams.get("stock_code") === `in.(${code})`);
+  const signalCode = chart && [BASIS_CODE, NO_BASIS_CODE, LOADING_STOCK_CODE].find(code => url.searchParams.get("stock_code") === `in.(${code})`);
   const basisSignals = signalCode
     ? chartRows.filter(row => row.stock_code === "005930").map(row => ({ ...row, stock_code: signalCode, payload: { ...row.payload, stock_code: signalCode } }))
     : null;
