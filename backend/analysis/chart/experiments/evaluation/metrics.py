@@ -117,10 +117,8 @@ def calculate_calibration_table(
     return summary
 
 
-def calculate_rank_ic(
-    eval_df: pd.DataFrame, prob_col: str = "Prob", target_col: str = "Y_Label"
-) -> dict:
-    """eval_df에는 'Date', prob_col, target_col 컬럼이 있어야 한다."""
+def daily_rank_ic(eval_df: pd.DataFrame, prob_col: str = "Prob", target_col: str = "Y_Label") -> pd.Series:
+    """날짜별 단면 Spearman 상관. 종목이 5개 미만이거나 한쪽이 상수인 날은 뺀다."""
 
     def get_spearman(group):
         if len(group) < 5:
@@ -131,11 +129,15 @@ def calculate_rank_ic(
         target_rank = group[target_col].rank(method="average")
         return prob_rank.corr(target_rank, method="pearson")
 
-    try:
-        daily_ic = eval_df.groupby("Date", include_groups=False).apply(get_spearman).dropna()
-    except TypeError:
-        # include_groups는 pandas 2.2부터 지원한다.
-        daily_ic = eval_df.groupby("Date").apply(get_spearman).dropna()
+    columns = eval_df[["Date", prob_col, target_col]]
+    return columns.groupby("Date")[[prob_col, target_col]].apply(get_spearman).dropna()
+
+
+def calculate_rank_ic(
+    eval_df: pd.DataFrame, prob_col: str = "Prob", target_col: str = "Y_Label"
+) -> dict:
+    """eval_df에는 'Date', prob_col, target_col 컬럼이 있어야 한다."""
+    daily_ic = daily_rank_ic(eval_df, prob_col, target_col)
 
     n_days = len(daily_ic)
     if n_days < 2:
@@ -170,3 +172,57 @@ def calculate_rank_ic(
         "positive_day_ratio": float(pos_ratio),
         "n_days": n_days,
     }
+
+
+def summarize_daily_ic(daily_ic: pd.Series) -> dict:
+    """날짜별 IC의 평균, 표준편차, ICIR(평균/표준편차), 양(+)인 날 비율."""
+    daily_ic = daily_ic.dropna()
+    if len(daily_ic) < 2:
+        return {"ic_mean": np.nan, "ic_std": np.nan, "icir": np.nan, "positive_day_ratio": np.nan,
+                "n_days": len(daily_ic)}
+    mean, std = float(daily_ic.mean()), float(daily_ic.std())
+    return {"ic_mean": mean, "ic_std": std, "icir": mean / std if std else np.nan,
+            "positive_day_ratio": float((daily_ic > 0).mean()), "n_days": len(daily_ic)}
+
+
+def top_bottom_spread(eval_df: pd.DataFrame, prob_col: str, return_col: str, quantile: float = 0.1) -> dict:
+    """날짜마다 점수 상위 quantile 평균 수익률 − 하위 quantile 평균 수익률, 그 날짜 평균.
+
+    종목이 1/quantile개보다 적은 날은 뺀다. 비용과 체결은 반영하지 않는다.
+    """
+    frame = eval_df[["Date", prob_col, return_col]].dropna()
+    pct = frame.groupby("Date")[prob_col].rank(pct=True, method="first")
+    size = frame.groupby("Date")[prob_col].transform("size")
+    frame = frame.assign(top=pct > 1 - quantile, bottom=pct <= quantile).loc[size >= 1 / quantile]
+    top = frame.loc[frame.top].groupby("Date")[return_col].mean()
+    bottom = frame.loc[frame.bottom].groupby("Date")[return_col].mean()
+    daily = (top - bottom).dropna()
+    return {"spread_mean": float(daily.mean()) if len(daily) else np.nan,
+            "top_mean": float(top.mean()) if len(top) else np.nan,
+            "bottom_mean": float(bottom.mean()) if len(bottom) else np.nan,
+            "n_days": len(daily)}
+
+
+def compare_daily_ic(ic_a: pd.Series, ic_b: pd.Series, *, n_boot: int = 2000, seed: int = 0,
+                     confidence: float = 0.95) -> dict:
+    """두 모델의 날짜별 IC 차이(b − a)를 월 단위 블록 부트스트랩으로 검정한다.
+
+    같은 날의 IC끼리 짝지어 차이를 구하고, 달(月)을 통째로 복원 추출해 날짜 사이 자기상관을 보존한다.
+    t = 평균 차이 / 부트스트랩 표준오차.
+    """
+    diff = (ic_b - ic_a).dropna()
+    if diff.empty:
+        raise ValueError("No common dates between the two IC series")
+    months = pd.DatetimeIndex(diff.index).to_period("M")
+    blocks = [group.to_numpy() for _, group in diff.groupby(months)]
+    rng = np.random.default_rng(seed)
+    sums = np.array([block.sum() for block in blocks])
+    counts = np.array([len(block) for block in blocks])
+    picks = rng.integers(0, len(blocks), size=(n_boot, len(blocks)))
+    boot = sums[picks].sum(axis=1) / counts[picks].sum(axis=1)
+    se = float(boot.std(ddof=1))
+    mean = float(diff.mean())
+    tail = (1 - confidence) / 2
+    return {"diff_mean": mean, "boot_se": se, "t_stat": mean / se if se else np.nan,
+            "ci_low": float(np.quantile(boot, tail)), "ci_high": float(np.quantile(boot, 1 - tail)),
+            "n_days": len(diff), "n_months": len(blocks), "n_boot": n_boot}
