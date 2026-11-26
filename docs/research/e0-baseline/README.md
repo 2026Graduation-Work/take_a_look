@@ -92,6 +92,10 @@ python -m experiments.e0_baseline --oos-dir <h5_A, h20_A, h5_B, h20_B 폴더> --
 - 시드 하나, 같은 기간 한 번의 결과다. 시드를 바꿔도 같은지는 아래 남은 것에서 본다
 - 함수 확인용으로 같은 모델 A의 두 점수도 비교했다: `prob_up − prob_down`은 `prob_up`보다 H5 −0.0130(t −3.18), H20 −0.0526(t −6.63) 낮다. 순위는 `prob_up` 하나로 매긴다
 
+## 4. 신뢰도와 쓸모
+
+`safety_*.csv`는 `experiments/e0_safety.py`로 같은 예측에서 계산한 확률 보정, 등급별 실제 상승 비율, 비용 반영 상위 10% 초과수익이다. 기준과 읽는 법은 [모델 개선 실험 계획](../model-improvement-plan.md) 8절에 있다.
+
 ## 남은 것
 
 - 시드 5개 반복: 재학습이 필요하다. 학습 데이터셋(`shared_v3_local_2016`)은 남아 있지 않아(11/24 팀 채팅) Actions로 다시 만드는 방향이다. KRX 로그인이 필요하다
