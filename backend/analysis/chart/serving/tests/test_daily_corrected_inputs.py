@@ -3,7 +3,8 @@ import pandas as pd
 import pytest
 from serving.internal import flows, pipeline
 from serving.internal.features import build_feature_frame
-from serving.internal.prices import attach_actual_vwap
+from serving.internal.prices import PriceBasisError, attach_actual_vwap, merge_price_history
+from serving.internal.storage import PRICE_COLUMNS, SupabaseStore
 
 
 def test_uniform_raw_ohlc_and_outside_range_vwap():
@@ -231,7 +232,8 @@ def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, ch
     values = np.arange(len(dates)) + 100.
     stored = pd.DataFrame({"Date": dates[:-1], "Open": values[:-1], "High": values[:-1]+1,
                            "Low": values[:-1]-1, "Close": values[:-1], "Volume": 10.,
-                           "VWAP": values[:-1], "RawClose": values[:-1], "RawVolume": 10., "Amount": 1000.})
+                           "VWAP": values[:-1], "RawClose": values[:-1], "RawVolume": 10., "Amount": 1000.,
+                           "AdjustmentFactor": 1.})
     start = dates[-1] - pd.Timedelta(240, unit="D")
     fresh = pd.concat([stored, pd.DataFrame([{**stored.iloc[-1].to_dict(), "Date": dates[-1]}])], ignore_index=True)
     fresh = fresh.loc[fresh.Date >= start].copy()
@@ -264,3 +266,214 @@ def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, ch
     pd.testing.assert_frame_equal(actual.reset_index(drop=True), expected.reset_index(drop=True))
     assert len(actual) == 400
     assert not result[2]
+
+
+@pytest.mark.parametrize(
+    ("action_factor", "failure"),
+    [(0.2, None), (5., None), (0.98, None), (0.2, "database"), (0.2, "fallback"), (0.2, "storage"), (0.2, "marker")],
+)
+def test_corporate_action_rebases_saved_history_and_chart_prices(monkeypatch, action_factor, failure):
+    code = "005930"
+    dates = pd.bdate_range("2023-01-02", periods=600 if failure else 400)
+    cutoff = dates[-1] - pd.Timedelta(240, unit="D")
+    close = pd.Series(np.arange(len(dates)) + 100., index=dates)
+    factor = pd.Series(action_factor, index=dates)
+    factor.iloc[-1] = 1.
+    volume = np.arange(len(dates)) + 10.
+    expected = pd.DataFrame({
+        "Open": close - 0.5,
+        "High": close + 1.,
+        "Low": close - 1.,
+        "Close": close,
+        "VWAP": close + 0.5,
+        "Volume": volume,
+        "RawVolume": volume,
+        "Change": close.pct_change() * 100,
+        "AdjustmentFactor": factor,
+    }, index=dates.rename("Date"))
+    expected.index.freq = None
+    for column in ("Open", "High", "Low", "Close"):
+        expected[f"Raw{column}"] = expected[column] / factor
+    expected["Amount"] = expected.VWAP / factor * expected.Volume
+
+    adjusted_columns = ["Open", "High", "Low", "Close", "VWAP"]
+    stored = expected.iloc[:-1].copy()
+    stored[adjusted_columns] = stored[adjusted_columns].div(stored.AdjustmentFactor, axis=0)
+    stored["AdjustmentFactor"] = 1.
+    fresh = expected.loc[cutoff:].reset_index()
+    archive = None
+    upserted = {}
+    db_requests, storage_requests = [], []
+
+    class Store(SupabaseStore):
+        def _request(self, method, path, body=None, **kwargs):
+            nonlocal archive
+            if method == "GET":
+                return archive
+            if path.startswith("/rest/v1/chart_prices?"):
+                db_requests.append(len(body))
+                if failure in {"database", "fallback"} and len(db_requests) == 2:
+                    raise RuntimeError("second DB request failed")
+                upserted.update({row["trade_date"]: row for row in body})
+                return None
+            assert path.endswith(f"/raw-history-v3/{code}.parquet")
+            storage_requests.append(path)
+            if failure == "marker" and len(storage_requests) == 2:
+                raise RuntimeError("pending Storage write failed")
+            if failure == "storage" and len(storage_requests) == 3:
+                raise RuntimeError("final Storage write failed")
+            archive = body
+            return None
+
+        def save_calendar(self, *args): pass
+        def save_universe(self, *args): pass
+        def save_raw_price_panel(self, *args): pass
+        def upload_feature_panel(self, *args): pass
+
+    store = Store("http://localhost", "test")
+    store.save_price_history(code, stored.reset_index())
+
+    universe = pd.DataFrame({"Code": [code], "Name": ["삼성전자"], "ListingDate": [dates[0]]})
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (pd.DataFrame(), {}))
+    monkeypatch.setattr(pipeline, "_retry_fetch", lambda *args: fresh.copy())
+
+    as_of = dates[-1].date().isoformat()
+    if failure:
+        with pytest.raises(RuntimeError, match="request failed|write failed"):
+            pipeline.collect(as_of, store)
+        rows_written = {"database": 500, "fallback": 500, "storage": 600, "marker": 0}
+        assert len(upserted) == rows_written[failure]
+        pending_history = store.load_price_history(code)
+        pd.testing.assert_frame_equal(pending_history.set_index("Date"), stored)
+        assert pending_history.attrs.get("price_rebase_pending", False) is (failure != "marker")
+        if failure == "fallback":
+            expected = pd.concat([stored, expected.iloc[-1:]])
+            fresh = expected.loc[cutoff:].reset_index()
+
+    result = pipeline.collect(as_of, store)
+
+    history = store.load_price_history(code).set_index("Date").sort_index()
+    assert "price_rebase_pending" not in history.attrs
+    assert "price_rebase_pending" not in result[1][code][0].attrs
+    pd.testing.assert_series_equal(history.AdjustmentFactor, expected.AdjustmentFactor)
+    pd.testing.assert_series_equal(history.Close.pct_change(), expected.Close.pct_change())
+    raw_columns = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount", "Volume"]
+    pd.testing.assert_frame_equal(history[raw_columns], expected[raw_columns])
+    pd.testing.assert_frame_equal(history[adjusted_columns], expected[adjusted_columns])
+
+    chart_prices = pd.DataFrame(upserted.values()).rename(columns={db: source for source, db in PRICE_COLUMNS.items()})
+    chart_prices["Date"] = pd.to_datetime(chart_prices.Date)
+    chart_prices = chart_prices.set_index("Date").sort_index()
+    basis_columns = [*adjusted_columns, "AdjustmentFactor"]
+    pd.testing.assert_frame_equal(chart_prices[basis_columns], expected[basis_columns])
+    if failure:
+        assert db_requests[-2:] == [500, 100]
+    assert len(storage_requests) == 3 + (failure in {"marker", "storage"})
+
+    prior_writes = len(storage_requests)
+    pipeline.collect(as_of, store)
+    pd.testing.assert_frame_equal(store.load_price_history(code).set_index("Date").sort_index(), history)
+    assert db_requests[-1] == len(fresh)
+    assert len(storage_requests) == prior_writes + 1
+
+
+def test_nonuniform_overlap_excludes_only_the_affected_stock(monkeypatch):
+    dates = pd.bdate_range("2024-01-02", periods=75)
+    close = np.arange(len(dates)) + 100.
+    good = pd.DataFrame({"Date": dates, "Open": close, "High": close + 1, "Low": close - 1,
+                         "Close": close, "VWAP": close, "Volume": 10., "Amount": close * 10,
+                         "AdjustmentFactor": 1.})
+    bad = good.copy()
+    bad.loc[1, ["AdjustmentFactor", "Open", "High", "Low", "Close", "VWAP"]] *= 0.98
+    price_writes = []
+
+    class Store:
+        def save_calendar(self, *args): pass
+        def save_universe(self, *args): pass
+        def load_price_history(self, code): return good.iloc[:-1].copy()
+        def save_price_history(self, code, frame): price_writes.append(("storage", code))
+        def upsert_prices(self, code, frame): price_writes.append(("database", code))
+        def save_raw_prices(self, code, *args): price_writes.append(("snapshot", code))
+        def upload_features(self, code, *args): price_writes.append(("features", code))
+
+    universe = pd.DataFrame({"Code": ["000660", "005930"], "Name": ["SK하이닉스", "삼성전자"],
+                             "ListingDate": dates[0]})
+    sources = {"000660": bad, "005930": good}
+    monkeypatch.setattr(pipeline, "refresh_krx_trading_days", lambda *args: set(dates.date))
+    monkeypatch.setattr(pipeline, "fetch_universe", lambda *args, **kwargs: universe)
+    monkeypatch.setattr(pipeline, "collect_flows", lambda *args: (pd.DataFrame(), {}))
+    monkeypatch.setattr(pipeline, "_retry_fetch", lambda code, *args: sources[code].copy())
+
+    _, frames, unavailable, _, _ = pipeline.collect(dates[-1].date().isoformat(), Store())
+
+    assert list(frames) == ["005930"]
+    assert unavailable == {"000660": "price_adjustment_basis_inconsistent"}
+    assert price_writes == [(target, "005930") for target in ("database", "storage", "snapshot", "features")]
+
+
+@pytest.mark.parametrize("factor", [0., np.nan, np.inf])
+def test_merge_price_history_rejects_invalid_traded_factor(factor):
+    previous = pd.DataFrame({"Date": pd.to_datetime(["2024-01-02"]), "Close": [100.],
+                             "Volume": [1.], "AdjustmentFactor": [1.]})
+    with pytest.raises(PriceBasisError, match="Invalid overlapping adjustment factor"):
+        merge_price_history(previous, previous.assign(AdjustmentFactor=factor))
+
+
+def test_merge_price_history_requires_overlap_with_turnover():
+    previous = pd.DataFrame({"Date": pd.to_datetime(["2024-01-02", "2024-01-03"]), "Close": [100., 0.],
+                             "Volume": [1., 0.], "AdjustmentFactor": [1., np.nan]})
+    fresh = previous.iloc[1:].copy()
+    with pytest.raises(PriceBasisError, match="No overlapping observations with turnover"):
+        merge_price_history(previous, fresh)
+
+
+@pytest.mark.parametrize(("factor", "rebased"), [(1.0004, None), (0.2001, 0.2)])
+def test_merge_price_history_allows_rounding_and_preserves_halts(factor, rebased):
+    dates = pd.bdate_range("2024-01-02", periods=5)
+    previous = pd.DataFrame({"Date": dates, "Volume": [0., 1., 1., 1., 0.],
+                             "AdjustmentFactor": [np.nan, 1., 1., 1., np.nan]})
+    columns = ["Open", "High", "Low", "Close", "VWAP"]
+    previous[columns] = 50_000.
+    new_ratios = pd.Series([rebased or 1., factor, rebased or 1., np.nan], index=previous.index[1:])
+    fresh = previous.iloc[1:].copy()
+    fresh[columns] = fresh[columns].mul(new_ratios, axis=0)
+    fresh["AdjustmentFactor"] = new_ratios
+
+    merged, ratio = merge_price_history(previous, fresh)
+
+    assert ratio == rebased
+    assert merged.Date.tolist() == dates.tolist()
+    assert pd.isna(merged.iloc[0].AdjustmentFactor) and pd.isna(merged.iloc[-1].AdjustmentFactor)
+    assert merged.iloc[0].Close == 50_000. * (rebased or 1.)
+
+
+def test_merge_price_history_uses_common_ratio_when_median_is_outside_rounding_bounds():
+    dates = pd.bdate_range("2024-01-02", periods=4)
+    raw_close = [1000., 1002., 1002., 4000.]
+    previous = pd.DataFrame({"Date": dates, "Volume": 1., "AdjustmentFactor": 1.,
+                             "RawClose": raw_close})
+    columns = ["Open", "High", "Low", "Close", "VWAP"]
+    for column in columns:
+        previous[column] = raw_close
+    fresh = previous.iloc[1:].copy()
+    for column in columns:
+        fresh[column] = [200., 200., 800.]
+    fresh["AdjustmentFactor"] = fresh.Close / fresh.RawClose
+
+    merged, ratio = merge_price_history(previous, fresh)
+
+    assert ratio == pytest.approx(0.2 / 1.00175)
+    assert merged.Close.iloc[0] == pytest.approx(1000. * ratio)
+    pd.testing.assert_frame_equal(merged.iloc[1:].reset_index(drop=True), fresh.reset_index(drop=True))
+
+
+def test_merge_price_history_allows_untraded_overlap_when_fresh_replaces_all_rows():
+    dates = pd.bdate_range("2024-01-02", periods=2)
+    fresh = pd.DataFrame({"Date": dates, "Volume": 0., "Close": 0., "AdjustmentFactor": np.nan})
+
+    merged, ratio = merge_price_history(fresh.iloc[:1], fresh)
+
+    assert ratio is None
+    pd.testing.assert_frame_equal(merged, fresh)

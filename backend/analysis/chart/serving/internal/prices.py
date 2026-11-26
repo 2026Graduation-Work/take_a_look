@@ -6,6 +6,55 @@ import numpy as np
 import pandas as pd
 
 REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
+ADJUSTED_COLUMNS = ["Open", "High", "Low", "Close", "VWAP", "AdjustmentFactor"]
+PRICE_BASIS_INCONSISTENT = "price_adjustment_basis_inconsistent"
+
+
+class PriceBasisError(ValueError):
+    pass
+
+
+def adjustment_tolerance(close, other_close):
+    # Allow rounding in both provider closes and small drift in old ratios.
+    return 0.5 / close + 0.5 / other_close + 1e-3
+
+
+def merge_price_history(previous: pd.DataFrame, fresh: pd.DataFrame) -> tuple[pd.DataFrame, float | None]:
+    columns = ["Date", "Close", "AdjustmentFactor", "Volume"]
+    if any(set(columns) - set(frame) for frame in (previous, fresh)):
+        raise PriceBasisError("Missing adjustment inputs")
+
+    prefix = previous.loc[previous.Date.lt(fresh.Date.min())]
+    overlap = previous[columns].merge(fresh[columns], on="Date", suffixes=("_old", "_new"), validate="one_to_one")
+    # Zero-turnover rows may have no adjustment factor in either source.
+    overlap = overlap.loc[~(overlap.Volume_old.eq(0) & overlap.Volume_new.eq(0))]
+    if overlap.empty:
+        if prefix.empty:
+            return fresh, None
+        raise PriceBasisError("No overlapping observations with turnover")
+    factors = overlap[["AdjustmentFactor_old", "AdjustmentFactor_new"]].to_numpy(dtype=float, na_value=np.nan)
+    closes = overlap[["Close_old", "Close_new"]].to_numpy(dtype=float, na_value=np.nan)
+    if not np.isfinite(factors).all() or (factors <= 0).any():
+        raise PriceBasisError("Invalid overlapping adjustment factor")
+    if not np.isfinite(closes).all() or (closes <= 0).any():
+        raise PriceBasisError("Invalid overlapping close")
+
+    ratios = factors[:, 1] / factors[:, 0]
+    if not np.isfinite(ratios).all() or (ratios <= 0).any():
+        raise PriceBasisError("Invalid overlapping adjustment factor ratio")
+    tolerance = adjustment_tolerance(closes[:, 1], closes[:, 0])
+    lower = (ratios / (1 + tolerance)).max()
+    upper = np.divide(ratios, 1 - tolerance, out=np.full_like(ratios, np.inf), where=tolerance < 1).min()
+    if lower > upper:
+        raise PriceBasisError("Adjustment factor ratios disagree across overlapping dates")
+    if lower <= 1 <= upper:
+        merged = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+        return merged, None
+
+    ratio = float(np.clip(np.median(ratios), lower, upper))
+    prefix = prefix.copy()
+    prefix[ADJUSTED_COLUMNS] = prefix[ADJUSTED_COLUMNS] * ratio
+    return pd.concat([prefix, fresh], ignore_index=True), ratio
 
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
@@ -68,8 +117,7 @@ def check_adjustment_steps(frame):
     """
     traded = frame.loc[frame.Volume.gt(0) & ~frame[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)]
     factor, close = traded.AdjustmentFactor.astype(float), traded.Close.astype(float)
-    # Integer rounding plus ~0.03% drift seen in suppliers' old corporate-action ratios.
-    tolerance = 0.5 / close + 0.5 / close.shift() + 1e-3
+    tolerance = adjustment_tolerance(close, close.shift())
     steps = int(((factor / factor.shift() - 1).abs() > tolerance).sum())
     allowed = 3 + len(traded) // 250
     if steps > allowed:

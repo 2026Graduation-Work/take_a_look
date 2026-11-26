@@ -166,7 +166,7 @@ erDiagram
 |---|---|---|---|---|
 | 0005 | `news_sentiment_tracks`·`news_sentiment_daily`·`news_articles`, `financial_snapshots`·`financial_metrics` | 종목·트랙(historical/live)·일별 감성, 재무 6지표·근거 | ✅ | 뉴스 원문 90일(일별 집계는 유지) |
 | 0006 | `stock_notes` | 사용자·종목·메모 | 본인만 | — |
-| 0007 | `chart_releases`·`chart_batches`·`chart_signal_snapshots`·`chart_universe`·`chart_prices`·`chart_feature_snapshots`, 뷰 `latest_chart_signal_snapshots` | 게시 배치·H5/H20 payload·종목 목록·가격·입력 파일 경로 | 게시분만 | 게시 배치 최근 5개, 입력 파일 30일 |
+| 0007 | `chart_releases`·`chart_batches`·`chart_signal_snapshots`·`chart_universe`·`chart_prices`·`chart_feature_snapshots`, 뷰 `latest_chart_signal_snapshots` | 게시 배치·H5/H20 payload·종목 목록·가격·입력 파일 경로 | 게시분만 | 게시 배치 최근 5개, 가격 전체 이력, 날짜별 입력은 보존 배치만 |
 | 0008 | 함수 `delete_my_account()` | — | 로그인 사용자 실행 | — |
 | 0009 | `chart_prediction_log`, 함수 `log_chart_predictions()`·`prune_chart_batches(p_keep)` | 종목·as_of·기간·클래스 확률·신호·batch_id | 서비스 롤만 | **영구** |
 | 0010 | 함수 `budget_usage()` | DB·Storage 크기, 마지막 게시 as_of | 서비스 롤만 | — |
@@ -176,6 +176,7 @@ erDiagram
 | 0014 | `stocks.volatility_annual`·`volatility_percentile`·`risk_as_of` | 1년 변동성·코스피 내 백분위·기준일 | ✅ | — |
 | 0015 | 함수 `budget_usage()` 확장, 뷰 권한 | RLS 꺼진 public 테이블, 24시간·7일 가입 수. 최신 신호 뷰는 SELECT만 | 서비스 롤만 | — |
 
+- `chart_prices`와 Storage `raw-history-v3`는 수정 가격 전체 이력을 유지하며 retention에서 행을 지우지 않는다. 권리 이벤트의 일정한 수정계수 변경을 확인하면 해당 종목 전체를 같은 기준으로 upsert한다. [서빙 운영 기준](../backend/analysis/chart/serving/OPERATIONS.md#권리-이벤트와-수정-가격-기준)을 따른다.
 - `stocks`는 차트 서빙 universe(코스피 전 종목 + 에코프로비엠)로 매일 insert·update된다(`stock_master.py`, 삭제 없음). 위험 표시 규칙은 [stock-master-rules.md](stock-master-rules.md).
 - 0007 스냅샷 가드 트리거는 staging 배치의 스냅샷만 지우게 한다. 보존 정리는 `prune_chart_batches`가 한 트랜잭션 안에서 staging으로 돌린 뒤 스냅샷 → 배치 순서로 지운다.
 
