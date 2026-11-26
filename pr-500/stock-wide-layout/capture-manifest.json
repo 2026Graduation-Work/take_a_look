@@ -1,0 +1,72 @@
+{
+  "pr": 500,
+  "source_commit": "7f93e4cee79988fcdf753533bb440b155378573f",
+  "captured_on": "2026-11-26",
+  "timezone": "Asia/Seoul",
+  "data": "Dedicated local demo account and synthetic Supabase fixtures. No real account or holdings data.",
+  "source_url": "http://127.0.0.1:3115/stocks/000660",
+  "capture": "Chrome full-page JPEG, scrollY 0; desktop viewport 1280x1050, mobile viewport 390x844",
+  "images": [
+    {
+      "file": "desktop-company.jpg",
+      "sha256": "2e26c1c5b1893ddfc5bf899bd166cbcd75279ba2aa5d7dffa09d769130b2a551",
+      "width": 1280,
+      "height": 1420
+    },
+    {
+      "file": "desktop-model.jpg",
+      "sha256": "654a5dec607ffc98219bec7fa417ef2f3a8861eb9660d498bf5b05abd16d5518",
+      "width": 1280,
+      "height": 2179
+    },
+    {
+      "file": "desktop-news.jpg",
+      "sha256": "02513ad64feacee72c4692c311df957b58233640172ab5f05e4ca09953d246cc",
+      "width": 1280,
+      "height": 1050
+    },
+    {
+      "file": "desktop-overview.jpg",
+      "sha256": "6382c55dae05b8e1ad4edfeed58393f71ef864a249610ce62b1c80bf884aa93a",
+      "width": 1280,
+      "height": 1828
+    },
+    {
+      "file": "desktop-trading.jpg",
+      "sha256": "a47096750188c47663c22cbd05951c68042c4bd9b2f35f9ab643f7f7a9c67174",
+      "width": 1280,
+      "height": 1196
+    },
+    {
+      "file": "mobile-company.jpg",
+      "sha256": "65b01271b195c0af66830c39c5bfecd1d6f9772fa3ea5fa086601c8e8df473d3",
+      "width": 390,
+      "height": 1951
+    },
+    {
+      "file": "mobile-model.jpg",
+      "sha256": "835a909070924f4781c77f2b402647f1fc5f1742bd09d75dc44f8333d4c345de",
+      "width": 390,
+      "height": 2478
+    },
+    {
+      "file": "mobile-news.jpg",
+      "sha256": "f7f700fa039c04c9bf74a525bb785ca10a9a30982d7be4b96500a9cc8539534f",
+      "width": 390,
+      "height": 1191
+    },
+    {
+      "file": "mobile-overview.jpg",
+      "sha256": "da94bc748ecb5ce6842b4620a3f6cad75727500899888b7d6e8f7625068901ac",
+      "width": 390,
+      "height": 2216
+    },
+    {
+      "file": "mobile-trading.jpg",
+      "sha256": "67b70bb399d2194e44019617954eec2670e2c8438a8288c1f6eed6f073b89c80",
+      "width": 390,
+      "height": 1595
+    }
+  ],
+  "note": "Mobile market sentiment screenshot was taken with index rotation paused to avoid transition clipping."
+}
