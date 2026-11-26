@@ -60,11 +60,12 @@ def test_missing_prediction_does_not_take_a_slot_from_a_real_zero_score() -> Non
     market = pd.DataFrame([{"Date": day, "Code": code, "Open": 100.0, "Trading_Halt": 0,
                             "Sigma": 0.1} for day in dates for code in codes])
     scores = {"000002": 0.8, "000003": 0.8, "000004": 0.8, "000005": 0.8, "000006": 0.0}
-    predictions = pd.DataFrame([{"Date": day, "Code": code, "Prob": prob}
-                                for day in dates for code, prob in scores.items()])
+    for unscored in ({}, {"000001": np.nan}):  # 000001 has no prediction row, or an empty score.
+        predictions = pd.DataFrame([{"Date": day, "Code": code, "Prob": prob} for day in dates
+                                    for code, prob in {**unscored, **scores}.items()])
 
-    entries = SwingStrategy({"strategy": {"prob_threshold": 0.0, "top_n": 5}}).generate_signals(
-        predictions, market
-    )
+        entries = SwingStrategy({"strategy": {"prob_threshold": 0.0, "top_n": 5}}).generate_signals(
+            predictions, market
+        )
 
-    assert entries.loc[dates[1]][entries.loc[dates[1]]].index.tolist() == list(scores)
+        assert entries.loc[dates[1]][entries.loc[dates[1]]].index.tolist() == list(scores)
