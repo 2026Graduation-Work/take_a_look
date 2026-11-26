@@ -52,3 +52,19 @@ def test_rank_only_selection_ignores_how_large_a_model_writes_its_scores() -> No
     pd.testing.assert_frame_equal(picks(modest, 0.0), picks(confident, 0.0))
     assert picks(modest, 0.65).sum().sum() == 0
     assert picks(confident, 0.65).sum().sum() > 0
+
+
+def test_missing_prediction_does_not_take_a_slot_from_a_real_zero_score() -> None:
+    dates = pd.date_range("2024-01-02", periods=2, freq="B")
+    codes = [f"00000{i}" for i in range(1, 7)]
+    market = pd.DataFrame([{"Date": day, "Code": code, "Open": 100.0, "Trading_Halt": 0,
+                            "Sigma": 0.1} for day in dates for code in codes])
+    scores = {"000002": 0.8, "000003": 0.8, "000004": 0.8, "000005": 0.8, "000006": 0.0}
+    predictions = pd.DataFrame([{"Date": day, "Code": code, "Prob": prob}
+                                for day in dates for code, prob in scores.items()])
+
+    entries = SwingStrategy({"strategy": {"prob_threshold": 0.0, "top_n": 5}}).generate_signals(
+        predictions, market
+    )
+
+    assert entries.loc[dates[1]][entries.loc[dates[1]]].index.tolist() == list(scores)
