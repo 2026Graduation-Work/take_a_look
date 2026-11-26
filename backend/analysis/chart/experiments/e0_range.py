@@ -1,6 +1,7 @@
 """화면 '예상 범위'의 기준선 적중률을 재학습 없이 계산한다(기준은 docs/research/model-improvement-plan.md 2절).
 
-범위 = 등급(argmax) × 종목 변동성 5분위 칸마다, 그 달 1일 전에 이미 실현된 수익률의 10%, 50%, 90% 분위수.
+범위 = 등급 × 종목 변동성 5분위 칸마다, 그 달 1일 전 36개월 안에 이미 실현된 수익률의 10%, 50%, 90% 분위수.
+등급 규칙: G0 = 3칸 확률 중 가장 큰 쪽(지금 화면), G1 = 같은 날 prob_up 상위 20% 상승, 하위 20% 하락.
 하방 경고 = 같은 날 하방 반편차 상위 20%.
 
     python -m experiments.e0_range --oos-dir <dir> --prices <prices.parquet> --out <dir>
@@ -12,10 +13,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from experiments.e0_safety import grade_rise_rates
 
 GRADES = np.array(["down", "neutral", "up"])
 WINDOW = 60  # 거래일. 변동성과 반편차 모두
 MIN_CELL = 200  # 칸의 과거 표본이 이보다 적으면 범위를 내지 않는다
+LOOKBACK_MONTHS = 36
 
 
 def trailing_risk(prices, window=WINDOW):
@@ -29,20 +32,28 @@ def trailing_risk(prices, window=WINDOW):
     return prices[["Date", "Code"]].assign(vol=vol, semi=semi)
 
 
-def add_cells(frame, risk, warn_top=0.2):
+def grades(frame, rule):
+    if rule == "G0":
+        return GRADES[frame[["prob_down", "prob_neutral", "prob_up"]].to_numpy().argmax(1)]
+    pct = frame.groupby("Date").prob_up.rank(pct=True, method="first")
+    return np.where(pct > 0.8, "up", np.where(pct <= 0.2, "down", "neutral"))
+
+
+def add_cells(frame, risk, rule="G0", warn_top=0.2):
     frame = frame.merge(risk, on=["Date", "Code"], how="inner").dropna(subset=["vol", "semi"])
     by_day = frame.groupby("Date")
     return frame.assign(
-        grade=GRADES[frame[["prob_down", "prob_neutral", "prob_up"]].to_numpy().argmax(1)],
+        grade=grades(frame, rule),
         vol_q=(by_day.vol.rank(pct=True, method="first") * 5).apply(np.ceil).clip(1, 5).astype(int),
         warn=by_day.semi.rank(pct=True, method="first") > 1 - warn_top)
 
 
-def monthly_ranges(frame, min_cell=MIN_CELL):
-    """달마다, 그 달 1일 전에 return_date가 지난 행만으로 칸별 분위수를 정해 그 달 행에 붙인다."""
+def monthly_ranges(frame, min_cell=MIN_CELL, lookback_months=LOOKBACK_MONTHS):
+    """달마다, 그 달 1일 전 lookback_months개월 안에 return_date가 지난 행만으로 칸별 분위수를 정해 그 달 행에 붙인다."""
     out = []
     for month, part in frame.groupby(frame.Date.dt.to_period("M")):
-        past = frame.loc[frame.return_date < month.start_time].groupby(["grade", "vol_q"]).forward_return
+        start = month.start_time - pd.DateOffset(months=lookback_months)
+        past = frame.loc[frame.return_date.between(start, month.start_time, inclusive="left")].groupby(["grade", "vol_q"]).forward_return
         if not past.ngroups:
             continue
         q = past.quantile([0.1, 0.5, 0.9]).unstack().set_axis(["q10", "q50", "q90"], axis=1)
@@ -53,18 +64,28 @@ def monthly_ranges(frame, min_cell=MIN_CELL):
                          below=ranged.forward_return < ranged.q10)
 
 
-def summarize(ranged, horizon):
+def summarize(ranged, horizon, rule):
     year = ranged.Date.dt.year
     yearly = ranged.groupby(year).agg(rows=("inside", "size"), coverage=("inside", "mean"),
                                       below=("below", "mean")).reset_index(names="year")
     total = {"year": "all", "rows": len(ranged), "coverage": ranged.inside.mean(), "below": ranged.below.mean()}
-    yearly = pd.concat([pd.DataFrame([total]), yearly]).assign(horizon=horizon)
+    yearly = pd.concat([pd.DataFrame([total]), yearly]).assign(horizon=horizon, rule=rule)
     up = ranged.loc[ranged.grade.eq("up")]
-    warning = {"horizon": horizon, "up_rows": len(up), "warn_share": up.warn.mean(),
+    warning = {"horizon": horizon, "rule": rule, "up_rows": len(up), "warn_share": up.warn.mean(),
                "below_warn": up.loc[up.warn].below.mean(), "below_rest": up.loc[~up.warn].below.mean(),
                "warn_higher_years": int((up.groupby([up.Date.dt.year, "warn"]).below.mean().unstack()
                                          .pipe(lambda t: t[True] > t[False])).sum())}
     return yearly, warning
+
+
+def grade_table(cells):
+    """등급별 실제로 오른 비율(전체, 연도별)과 순서(상승 > 중립 > 하락)를 지켰는지."""
+    year = cells.Date.dt.year
+    table = pd.concat([grade_rise_rates(part).assign(year=key)
+                       for key, part in [("all", cells), *cells.groupby(year)]])
+    wide = table.pivot(index="year", columns="grade", values="rise_rate").reindex(columns=GRADES)
+    ordered = ((wide.up > wide.neutral) & (wide.neutral > wide.down)).rename("ordered")
+    return table.merge(ordered, left_on="year", right_index=True)
 
 
 def main():
@@ -76,16 +97,20 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     prices = pd.read_parquet(args.prices).assign(Date=lambda f: pd.to_datetime(f.Date), Code=lambda f: f.Code.astype(str))
     risk = trailing_risk(prices)
-    tables, warnings = [], []
+    tables, warnings, rises = [], [], []
     for h in (5, 20):
         frame = pd.read_parquet(args.oos_dir / f"h{h}_A.parquet").assign(Code=lambda f: f.Code.astype(str))
-        ranged = monthly_ranges(add_cells(frame.loc[frame.return_observed], risk))
-        yearly, warning = summarize(ranged, h)
-        tables.append(yearly)
-        warnings.append(warning)
+        for rule in ("G0", "G1"):
+            cells = add_cells(frame.loc[frame.return_observed], risk, rule)
+            yearly, warning = summarize(monthly_ranges(cells), h, rule)
+            tables.append(yearly)
+            warnings.append(warning)
+            rises.append(grade_table(cells).assign(horizon=h, rule=rule))
     pd.concat(tables).to_csv(args.out / "range_coverage.csv", index=False)
     pd.DataFrame(warnings).to_csv(args.out / "range_warning.csv", index=False)
+    pd.concat(rises).to_csv(args.out / "grade_rules.csv", index=False)
     print(pd.concat(tables).round(4).to_string(), json.dumps(warnings, default=float, indent=1))
+    print(pd.concat(rises).round(4).to_string())
 
 
 if __name__ == "__main__":
