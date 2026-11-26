@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from experiments.config import load_experiment_config
 from experiments.train import _evaluate_validation, _training_windows
 
 
@@ -10,7 +11,7 @@ class _FixedProbModel:
     def predict(self, features: pd.DataFrame):
         # The halted row receives the highest score on every day.  If validation
         # substitutes Trading_Halt=0, it would incorrectly be selected instead.
-        return [0.99 if code == "HALTED" else 0.80 for code in features.index]
+        return features["feature"].to_numpy()
 
 
 def _validation_frame() -> pd.DataFrame:
@@ -19,8 +20,8 @@ def _validation_frame() -> pd.DataFrame:
     for date in dates:
         rows.extend(
             [
-                {"Date": date, "Code": "HALTED", "Close": 100.0, "Trading_Halt": 1, "Y_Label": 2, "feature": 1.0},
-                {"Date": date, "Code": "TRADEABLE", "Close": 100.0, "Trading_Halt": 0, "Y_Label": 1, "feature": 2.0},
+                {"Date": date, "Code": "HALTED", "Close": 100.0, "Trading_Halt": 1, "Y_Label": 2, "feature": 0.99},
+                {"Date": date, "Code": "TRADEABLE", "Close": 100.0, "Trading_Halt": 0, "Y_Label": 1, "feature": 0.80},
             ]
         )
     return pd.DataFrame(rows).set_index("Code", drop=False)
@@ -38,6 +39,31 @@ def test_validation_excludes_halted_high_probability_signals() -> None:
 
     assert metrics["selected_signal_count"] == 5
     assert metrics["selected_success_count"] == 0
+
+
+def test_rank_only_backtest_config_keeps_training_validation_threshold() -> None:
+    config = load_experiment_config("experiments/configs/base.yaml")
+    frame = pd.DataFrame({
+        "Date": pd.Timestamp("2024-01-02"),
+        "Code": ["AT_THRESHOLD", "BELOW_THRESHOLD"],
+        "Close": 100.0,
+        "Trading_Halt": 0,
+        "Y_Label": [2, 1],
+        "feature": [0.65, 0.64],
+    })
+
+    metrics = _evaluate_validation(
+        config,
+        {"train_start": "2023-01-01", "train_end": "2023-12-31"},
+        0,
+        _FixedProbModel(),
+        frame,
+        ["feature"],
+    )
+
+    assert config["strategy"]["prob_threshold"] == 0.0
+    assert metrics["selected_signal_count"] == 1
+    assert metrics["selected_success_count"] == 1
 
 
 def test_validation_rejects_missing_trade_metadata() -> None:
