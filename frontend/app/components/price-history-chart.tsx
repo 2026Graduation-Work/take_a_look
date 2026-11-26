@@ -1,7 +1,8 @@
 "use client";
 
 import { CHART } from "@/lib/chart-colors";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type PointerEvent, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { changeMeta, formatKstDateTime, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
@@ -9,6 +10,108 @@ const MIN_WIDTH = 560;
 const HEIGHT = 264;
 const PAD = { top: 20, bottom: 34 };
 const X0 = 14;
+const POPUP_MARGIN = 16;
+const POPUP_WIDTH = 320;
+const POPUP_GAP = 24;
+
+type ActiveMarker = {
+  date: string;
+  anchor: HTMLButtonElement;
+  openedBy: "hover" | "press";
+};
+
+function PriceEventPopup({
+  id, marker, x, y, scroller, close, dismiss, cancelClose, scheduleClose, children,
+}: {
+  id: string;
+  marker: ActiveMarker;
+  x: number;
+  y: number;
+  scroller: RefObject<HTMLDivElement | null>;
+  close: () => void;
+  dismiss: (date: string) => void;
+  cancelClose: () => void;
+  scheduleClose: () => void;
+  children: ReactNode;
+}) {
+  const popup = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const panel = popup.current!;
+    const scrollArea = scroller.current!;
+    const dot = marker.anchor.firstElementChild!;
+    const place = () => {
+      const point = dot.getBoundingClientRect();
+      const bounds = scrollArea.getBoundingClientRect();
+      const centerX = point.left + point.width / 2;
+      const centerY = point.top + point.height / 2;
+      if (centerX < Math.max(0, bounds.left) || centerX > Math.min(innerWidth, bounds.right) ||
+          centerY < 0 || centerY > innerHeight) {
+        close();
+        return;
+      }
+
+      const width = Math.min(POPUP_WIDTH, innerWidth - 2 * POPUP_MARGIN);
+      const left = Math.max(POPUP_MARGIN, Math.min(centerX - width / 2, innerWidth - width - POPUP_MARGIN));
+      const above = centerY - POPUP_GAP - POPUP_MARGIN;
+      const below = innerHeight - centerY - POPUP_GAP - POPUP_MARGIN;
+      const heightLimit = innerHeight / 2;
+      const placeAbove = above >= Math.min(panel.scrollHeight, heightLimit) || above >= below;
+      panel.style.left = `${left}px`;
+      panel.style.top = placeAbove ? "auto" : `${centerY + POPUP_GAP}px`;
+      panel.style.bottom = placeAbove ? `${innerHeight - centerY + POPUP_GAP}px` : "auto";
+      panel.style.maxHeight = `${Math.max(0, Math.min(heightLimit, placeAbove ? above : below))}px`;
+    };
+    const outside = (event: globalThis.PointerEvent) => {
+      // Touch hit adjustment can target the scrollable popup from outside its bounds.
+      const target = event.pointerType === "touch" ? document.elementFromPoint(event.clientX, event.clientY) : event.target;
+      if (target instanceof Node && !panel.contains(target) && !marker.anchor.contains(target)) close();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      dismiss(marker.date);
+      marker.anchor.focus({ preventScroll: true });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    observer.observe(panel.firstElementChild!);
+    observer.observe(scrollArea);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [close, dismiss, marker, scroller, x, y]);
+
+  useLayoutEffect(() => {
+    if (marker.openedBy === "press") popup.current?.focus({ preventScroll: true });
+  }, [marker]);
+
+  return createPortal(
+    <div
+      ref={popup}
+      id={id}
+      role="dialog"
+      aria-label="가격이 크게 움직인 날"
+      tabIndex={-1}
+      onPointerEnter={cancelClose}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse" && !event.currentTarget.contains(document.activeElement)) scheduleClose();
+      }}
+      className="fixed z-50 w-[min(320px,calc(100vw-32px))] overflow-auto overscroll-contain rounded-md bg-surface p-4 shadow-lift"
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
 
 function niceStep(rough: number) {
   if (!Number.isFinite(rough) || rough <= 0) return 1;
@@ -33,6 +136,8 @@ interface PriceHistoryChartProps {
     moves: { date: string; changePercent: number }[];
     selectedDate?: string;
     select: (date: string) => void;
+    content: ReactNode;
+    emptyStatus?: ReactNode;
   };
 }
 
@@ -47,10 +152,37 @@ export default function PriceHistoryChart({
 }: PriceHistoryChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const popupId = useId();
+  const markerButtons = useRef(new Map<string, HTMLButtonElement>());
+  const dismissedHoverDate = useRef<string | undefined>(undefined);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [activeMarker, setActiveMarker] = useState<ActiveMarker | null>(null);
   const [hoverIndex, setHovered] = useState<number | null>(null);
   const hovered = hoverIndex !== null && hoverIndex < prices.length ? hoverIndex : null;
   const [width, setWidth] = useState(MIN_WIDTH);
   const hasPrices = prices.length >= 2 && prices.every(Number.isFinite);
+  if (activeMarker) {
+    const index = priceEvents?.dates.indexOf(activeMarker.date) ?? -1;
+    if (!hasPrices || index < 0 || index >= prices.length || !priceEvents?.moves.some(({ date }) => date === activeMarker.date)) {
+      setActiveMarker(null);
+    }
+  }
+
+  const cancelClose = useCallback(() => clearTimeout(closeTimer.current), []);
+  const closePopup = useCallback(() => {
+    cancelClose();
+    setActiveMarker(null);
+  }, [cancelClose]);
+  const dismissPopup = useCallback((date: string) => {
+    dismissedHoverDate.current = date;
+    closePopup();
+  }, [closePopup]);
+  const scheduleClose = () => {
+    if (activeMarker?.openedBy !== "hover") return;
+    cancelClose();
+    closeTimer.current = setTimeout(closePopup, 240);
+  };
+  useEffect(() => cancelClose, [cancelClose]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -67,7 +199,7 @@ export default function PriceHistoryChart({
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
   }, [prices]);
 
-  if (!hasPrices) return null;
+  if (!hasPrices) return priceEvents?.emptyStatus ?? null;
 
   const rangeBand = band && Number.isFinite(band.low) && Number.isFinite(band.high) && band.low <= band.high ? band : null;
   const X1 = width - (rangeBand ? 186 : 100);
@@ -106,6 +238,29 @@ export default function PriceHistoryChart({
       ? [{ ...move, x: xAt(index), y: y(prices[index]) }]
       : [];
   }) ?? [];
+  const activePoint = markers.find(({ date }) => date === activeMarker?.date);
+  const closestMarker = (clientX: number, clientY: number, fallback: typeof markers[number]) => {
+    const rect = svgRef.current!.getBoundingClientRect();
+    const bounds = scrollRef.current!.getBoundingClientRect();
+    const distance = (point: typeof fallback) => (point.x + rect.left - clientX) ** 2 + (point.y + rect.top - clientY) ** 2;
+    const visible = markers.filter(({ x }) => x + rect.left >= bounds.left && x + rect.left <= bounds.right);
+    return visible.reduce((best, point) => distance(point) < distance(best) ? point : best, visible[0] ?? fallback);
+  };
+  const openPopup = (date: string, openedBy: ActiveMarker["openedBy"]) => {
+    cancelClose();
+    const anchor = markerButtons.current.get(date);
+    if (!anchor || !priceEvents) return;
+    if (activeMarker?.date === date) {
+      if (openedBy === "hover") return;
+      if (activeMarker.openedBy !== "hover") {
+        closePopup();
+        return;
+      }
+    }
+    setHovered(null);
+    priceEvents.select(date);
+    setActiveMarker({ date, anchor, openedBy });
+  };
 
   const handleMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const vx = event.clientX - event.currentTarget.getBoundingClientRect().left;
@@ -260,28 +415,46 @@ export default function PriceHistoryChart({
       </svg>
       {priceEvents && markers.map((marker) => {
         const left = Math.max(22, marker.x);
+        const expanded = activeMarker?.date === marker.date;
+        const hoverMarker = (event: PointerEvent<HTMLButtonElement>) => {
+          if (event.pointerType !== "mouse") return;
+          const { date } = closestMarker(event.clientX, event.clientY, marker);
+          if (date === dismissedHoverDate.current) return;
+          dismissedHoverDate.current = undefined;
+          openPopup(date, "hover");
+        };
         return <button
           type="button"
           key={marker.date}
+          ref={(button) => {
+            if (button) markerButtons.current.set(marker.date, button);
+            else markerButtons.current.delete(marker.date);
+          }}
+          data-price-event-marker
           aria-label={`차트에서 ${formatKstDateTime(marker.date)} ${formatSignedPercent(marker.changePercent, 2)} 선택`}
-          aria-pressed={priceEvents.selectedDate === marker.date}
-          onClick={(event) => {
-            const rect = svgRef.current?.getBoundingClientRect();
-            if (!event.detail || !rect) {
-              priceEvents.select(marker.date);
-              return;
+          aria-haspopup="dialog"
+          aria-expanded={expanded}
+          aria-controls={expanded ? popupId : undefined}
+          onPointerEnter={(event) => {
+            if (event.pointerType !== "mouse") return;
+            const previous = event.relatedTarget;
+            if (!(previous instanceof Element && previous.closest("[data-price-event-marker]"))) {
+              dismissedHoverDate.current = undefined;
             }
-            // Adjacent 44px targets can overlap, so pointer clicks select the nearest visible point.
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            const distance = (point: typeof marker) => (point.x - x) ** 2 + (point.y - y) ** 2;
-            const closest = markers.reduce((best, point) => distance(point) < distance(best) ? point : best, marker);
-            priceEvents.select(closest.date);
+            hoverMarker(event);
+          }}
+          onPointerMove={hoverMarker}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") scheduleClose();
+          }}
+          onClick={(event) => {
+            if (event.detail === 0) openPopup(marker.date, "press");
+            else openPopup(closestMarker(event.clientX, event.clientY, marker).date, "press");
           }}
           className="group absolute z-10 grid size-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
           style={{ left, top: marker.y }}
         >
-          <span className="size-3.5 rounded-full border-2 border-ink bg-surface shadow-sm group-aria-pressed:bg-ink"
+          <span className="size-3.5 rounded-full border-2 border-ink bg-surface shadow-sm group-aria-expanded:bg-ink"
             style={{ transform: `translateX(${marker.x - left}px)` }} aria-hidden />
         </button>;
       })}
@@ -305,6 +478,13 @@ export default function PriceHistoryChart({
     </div>
     </div>
     <p className="m-0 mt-2 text-2xs text-muted @min-[560px]:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
+    {markers.length === 0 && priceEvents?.emptyStatus}
+    {activeMarker && activePoint && activeMarker.date === priceEvents?.selectedDate && (
+      <PriceEventPopup id={popupId} marker={activeMarker} x={activePoint.x} y={activePoint.y} scroller={scrollRef}
+        close={closePopup} dismiss={dismissPopup} cancelClose={cancelClose} scheduleClose={scheduleClose}>
+        {priceEvents.content}
+      </PriceEventPopup>
+    )}
     </div>
   );
 }
