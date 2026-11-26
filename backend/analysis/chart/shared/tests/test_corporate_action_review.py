@@ -1,11 +1,22 @@
 from dataclasses import replace
+from datetime import date
 from fractions import Fraction
 
+import pandas as pd
 import pytest
-from shared.data.actions import FieldEvidence
-from shared.data.market_notices import Notice, NoticeSection, SecurityKey
+from shared.data.actions import FieldEvidence, reconcile
+from shared.data.kind_market import KindBody, MarketFiling
+from shared.data.market_notices import (
+    Notice,
+    NoticeSection,
+    SecurityKey,
+    match_notice,
+    normal_company,
+    parse_notice,
+)
 from shared.data.market_resolutions import NoticeFailure, Resolution
 from shared.tests.test_market_resolutions import TEST_SOURCE, actual_notices, bars, resolve
+from shared.tests.test_official_actions import FIXTURES, action_case, response
 
 
 @pytest.fixture
@@ -98,3 +109,41 @@ def test_fractional_share_split_cannot_round_the_issued_share_count(moa_data, af
                                             par_after=200, shares_after=after))
     event, = resolve(security, raw, [listing], coverage_complete=True).resolutions
     assert (event.kind, event.review, event.failed_check) == (Resolution.SEGMENT_BREAK, True, "par_shares_mismatch")
+
+
+@pytest.mark.parametrize("code, day, listing, form, auction, expected_kind, factor", [
+    ("004920", "2020-03-20", "20200317000810", "68155", "20200319001024", Resolution.UNIT_CHANGE, Fraction(3)),
+    ("003410", "2020-12-04", "20201201000101", "68151", "20201203000329", Resolution.REFERENCE_RESET, Fraction(1)),
+])
+def test_kind_only_reduction_matches_the_dart_factors(code, day, listing, form, auction, expected_kind, factor):
+    official_security, decisions, implementation, sessions, auctions = action_case(code)
+    security = SecurityKey(code, official_security.isin, official_security.listing, None, "KOSPI", "common")
+    raw = pd.read_csv(FIXTURES / f"{code}_2020.csv", comment="#", parse_dates=["Date"])
+    raw = raw.loc[raw.Date.le(day)].tail(2).reset_index(drop=True)
+    notices = []
+    for accession, notice_form, title in (
+        (listing, form, "변경상장(감자)"),
+        (auction, "99328", "자본감소에 따른 기준가격결정방법 안내"),
+    ):
+        capture = response(f"{accession}.notice.html")
+        body = KindBody(capture.body, capture.charset, capture.evidence, accession, (accession,), True)
+        source = MarketFiling(accession, date.fromisoformat(accession[:8]), title, TEST_SOURCE)
+        facts, = parse_notice(source, notice_form, body)
+        notices.append(match_notice(source, notice_form, facts, body, (capture.evidence,),
+                                    {security: {normal_company(facts.company)}}))
+
+    row, = resolve(security, raw, notices, coverage_complete=True).resolutions
+    expected = expected_kind, factor, 1 / factor, False, ""
+    assert (row.kind, row.price_factor, row.volume_factor, row.review, row.failed_check) == expected
+    actions, pending = reconcile(official_security, decisions, [implementation], "2020-01-01", "2020-12-31",
+                                 sessions, auctions)
+    assert not pending
+    dart, = resolve(security, raw, notices, actions=actions, coverage_complete=True).resolutions
+    assert dart.reason == "verified_dart_and_kind_action"
+    assert (dart.kind, dart.price_factor, dart.volume_factor, dart.review, dart.failed_check) == expected
+
+    raw.loc[1, "RawOpen"] += 1
+    mismatch, = resolve(security, raw, notices, coverage_complete=True).resolutions
+    assert (mismatch.kind, mismatch.review, mismatch.failed_check) == (
+        Resolution.SEGMENT_BREAK, True, "reduction_opening_auction_mismatch",
+    )

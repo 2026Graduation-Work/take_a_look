@@ -4,3 +4,4 @@ ts	phase	decision	why	evidence	result
 2026-11-26T02:12:36Z	baseline-tests	기존 pack hash 실패를 별도 기록	기존 실패를 신규 회귀와 구분한다	baseline-pytest.log;baseline-ruff.log	550passed;3skipped;pack1failed
 2026-11-26T02:28:43Z	stage1	FailedCheck를 증거와 분리한 자료형과 CSV 열로 전달	사람용 오류 문구나 증거 문자열에서 진단값을 추정하지 않는다	stage1-typed/manifest.json;stage1-typed-summary.log;stage1-typed-pytest.log	기존판정바이트동일;HTTP0회;556passed;3skipped;pack1failed
 2026-11-26T02:42:27Z	stage2	액면병합만 단주를 버리고 액면분할은 정확한 곱을 요구	공시와 KRX 이후 주식수 및 기준가가 함께 맞는 병합만 확정한다; 감사의 분할5건은 검토 유지	workspace/corporate-action-review/stage2/manifest.json;docs/corporate-action-review-results.json	신규자동233;검토1241;학습검토1069;기존자동계수변경0;HTTP0
+2026-11-26T02:58:53Z	stage3	네 가지 단일 감자 사유에 KIND 평가가격과 상장 공지를 대조	감자(무상)은 동의어로 단정할 수 없어 허용 목록을 유지; 실제 재개 시가와 거래량도 검증	workspace/corporate-action-review/stage3/manifest.json;docs/corporate-action-review-results.json	단계증가35;검토1206;학습검토1034;기존자동계수변경0;HTTP0

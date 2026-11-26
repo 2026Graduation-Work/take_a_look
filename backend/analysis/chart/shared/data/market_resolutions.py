@@ -476,6 +476,13 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
     listings = [notice for notice in events if notice.facts.kind == "listing"]
     market = raw.Market.iloc[at] if "Market" in raw else security.market
     failed_check = "notice_not_final" if nonfinal else ""
+    if not nonfinal:
+        reduction_factor, failed_check = _kind_reduction(candidate, prices, listings, market, raw, at)
+        if reduction_factor is not None:
+            kind = Resolution.REFERENCE_RESET if reduction_factor == 1 else Resolution.UNIT_CHANGE
+            return _result(security, day, kind, "official_kind_reduction_auction", final,
+                           factors=(reduction_factor, 1 / reduction_factor))
+
     if not nonfinal and len(prices) == 1:
         notice = prices[0]
         facts, reason = notice.facts, _reason(notice)
@@ -542,10 +549,6 @@ def _resolve_day(security, raw, days, at, candidate, action, notices, terms, all
         return _result(security, day, Resolution.TICK_ROUNDING, "krx_reference_rounded_up_to_tick",
                        factors=(Fraction(1), Fraction(1)))
     reason = "official_facts_conflict_or_lack_terms" if notices else "completed_search_without_official_proof"
-    if not failed_check:
-        reduction_factor, failed_check = _kind_reduction(candidate, prices, listings, market, raw, at)
-        if reduction_factor is not None:
-            failed_check = "reduction_dart_action_missing"
     return _result(security, day, Resolution.SEGMENT_BREAK, reason, notices,
                    evidence=action_evidence, review=True,
                    failed_check=failed_check or ("official_terms_unmatched" if notices else "official_evidence_missing"))
