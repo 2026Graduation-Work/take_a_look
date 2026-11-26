@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
-import { NewsSentimentPanel } from "@/app/components/insight-cards";
 import StockDetailBoundary from "@/app/components/stock-detail-boundary";
 import { stockDetails } from "@/lib/mock-data";
-import { loadPublicCharts } from "@/lib/chart-public";
 import { loadStockInsights } from "@/lib/providers";
 import { getMockStockDetailData } from "@/lib/queries";
 import { masterVolatility, toRiskFlags, toRiskGrade } from "@/lib/mappers";
@@ -32,12 +30,12 @@ const loadMasterStock = cache(async (code: string): Promise<MasterStock | null> 
   };
 });
 
-function chartOnlyDetail(code: string, stock: MasterStock): StockDetail {
+function masterOnlyDetail(code: string, stock: MasterStock): StockDetail {
   return {
     code, ...stock, signalLight: "neutral", rankPercentile: 0,
     returnBand: { low: 0, high: 0, ciLevel: 0.68 }, hitRate: 0, similarCaseCount: 0,
     horizonAgreement: { h5: "flat", h10: "flat", h20: "flat", agreement: "mixed" },
-    provenance: { kind: "real", source: "LGBM 20거래일" }, asOf: "", reasons: [],
+    provenance: { kind: "real", source: "KRX 종목 정보" }, asOf: "", reasons: [],
   };
 }
 
@@ -47,36 +45,22 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: PageProps<"/stocks/[code]">): Promise<Metadata> {
   const { code } = await params;
-  const name = stockDetails[code]?.name ?? (await loadMasterStock(code))?.name;
+  const name = (await loadMasterStock(code))?.name ?? stockDetails[code]?.name;
   return name ? { title: `${name} ${code}`, description: `${name}의 뉴스 분위기, 재무, 차트 신호를 근거와 함께 쉽게 보여 드려요.` } : {};
 }
 
 export default async function StockDetailPage({ params }: PageProps<"/stocks/[code]">) {
   const { code } = await params;
   const [master, insights] = await Promise.all([loadMasterStock(code), loadStockInsights(code)]);
-  const stock = stockDetails[code] ? null : master;
-  const charts = stock ? await loadPublicCharts([code]).catch(() => null) : null;
-  const mockData = getMockStockDetailData(code, stock && charts?.has(code) ? chartOnlyDetail(code, stock) : undefined);
-  const initialData = mockData && master
-    ? { ...mockData, detail: { ...mockData.detail, volatilityAnnual: master.volatilityAnnual, volatilityPercentile: master.volatilityPercentile, riskAsOf: master.riskAsOf } }
-    : mockData;
-  if (!initialData) {
-    if (!stock) notFound();
-    return (
-      <main className="page pb-12 pt-6">
-        <section className="page-wide surface flex flex-col gap-6 p-6">
-          <div>
-            <span className="flex gap-x-3 text-2xs text-muted tabular-nums"><span>{code}</span><span>{stock.market}</span></span>
-            <h1 className="mt-1 text-3xl font-semibold">{stock.name}</h1>
-            <p className="m-0 mt-2 text-sm text-body">
-              이 종목은 오늘 모델 신호가 없어요. 수집된 뉴스 분위기만 보여 드려요.
-            </p>
-          </div>
-          <NewsSentimentPanel insights={insights} code={code} />
-        </section>
-      </main>
-    );
-  }
+  const masterOnly = master && !stockDetails[code];
+  const data = getMockStockDetailData(code, masterOnly ? masterOnlyDetail(code, master) : undefined);
+  if (!data) notFound();
 
+  const initialData = {
+    ...data,
+    detail: { ...data.detail, ...master },
+    styleAxes: masterOnly ? null : data.styleAxes,
+    holdings: masterOnly ? [] : data.holdings,
+  };
   return <StockDetailBoundary code={code} initialData={initialData} insights={insights} />;
 }

@@ -48,7 +48,7 @@ const isLatestDisclosure = (url: URL) => isDisclosure(url) &&
   url.searchParams.getAll("filed_on").includes(`lte.${latest}`);
 const focusRefresh = (page: Page) => page.evaluate(() => window.dispatchEvent(new Event("focus")));
 const retry = (source: ReturnType<typeof disclosures>) => source.getByRole("button", { name: "다시 확인" });
-const chart = (page: Page) => page.getByRole("img", { name: /^최근 60거래일 주가 흐름/ });
+const chart = (page: Page) => page.getByRole("img", { name: "최근 주가 흐름", exact: true });
 const serverError = (route: Route) => route.fulfill({ status: 503, json: { message: "internal fixture detail" } });
 
 async function capturePanel(page: Page, name: string) {
@@ -209,7 +209,7 @@ test("legacy snapshots still display chart and skip event source reads", async (
     return route.fulfill({ json: rows });
   });
   await page.goto(`/stocks/${firstStock}`);
-  await expect(page.getByRole("img", { name: /^최근 60거래일 주가 흐름/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: "최근 주가 흐름", exact: true })).toBeVisible();
   await expect(panel(page)).toContainText("이 차트에는 변동일을 고르는 기준이 없어요.");
   await capturePanel(page, "missing-basis");
   expect(db.counts()).toEqual({ market: 0, disclosures: 0 });
@@ -271,7 +271,7 @@ test("a missing trading day keeps both ordinary charts and never creates an even
     return route.fulfill({ json: rows });
   });
   await page.goto(`/stocks/${firstStock}`);
-  const chart = page.getByRole("img", { name: /^최근 60거래일 주가 흐름/ });
+  const chart = page.getByRole("img", { name: "최근 주가 흐름", exact: true });
   const unavailable = "가격 기록의 개수나 날짜가 맞지 않아 변동일을 확인할 수 없어요.";
   for (const horizon of ["1주", "4주"]) {
     const tab = page.getByRole("tab", { name: horizon, exact: true });
