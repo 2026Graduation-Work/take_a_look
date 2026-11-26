@@ -34,6 +34,7 @@ from .census_actions import (
     _security_master,
     _share_class,
     _windows,
+    master_security_aliases,
     spac_observations,
 )
 
@@ -55,6 +56,9 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
     raw, hashes = _price_frame(krx_days, sessions, set(codes))
     require(hashes == sources["krx_sessions"], "Census KRX daily input bytes differ")
     securities, expected, aliases, anchors, training, _, _, failures = _windows(raw, master, sessions, {})
+    identity_universe = master_security_aliases(master)
+    for key, aliases_for_key in aliases.items():
+        identity_universe.setdefault(key, set()).update(aliases_for_key)
     del raw
     require(securities.keys() == windows.keys() and not failures,
             "Census listing scope differs from independent KRX input windows")
@@ -91,7 +95,9 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
                                   notice.evidence[0], company_id=notice.company_id)
             matched = match_notice(filing, notice.form, notice.facts, notice, notice.evidence[1:],
                                    {notice.security: aliases[notice.security]},
-                                   identity_witness=links.get(notice_section_key(notice), ()))
+                                   identity_witness=links.get(notice_section_key(notice), ()),
+                                   identity_universe={key: names for key, names in identity_universe.items()
+                                                      if key.code.startswith(notice.security.code[:5])})
             require(matched.security == notice.security, "Official filing differs from the KRX listing identity")
             by_security[notice.security].append(matched)
         issuer_mergers = issuer_merger_boundaries(

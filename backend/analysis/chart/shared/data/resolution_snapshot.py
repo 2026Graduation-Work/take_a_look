@@ -122,7 +122,7 @@ def _consumer_hash():
     return canonical_hash({name: sha256(folder / name) for name in (
         "resolution_snapshot.py", "resolution_archive.py", "segmented_prices.py", "market_resolutions.py", "events.py",
         "validation.py", "calendar.py", "market_notices.py", "kind_market.py", "actions.py",
-        "disclosures.py", "training_prices.py",
+        "disclosures.py", "training_prices.py", "issuer_aliases.json",
     )})
 
 

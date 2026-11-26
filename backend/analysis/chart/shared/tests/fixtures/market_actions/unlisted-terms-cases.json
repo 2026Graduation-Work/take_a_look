@@ -1,0 +1,40 @@
+[
+  {
+    "quote": "20180822000298",
+    "terms": "20180809000081",
+    "candidate": {
+      "Code": "016740",
+      "ISIN": "KR7016740003",
+      "ListingDate": "2016-07-29",
+      "DelistingDate": "",
+      "Market": "KOSPI",
+      "ShareClass": "common",
+      "Date": "2018-08-23",
+      "PrevDate": "2018-08-22",
+      "PrevClose": "5860",
+      "BasePrice": "3950",
+      "SharesBefore": "18235986",
+      "SharesAfter": "18235986",
+      "Paused": "False"
+    }
+  },
+  {
+    "quote": "20211228000765",
+    "terms": "20211201000135",
+    "candidate": {
+      "Code": "086900",
+      "ISIN": "KR7086900008",
+      "ListingDate": "2009-01-16",
+      "DelistingDate": "",
+      "Market": "KOSDAQ",
+      "ShareClass": "common",
+      "Date": "2021-12-29",
+      "PrevDate": "2021-12-28",
+      "PrevClose": "155000",
+      "BasePrice": "148200",
+      "SharesBefore": "6254384",
+      "SharesAfter": "6254384",
+      "Paused": "False"
+    }
+  }
+]

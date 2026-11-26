@@ -508,5 +508,165 @@
       "resolutions": "820d0dca3c47b4a1b59e03a8016341411493a78babc2c909b1df4ecc5a3eca71"
     },
     "training_review": 1034
+  },
+  "stage4": {
+    "candidate_automatic": 3629,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        218
+      ],
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_security_unresolved",
+        110
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        58
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_shares_mismatch",
+        10
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1178,
+    "new_automatic": 296,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 711,
+      "official_notice_format_requires_review": 353,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 755,
+      "reference_reset": 474,
+      "rights": 655,
+      "segment_break": 1528,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 611
+    },
+    "review_queue": {
+      "rows": 1006,
+      "sha256": "899286749c7e35e3eb0dce3f59a11adc0374f0763ab8e7ca9b7720081872814a"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "2626b875747441d3916a55dcc2d1adfbbf7528f139546a41f7ab3fd94ba0c43f",
+      "notices": "b2ad9d02aec645d6bd9332f06ab2f05060bc2ac625c4023835b07034b81f9eb3",
+      "resolutions": "3e961b94b892b5f5be48490987cb5fbe6ee832edb95667b2c65b54b1331e38c6"
+    },
+    "training_review": 1006
   }
 }

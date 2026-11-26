@@ -1401,5 +1401,146 @@
       "20201119001204"
     ],
     "final": true
+  },
+  "20160929000274": {
+    "form": "99301",
+    "title": "권리락 기준가격 안내",
+    "company": "삼성중공업",
+    "company_id": "01014",
+    "published": "2016-09-29",
+    "body_url": "https://kind.krx.co.kr/external/2016/09/29/000274/20160929000709/99301.htm",
+    "charset": "utf-8",
+    "sha256": "02ebcc33fe176dd67d39ee542526ee637804ecf20c533979bb8a538fb13009a3",
+    "document_no": "20160929000709",
+    "family": [
+      "20160929000709"
+    ],
+    "final": true
+  },
+  "20160929000295": {
+    "form": "99301",
+    "title": "권리락 기준가격 안내(삼성중공우)",
+    "company": "삼성중공업",
+    "company_id": "01014",
+    "published": "2016-09-29",
+    "body_url": "https://kind.krx.co.kr/external/2016/09/29/000295/20160929000711/99301.htm",
+    "charset": "utf-8",
+    "sha256": "91e5fbc731b0442e71deaf5c83acbd205a311c39da4b3fb2debcb714cfefa849",
+    "document_no": "20160929000711",
+    "family": [
+      "20160929000711"
+    ],
+    "final": true
+  },
+  "20180306000610": {
+    "form": "99301",
+    "title": "권리락 기준가격 안내(삼성중공우)",
+    "company": "삼성중공업",
+    "company_id": "01014",
+    "published": "2018-03-06",
+    "body_url": "https://kind.krx.co.kr/external/2018/03/06/000610/20180306001549/99301.htm",
+    "charset": "utf-8",
+    "sha256": "325e34c212a8b8216d00a5419267127921273c814113b18ad7aa78bd0ba98524",
+    "document_no": "20180306001549",
+    "family": [
+      "20180306001549"
+    ],
+    "final": true
+  },
+  "20161216000547": {
+    "form": "11307",
+    "title": "무상증자결정",
+    "company": "JW중외제약",
+    "company_id": "00106",
+    "published": "2016-12-16",
+    "body_url": "https://kind.krx.co.kr/external/2016/12/16/000547/20161216000803/11307.htm",
+    "charset": "utf-8",
+    "sha256": "54c73188f85cbc1500cacd1ac53c37daaf3ffa86e31f40423ab6901b0fb4bbde",
+    "document_no": "20161216000803",
+    "family": [
+      "20161216000803"
+    ],
+    "final": true
+  },
+  "20230330001037": {
+    "form": "11307",
+    "title": "무상증자결정",
+    "company": "TYM",
+    "company_id": "00290",
+    "published": "2023-03-30",
+    "body_url": "https://kind.krx.co.kr/external/2023/03/30/001037/20230330002549/11307.htm",
+    "charset": "utf-8",
+    "sha256": "25f2df87028d16ce8629787789c39fe0d4504ec042e1d3ac1b2ca331c7074990",
+    "document_no": "20230330002549",
+    "family": [
+      "20230330002549",
+      "20230510000540",
+      "20230517000472"
+    ],
+    "final": false
+  },
+  "20180809000081": {
+    "form": "11307",
+    "title": "무상증자결정",
+    "company": "두올",
+    "company_id": "01674",
+    "published": "2018-08-09",
+    "submitter": "두올",
+    "body_url": "https://kind.krx.co.kr/external/2018/08/09/000081/20180809000177/11307.htm",
+    "charset": "utf-8",
+    "sha256": "2092a37a0f5dc7f296fb69fec5362489eedd7f18fe1cd286c45492c43c19cc23",
+    "document_no": "20180809000177",
+    "family": [
+      "20180809000177"
+    ],
+    "final": true
+  },
+  "20180822000298": {
+    "form": "99301",
+    "title": "권리락 기준가격 안내",
+    "company": "두올",
+    "company_id": "01674",
+    "published": "2018-08-22",
+    "submitter": "유가증권시장본부",
+    "body_url": "https://kind.krx.co.kr/external/2018/08/22/000298/20180822000819/99301.htm",
+    "charset": "utf-8",
+    "sha256": "65b85bf2c7c8498b5c6adaf92b4c6ce2e0087266fa7335539cf8d2628b2f1719",
+    "document_no": "20180822000819",
+    "family": [
+      "20180822000819"
+    ],
+    "final": true
+  },
+  "20211201000135": {
+    "form": "71474",
+    "title": "주식배당결정",
+    "company": "메디톡스",
+    "company_id": "08690",
+    "published": "2021-12-01",
+    "submitter": "메디톡스",
+    "body_url": "https://kind.krx.co.kr/external/2021/12/01/000135/20211201000161/71474.htm",
+    "charset": "utf-8",
+    "sha256": "ab4a475c879f469e29711138f078383845af99c16b6d8da4df735c76be5ab976",
+    "document_no": "20211201000161",
+    "family": [
+      "20211201000161"
+    ],
+    "final": true
+  },
+  "20211228000765": {
+    "form": "70767",
+    "title": "배당락(주식배당)",
+    "company": "메디톡스",
+    "company_id": "08690",
+    "published": "2021-12-28",
+    "submitter": "코스닥시장본부",
+    "body_url": "https://kind.krx.co.kr/external/2021/12/28/000765/20211228002310/70767.htm",
+    "charset": "utf-8",
+    "sha256": "50dfc991a368b2c0c99dc2d762c43cd2d9526d6f99a5774fabae8b41ce1755aa",
+    "document_no": "20211228002310",
+    "family": [
+      "20211228002310"
+    ],
+    "final": true
   }
 }

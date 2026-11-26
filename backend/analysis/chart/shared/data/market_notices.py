@@ -1,11 +1,14 @@
 """Normalize supported KIND forms before resolving price observations."""
 
+import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import date
 from fractions import Fraction
+from functools import lru_cache
 from html import unescape
+from pathlib import Path
 
 from .actions import deal_table, official_date, valid_isin
 from .disclosures import DisclosureError, Evidence, one, require
@@ -104,6 +107,17 @@ def normal_company(value):
     return re.sub(r"\s+|\(주\)|㈜|주식회사", "", value).casefold()
 
 
+def share_identity(label):
+    label = re.sub(r"\s+", "", label)
+    if label in {"보통주", "보통주식", "보통주권"}:
+        return "common", "", ""
+    if match := re.fullmatch(r"([0-9]*)우선주(?:식)?([A-Z]?)", label):
+        return "preferred", *match.groups()
+    if match := re.fullmatch(r"종류주(?:식|권)([0-9]*)", label):
+        return "preferred", match[1], ""
+    return None
+
+
 def kind_topic(filing):
     title = re.sub(r"\s+", "", filing.title)
     if OTHER_INSTRUMENT.search(filing.title) or re.match(r"(?:\[정정\])?(?:주식선물|주식옵션)", title):
@@ -168,15 +182,35 @@ def _flat_rights(rows):
     return sections
 
 
+def _price_table_day(form, rows):
+    label = r"3\.적용일" if form in FIXED_REFERENCE_FORMS else r"[456]\.(?:적용일|거래재개일)"
+    return official_date(_field(rows, label))
+
+
+def _price_table_rows(rows):
+    header = [row for row in rows if row[0].startswith("2.") and "주권종류" in row]
+    require(len(header) == 1, "KIND price table header missing")
+    columns = [_compact(cell) for cell in header[0][1:]]
+    require(columns[0] == "주권종류", "Invalid KIND price class header")
+    require(len(set(columns)) == len(columns) and not any(
+        "표준코드" in column or "ISIN" in column.upper() for column in columns
+    ), "Invalid KIND price table identity columns")
+    after = rows[rows.index(header[0]) + 1:]
+    end = next((index for index, row in enumerate(after) if re.match(r"\d+\.", row[0])), len(after))
+    require(end and all(len(row) == len(columns) and share_identity(row[0]) for row in after[:end])
+            and not any(share_identity(row[0]) for row in after[end:]),
+            "Invalid KIND price table identity rows")
+    return columns, after[:end]
+
+
 def _price_table(form, rows):
     company = _field(rows, r"1\.회사명")
+    day = _price_table_day(form, rows)
     if form in FIXED_REFERENCE_FORMS:
-        day = official_date(_field(rows, r"3\.적용일"))
         reasons = [row[1] for row in rows if len(row) in {2, 3} and _compact(row[0]) == "4.사유"]
         require(len(reasons) == 1, "KIND fixed-reference reason is missing or ambiguous")
         reason = reasons[0]
     else:
-        day = official_date(_field(rows, r"[456]\.(?:적용일|거래재개일)"))
         reason = _field(rows, r"[345]\.사유", required=form != "99409") or "장기간 매매거래정지 후 재개"
     note = _field(rows, r"[678]\.기타", required=False)
     if form in FIXED_REFERENCE_FORMS and re.search(r"무상증자|권리락|주식배당", note):
@@ -190,19 +224,12 @@ def _price_table(form, rows):
         market, close = previous_prices[0]
         previous_market = {"코넥스": "KONEX", "코스닥": "KOSDAQ", "유가증권": "KOSPI"}[market]
         previous_close = _integer(close)
-    header = [row for row in rows if row[0].startswith("2.") and "주권종류" in row]
-    require(len(header) == 1, "KIND price table header missing")
-    columns = [_compact(cell) for cell in header[0][1:]]
-    require(columns[0] == "주권종류", "Invalid KIND price class header")
+    columns, securities = _price_table_rows(rows)
     if form == "70718":
         require("단축코드" in columns and "평가가격(원)" not in columns,
                 "KIND new-listing reference lacks a coded fixed price")
-    after = rows[rows.index(header[0]) + 1:]
-    securities = [row for row in after if re.fullmatch(CLASS, row[0])]
-    require(securities, "KIND price table identifies no ordinary or preferred shares")
     sections = []
     for index, values in enumerate(securities, 1):
-        require(len(values) == len(columns), "Invalid KIND price table row")
         fields = dict(zip(columns, values))
         identity = {"code": _short(fields["단축코드"])} if "단축코드" in fields else {}
         if "평가가격(원)" in fields:
@@ -846,6 +873,117 @@ def _preferred_name_matches(facts, company, names):
     return bool(candidates & names)
 
 
+@lru_cache(maxsize=1)
+def _issuer_aliases():
+    groups = json.loads(Path(__file__).with_name("issuer_aliases.json").read_text(encoding="utf-8"))
+    return {issuer: {normal_company(name) for name in names} for issuer, names in groups.items()}
+
+
+def _reported_company_names(company_id, facts):
+    company = normal_company(facts.company)
+    aliases = _issuer_aliases().get(company_id[:5], set())
+    return {company, *aliases} if company in aliases else {company}
+
+
+def _preferred_series(company_names, names):
+    roots = company_names | {name.removesuffix("공업") for name in company_names}
+    return {match.groups() for name in names for root in roots
+            if root and name.startswith(root)
+            and (match := re.fullmatch(r"([0-9]*)우(?:선주(?:식)?)?([a-z]?)", name[len(root):]))}
+
+
+def _same_series(series, suffix, known, *, allow_unnumbered_first):
+    if series:
+        known = {(number, letter) for number, letter in known if number} or known
+    return any((not series or number == series or (allow_unnumbered_first and series == "1" and not number))
+               and (not suffix or letter == suffix.casefold()) for number, letter in known)
+
+
+def _coded_matches(facts, active, identity):
+    _, series, suffix = identity
+    matches = []
+    for key, names in active.items():
+        if facts.code not in {None, key.code} or facts.isin not in {None, key.isin}:
+            continue
+        if series or suffix:
+            known = _preferred_series(_reported_company_names(key.code, facts), names)
+            if known and not _same_series(series, suffix, known, allow_unnumbered_first=True):
+                continue
+        matches.append(key)
+    return matches
+
+
+def _uncoded_matches(company_id, facts, active, identity):
+    share_class, series, suffix = identity
+    company_names = _reported_company_names(company_id, facts)
+    if share_class == "common":
+        if facts.kind == "rename":
+            company_names.update(normal_company(name) for name in facts.reason.split(" · "))
+        return [key for key, names in active.items() if any(
+            name in company_names or re.sub(r"보통주(?:식)?$", "", name) in company_names for name in names
+        )]
+
+    matches = []
+    for key, names in active.items():
+        known = _preferred_series(company_names, names)
+        if not series and not suffix:
+            if len(active) == 1 and (known or names & company_names):
+                matches.append(key)
+            continue
+        if _same_series(series, suffix, known, allow_unnumbered_first=len(active) == 1):
+            matches.append(key)
+    return matches
+
+
+def _identity_failure(facts):
+    return NoticeError("notice_security_unresolved",
+                       f"KIND notice does not identify one KRX security: {facts.company} {facts.share_label}")
+
+
+def _notice_identity(facts):
+    identity = share_identity(facts.share_label)
+    try:
+        effective = official_date(facts.effective)
+    except ValueError as exc:
+        raise _identity_failure(facts) from exc
+    if identity is None or effective != facts.effective:
+        raise _identity_failure(facts)
+    return identity
+
+
+def resolve_notice_security(company_id, facts, identity_universe):
+    """Bind one notice section against all KRX listing intervals for its KIND issuer."""
+    identity = _notice_identity(facts)
+    if not re.fullmatch(r"[0-9A-Z]{5,6}", company_id):
+        raise _identity_failure(facts)
+    active = {key: names for key, names in identity_universe.items()
+              if key.code.startswith(company_id[:5]) and key.active(facts.effective) and key.share_class == identity[0]}
+    if facts.code is not None or facts.isin is not None:
+        matches = _coded_matches(facts, active, identity)
+    else:
+        matches = _uncoded_matches(company_id, facts, active, identity)
+    if len(matches) != 1 or len(company_id) == 6 and matches[0].code != company_id:
+        raise _identity_failure(facts)
+    return matches[0]
+
+
+def notice_security_scope(filing, form, body, identity_universe):
+    """Recover verified price-table identities and dates independently of price fields."""
+    require(form in PRICE_FORMS and body.final, "KIND notice has no supported identity scope")
+    rows = deal_table(body.text())
+    company = _field(rows, r"1\.회사명")
+    day = _price_table_day(form, rows)
+    columns, securities = _price_table_rows(rows)
+    scope = set()
+    for index, row in enumerate(securities, 1):
+        fields = dict(zip(columns, row))
+        code = _short(fields["단축코드"]) if "단축코드" in fields else None
+        facts = NoticeSection(index, "", company, row[0], day, "", code=code)
+        scope.add((resolve_notice_security(filing.company_id, facts, identity_universe), day))
+    require(len(scope) == len(securities), "KIND price table duplicates the same security")
+    return scope
+
+
 def can_join_auction_identity(form, facts, final):
     return (final and form in {"99332", "99334"} and facts.kind == "auction"
             and facts.code is None and facts.isin is None)
@@ -908,26 +1046,38 @@ def auction_identity_links(notices, listings):
     return sorted(links, key=lambda row: row["Auction"])
 
 
-def match_notice(filing, form, facts, body, evidence, securities, *, identity_witness=()):
+def match_notice(filing, form, facts, body, evidence, securities, *, identity_witness=(), identity_universe=None):
     """Bind by explicit identifiers or by a unique issuer and disclosed share class."""
-    company = normal_company(facts.company)
-    share_class = "common" if facts.share_label in {"보통주", "보통주식"} else "preferred"
-    matches = [key for key, names in securities.items()
-               if key.active(facts.effective) and key.share_class == share_class
-               and (facts.code is None or facts.code == key.code)
-               and (facts.isin is None or facts.isin == key.isin)
-               and (facts.code or share_class == "common" and company in names
-                    or share_class == "preferred" and _preferred_name_matches(facts, company, names) or facts.kind == "rename" and any(
-                   normal_company(name) in names for name in facts.reason.split(" · ")))]
+    universe = securities if identity_universe is None else identity_universe
     if identity_witness:
+        share_class, _, _ = _notice_identity(facts)
         witnessed = identity_witness[0].security
         require(can_join_auction_identity(form, facts, body.final) and witnessed in securities
-                and witnessed.share_class == share_class and witnessed.active(facts.effective),
+                and witnessed.share_class == share_class and witnessed.active(facts.effective)
+                and (not filing.company_id or witnessed.code.startswith(filing.company_id)),
                 "KIND auction witness differs from the KRX listing interval")
-        matches = [witnessed]
-    if len(matches) != 1:
-        raise NoticeError("notice_security_unresolved",
-                          f"KIND notice does not identify one KRX security: {facts.company} {facts.share_label}")
-    return Notice(matches[0], filing.accession, form, filing.published.isoformat(), filing.company_id,
+        match = witnessed
+    elif filing.company_id:
+        match = resolve_notice_security(filing.company_id, facts, universe)
+    else:
+        identity = _notice_identity(facts)
+        share_class = identity[0]
+        active = {key: names for key, names in universe.items()
+                  if key.active(facts.effective) and key.share_class == share_class}
+        if facts.code is not None or facts.isin is not None:
+            matches = _coded_matches(facts, active, identity)
+        else:
+            company = normal_company(facts.company)
+            matches = [key for key, names in active.items()
+                       if (share_class == "common" and company in names
+                           or share_class == "preferred" and _preferred_name_matches(facts, company, names)
+                           or facts.kind == "rename" and any(
+                               normal_company(name) in names for name in facts.reason.split(" · ")))]
+        if len(matches) != 1:
+            raise _identity_failure(facts)
+        match, = matches
+    if match not in securities:
+        raise _identity_failure(facts)
+    return Notice(match, filing.accession, form, filing.published.isoformat(), filing.company_id,
                   filing.title, replace(facts, company=facts.company.strip()), (filing.evidence, *evidence),
                   body.document_no, body.family, body.final)

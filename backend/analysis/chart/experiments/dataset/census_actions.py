@@ -28,7 +28,9 @@ from shared.data.market_notices import (
     kind_topic,
     match_notice,
     normal_company,
+    notice_security_scope,
     parse_notice,
+    share_identity,
 )
 from shared.data.market_resolutions import (
     NoticeFailure,
@@ -109,6 +111,19 @@ def _share_class(label):
     if "우선주" in label or label in {"종류주권", "종류주식"}:
         return "preferred"
     raise DisclosureError(f"Unsupported KRX share class: {label}")
+
+
+def master_security_aliases(master):
+    universe = {}
+    for row in master.itertuples(index=False):
+        if row.Group not in {"주권", "외국주권", "주식예탁증권", "부동산투자회사"}:
+            continue
+        key = SecurityKey(row.Code, row.ISIN, row.ListingDate.date().isoformat(),
+                          row.DelistingDate.date().isoformat() if pd.notna(row.DelistingDate) else None,
+                          row.Market, _share_class(row.KIND_STKCERT_TP_NM))
+        universe.setdefault(key, set()).update(normal_company(str(name)) for name in (row.Name, row.ShortName)
+                                                if pd.notna(name))
+    return universe
 
 
 def _windows(raw, master, sessions, market_observed):
@@ -232,13 +247,18 @@ def _kind_inventory(client, start, end, company_cache, codes, registered=frozens
 
 
 def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded,
-                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None):
+                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None, identity_universe=None):
     by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
     for key, names in aliases.items():
         for name in names:
             by_name[name].add(key)
         by_code[key.code].add(key)
         by_company[key.code[:5]].add(key)
+    complete_identity = identity_universe is not None
+    identity_universe = aliases if identity_universe is None else identity_universe
+    identity_by_company = defaultdict(dict)
+    for key, names in identity_universe.items():
+        identity_by_company[key.code[:5]][key] = names
     parsed, blocked, unparsed, failures = defaultdict(list), defaultdict(set), defaultdict(lambda: defaultdict(list)), []
     structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
     selected, fetched, verified, families = set(), set(), {}, []
@@ -249,7 +269,14 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
     def has_session(key, day):
         return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
 
-    def failed(filing, structural, keys, affected, refs, exc, check="notice_parse_failed"):
+    def failed(filing, structural, keys, affected, refs, exc, check="notice_parse_failed", *, form=None, body=None):
+        if not structural and form is not None and body is not None:
+            try:
+                targets = notice_security_scope(filing, form, body, identity_universe)
+            except ValueError:
+                targets = set()
+            if targets:
+                affected = [(key, candidate) for key, candidate in affected if (key, candidate.date) in targets]
         check = getattr(exc, "failed_check", check)
         stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
         if isinstance(exc, DocumentFormatError):
@@ -275,26 +302,35 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             nonstock.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FormId": form,
                              "Evidence": [asdict(ref) for ref in (filing.evidence, *acquired)]})
         matched = []
+        securities = identity_by_company[issuer] if issuer else identity_universe
         for facts in sections:
-            if facts.code:
-                possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
-            else:
-                possible = keys if issuer else keys | by_name[normal_company(facts.company)]
-            common = facts.share_label in {"보통주", "보통주식"}
-            if not any(key.active(facts.effective) and common == (key.share_class == "common") for key in possible):
-                if (bounded and body.final and filing.company_id[:5] == issuer and issuer
-                        and merger_facts(facts.kind, facts.reason)
-                        and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
-                        and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)):
-                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+            if (complete_identity and body.final and issuer and issuer not in unresolved_issuers
+                    and facts.kind in {"bonus_terms", "dividend_terms"} and facts.code is None and facts.isin is None
+                    and share_identity(facts.share_label) == ("preferred", "", "")
+                    and any(notice.security.share_class == "common" and notice.facts.kind == facts.kind
+                            and notice.facts.effective == facts.effective for notice in matched)
+                    and not any(key.share_class == "preferred" and key.active(facts.effective) for key in securities)):
                 continue
-            securities = {key: aliases[key] for key in possible}
+            outside_merger_source = (
+                bounded and body.final and filing.company_id[:5] == issuer and issuer
+                and merger_facts(facts.kind, facts.reason)
+                and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
+                and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)
+            )
             try:
-                notice = match_notice(filing, form, facts, body, acquired, securities)
+                notice = match_notice(filing, form, facts, body, acquired, securities,
+                                      identity_universe=securities)
             except DisclosureError as exc:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+                    continue
                 if not can_join_auction_identity(form, facts, body.final):
                     raise
                 pending_auctions.append((filing, form, facts, body, acquired, securities, structural, keys, affected, exc))
+                continue
+            if notice.security not in keys:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
                 continue
             parsed[notice.security].append(notice)
             matched.append(notice)
@@ -330,6 +366,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             continue
         selected.add(filing.accession)
         refs = (filing.evidence,)
+        form = body = None
         check = "notice_parse_failed"
         try:
             form, body, acquired = client.document(filing)
@@ -364,7 +401,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                                                            target.evidence, *target_refs)]}
             pending_families.append((filing, structural, keys, affected, refs, target_refs, family, form, body))
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc, check)
+            failed(filing, structural, keys, affected, refs, exc, check, form=form, body=body)
 
     listings = auction_listing_index(notice for rows in parsed.values() for notice in rows)
     for filing, form, facts, body, acquired, securities, structural, keys, affected, initial_error in pending_auctions:
@@ -373,11 +410,14 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
         try:
             if not witness:
                 raise initial_error
-            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness)
+            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness,
+                                  identity_universe=securities)
+            if notice.security not in keys:
+                continue
             parsed[notice.security].append(notice)
             verified[filing.accession].append(notice)
         except DisclosureError as exc:
-            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc)
+            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc, form=form, body=body)
 
     for filing, structural, keys, affected, refs, target_refs, family, form, body in pending_families:
         try:
@@ -409,7 +449,7 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if review:
                 structural_reviews[review.security].append(review)
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc, "correction_final_unresolved")
+            failed(filing, structural, keys, affected, refs, exc, "correction_final_unresolved", form=form, body=body)
     require(not missing_merger_sources,
             "Issuer merger source is outside the bounded census; include --code for "
             + ", ".join(sorted(missing_merger_sources)))
@@ -516,6 +556,7 @@ def _implementation_hashes():
         "experiments/dataset/census_actions.py", "shared/data/actions.py", "shared/data/events.py",
         "shared/data/disclosures.py", "shared/data/kind_market.py", "shared/data/market_notices.py",
         "shared/data/market_resolutions.py", "shared/data/calendar.py", "shared/data/validation.py",
+        "shared/data/issuer_aliases.json",
         "shared/data/resolution_snapshot.py", "shared/data/resolution_archive.py",
     )}
 
@@ -597,6 +638,9 @@ def build_census(args, client):
     raw_codes = raw.Code.nunique()
     failures.extend({"Code": code, "Stage": "identity", "Reason": "No preserved KRX prices in this scope"}
                     for code in sorted(codes - set(raw.Code.unique())))
+    identity_universe = master_security_aliases(master)
+    for key, names in aliases.items():
+        identity_universe.setdefault(key, set()).update(names)
     del raw, master
     candidates = defaultdict(tuple)
     fingerprints = {}
@@ -620,7 +664,8 @@ def build_census(args, client):
     unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
                                 spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
-                                registered=registered, daily=daily, expected_days=expected_days)
+                                registered=registered, daily=daily, expected_days=expected_days,
+                                identity_universe=identity_universe)
     (notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families,
      structural_reviews, selected, fetched) = acquired
     issuer_mergers = issuer_merger_boundaries(
