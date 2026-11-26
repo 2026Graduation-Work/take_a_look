@@ -1,0 +1,193 @@
+{
+  "pr": 502,
+  "synthetic": true,
+  "sourceHead": "774f258d52e8523989025ba298595fa92e5d0372",
+  "mergeCommit": "97ec72007c165729f5116a56b9ca64ac1f3ccf1b",
+  "captures": [
+    {
+      "file": "01-run-list.jpg",
+      "title": "실행 목록과 행 선택",
+      "url": "http://127.0.0.1:3114/lab/backtest",
+      "fullPage": true,
+      "sha256": "3a99d8f087b0b745e0bc1e360eacac4caddbec72313bb940a03dc551fbdc668f",
+      "bytes": 66853,
+      "width": 1264,
+      "height": 900
+    },
+    {
+      "file": "02-backtest-detail.jpg",
+      "title": "완료 상세, 연도 성과와 자산 곡선",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_h20_base",
+      "fullPage": true,
+      "sha256": "36de0b76eca693a6db1aeab058a946e064d145c831a24d5365c9047ed6bbbf69",
+      "bytes": 104327,
+      "width": 1264,
+      "height": 1593
+    },
+    {
+      "file": "03-trading-settings.jpg",
+      "title": "매매 설정 펼침",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_h20_base",
+      "fullPage": true,
+      "sha256": "e2a755cfa9d656e0621468c5a5167a5ca19c01bca109ac5f98bf3878a5227513",
+      "bytes": 144948,
+      "width": 1264,
+      "height": 2207
+    },
+    {
+      "file": "04-model-detail.jpg",
+      "title": "모델 지표, 연도별 평가와 확률 보정",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_h20_base",
+      "fullPage": true,
+      "sha256": "2dafe54010885aeb566d65965e270fc01c5d4bbc705f343b3e6054c2b466f5c4",
+      "bytes": 181503,
+      "width": 1264,
+      "height": 2441
+    },
+    {
+      "file": "05-metric-tooltip.jpg",
+      "title": "지표 정의와 판정 기준 툴팁",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_h20_base",
+      "fullPage": false,
+      "sha256": "759b8ca2cb616e084b65ac4a5a6cfd8b7613289f5c00d3d5d68451e66a7a08bb",
+      "bytes": 77121,
+      "width": 1264,
+      "height": 900
+    },
+    {
+      "file": "06-compare-backtest-two.jpg",
+      "title": "두 실행 백테스트 비교",
+      "url": "http://127.0.0.1:3114/lab/backtest?compare=capture_demo_h20_base%2Ccapture_demo_h20_flow",
+      "fullPage": true,
+      "sha256": "658ba4dbd255a7c726302a01b5192d47238161e4dee2a64ee6d26512833dac36",
+      "bytes": 138880,
+      "width": 1264,
+      "height": 1732
+    },
+    {
+      "file": "07-compare-model-two.jpg",
+      "title": "두 모델 비교",
+      "url": "http://127.0.0.1:3114/lab/backtest?compare=capture_demo_h20_base%2Ccapture_demo_h20_flow",
+      "fullPage": true,
+      "sha256": "c4f492b41e77b15fcb78a8dd1d145593e9228aa2ec53c820fcc10f041a0296d8",
+      "bytes": 149989,
+      "width": 1264,
+      "height": 2067
+    },
+    {
+      "file": "08-compare-backtest-six.jpg",
+      "title": "여섯 실행 백테스트 비교",
+      "url": "http://127.0.0.1:3114/lab/backtest?compare=capture_demo_h20_base%2Ccapture_demo_h20_flow%2Ccapture_demo_h20_threshold%2Ccapture_demo_h20_fees%2Ccapture_demo_h20_flow_cash%2Ccapture_demo_h5_base",
+      "fullPage": true,
+      "sha256": "7e29ebcfe227008ec1a9e2a0ce616e464f03a45334cbc7b83b4b855f521471c3",
+      "bytes": 221252,
+      "width": 1264,
+      "height": 2353
+    },
+    {
+      "file": "09-compare-model-six.jpg",
+      "title": "여섯 실행을 세 모델로 묶은 비교",
+      "url": "http://127.0.0.1:3114/lab/backtest?compare=capture_demo_h20_base%2Ccapture_demo_h20_flow%2Ccapture_demo_h20_threshold%2Ccapture_demo_h20_fees%2Ccapture_demo_h20_flow_cash%2Ccapture_demo_h5_base",
+      "fullPage": true,
+      "sha256": "a60fec695fc3ee0f46de3e893c01db10f6bf9af5db79370aa20c116b0a3d7492",
+      "bytes": 226756,
+      "width": 1264,
+      "height": 2724
+    },
+    {
+      "file": "10-running-progress.jpg",
+      "title": "진행률과 완료된 연도 표시 예시",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_running",
+      "fullPage": true,
+      "sha256": "d5fd5d56a9705d4e31e1e9c72749e52421f730c096c16345c1201ce68fdef7e6",
+      "bytes": 83326,
+      "width": 1264,
+      "height": 1422
+    },
+    {
+      "file": "11-failure-log.jpg",
+      "title": "실패 원인, 다음 명령과 로그",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_failed",
+      "fullPage": true,
+      "sha256": "e0e3e3fb692c0b31bdb5df7ae4394f3e214180ee7825b20bf29afc35ac9d9d19",
+      "bytes": 38250,
+      "width": 1264,
+      "height": 900
+    },
+    {
+      "file": "12-new-run-changes.jpg",
+      "title": "새 실행, 바꾼 값과 예상 시간",
+      "url": "http://127.0.0.1:3114/lab/backtest?new=",
+      "fullPage": true,
+      "sha256": "707b7de1c13254c3198d82d0058a5526aa467f6b817a50033457eedbee011b2a",
+      "bytes": 59705,
+      "width": 1264,
+      "height": 1413
+    },
+    {
+      "file": "13-validation-failed.jpg",
+      "title": "라벨 불일치 경고와 검사 실패",
+      "url": "http://127.0.0.1:3114/lab/backtest?new=",
+      "fullPage": true,
+      "sha256": "f7905644b8adf4902439abf16281a77f756ce3a99f055baa7004a40da754c545",
+      "bytes": 72029,
+      "width": 1264,
+      "height": 1438
+    },
+    {
+      "file": "14-validation-passed.jpg",
+      "title": "검사 통과와 실행 가능 상태",
+      "url": "http://127.0.0.1:3114/lab/backtest?new=",
+      "fullPage": true,
+      "sha256": "b913e83c96c13a611afa07cd8ff121a02601c552aac80504cb813c4588747718",
+      "bytes": 62339,
+      "width": 1264,
+      "height": 1413
+    },
+    {
+      "file": "15-model-missing.jpg",
+      "title": "ML 결과 없음과 평가 실행 안내",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_form_9ad48831063ca012",
+      "fullPage": true,
+      "sha256": "64b619970aae403b888f9fcba239e19444a9ad3446e6552daf4d793f75057e07",
+      "bytes": 91584,
+      "width": 1264,
+      "height": 1522
+    },
+    {
+      "file": "16-overwrite-confirmation.jpg",
+      "title": "같은 설정 재실행의 덮어쓰기 확인",
+      "url": "http://127.0.0.1:3114/lab/backtest?new=",
+      "fullPage": true,
+      "sha256": "49c220218de140b08faa8c7e5ef7ca52949df1945bf9362fc52e0c2731ff78b9",
+      "bytes": 75365,
+      "width": 1264,
+      "height": 1413
+    },
+    {
+      "file": "17-live-running-cancel.jpg",
+      "title": "합성 데이터 실제 실행과 취소 버튼",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_live_progress_ecf2c6e8ad1f3d64",
+      "fullPage": true,
+      "sha256": "84aec99f8610a539af373d3d24dfda9f9ceccfdb8122d8d68a3b48e47fa55843",
+      "bytes": 32846,
+      "width": 1264,
+      "height": 900
+    },
+    {
+      "file": "18-cancelled.jpg",
+      "title": "사용자 취소 후 상태",
+      "url": "http://127.0.0.1:3114/lab/backtest?run=capture_demo_live_progress_ecf2c6e8ad1f3d64",
+      "fullPage": true,
+      "sha256": "e4ef3008f6fe33128af7973ac0b63dee546085903d8e188362d9616bb4d8df26",
+      "bytes": 28360,
+      "width": 1264,
+      "height": 900
+    }
+  ],
+  "capturedDate": "2026-11-26",
+  "timezone": "Asia/Seoul",
+  "dataNotice": "모든 성과·가격·ML 수치는 화면 보존용 합성 데이터입니다. 실제 계좌, 보유 정보 또는 실제 연구 성과가 아닙니다.",
+  "stateNotice": "10과 11은 명시적인 합성 상태 예시이며, 17과 18은 합성 입력을 실제 실행하고 취소한 화면입니다.",
+  "review": "18 JPEGs visually reviewed; 03,12,13,14,16 recaptured at scrollY=0; no real holdings/account data"
+}
