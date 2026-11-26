@@ -38,7 +38,7 @@ class SwingStrategy:
             else pd.DataFrame(True, index=raw_open_price.index, columns=raw_open_price.columns)
         )
         prob = prediction_frame.pivot(index="Date", columns="Code", values="Prob")
-        prob = prob.reindex(index=raw_open_price.index, columns=raw_open_price.columns).fillna(0.0)
+        prob = prob.reindex(index=raw_open_price.index, columns=raw_open_price.columns)
         prediction_dates = prediction_frame.assign(_prediction=True).pivot(
             index="Date", columns="Code", values="_prediction"
         )
