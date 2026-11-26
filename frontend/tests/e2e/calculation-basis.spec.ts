@@ -16,6 +16,7 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
   await expect(overview.getByRole("button", { name: /^회사 상태/ })).toContainText("104.8%");
   const price = overview.getByRole("region", { name: "최근 주가" });
   const graph = price.getByRole("img", { name: "최근 주가 흐름" });
+  const firstDate = graph.locator("text").filter({ hasText: /^3개월 전$/ });
   const scrollRegion = price.getByRole("region", { name: "주가 차트 좌우 탐색" });
   const scrollHint = price.getByText("차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.");
   const checkpoint = page.getByRole("region", { name: "나에게 해당하는 확인 사항" });
@@ -61,6 +62,13 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
       return element.clientWidth - parseFloat(paddingLeft) - parseFloat(paddingRight);
     });
     expect(chart!.width).toBeCloseTo(mainContentWidth, 0);
+    expect((await graph.boundingBox())!.height).toBe(264);
+    const labelSize = await firstDate.evaluate((label: SVGTextElement) => {
+      const { a, b, c, d } = label.getScreenCTM()!;
+      const fontSize = parseFloat(getComputedStyle(label).fontSize);
+      return [Math.hypot(a, b) * fontSize, Math.hypot(c, d) * fontSize];
+    });
+    expect(labelSize).toEqual([13, 13]);
     const scrollable = await scrollRegion.evaluate(({ scrollWidth, clientWidth }) => scrollWidth > clientWidth);
     await expect(scrollHint).toBeVisible({ visible: scrollable });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -68,6 +76,10 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
 
   await page.setViewportSize({ width: 1280, height: 900 });
   const chartContent = (await graph.boundingBox())!;
+  const lastClose = graph.locator("circle").first();
+  await expect.poll(async () => (await lastClose.boundingBox())!.x - chartContent.x).toBeGreaterThan(chartContent.width / 2);
+  await lastClose.hover();
+  await expect(price.getByText("최근 종가", { exact: true })).toBeVisible();
   async function expectWideTab(panel: Locator) {
     await expect(checkpoint).toBeVisible();
     const content = (await panel.getByRole("region").first().boundingBox())!;

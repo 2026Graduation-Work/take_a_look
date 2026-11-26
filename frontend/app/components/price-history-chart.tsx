@@ -5,11 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
-const VB_W = 560;
-const VB_H = 264;
+const MIN_WIDTH = 560;
+const HEIGHT = 264;
 const PAD = { top: 20, bottom: 34 };
 const X0 = 14;
-const XH = 500;
 
 function niceStep(rough: number) {
   if (!Number.isFinite(rough) || rough <= 0) return 1;
@@ -42,21 +41,30 @@ export default function PriceHistoryChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  const [width, setWidth] = useState(MIN_WIDTH);
+  const hasPrices = prices.length >= 2 && prices.every(Number.isFinite);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!hasPrices || !svg) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(Math.max(MIN_WIDTH, entry.contentRect.width));
+    });
+    observer.observe(svg);
+    return () => observer.disconnect();
+  }, [hasPrices]);
+
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
   }, [prices]);
 
-  if (
-    prices.length < 2 ||
-    prices.some((price) => !Number.isFinite(price))
-  ) {
-    return null;
-  }
+  if (!hasPrices) return null;
 
   const rangeBand = band && Number.isFinite(band.low) && Number.isFinite(band.high) && band.low <= band.high ? band : null;
-  const X1 = rangeBand ? 374 : 460;
+  const X1 = width - (rangeBand ? 186 : 100);
   const XAXIS = X1 + 10;
+  const XH = width - 60;
   const last = prices[prices.length - 1];
   const bandHighPrice = rangeBand ? last * (1 + rangeBand.high / 100) : last;
   const bandLowPrice = rangeBand ? last * (1 + rangeBand.low / 100) : last;
@@ -68,7 +76,7 @@ export default function PriceHistoryChart({
   const vMin = rawMin - padValue;
   const vMax = rawMax + padValue;
 
-  const plotH = VB_H - PAD.top - PAD.bottom;
+  const plotH = HEIGHT - PAD.top - PAD.bottom;
   const baseline = PAD.top + plotH;
   const y = (v: number) => PAD.top + ((vMax - v) / (vMax - vMin)) * plotH;
   const xAt = (i: number) => X0 + (i / (prices.length - 1)) * (X1 - X0);
@@ -86,9 +94,7 @@ export default function PriceHistoryChart({
   const yLow = y(bandLowPrice);
 
   const handleMove = (event: React.MouseEvent<SVGSVGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const vx = ((event.clientX - rect.left) / rect.width) * VB_W;
+    const vx = event.clientX - event.currentTarget.getBoundingClientRect().left;
     if (vx < X0 || vx > X1 + 20) {
       setHovered(null);
       return;
@@ -103,7 +109,7 @@ export default function PriceHistoryChart({
     <div className="relative min-w-[560px]">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        height={HEIGHT}
         className="block w-full"
         role="img"
         aria-label="최근 주가 흐름"
@@ -113,7 +119,7 @@ export default function PriceHistoryChart({
       >
         {ticks.map((tick) => (
           <g key={tick}>
-            <line x1={X0} y1={y(tick)} x2={VB_W - 10} y2={y(tick)} style={{ stroke: "var(--color-line-soft)" }} />
+            <line x1={X0} y1={y(tick)} x2={width - 10} y2={y(tick)} style={{ stroke: "var(--color-line-soft)" }} />
             {Math.abs(y(tick) - yLast) > 16 && (
               <text x={XAXIS} y={y(tick) + 4} fontSize={13} style={{ fill: "var(--color-muted)" }}>
                 {tick.toLocaleString("ko-KR")}
@@ -243,8 +249,8 @@ export default function PriceHistoryChart({
         <div
           className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap surface px-3 py-2 shadow-lift"
           style={{
-            left: `${(xAt(hovered) / VB_W) * 100}%`,
-            top: `${((y(prices[hovered]) - 10) / VB_H) * 100}%`,
+            left: xAt(hovered),
+            top: y(prices[hovered]) - 10,
           }}
         >
           <span className="text-xs text-muted">
