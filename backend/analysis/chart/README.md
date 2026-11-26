@@ -17,4 +17,6 @@
 
 실행법: [실험](experiments/README.md), [serving](serving/OPERATIONS.md). 해석 전 [품질 제한](docs/RESULTS.md#품질-제한)을 확인한다.
 
+공식 Qlib Alpha158로 재학습할 때는 [원본 적용과 모델 호환성](docs/ALPHA158_COMPATIBILITY.md)을 따른다. `preprocessing: qlib_alpha158`는 원본 패키지를 직접 사용한다. 기존 운영 모델은 기존 `shared_v3` 계산을 유지하며, 이 경로는 재학습 전환 때 삭제할 임시 경로다([#464](https://github.com/2026Graduation-Work/take_a_look/issues/464)).
+
 대표 결과와 품질 제한은 [RESULTS.md](docs/RESULTS.md)에 있다. 이전 코드·문서 원문(`archive/`)은 태그 [`v1.1.0`](https://github.com/2026Graduation-Work/take_a_look/tree/v1.1.0/backend/analysis/chart/archive)에 남아 있다.

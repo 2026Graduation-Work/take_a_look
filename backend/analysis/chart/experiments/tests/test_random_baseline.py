@@ -113,6 +113,21 @@ def test_undefined_metrics_are_not_counted_as_losses():
     assert summary["sharpe_ratio_valid_runs"] == 0
 
 
+def test_reporting_progress_preserves_the_random_result():
+    prices = market()
+    cfg = model_config()
+    preds = predictions(lambda day, code: 0.9)
+    model, metrics = run_model(cfg, preds, prices)
+    expected, expected_distribution = compare_with_random(cfg, preds, prices, model, metrics, 3)
+    steps = []
+    actual, distribution = compare_with_random(
+        cfg, preds, prices, model, metrics, 3, on_progress=lambda i, n: steps.append((i, n)),
+    )
+    assert steps == [(1, 3), (2, 3), (3, 3)]
+    assert actual == expected
+    pd.testing.assert_frame_equal(distribution, expected_distribution)
+
+
 def test_valid_runs_counts_only_runs_actually_compared_with_the_model():
     # The model always buys a stock that never moves, so its Sharpe is undefined, while random
     # runs buy moving stocks and get a finite Sharpe. Nothing is compared, so 0 and NaN.

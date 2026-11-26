@@ -37,7 +37,7 @@ def random_run(config, predictions, prices, daily_buys, seed):
     return simulate(config, pool, prices, priority=priority, daily_buys=daily_buys)
 
 
-def compare_with_random(config, predictions, prices, model_result, model_metrics, runs):
+def compare_with_random(config, predictions, prices, model_result, model_metrics, runs, on_progress=None):
     daily_buys = daily_buy_counts(model_result)
     rows = []
     for seed in range(runs):
@@ -45,6 +45,8 @@ def compare_with_random(config, predictions, prices, model_result, model_metrics
         metrics = calculate_trading_metrics(result.returns(), result.trades)
         rows.append({"seed": seed, "unfilled_buys": result.unfilled_buys,
                      **{name: metrics.get(name, np.nan) for name in COMPARED}})
+        if on_progress is not None:
+            on_progress(seed + 1, runs)
     distribution = pd.DataFrame(rows, columns=["seed", "unfilled_buys", *COMPARED])
     summary = {"random_runs": runs, "random_unfilled_buys": int(distribution.unfilled_buys.sum())}
     for name in COMPARED:

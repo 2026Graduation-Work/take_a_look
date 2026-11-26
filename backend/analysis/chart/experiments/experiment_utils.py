@@ -372,6 +372,8 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
                 "Run python -m experiments.features.build_feature_panel --config first"
             )
         manifest = json.loads(manifest_path.read_text())
+        if manifest.get("config", {}).get("processing_contract") != config["processing_contract"]:
+            raise ValueError("Shared processing changed; prepare features again")
         if manifest["feature_columns"] != config["feature_columns"]:
             raise ValueError("Feature list changed; prepare features again")
         for name, digest in manifest["file_hashes"].items():
@@ -380,9 +382,10 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
     return str(path)
 
 
-def cache_dir(anchor_file: str) -> str:
+def cache_dir(anchor_file: str, *, create: bool = True) -> str:
     path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "predictions")
-    os.makedirs(path, exist_ok=True)
+    if create:
+        os.makedirs(path, exist_ok=True)
     return path
 
 
@@ -395,13 +398,17 @@ def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_fil
     return os.path.join(cache_dir(anchor_file), f"{pred_hash}_predictions.parquet")
 
 
-def result_dir(config: dict, anchor_file: str) -> str:
+def result_path(config: dict, anchor_file: str) -> Path:
     exp_name = config.get("experiment_name", "default_exp")
     if config.get("contract_version") == 3:
         from experiments.config import identity
 
         exp_name += "_" + identity(config)
-    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "runs", exp_name)
+    return Path(chart_root(anchor_file)) / "workspace" / "experiments" / "runs" / exp_name
+
+
+def result_dir(config: dict, anchor_file: str) -> str:
+    path = result_path(config, anchor_file)
     os.makedirs(path, exist_ok=True)
     if config.get("contract_version") == 3:
         from shared.io import atomic_json
@@ -415,7 +422,7 @@ def result_dir(config: dict, anchor_file: str) -> str:
                 "processing_contract": config["processing_contract"],
             },
         )
-    return path
+    return str(path)
 
 
 def label_params_from_config(config: dict) -> dict:

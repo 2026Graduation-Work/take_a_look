@@ -16,6 +16,7 @@
 | [../README.md](../README.md) | 서비스 소개, 빠른 시작, 구조 |
 | [../AGENTS.md](../AGENTS.md) | 공통 지침·제품 원칙·운영과 안전·작업별 정본 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 블록 구분·브랜치·커밋·PR·머지·훅 변경 절차 |
+| [issue-writing.md](issue-writing.md) | 버그·기능 이슈의 사용자 문제·선택 이유·완료 조건·검증·결정 이력 작성 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경과 초기 기록(서비스명, 레포 이름) |
 
 ## 운영
@@ -54,6 +55,8 @@
 | 문서 | 내용 |
 |---|---|
 | [research/psychology-ab-2019-2025/README.md](research/psychology-ab-2019-2025/README.md) | 심리 피처 A/B, 2019~2025 표본 밖 평가 |
+| [research/psych-candidates/README.md](research/psych-candidates/README.md) | 심리지표 후보 P1~P5 1차 선별, 2단계 사전 등록, 가격 밖 데이터 조사 |
+| [research/psych-candidates/stage2-plan.md](research/psych-candidates/stage2-plan.md) | 심리 후보 2단계 실험 사전 등록(목록, 설정, 판정 기준) |
 | [research/flow-161-vs-170-2019-2026/README.md](research/flow-161-vs-170-2019-2026/README.md) | 기본 모델과 수급 모델 비교 |
 | [research/horizon-selection.md](research/horizon-selection.md) | 1주, 4주를 남기고 H10을 뺀 근거 |
 | [research/2026-06-selection-report.md](research/2026-06-selection-report.md) | H5, H10, H20 라벨 배수 후보 비교와 최종 후보 선정(2026-06-29) |
