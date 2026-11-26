@@ -1,48 +1,58 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { DISCLOSURE_KIND } from "@/lib/copy-glossary";
 import { formatKstDateTime, formatSignedPercent } from "@/lib/display";
+import { priceEventSourceMessages, priceMoveMessages, type EventSource } from "@/lib/price-event-messages";
 import { PRICE_EVENT_MULTIPLIER } from "@/lib/price-events";
 import type { SourceResult } from "@/lib/providers/price-event-context";
 import type { usePriceEvents } from "@/lib/use-price-events";
 
 type PriceEvents = ReturnType<typeof usePriceEvents>;
 
-function SourceDetails<T>({ source, retry, children }: {
+const sourceStatusLabels: Record<EventSource, string> = {
+  market: "코스피 조회 상태",
+  disclosures: "공시 조회 상태",
+  news: "뉴스 조회 상태",
+};
+
+function SourceDetails<T>({ name, source, retry, children }: {
+  name: EventSource;
   source: SourceResult<T>;
   retry?: () => void;
   children: (items: T[]) => ReactNode;
 }) {
-  const unavailable = source.status === "unavailable";
+  const announcement = useRef<HTMLDivElement>(null);
+  const { message, coverageNote, refreshNote, lastCheckedAt, canRetry } = priceEventSourceMessages(name, source);
+  const items = source.status === "available" && source.items.length > 0 ? children(source.items) : null;
   return (
     <>
-      {source.status === "loading" && <p className="m-0 text-sm text-muted">자료를 불러오는 중이에요.</p>}
-      {source.status === "available" && children(source.items)}
-      {unavailable && <p className="m-0 text-sm text-muted">
-        {source.reason === "usage_not_approved" || source.reason === "not_configured"
-          ? "이 자료는 지금 제공하지 않아요."
-          : "자료를 불러오지 못했어요."}
-      </p>}
-      {source.status === "available" && source.refresh === "loading" && <p className="m-0 text-xs text-muted">새로 확인하는 중이에요.</p>}
-      {source.status === "available" && source.refresh === "failed" && <p className="m-0 text-xs text-muted">이전 조회 자료예요.</p>}
-      {retry && (
-        (unavailable && (source.reason === "query_failed" || source.reason === "invalid_response")) ||
-        (source.status === "available" && source.refresh === "failed")
-      ) && <button type="button" onClick={retry} className="min-h-11 self-start text-sm text-ink underline underline-offset-4">다시 확인</button>}
+      {name !== "market" && items}
+      <div ref={announcement} role="status" aria-label={sourceStatusLabels[name]} aria-live="polite" aria-atomic="true"
+        tabIndex={-1} className="flex flex-col gap-2">
+        {name === "market" && items}
+        {message && <p className="m-0 text-sm text-muted">{message}</p>}
+        {coverageNote && <p className="m-0 text-xs text-muted">{coverageNote}</p>}
+        {refreshNote && <p className="m-0 text-xs text-muted">{refreshNote}</p>}
+        {lastCheckedAt && <p className="m-0 text-xs text-muted">
+          마지막 확인 <time dateTime={lastCheckedAt}>{formatKstDateTime(lastCheckedAt)}</time>
+        </p>}
+      </div>
+      {retry && canRetry && <button type="button" onClick={() => {
+        announcement.current?.focus();
+        retry();
+      }} className="min-h-11 self-start text-sm text-ink underline underline-offset-4">다시 확인</button>}
     </>
   );
 }
 
-function DisclosureItems({ source }: {
-  source: Extract<NonNullable<PriceEvents["context"]>["disclosures"], { status: "available" }>;
+function DisclosureItems({ items }: {
+  items: Extract<NonNullable<PriceEvents["context"]>["disclosures"], { status: "available" }>["items"];
 }) {
-  const { items, coverage, truncated } = source;
   const [expanded, setExpanded] = useState(false);
   return (
     <>
-      {items.length === 0 && <p className="m-0 text-sm text-body">이 기간에 수집된 공시가 없어요.</p>}
-      {items.length > 0 && <ul className="m-0 list-none p-0">
+      <ul className="m-0 list-none p-0">
         {(expanded ? items : items.slice(0, 3)).map(item => (
           <li key={item.rceptNo} className="flex flex-col gap-1 py-2">
             {item.url
@@ -54,26 +64,22 @@ function DisclosureItems({ source }: {
             </p>
           </li>
         ))}
-      </ul>}
+      </ul>
       {!expanded && items.length > 3 && <button type="button" onClick={() => setExpanded(true)}
         className="min-h-11 self-start text-sm text-ink underline underline-offset-4">더 보기({items.length - 3})</button>}
-      {coverage === "unverified" && <p className="m-0 text-xs text-muted">
-        수집 범위를 확인하지 못했어요.{items.length > 0 && " 조회된 자료만 표시해요."}
-      </p>}
-      {coverage === "known_partial" && <p className="m-0 text-xs text-muted">형식이 맞지 않는 자료를 제외해 일부 자료만 표시해요.</p>}
-      {truncated && <p className="m-0 text-xs text-muted">조회 한도에 도달했어요. 일부 자료만 표시해요.</p>}
     </>
   );
 }
 
 export default function PriceEventPanel({ events }: { events: PriceEvents }) {
   const { basis, result, moves, move, context, select, retry } = events;
+  const { message, coverageNote } = priceMoveMessages(result);
   return (
     <section aria-labelledby="price-events-title" className="flex min-w-0 flex-col gap-6">
       <div className="flex flex-col gap-2">
         <h3 id="price-events-title" className="m-0 text-xl font-semibold">가격이 크게 움직인 날</h3>
-        {result.status === "unavailable" && <p className="m-0 text-sm text-muted">변동일을 확인할 가격 자료가 부족해요.</p>}
-        {result.status === "ready" && !moves.length && <p className="m-0 text-sm text-body">기준을 넘은 날이 없어요.</p>}
+        {message && <p className="m-0 text-sm text-muted">{message}</p>}
+        {coverageNote && <p className="m-0 text-xs text-muted">{coverageNote}</p>}
         {move && context && (
           <div role="group" aria-label="변동일 선택" className="flex flex-wrap gap-x-4">
             {moves.map(item => (
@@ -92,8 +98,8 @@ export default function PriceEventPanel({ events }: { events: PriceEvents }) {
             <strong>종목 {formatSignedPercent(move.changePercent, 2)}</strong>
           </p>
           <section aria-label="같은 날 코스피" className="flex flex-col gap-2">
-            <SourceDetails source={context.market} retry={() => retry("market", move.date)}>
-              {items => <p className="m-0 text-sm tabular-nums text-body">코스피 {items.length ? formatSignedPercent(items[0].changePercent, 2) : "미제공"}</p>}
+            <SourceDetails name="market" source={context.market} retry={() => retry("market", move.date)}>
+              {items => <p className="m-0 text-sm tabular-nums text-body">코스피 {formatSignedPercent(items[0].changePercent, 2)}</p>}
             </SourceDetails>
           </section>
           <p className="m-0 text-xs text-muted">날짜가 가까운 자료를 함께 보고 있어요. 가격이 움직인 이유는 이 자료만으로 알 수 없어요.</p>
@@ -103,13 +109,13 @@ export default function PriceEventPanel({ events }: { events: PriceEvents }) {
             <h4 className="m-0 text-base font-semibold">앞뒤 거래일에 나온 공시</h4>
             <p className="m-0 text-xs tabular-nums text-muted">{formatKstDateTime(context.disclosureWindow.from)} ~ {formatKstDateTime(context.disclosureWindow.through)}</p>
             {context.disclosureWindow.endReason === "snapshot_boundary" && <p className="m-0 text-xs text-muted">차트 기준일까지 나온 자료만 확인했어요.</p>}
-            <SourceDetails source={context.disclosures} retry={() => retry("disclosures", move.date)}>
-              {() => context.disclosures.status === "available" && <DisclosureItems key={move.date} source={context.disclosures} />}
+            <SourceDetails name="disclosures" source={context.disclosures} retry={() => retry("disclosures", move.date)}>
+              {items => <DisclosureItems key={move.date} items={items} />}
             </SourceDetails>
           </section>
           <section aria-label="이날 뉴스" className="flex flex-col gap-2">
             <h4 className="m-0 text-base font-semibold">이날 뉴스</h4>
-            <SourceDetails source={context.news}>{() => null}</SourceDetails>
+            <SourceDetails name="news" source={context.news}>{() => null}</SourceDetails>
           </section>
         </div>
       </>}

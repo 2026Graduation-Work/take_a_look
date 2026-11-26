@@ -93,6 +93,14 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않아요."));
 });
 
+test("가격 변동일의 메시지 파일도 인과 단정 금지 규칙으로 검사한다", () => {
+  const file = "lib/price-event-messages.ts";
+  assert.ok(sourceFiles("lib").includes(file));
+  const causalCopy = "공시 때문에 올랐어요.";
+  assert.ok(FORBIDDEN_COPY.some(({ pattern, allowIn, onlyIn }) =>
+    pattern.test(causalCopy) && onlyIn?.includes(file) && !allowIn?.includes(file)));
+});
+
 test("신호 방향 이름(상승·하락)은 확률·전망 금지 규칙에 걸리지 않는다", () => {
   const caught = (text: string) => FORBIDDEN_COPY.filter(({ pattern }) => pattern.test(text)).map(({ reason }) => reason);
   for (const text of [...Object.values(SIGNAL_WORD), `강한 ${SIGNAL_WORD.up}`,

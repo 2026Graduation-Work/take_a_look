@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { selectPriceMoves, type DisclosureWindow } from "./price-events.ts";
-import { loadEventDisclosures, loadEventMarket, type EventDisclosure, type MarketMove, type SourceResult } from "./providers/price-event-context.ts";
+import { canRetryEventSource, loadEventDisclosures, loadEventMarket, type EventDisclosure, type MarketMove, type SourceResult, type SourceUnavailableReason } from "./providers/price-event-context.ts";
 import type { ChartSnapshot } from "./chart-public.ts";
 
 const LOADING = { status: "loading" } as const;
@@ -50,27 +50,39 @@ function createSession(key: string, { stockCode, dates, windows }: Requests, pub
 
   function enqueue<T>(source: keyof ContextRows, table: Map<string, SourceResult<T>>, requested: string[],
     read: (keys: string[], signal: AbortSignal) => Promise<Map<string, SourceResult<T>>>) {
-    const keys = requested.filter(id => !pending.has(`${source}:${id}`));
+    const keys = requested.filter(id => {
+      if (pending.has(`${source}:${id}`)) return false;
+      const last = table.get(id);
+      if (last?.status === "unavailable") return canRetryEventSource(last.reason);
+      if (last?.status === "available" && last.refresh.status === "failed") return canRetryEventSource(last.refresh.reason);
+      return true;
+    });
     if (!keys.length) return;
     const attempt = ++sequence;
-    for (const id of keys) pending.set(`${source}:${id}`, attempt);
-    queue.push(async () => {
-      const previous = new Map(keys.map(id => [id, table.get(id)]));
-      for (const id of keys) {
-        const last = previous.get(id);
-        table.set(id, last?.status === "available" ? { ...last, refresh: "loading" } : LOADING);
-      }
-      emit();
+    const previous = new Map(keys.map(id => [id, table.get(id)]));
+    for (const id of keys) {
+      pending.set(`${source}:${id}`, attempt);
+      const last = previous.get(id);
+      table.set(id, last?.status === "available" ? { ...last, refresh: { status: "loading" } } : LOADING);
+    }
+    emit();
 
+    queue.push(async () => {
       const controller = new AbortController();
       active.add(controller);
-      const timer = window.setTimeout(() => controller.abort(), 10_000);
-      const expired = new Promise<null>(resolve => controller.signal.addEventListener("abort", () => resolve(null), { once: true }));
-      let results: Map<string, SourceResult<T>> | null;
+      let timer: number | undefined;
+      const aborted = new Promise<SourceUnavailableReason>(resolve => {
+        controller.signal.addEventListener("abort", () => resolve("query_failed"), { once: true });
+        timer = window.setTimeout(() => {
+          resolve("timeout");
+          controller.abort();
+        }, 10_000);
+      });
+      let results: Map<string, SourceResult<T>> | SourceUnavailableReason;
       try {
-        results = await Promise.race([read(keys, controller.signal), expired]);
+        results = await Promise.race([read(keys, controller.signal), aborted]);
       } catch {
-        results = null;
+        results = "query_failed";
       } finally {
         window.clearTimeout(timer);
         active.delete(controller);
@@ -81,9 +93,13 @@ function createSession(key: string, { stockCode, dates, windows }: Requests, pub
         const requestKey = `${source}:${id}`;
         if (pending.get(requestKey) !== attempt) continue;
         pending.delete(requestKey);
-        const next = results?.get(id) ?? QUERY_FAILED;
+        const next = typeof results === "string"
+          ? { status: "unavailable" as const, reason: results }
+          : results.get(id) ?? QUERY_FAILED;
         const last = previous.get(id);
-        table.set(id, next.status === "unavailable" && last?.status === "available" ? { ...last, refresh: "failed" } : next);
+        table.set(id, next.status === "unavailable" && last?.status === "available"
+          ? { ...last, refresh: { status: "failed", reason: next.reason } }
+          : next);
       }
       emit();
     });
@@ -117,11 +133,14 @@ function createSession(key: string, { stockCode, dates, windows }: Requests, pub
 }
 
 export function usePriceEvents(chart: ChartSnapshot | undefined, chartRevision: number) {
-  const basis = chart?.prices.eventBasis;
-  const result = useMemo(
-    () => selectPriceMoves(chart?.prices.history ?? [], chart?.prices.eventBasis, chart?.data_asof ?? ""),
-    [chart],
-  );
+  const eventBasis = chart?.prices.eventBasis;
+  const basis = eventBasis?.status === "available" ? eventBasis.basis : undefined;
+  const result = useMemo(() => {
+    if (!chart) return selectPriceMoves([], undefined, "");
+    const eventBasis = chart.prices.eventBasis;
+    return eventBasis.status === "unavailable" ? eventBasis
+      : selectPriceMoves(chart.prices.history, eventBasis.basis, chart.data_asof);
+  }, [chart]);
   const moves = result.status === "ready" ? result.moves : [];
   const stockCode = chart?.stock_code ?? "";
   const key = chart && moves.length ? JSON.stringify([
@@ -134,6 +153,7 @@ export function usePriceEvents(chart: ChartSnapshot | undefined, chartRevision: 
   const move = (selected?.stockCode === stockCode && moves.find(item => item.date === selected.date)) || moves[0];
   const [data, setData] = useState<{ key: string; rows: ContextRows } | null>(null);
   const session = useRef<ContextSession | null>(null);
+  if (data && data.key !== key) setData(null);
 
   useEffect(() => {
     if (!key) return;

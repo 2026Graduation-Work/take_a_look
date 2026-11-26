@@ -14,6 +14,11 @@ export type PriceEventBasis = {
   previousBar: DatedClose | null;
 };
 
+type PriceEventBasisFailure = "missing_basis" | "invalid_basis" | "incomplete_sessions" | "mismatched_periods";
+export type PriceEventBasisResult =
+  | { status: "available"; basis: PriceEventBasis }
+  | { status: "unavailable"; reason: PriceEventBasisFailure };
+
 export type DisclosureWindow = {
   from: string;
   through: string;
@@ -29,7 +34,7 @@ type PriceMove = {
 };
 export type PriceMoveResult =
   | { status: "ready"; moves: PriceMove[]; evaluatedDays: number; excludedDays: number }
-  | { status: "unavailable"; reason: "missing_basis" | "invalid_basis" | "incomplete_sessions" | "no_evaluable_returns" };
+  | { status: "unavailable"; reason: PriceEventBasisFailure | "no_evaluable_returns" };
 
 export function isCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;

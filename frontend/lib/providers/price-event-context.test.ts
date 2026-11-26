@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseEventDisclosures, parseEventMarket } from "./price-event-context.ts";
+import { loadEventDisclosures, loadEventMarket, parseEventDisclosures, parseEventMarket } from "./price-event-context.ts";
 
 const stock = "005930";
 const window = { from: "2026-11-20", through: "2026-11-23", endReason: "next_session_included" } as const;
@@ -44,20 +44,46 @@ test("코스피 0%는 유지하고 요청 밖 행 때문에 응답을 믿을 수
     { status_date: b, index_quotes: [{ symbol: "KOSPI", changePercent: "0.4" }] },
     { status_date: "2026-11-24", index_quotes: [{ symbol: "KOSPI", changePercent: 1 }] },
   ], [a, b, c], timestamp);
-  assert.deepEqual(result.get(a), { status: "available", items: [{ date: a, changePercent: 0 }], fetchedAt: timestamp, coverage: "unverified", truncated: false, refresh: "idle" });
+  assert.deepEqual(result.get(a), { status: "available", items: [{ date: a, changePercent: 0 }], fetchedAt: timestamp, coverage: "unverified", truncated: false, refresh: { status: "idle" } });
   assert.deepEqual(result.get(b), { status: "unavailable", reason: "invalid_response" });
   assert.deepEqual(result.get(c), { status: "unavailable", reason: "invalid_response" });
 });
 
 test("빈 코스피 응답과 정상 응답의 빠진 날짜는 0건이고 날짜를 읽을 수 없는 응답은 실패다", () => {
   const dates = ["2026-11-20", "2026-11-23"];
-  const empty = { status: "available", items: [], fetchedAt: timestamp, coverage: "unverified", truncated: false, refresh: "idle" };
+  const empty = { status: "available", items: [], fetchedAt: timestamp, coverage: "unverified", truncated: false, refresh: { status: "idle" }, emptyReason: "no_rows" };
   const exact = { status_date: dates[0], index_quotes: [{ symbol: "KOSPI", changePercent: 1 }] };
   assert.deepEqual([...parseEventMarket([], dates, timestamp).values()], [empty, empty]);
   assert.deepEqual(parseEventMarket([exact], dates, timestamp).get(dates[1]), empty);
   const mixed = parseEventMarket([exact, { status_date: "2026-02-30", index_quotes: [] }], dates, timestamp);
   assert.equal(mixed.get(dates[0])?.status, "available");
   assert.deepEqual(mixed.get(dates[1]), { status: "unavailable", reason: "invalid_response" });
+});
+
+test("검증할 수 있는 코스피 값의 미제공과 식별할 수 없는 코스피 응답을 구분한다", () => {
+  const date = "2026-11-20";
+  const market = (quotes: unknown) => parseEventMarket([{ status_date: date, index_quotes: quotes }], [date], timestamp).get(date);
+  for (const quotes of [[], [{ symbol: "KOSDAQ" }], [{ symbol: "KOSPI" }], [{ symbol: "KOSPI", changePercent: null }]]) {
+    const result = market(quotes);
+    assert.equal(result?.status, "available");
+    assert.deepEqual(result.items, []);
+    assert.equal(result.emptyReason, "missing_value");
+  }
+  const value = { symbol: "KOSPI", changePercent: 0 };
+  for (const quotes of [null, {}, [value, value], [{}], [{ symbol: 0 }], [{ symbol: " KOSPI" }],
+    ...["0", NaN, Infinity].map(changePercent => [{ symbol: "KOSPI", changePercent }])]) {
+    assert.deepEqual(market(quotes), { status: "unavailable", reason: "invalid_response" });
+  }
+  const duplicate = { status_date: date, index_quotes: [value] };
+  assert.deepEqual(parseEventMarket([duplicate, duplicate], [date], timestamp).get(date),
+    { status: "unavailable", reason: "invalid_response" });
+  const unidentified = { changePercent: 1 };
+  for (const missing of [{ symbol: "KOSPI" }, { symbol: "KOSPI", changePercent: null }]) {
+    assert.deepEqual(market([missing, unidentified]), { status: "unavailable", reason: "invalid_response" });
+  }
+  const known = market([unidentified, value]);
+  assert.equal(known?.status, "available");
+  assert.equal(known.items[0].changePercent, 0);
 });
 
 test("종목이나 날짜가 범위에 맞지 않는 공시는 해당 행만 제외한다", () => {
@@ -74,4 +100,17 @@ test("종목이나 날짜가 범위에 맞지 않는 공시는 해당 행만 제
   assert.equal(result.status, "available");
   assert.equal(result.coverage, "known_partial");
   assert.deepEqual(result.items.map((item) => item.rceptNo), within.map((item) => item.rcept_no).reverse());
+});
+
+test("공개 연결이 설정되지 않은 상태는 조회 실패와 구분한다", async (t) => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  t.after(() => {
+    if (url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = url;
+  });
+  delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const signal = new AbortController().signal;
+  const unavailable = { status: "unavailable", reason: "not_configured" };
+  assert.deepEqual(await loadEventDisclosures(stock, window, signal), unavailable);
+  assert.deepEqual((await loadEventMarket([window.from], signal)).get(window.from), unavailable);
 });
