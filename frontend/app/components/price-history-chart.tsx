@@ -98,7 +98,7 @@ export default function PriceHistoryChart({
   };
 
   return (
-    <div className="min-w-0">
+    <div className="@container min-w-0">
     <div ref={scrollRef} role="region" aria-label="주가 차트 좌우 탐색" tabIndex={0} className="overflow-x-auto [scrollbar-width:thin]">
     <div className="relative min-w-[560px]">
       <svg
@@ -257,7 +257,7 @@ export default function PriceHistoryChart({
       )}
     </div>
     </div>
-    <p className="m-0 mt-2 text-2xs text-muted xl:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
+    <p className="m-0 mt-2 text-2xs text-muted @min-[560px]:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
     </div>
   );
 }

@@ -232,7 +232,7 @@ export default function StockDetailView({
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} rotateQuotesOnMobile />
 
       <main className="page pb-12 pt-6">
-      <div className="page-wide flex flex-col gap-6">
+      <div className="flex flex-col gap-6">
 
         {loading && (
           <p role="status" className="m-0 text-xs text-muted">
@@ -253,52 +253,55 @@ export default function StockDetailView({
           </div>
         )}
 
-        <section aria-labelledby="stock-name" className="flex flex-col gap-2 px-1">
-          <div className="flex min-w-0 flex-col gap-2">
-            <span className="flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
-              <span>{detail.code}</span>
-              <span>{detail.market}</span>
-              <RiskMeter grade={detail.riskGrade} />
-              {detail.riskFlags.map((flag) => <span key={flag}>{RISK_FLAG_LABEL[flag]}</span>)}
-            </span>
-            <div className="flex flex-wrap items-center gap-x-1">
-              <h1 id="stock-name" className="m-0 break-words text-3xl font-semibold">{detail.name}</h1>
-              <StockMarks key={detail.code} code={detail.code} name={detail.name} />
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <section aria-labelledby="stock-name" className="flex min-w-0 flex-col gap-2 px-1">
+            <div className="flex min-w-0 flex-col gap-2">
+              <span className="flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
+                <span>{detail.code}</span>
+                <span>{detail.market}</span>
+                <RiskMeter grade={detail.riskGrade} />
+                {detail.riskFlags.map((flag) => <span key={flag}>{RISK_FLAG_LABEL[flag]}</span>)}
+              </span>
+              <div className="flex flex-wrap items-center gap-x-1">
+                <h1 id="stock-name" className="m-0 break-words text-3xl font-semibold">{detail.name}</h1>
+                <StockMarks key={detail.code} code={detail.code} name={detail.name} />
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col items-start gap-1">
-            {currentPrice !== null ? (
-              <>
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular-nums">
-                  <span className="text-4xl font-semibold">{currentPrice.toLocaleString("ko-KR")}원</span>
-                  {typeof changePercent === "number" && Number.isFinite(changePercent) && (
-                    <span className="whitespace-nowrap text-sm font-semibold" style={{ color: changeColor }}>
-                      <span className="sr-only">전일 대비 {changeWord} </span>
-                      {changeArrow && <span aria-hidden="true">{changeArrow} </span>}
-                      {changeWon === null
-                        ? `${Math.abs(changePercent).toFixed(1)}%`
-                        : `${Math.round(Math.abs(changeWon)).toLocaleString("ko-KR")}원 (${Math.abs(changePercent).toFixed(1)}%)`}
-                    </span>
-                  )}
-                </div>
-                {priceDate && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
-              </>
-            ) : (
-              <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
-            )}
-            {own && (
-              <p className="m-0 flex max-w-xs flex-wrap items-baseline gap-x-3 text-xs text-muted tabular-nums">
-                <span>보유 {own.quantity.toLocaleString("ko-KR")}주</span>
-                {own.rawAvgBuyPrice
-                  ? <>
-                      <span>평균 매입가 {own.rawAvgBuyPrice.toLocaleString("ko-KR")}원</span>
-                      <GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} aligned />
-                    </>
-                  : <span>평균 매입가를 <Link href="/portfolio" className="text-brand hover:underline">보유 종목</Link>에 넣으면 평단 대비 수익률이 보여요.</span>}
-              </p>
-            )}
-          </div>
-        </section>
+            <div className="flex flex-col items-start gap-1">
+              {currentPrice !== null ? (
+                <>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular-nums">
+                    <span className="text-4xl font-semibold">{currentPrice.toLocaleString("ko-KR")}원</span>
+                    {typeof changePercent === "number" && Number.isFinite(changePercent) && (
+                      <span className="whitespace-nowrap text-sm font-semibold" style={{ color: changeColor }}>
+                        <span className="sr-only">전일 대비 {changeWord} </span>
+                        {changeArrow && <span aria-hidden="true">{changeArrow} </span>}
+                        {changeWon === null
+                          ? `${Math.abs(changePercent).toFixed(1)}%`
+                          : `${Math.round(Math.abs(changeWon)).toLocaleString("ko-KR")}원 (${Math.abs(changePercent).toFixed(1)}%)`}
+                      </span>
+                    )}
+                  </div>
+                  {priceDate && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
+                </>
+              ) : (
+                <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
+              )}
+              {own && (
+                <p className="m-0 flex max-w-xs flex-wrap items-baseline gap-x-3 text-xs text-muted tabular-nums">
+                  <span>보유 {own.quantity.toLocaleString("ko-KR")}주</span>
+                  {own.rawAvgBuyPrice
+                    ? <>
+                        <span>평균 매입가 {own.rawAvgBuyPrice.toLocaleString("ko-KR")}원</span>
+                        <GainText avgBuyPrice={own.rawAvgBuyPrice} close={detail.currentPrice} aligned />
+                      </>
+                    : <span>평균 매입가를 <Link href="/portfolio" className="text-brand hover:underline">보유 종목</Link>에 넣으면 평단 대비 수익률이 보여요.</span>}
+                </p>
+              )}
+            </div>
+          </section>
+          <Checkpoints bit={bit} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
+        </div>
 
         <div role="tablist" aria-label="종목 상세" onKeyDown={onTabKeyDown} className="flex min-w-0 overflow-x-auto border-b border-line [scrollbar-width:thin] sm:gap-4">
           {tabs.map((id) => (
@@ -331,63 +334,60 @@ export default function StockDetailView({
             {activeTab === id && (
               id === "overview" ? (
                 <div className="flex flex-col gap-8">
-                  <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-                    <section aria-labelledby="recent-price" className="surface flex min-w-0 flex-col gap-4 p-4 sm:p-6">
-                      <h2 id="recent-price" className="text-xl font-semibold">최근 주가</h2>
-                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                        <div className="flex flex-wrap items-center gap-x-2">
-                          <h3 className="text-xl font-semibold">모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span></h3>
-                          {preview && direction && <span className="text-xs text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
-                          {!preview && <span className="text-xs text-muted">{topPercentLabel(detail.rankPercentile)}</span>}
-                          <MarketDetail title="모델 신호 설명" className="inline-flex"
-                            label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">모델 신호 설명 보기</span></>}>
-                            <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
-                          </MarketDetail>
-                        </div>
-                        {preview && onHorizonChange && <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />}
+                  <section aria-labelledby="recent-price" className="surface flex min-w-0 flex-col gap-4 p-4 sm:p-6">
+                    <h2 id="recent-price" className="text-xl font-semibold">최근 주가</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                      <div className="flex flex-wrap items-center gap-x-2">
+                        <h3 className="text-xl font-semibold">모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span></h3>
+                        {preview && direction && <span className="text-xs text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
+                        {!preview && <span className="text-xs text-muted">{topPercentLabel(detail.rankPercentile)}</span>}
+                        <MarketDetail title="모델 신호 설명" className="inline-flex"
+                          label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">모델 신호 설명 보기</span></>}>
+                          <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
+                        </MarketDetail>
                       </div>
-                      {hasBand && <p id="overview-return-range" className="m-0 text-sm text-body">
-                        {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
-                        <strong className="font-semibold tabular-nums text-ink">{range}</strong>
-                      </p>}
-                      {priceHistory.length >= 2 ? (
-                        <PriceHistoryChart
-                          prices={priceHistory}
-                          band={hasBand ? detail.returnBand : undefined}
-                          signal={signal}
-                          horizonLabel={HORIZON_LABEL[horizon]}
-                          asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
-                          avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
-                        />
-                      ) : (
-                        <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
-                      )}
-                      {volatility && (
-                        <>
-                          <div className="text-sm text-body">
-                            최근 1년 <TermLabel term="volatility" /> <strong>{volatility}</strong>
-                            {volatilityRank !== null && <span className="block text-xs text-muted">코스피 전 종목 중 큰 쪽 상위 {volatilityRank}%</span>}
-                            {risk?.asOf && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
-                          </div>
-                          {risk && <dl className="m-0 grid grid-cols-2 gap-3 text-xs text-muted">
-                            <div><dt>3개월 최고가 대비</dt><dd className="m-0"><ChangeText value={risk.drawdownFrom3mHigh * 100}>{signedPercent(risk.drawdownFrom3mHigh)}</ChangeText></dd></div>
-                            <div><dt>최근 3거래일</dt><dd className="m-0"><ChangeText value={risk.return3d * 100}>{signedPercent(risk.return3d)}</ChangeText></dd></div>
-                          </dl>}
-                        </>
-                      )}
-                      {volatility && <details className="disclosure">
-                        <summary>계산 근거</summary>
-                        <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 text-xs text-muted">
-                          <li>{TERM_INFO.volatility.label} = 최근 250거래일 하루 수익률(로그)의 표준편차 × √252, 코스피 전 종목 중 순위</li>
-                          {risk && <>
-                            <li>3개월 최고가 대비 = 지금 종가 ÷ 최근 60거래일 최고 종가 − 1</li>
-                            <li>최근 3거래일 = 지금 종가 ÷ 3거래일 전 종가 − 1</li>
-                          </>}
-                        </ul>
-                      </details>}
-                    </section>
-                    <Checkpoints bit={bit} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
-                  </div>
+                      {preview && onHorizonChange && <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />}
+                    </div>
+                    {hasBand && <p id="overview-return-range" className="m-0 text-sm text-body">
+                      {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
+                      <strong className="font-semibold tabular-nums text-ink">{range}</strong>
+                    </p>}
+                    {priceHistory.length >= 2 ? (
+                      <PriceHistoryChart
+                        prices={priceHistory}
+                        band={hasBand ? detail.returnBand : undefined}
+                        signal={signal}
+                        horizonLabel={HORIZON_LABEL[horizon]}
+                        asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
+                        avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
+                      />
+                    ) : (
+                      <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
+                    )}
+                    {volatility && (
+                      <>
+                        <div className="text-sm text-body">
+                          최근 1년 <TermLabel term="volatility" /> <strong>{volatility}</strong>
+                          {volatilityRank !== null && <span className="block text-xs text-muted">코스피 전 종목 중 큰 쪽 상위 {volatilityRank}%</span>}
+                          {risk?.asOf && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
+                        </div>
+                        {risk && <dl className="m-0 grid grid-cols-2 gap-3 text-xs text-muted">
+                          <div><dt>3개월 최고가 대비</dt><dd className="m-0"><ChangeText value={risk.drawdownFrom3mHigh * 100}>{signedPercent(risk.drawdownFrom3mHigh)}</ChangeText></dd></div>
+                          <div><dt>최근 3거래일</dt><dd className="m-0"><ChangeText value={risk.return3d * 100}>{signedPercent(risk.return3d)}</ChangeText></dd></div>
+                        </dl>}
+                      </>
+                    )}
+                    {volatility && <details className="disclosure">
+                      <summary>계산 근거</summary>
+                      <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 text-xs text-muted">
+                        <li>{TERM_INFO.volatility.label} = 최근 250거래일 하루 수익률(로그)의 표준편차 × √252, 코스피 전 종목 중 순위</li>
+                        {risk && <>
+                          <li>3개월 최고가 대비 = 지금 종가 ÷ 최근 60거래일 최고 종가 − 1</li>
+                          <li>최근 3거래일 = 지금 종가 ÷ 3거래일 전 종가 − 1</li>
+                        </>}
+                      </ul>
+                    </details>}
+                  </section>
 
                   <section aria-labelledby="stock-summaries" className="flex flex-col gap-2">
                     <h2 id="stock-summaries" className="text-xl font-semibold">분야별 근거</h2>
@@ -411,7 +411,7 @@ export default function StockDetailView({
                   </section>
                 </div>
               ) : (
-                <div className="surface flex min-w-0 max-w-[720px] flex-col gap-8 p-4 sm:p-6">
+                <div className="surface flex min-w-0 flex-col gap-8 p-4 sm:p-6">
                   {id === "model" && <>
                     <section aria-labelledby="model-signal" className="flex flex-col gap-3">
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
