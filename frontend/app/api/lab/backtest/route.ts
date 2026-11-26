@@ -8,6 +8,9 @@ import { activeJob, chart, ownsJob, python, readBenchmarkReturns, readLog, readP
 export const runtime = "nodejs";
 
 const basePath = /^(?:experiments\/configs|workspace\/experiments\/lab\/configs)\/[\p{L}\p{N}_.-]+\.yaml$/u;
+const labConfigDir = "workspace/experiments/lab/configs";
+const labConfigRoot = path.resolve(chart, labConfigDir);
+const sourceConfigRoot = path.resolve(chart, "experiments/configs");
 const localHost = /^(?:127\.0\.0\.1|localhost)(?::\d+)?$/;
 const namePattern = /^[\p{L}\p{N}][\p{L}\p{N}_-]{0,63}$/u;
 
@@ -27,8 +30,12 @@ function error(message: string, status = 400) {
 
 async function trustedConfig(id: unknown) {
   if (typeof id !== "string" || !basePath.test(id)) throw new Error("설정 파일을 찾을 수 없습니다.");
-  const full = path.join(chart, id);
-  if (await realpath(full) !== full || !(await lstat(full)).isFile()) throw new Error("설정 파일을 찾을 수 없습니다.");
+  const root = id.startsWith(labConfigDir + "/") ? labConfigRoot : sourceConfigRoot;
+  const full = path.resolve(root, path.basename(id));
+  if (!full.startsWith(root + path.sep)) throw new Error("설정 파일을 찾을 수 없습니다.");
+  if (await realpath(root) !== root || await realpath(full) !== full || !(await lstat(full)).isFile()) {
+    throw new Error("설정 파일을 찾을 수 없습니다.");
+  }
   return id;
 }
 
@@ -47,9 +54,16 @@ async function newConfig(base: unknown, name: unknown, changes: unknown) {
       !Object.values(changes).every((value) => value === null || typeof value === "string" || typeof value === "number")) {
     throw new Error("설정 값이 올바르지 않습니다.");
   }
-  const stem = "workspace/experiments/lab/configs/" + minuteStamp() + "-" + name;
-  const output = await lstat(path.join(chart, stem + ".yaml")).catch(() => null)
-    ? `${stem}-${randomUUID().slice(0, 8)}.yaml` : stem + ".yaml";
+  const stem = minuteStamp() + "-" + name;
+  const candidate = path.resolve(labConfigRoot, stem + ".yaml");
+  if (!candidate.startsWith(labConfigRoot + path.sep)) throw new Error("설정 파일을 저장할 수 없습니다.");
+  const realRoot = await realpath(labConfigRoot).catch((cause: NodeJS.ErrnoException) => {
+    if (cause.code === "ENOENT") return null;
+    throw cause;
+  });
+  if (realRoot !== null && realRoot !== labConfigRoot) throw new Error("설정 폴더가 올바르지 않습니다.");
+  const collision = realRoot !== null && await lstat(candidate).catch(() => null);
+  const output = `${labConfigDir}/${collision ? `${stem}-${randomUUID().slice(0, 8)}` : stem}.yaml`;
   const result = await runPython<{ config: string }>("experiments.lab_read", [
     "write-config", "--base", id, "--output", output, "--name", name,
   ], changes);
@@ -151,7 +165,7 @@ export async function POST(request: Request) {
     }
     if (body.action !== "run" && body.action !== "ml") return error("지원하지 않는 작업입니다.");
     const config = await trustedConfig(body.config);
-    if (body.action === "run" && !config.startsWith("workspace/experiments/lab/configs/")) {
+    if (body.action === "run" && !config.startsWith(labConfigDir + "/")) {
       return error("새 실행 화면에서 설정을 먼저 검사하세요.");
     }
     if (body.action === "ml") {
