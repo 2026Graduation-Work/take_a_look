@@ -11,12 +11,12 @@ export default function ChartPreviewDetail({ data, insights }: {
   data: StockDetailData; insights: StockInsights;
 }) {
   const [signalHorizon, chooseHorizon] = useSignalHorizon();
-  const { charts, loading, error, retry } = usePublicCharts([data.detail.code]);
+  const { charts, loading, error, retry, revision } = usePublicCharts([data.detail.code]);
   const snapshots = charts?.get(data.detail.code);
   const detail = chartDetail(data.detail, snapshots?.get(signalHorizon), signalHorizon);
   return <StockDetailView {...data} detail={detail}
     insights={{ ...insights, provenance: { ...insights.provenance, contributions: detail.provenance } }}
-    chartSnapshots={snapshots ?? null} loading={loading} signalHorizon={signalHorizon} onHorizonChange={chooseHorizon}
-    dataError={error}
+    chartSnapshots={snapshots ?? null} chartRevision={revision} loading={loading} signalHorizon={signalHorizon} onHorizonChange={chooseHorizon}
+    dataError={error || (!loading && !snapshots ? "이 종목의 게시된 예측 결과가 아직 없어요." : "")}
     onRetry={retry} />;
 }

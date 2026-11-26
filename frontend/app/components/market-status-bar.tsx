@@ -6,7 +6,7 @@ import { loadLatestMarketStatus, staleLabel } from "@/lib/market-status";
 import MarketDetail from "./market-detail";
 import type { MarketIndexQuote, MarketStatus } from "@/lib/types";
 
-const SHOWN = new Set(["KOSPI", "KOSDAQ", "KOSPI200"]);
+const SHOWN = new Set(["KOSPI", "KOSDAQ"]);
 const MOBILE_QUOTE_MOTION = "(max-width: 39.999rem) and (prefers-reduced-motion: no-preference)";
 
 function subscribeToMobileQuoteMotion(callback: () => void) {
@@ -19,16 +19,14 @@ function formatValue(quote: MarketIndexQuote): string {
   return quote.value.toLocaleString("ko-KR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function Quote({ quote, inlineOnMobile }: { quote: MarketIndexQuote; inlineOnMobile: boolean }) {
-  const { color, arrow } = changeMeta(quote.changePercent, 2);
+function Quote({ quote }: { quote: MarketIndexQuote }) {
+  const { color } = changeMeta(quote.changePercent, 2);
   return (
-    <span className={inlineOnMobile
-      ? "flex flex-none items-baseline gap-2 whitespace-nowrap"
-      : "contents sm:flex sm:flex-none sm:items-baseline sm:gap-2 sm:whitespace-nowrap"}>
+    <span className="inline-flex flex-none items-baseline gap-1 whitespace-nowrap sm:gap-2">
       <span className="text-xs text-muted">{quote.label}</span>
-      <span className="justify-self-end text-sm font-medium tabular-nums">{formatValue(quote)}</span>
+      <span className="text-sm font-medium tabular-nums">{formatValue(quote)}</span>
       <span className="text-xs tabular-nums" style={{ color }}>
-        {arrow && `${arrow} `}{formatSignedPercent(quote.changePercent, 2)}
+        {formatSignedPercent(quote.changePercent, 2)}
       </span>
     </span>
   );
@@ -56,7 +54,7 @@ function MobileMarketQuotes({ quotes }: { quotes: MarketIndexQuote[] }) {
   return (
     <div role="region" aria-label="시장 지수" className="flex min-w-0 basis-full items-center gap-2 motion-reduce:hidden sm:hidden">
       <ul className="sr-only">
-        {quotes.map((quote) => <li key={quote.symbol}><Quote quote={quote} inlineOnMobile /></li>)}
+        {quotes.map((quote) => <li key={quote.symbol}><Quote quote={quote} /></li>)}
       </ul>
       <div className="min-w-0 flex-1 overflow-hidden" aria-hidden="true">
         <div
@@ -65,7 +63,7 @@ function MobileMarketQuotes({ quotes }: { quotes: MarketIndexQuote[] }) {
         >
           {[...quotes, quotes[0]].map((quote, index) => (
             <div key={`${quote.symbol}-${index}`} className="w-full shrink-0">
-              <Quote quote={quote} inlineOnMobile />
+              <Quote quote={quote} />
             </div>
           ))}
         </div>
@@ -118,13 +116,13 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
   const stale = staleLabel(status.date);
   const meta = MARKET_CONDITION_META[status.condition];
   const real = status.provenance.kind === "real";
-  const quotes = status.indexQuotes.filter(({ symbol }) => SHOWN.has(symbol));
+  const quotes = status.indexQuotes.filter(({ symbol }) => SHOWN.has(symbol) || (rotateQuotesOnMobile && symbol === "KOSPI200"));
   const showMobileRotation = rotateQuotesOnMobile && quotes.length > 1;
   const date = status.date.replaceAll("-", ".");
 
   return (
-    <section aria-label="시장 브리핑" className="border-t border-line/60 bg-white/70 shadow-[0_1px_0_rgb(0_0_0/0.06)]">
-      <div className="mx-auto flex min-h-10 w-full max-w-[1200px] flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 sm:px-6 lg:px-8">
+    <section aria-label="시장 브리핑" className="border-t border-line/60 bg-surface">
+      <div className="page flex min-h-11 flex-wrap items-center gap-x-4 pt-2 sm:pt-0">
         {showMobileRotation && <MobileMarketQuotes key={quotes.map(({ symbol }) => symbol).join(",")} quotes={quotes} />}
         {quotes.length > 0 ? (
           <div
@@ -133,29 +131,32 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
             tabIndex={showMobileRotation ? 0 : undefined}
             className={rotateQuotesOnMobile
               ? `${showMobileRotation ? "hidden motion-reduce:flex sm:flex" : "flex"} min-w-0 basis-full items-baseline gap-x-5 overflow-x-auto py-1 sm:basis-auto sm:flex-wrap sm:overflow-visible sm:py-0`
-              : "grid grid-cols-[repeat(3,max-content)] items-baseline gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:gap-x-5"}
+              : "flex basis-full flex-wrap items-baseline gap-x-4 gap-y-1 sm:basis-auto"}
           >
-            {quotes.map((quote) => <Quote key={quote.symbol} quote={quote} inlineOnMobile={rotateQuotesOnMobile} />)}
+            {quotes.map((quote) => <Quote key={quote.symbol} quote={quote} />)}
           </div>
         ) : (
-          <span className="text-xs text-muted">지수 데이터가 아직 없어요.</span>
+          <span className="basis-full text-xs text-muted sm:basis-auto">지수 데이터가 아직 없어요.</span>
         )}
-        {stale && <strong className="flex-none text-xs font-medium text-ink">{stale}</strong>}
+        {stale && <strong className="text-xs font-semibold text-ink">{stale}</strong>}
         {real ? (
           <MarketDetail
+            className="ml-auto flex-none"
             label={
               <>
                 시장 흔들림 <Level score={status.volatilityScore} />
-                <span className="ml-3">거래</span> <Level score={status.volumeScore} />
                 <span aria-hidden className="ml-1 text-muted">ⓘ</span>
                 <span className="sr-only">설명 보기</span>
               </>
             }
           >
             <p className="m-0">
-              흔들림: KOSPI 최근 20거래일 가격 흔들림이 지난 1년 중 아래에서 {status.volatilityScore}% 위치예요.
+              KOSPI 최근 20거래일 가격 흔들림이 지난 1년 중 아래에서 {status.volatilityScore}% 위치예요.
             </p>
-            <p className="m-0 mt-1">거래: 최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
+            <p className="m-0 mt-2">
+              거래 <Level score={status.volumeScore} />
+            </p>
+            <p className="m-0 mt-1">최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">{meta.comment}.</p>
             <p className="m-0 mt-2 text-muted tabular-nums">{date} 기준</p>
           </MarketDetail>

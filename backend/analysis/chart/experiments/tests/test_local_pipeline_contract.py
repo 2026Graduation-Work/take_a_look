@@ -981,6 +981,10 @@ def test_independent_year_resets_cash_positions_and_signal_lag(tmp_path, monkeyp
     monkeypatch.setattr(module, "result_dir", lambda *_: str(tmp_path))
     monkeypatch.setattr(module, "configured_benchmark", lambda cfg, dates, frame: pd.Series(0.0, index=dates))
     module.run_local_backtest(config)
+    status = json.loads((tmp_path / "backtest_status.json").read_text())
+    assert status["status"] == "done"
+    assert status["progress"] == {"year": [2, 2], "random": [0, 0]}
+    assert status["finished_at"] >= status["started_at"]
     summary = json.loads((tmp_path / "backtest_metrics.json").read_text())
     assert summary["cash_and_positions_carried"] is False
     assert summary["years"][0]["final_equity"] == pytest.approx(20_100)

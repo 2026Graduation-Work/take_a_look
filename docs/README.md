@@ -65,6 +65,7 @@
 | [research/usability-test-plan.md](research/usability-test-plan.md) | 사용성 평가 계획 |
 | [research/persona-walkthrough-2026-10.md](research/persona-walkthrough-2026-10.md) | 페르소나 시나리오 점검 |
 | [research/source-display.md](research/source-display.md) | 기준 시점과 출처 표시 조사 |
+| [research/beginner-tips-sources.md](research/beginner-tips-sources.md) | "알고 계셨나요" 팁 42개의 선정 기준, 레퍼런스, 원문 대조 결과 |
 | [research/oss-scan.md](research/oss-scan.md) | 오픈소스와 무료 공급원 조사, 채택 결정 |
 | [product/beginner-gap.md](product/beginner-gap.md) | 초보 투자자가 어려워하는 점 |
 | [decisions/bigkinds-acquisition.md](decisions/bigkinds-acquisition.md) | BigKinds 뉴스 수집 방식 |

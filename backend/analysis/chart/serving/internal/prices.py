@@ -5,7 +5,14 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+from ..contracts import valid_event_basis
+from .hashing import canonical_hash
+
 REQUIRED = ("Open", "High", "Low", "Close", "Volume", "VWAP")
+PRICE_SOURCE = "KRX 비수정 OHLC·거래대금, 동일 수정계수 적용"
+HISTORY_SIZE = 60
+VOLATILITY_DAYS = 250
+EVENT_METHOD = "daily-log-std-250-v1"
 
 
 def attach_actual_vwap(adjusted: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
@@ -89,38 +96,86 @@ def load_prices(path: str | Path) -> pd.DataFrame:
         raise ValueError("Invalid or duplicate raw price dates")
     return frame.sort_values("Date").reset_index(drop=True)
 
-def price_snapshot(frame, code, as_of, source):
-    """Export observed bars only; do not forward-fill missing sessions."""
-    required = {"Date", "Close", "Volume"}
-    if not required.issubset(frame.columns):
-        raise ValueError(f"Missing price columns: {sorted(required - set(frame.columns))}")
-    prices = frame.copy()
-    prices["Date"] = pd.to_datetime(prices["Date"], errors="raise").dt.normalize()
-    cutoff = pd.Timestamp(as_of).normalize()
-    prices = prices.loc[prices.Date <= cutoff].sort_values("Date")
-    if prices.empty or prices.Date.duplicated().any():
-        raise ValueError("Empty price history or duplicate dates")
-    values = prices[["Close", "Volume"]].to_numpy(dtype=float)
-    if not np.isfinite(values).all() or (values[:, 0] <= 0).any() or (values[:, 1] < 0).any():
+def price_bars(frame):
+    return [
+        {"date": pd.Timestamp(row.Date).date().isoformat(), "close": float(row.Close), "volume": float(row.Volume)}
+        for row in frame.itertuples()
+    ]
+
+
+def _valid_bars(frame):
+    values = frame[["Close", "Volume"]].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    return np.isfinite(values).all() and (values[:, 0] > 0).all() and (values[:, 1] >= 0).all()
+
+
+def price_snapshot(frame, as_of, sessions, input_sha256, *, replay=False, basis_from=None):
+    dates = pd.DatetimeIndex(pd.to_datetime(frame.Date)).normalize()
+    if dates.empty or dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+        raise ValueError("Empty, invalid, duplicate or out-of-order price dates")
+    end = pd.Timestamp(as_of)
+    expected = sessions[sessions <= end]
+    history = frame.tail(HISTORY_SIZE)
+    if (expected.empty or expected[-1] != end or
+            not dates[-HISTORY_SIZE:].equals(expected[-HISTORY_SIZE:])):
+        raise ValueError("Price history does not match verified trading sessions")
+    if not _valid_bars(history):
         raise ValueError("Prices must be positive and volumes nonnegative, all finite")
-    last = prices.iloc[-1]
-    history = prices.tail(60)
+    result = {"basis": "adjusted_close", "source": PRICE_SOURCE, "history": price_bars(history)}
+    if len(dates) < HISTORY_SIZE + 1 or not dates[-(HISTORY_SIZE + 1):].equals(expected[-(HISTORY_SIZE + 1):]):
+        return result
+    previous = frame.iloc[[-(HISTORY_SIZE + 1)]]
+    if not _valid_bars(previous):
+        return result
+    previous_bar = price_bars(previous)[0]
+    if replay:
+        basis = frame.attrs.get("event_basis")
+        if (valid_event_basis(basis, result["history"], as_of, input_sha256)
+                and basis["previous_bar"] == previous_bar
+                and len(expected) > basis["return_count"]
+                and basis["period_start"] == expected[-basis["return_count"]].date().isoformat()):
+            result["event_basis"] = basis
+        return result
+    if basis_from is not None:
+        expected = expected[expected >= basis_from]
+    baseline = expected[-(VOLATILITY_DAYS + 1):]
+    if len(baseline) < HISTORY_SIZE + 1 or not dates[-len(baseline):].equals(baseline):
+        return result
+    close = pd.to_numeric(frame.Close.tail(len(baseline)), errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(close).all() or (close <= 0).any():
+        return result
+    sigma = float(np.diff(np.log(close)).std(ddof=1))
+    if np.isfinite(sigma) and sigma > 0:
+        result["event_basis"] = {
+            "method": EVENT_METHOD,
+            "daily_sigma": sigma,
+            "return_count": len(baseline) - 1,
+            "period_start": baseline[1].date().isoformat(),
+            "period_end": as_of,
+            "input_sha256": input_sha256,
+            "previous_bar": previous_bar,
+        }
+    return result
+
+
+def archive_basis_record(frame, code, as_of, basis):
     return {
-        "code": str(code),
-        "requested_asof": cutoff.date().isoformat(),
-        "data_asof": last.Date.date().isoformat(),
-        "status": "available" if last.Date == cutoff else "stale",
-        "source": source,
-        "price_basis": "adjusted_close",
-        "close": float(last.Close),
-        "volume": float(last.Volume),
-        "change_percent": (
-            float((last.Close / prices.iloc[-2].Close - 1) * 100)
-            if len(prices) >= 2 else None
-        ),
-        "history": [
-            {"date": row.Date.date().isoformat(), "close": float(row.Close),
-             "volume": float(row.Volume)}
-            for row in history.itertuples()
-        ],
+        "stock_code": code,
+        "as_of": as_of,
+        "input_sha256": frame.attrs["input_sha256"],
+        "bars_sha256": canonical_hash(price_bars(frame)),
+        "basis_sha256": canonical_hash(basis),
+        "basis": basis,
     }
+
+
+def restore_archive_basis(frame, code, as_of, record):
+    if not isinstance(record, dict) or len(frame) != HISTORY_SIZE + 1:
+        return
+    try:
+        basis = record.get("basis")
+        if (valid_event_basis(basis, price_bars(frame.tail(HISTORY_SIZE)), as_of, frame.attrs.get("input_sha256"))
+                and basis["previous_bar"] == price_bars(frame.iloc[[0]])[0]
+                and record == archive_basis_record(frame, code, as_of, basis)):
+            frame.attrs["event_basis"] = basis
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        return

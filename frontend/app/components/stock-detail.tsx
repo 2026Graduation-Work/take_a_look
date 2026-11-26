@@ -29,6 +29,8 @@ import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
+import PriceEventPanel from "./price-event-panel";
+import { usePriceEvents } from "@/lib/use-price-events";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
 import {
@@ -100,6 +102,7 @@ interface StockDetailViewProps {
   dataError?: string;
   onRetry?: () => void;
   chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
+  chartRevision?: number;
 }
 
 export default function StockDetailView({
@@ -114,6 +117,7 @@ export default function StockDetailView({
   dataError = "",
   onRetry,
   chartSnapshots,
+  chartRevision = 0,
   signalHorizon = 20,
   onHorizonChange,
 }: StockDetailViewProps) {
@@ -145,6 +149,7 @@ export default function StockDetailView({
 
   const preview = chartSnapshots !== undefined;
   const chart = chartSnapshots?.get(signalHorizon);
+  const events = usePriceEvents(chartSnapshots?.get(20), chartRevision);
   const direction = chartDirection(chart);
   const { close, sigma, barriers } = chart?.inference ?? {};
   const modelBasis = chart?.inference.status === "available" && close && sigma && barriers && [close, sigma, barriers.up, barriers.down].every((value) => Number.isFinite(value) && value > 0)
@@ -360,10 +365,12 @@ export default function StockDetailView({
                         horizonLabel={HORIZON_LABEL[horizon]}
                         asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
                         avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
+                        priceEvents={{ dates: detail.priceDates ?? [], moves: events.moves, selectedDate: events.move?.date, select: events.select }}
                       />
                     ) : (
                       <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
                     )}
+                    {chart && <PriceEventPanel events={events} />}
                     {volatility && (
                       <>
                         <div className="text-sm text-body">

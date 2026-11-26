@@ -10,9 +10,10 @@ test("이용 안내는 로그인 없이 열리고 용어 모음은 용어 파일
   await page.getByRole("link", { name: "이용 안내" }).click();
   await expect(page).toHaveURL(/\/guide$/);
   await expect(page.getByRole("heading", { level: 1, name: "이용 안내" })).toBeVisible();
-  const toc = page.getByRole("navigation", { name: "목차" }).getByRole("link");
-  await expect(toc).toHaveCount(6);
-  await toc.nth(4).click();
+  const toc = page.getByRole("navigation", { name: "목차" });
+  await expect(toc.getByRole("link")).toHaveCount(7);
+  await expect(toc.getByRole("link", { name: /알고 계셨나요/ })).toHaveAttribute("href", "#beginner-tips");
+  await toc.getByRole("link", { name: /용어 모음/ }).click();
   await expect(page).toHaveURL(/#terms$/);
   const labels = Object.values(TERM_INFO).map(({ label }) => label).sort((a, b) => a.localeCompare(b, "ko"));
   await expect(page.locator("#terms dt")).toHaveText(labels);
