@@ -129,7 +129,7 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
             className={`m-0 min-h-[3.2em] text-xs text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
           >
             {tip.title}{" "}
-            <Link href={`/guide#tip-${tip.id}`} className="whitespace-nowrap text-tip-link text-brand underline underline-offset-2">
+            <Link href={`/guide#tip-${tip.id}`} className="ml-2 whitespace-nowrap text-tip-link text-brand underline underline-offset-2">
               자세히 보기
             </Link>
           </p>
