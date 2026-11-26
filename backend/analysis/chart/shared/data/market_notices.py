@@ -22,17 +22,50 @@ IDENTITY = (
     rf"(?:(?P<class>{CLASS})\s+)?표준코드\s*:\s*(?P<isin>[A-Z]{{2}}[0-9A-Z]{{9}}[0-9])"
     r"\s*\(\s*단축코드\s*:\s*A(?P<code>[0-9A-Z]{6})\s*\)"
 )
-FIXED_REFERENCE_FORMS = frozenset({"70795", "32103"})
-PRICE_FORMS = FIXED_REFERENCE_FORMS | {"70718", "70793", "72100", "99301", "99302", "99311", "99321", "99322", "99323", "99326",
-                                     "99328", "99331", "99332", "99334", "99335", "99336", "99343", "99360", "99362", "99409",
-                                     "32108"}
-TABLE_LISTINGS = frozenset({"32002", "32003", "32004", "32005", "32006", "70760", "70763", "70764", "70765", "70779", "70791"})
-TEXT_LISTINGS = frozenset({"68151", "68152", "68154", "68155"})
 CLASS_RELISTING = (
     r"^◎\s*(.+?)\s+(?:보통)?주권\s+재상장(?:\s+내역\((?:재상장-)?인적분할\)"
     r"|\(재상장-인적분할\)\s+및\s+종류주권\s+신규상장\s+내역"
     r"|\s+및\s+(?:종류주권\s+)?신규상장\s+내역\s*\(재상장-인적분할\))\s*(?=\(1\))"
 )
+
+
+@dataclass(frozen=True)
+class FormSpec:
+    kind: str
+    layout: str
+    labels: tuple[str, ...] = ()
+
+
+_PRICE_DATE = r"[456]\.(?:적용일|거래재개일)"
+_FIXED_REFERENCE = FormSpec("listing_price", "fixed_reference", (r"3\.적용일",))
+_EX_PRICE = FormSpec("ex_price", "price_table", (_PRICE_DATE,))
+_LISTING_PRICE = FormSpec("listing_price", "price_table", (_PRICE_DATE,))
+_FLAT_RIGHTS = FormSpec("ex_price", "flat_rights")
+_TABLE_LISTING = FormSpec("listing", "listed_table")
+_TEXT_LISTING = FormSpec("listing", "listed_text")
+_BONUS_LABELS = (r"5\.1주당신주배정주식수", r"3\.증자전발행주식총수", r"1\.신주의종류와수")
+_DIVIDEND_ALLOCATION = r"1\.1주당배당주식수\(주\)"
+_DIVIDEND_QUANTITY = r"2\.배당주식총수\(주\)"
+
+FORMS = {
+    "11307": FormSpec("bonus_terms", "terms", _BONUS_LABELS),
+    "61474": FormSpec("dividend_terms", "terms", (_DIVIDEND_ALLOCATION, r"3\.발행주식총수", _DIVIDEND_QUANTITY)),
+    "71474": FormSpec("dividend_terms", "terms", (_DIVIDEND_ALLOCATION, r"3\.발행주식총수\(주\)", _DIVIDEND_QUANTITY)),
+    "68151": _TEXT_LISTING,
+    "68152": FormSpec("listing", "numbered_listing"),
+    "68154": _TEXT_LISTING,
+    "68155": FormSpec("listing", "hangul_listing"),
+    "68156": FormSpec("new_listing", "relisting"),
+    "68157": FormSpec("new_listing", "preferred_initial_listing"),
+    "70780": FormSpec("auction", "halted_division_auction"),
+    **dict.fromkeys(("32101", "70766", "70767"), _FLAT_RIGHTS),
+    **dict.fromkeys(("32103", "70795"), _FIXED_REFERENCE),
+    **dict.fromkeys(("99301", "99302", "99311"), _EX_PRICE),
+    **dict.fromkeys(("32002", "32003", "32004", "32005", "32006", "70760", "70763", "70764", "70765",
+                     "70779", "70791"), _TABLE_LISTING),
+    **dict.fromkeys(("32108", "70718", "70793", "72100", "99321", "99322", "99323", "99326", "99328", "99331",
+                     "99332", "99334", "99335", "99336", "99343", "99360", "99362", "99409"), _LISTING_PRICE),
+}
 
 
 class NoticeError(DisclosureError):
@@ -182,9 +215,8 @@ def _flat_rights(rows):
     return sections
 
 
-def _price_table_day(form, rows):
-    label = r"3\.적용일" if form in FIXED_REFERENCE_FORMS else r"[456]\.(?:적용일|거래재개일)"
-    return official_date(_field(rows, label))
+def _price_table_day(spec, rows):
+    return official_date(_field(rows, spec.labels[0]))
 
 
 def _price_table_rows(rows):
@@ -203,17 +235,18 @@ def _price_table_rows(rows):
     return columns, after[:end]
 
 
-def _price_table(form, rows):
+def _price_table(form, spec, rows):
     company = _field(rows, r"1\.회사명")
-    day = _price_table_day(form, rows)
-    if form in FIXED_REFERENCE_FORMS:
+    day = _price_table_day(spec, rows)
+    fixed = spec.layout == "fixed_reference"
+    if fixed:
         reasons = [row[1] for row in rows if len(row) in {2, 3} and _compact(row[0]) == "4.사유"]
         require(len(reasons) == 1, "KIND fixed-reference reason is missing or ambiguous")
         reason = reasons[0]
     else:
         reason = _field(rows, r"[345]\.사유", required=form != "99409") or "장기간 매매거래정지 후 재개"
     note = _field(rows, r"[678]\.기타", required=False)
-    if form in FIXED_REFERENCE_FORMS and re.search(r"무상증자|권리락|주식배당", note):
+    if fixed and re.search(r"무상증자|권리락|주식배당", note):
         reason += f" · {note}"
     if form == "99409" and re.search(r"감자|자본감소|분할|합병", note):
         reason = "재개 관련 종전 회사 조치 검토"
@@ -243,11 +276,10 @@ def _price_table(form, rows):
         else:
             require(form not in {"99323", "99360", "99362"}, "KIND opening auction fields are missing")
             base = fields.get("기준가격(원)") or fields.get("기준가격")
-            if form in FIXED_REFERENCE_FORMS:
+            if fixed:
                 base = fields.get("기준가(원)")
             require(base is not None, "KIND fixed reference price missing")
-            kind = "ex_price" if form in {"99301", "99302", "99311"} else "listing_price"
-            sections.append(NoticeSection(index, kind, company, values[0], day, reason,
+            sections.append(NoticeSection(index, spec.kind, company, values[0], day, reason,
                                           base=_integer(base), previous_market=previous_market,
                                           previous_close=previous_close, **identity))
     return sections
@@ -697,19 +729,16 @@ def _listed_text(html, form, *, final):
     return sections
 
 
-def _terms(filing, form, rows):
-    bonus = form == "11307"
+def _terms(filing, spec, rows):
+    bonus = spec.kind == "bonus_terms"
     company = _field(rows, r"회사명:", required=bonus) or filing.company
     day = official_date(_field(rows, r"4\.(?:신주배정기준일|배당기준일)"))
     listed = _field(rows, r"8\.신주의상장예정일", required=False) if bonus else ""
     listed = official_date(listed) if listed not in {"", "-"} else None
     sections = []
-    dividend_total = r"3\.발행주식총수" if form == "61474" else r"3\.발행주식총수\(주\)"
-    labels = (r"5\.1주당신주배정주식수", r"3\.증자전발행주식총수", r"1\.신주의종류와수") if bonus else (
-        r"1\.1주당배당주식수\(주\)", dividend_total, r"2\.배당주식총수\(주\)")
     for share_label in ("보통주식", "종류주식"):
         values = []
-        for label in labels:
+        for label in spec.labels:
             start = [i for i, row in enumerate(rows) if len(row) == 3 and re.fullmatch(label, _compact(row[0]))]
             require(len(start) == 1, f"KIND dividend or bonus terms lack: {label}")
             first, following = rows[start[0]:start[0] + 2]
@@ -725,7 +754,7 @@ def _terms(filing, form, rows):
             continue
         require(re.fullmatch(r"\d+(?:\.\d+)?", ratio) and Fraction(ratio) > 0,
                 "Invalid KIND per-share allocation")
-        sections.append(NoticeSection(len(sections) + 1, "bonus_terms" if bonus else "dividend_terms",
+        sections.append(NoticeSection(len(sections) + 1, spec.kind,
                                       company, share_label, day, filing.title, shares_before=_integer(shares),
                                       added_shares=_integer(added), ratio=Fraction(ratio), listing=listed))
     require(sections, "KIND terms contain no positive per-share allocation")
@@ -821,45 +850,49 @@ def superseded_merger_facts(filing, form, body):
 
 def parse_notice(filing, form, body):
     text = body.text()
-    if form == "68155":
+    spec = FORMS.get(form)
+    if spec is None:
+        raise NoticeError(f"unsupported_form:{form}", f"Unsupported KIND market-action form {form}")
+    layout = spec.layout
+    if layout == "hangul_listing":
         flattened = _document_text(text)
         if re.match(r"^◎\s*[^◎]+?\s+변경상장\(한글종목명\s*변경\)", flattened):
             return _hangul_name_change(flattened)
-    if form == "70780":
+    if layout == "halted_division_auction":
         return _halted_division_auction(_document_text(text), getattr(body, "final", False))
-    if form in {"68152", "68156"}:
+    if layout in {"numbered_listing", "relisting"}:
         flattened = _document_text(text)
-        if form == "68156" and (heading := re.match(CLASS_RELISTING, flattened)):
+        if layout == "relisting" and (heading := re.match(CLASS_RELISTING, flattened)):
             return _class_relisting_text(filing, flattened, heading[1])
-        circled = (r"①\s*상장종목명" if form == "68156" else
+        circled = (r"①\s*상장종목명" if layout == "relisting" else
                    r"^①\s*상장종목명|④\s*종목코드\s*:\s*표준코드\s+(?=[A-Z]{2})|"
                    r"④\s*표준코드\s*:\s*[A-Z0-9]{12}\s*\([^()]*\)\s+⑤\s*주식의\s*종류와\s*수\s*"
                    r"(?::?\s*-|:\s*(?=보통주))")
         if re.search(circled, flattened):
             return _circled_listing_text(filing, flattened, form)
-    if form in TEXT_LISTINGS:
+    if layout in {"listed_text", "numbered_listing", "hangul_listing"}:
         return _listed_text(text, form, final=getattr(body, "final", False))
-    if form == "68156":
+    if layout == "relisting":
         return _relisting_text(filing, text)
-    if form == "68157":
+    if layout == "preferred_initial_listing":
         return _preferred_initial_listing(filing, _document_text(text))
     rows = deal_table(text)
-    if form in {"70766", "70767", "32101"}:
+    if layout == "flat_rights":
         return _flat_rights(rows)
-    if form in PRICE_FORMS:
-        return _price_table(form, rows)
-    if form in TABLE_LISTINGS:
+    if layout in {"price_table", "fixed_reference"}:
+        return _price_table(form, spec, rows)
+    if layout == "listed_table":
         return _listed_table(filing, form, rows)
-    if form in {"61474", "71474", "11307"}:
+    if layout == "terms":
         rows = [row for row in rows if any(row)]
-        if form in {"61474", "71474"}:
+        if spec.kind == "dividend_terms":
             require("자회사의주요경영사항" not in _compact(filing.title)
                     and not any(_compact(row[0]) == "자회사인" for row in rows),
                     "KIND stock dividend terms belong to a subsidiary")
-        if form == "11307" and getattr(body, "final", False):
+        if spec.kind == "bonus_terms" and getattr(body, "final", False):
             rows = _final_bonus_terms_rows(rows)
-        return _terms(filing, form, rows)
-    raise NoticeError(f"unsupported_form:{form}", f"Unsupported KIND market-action form {form}")
+        return _terms(filing, spec, rows)
+    raise DisclosureError(f"Unsupported KIND market-action layout {layout} for form {form}")
 
 
 def _preferred_name_matches(facts, company, names):
@@ -969,10 +1002,12 @@ def resolve_notice_security(company_id, facts, identity_universe):
 
 def notice_security_scope(filing, form, body, identity_universe):
     """Recover verified price-table identities and dates independently of price fields."""
-    require(form in PRICE_FORMS and body.final, "KIND notice has no supported identity scope")
+    spec = FORMS.get(form)
+    require(spec is not None and spec.layout in {"price_table", "fixed_reference"} and body.final,
+            "KIND notice has no supported identity scope")
     rows = deal_table(body.text())
     company = _field(rows, r"1\.회사명")
-    day = _price_table_day(form, rows)
+    day = _price_table_day(spec, rows)
     columns, securities = _price_table_rows(rows)
     scope = set()
     for index, row in enumerate(securities, 1):
