@@ -2,7 +2,7 @@
 
 import { CHART } from "@/lib/chart-colors";
 import { useEffect, useRef, useState } from "react";
-import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
+import { changeMeta, formatKstDateTime, formatSignedPercent, type SignalMeta } from "@/lib/display";
 import type { ReturnBand } from "@/lib/types";
 
 // 오늘 종가와 범위 양 끝을 잇는 보조선은 두지 않는다. 범위는 과거 비슷한 경우의
@@ -34,6 +34,12 @@ interface PriceHistoryChartProps {
   asOfLabel: string;
   horizonLabel: string;
   avgBuyPrice?: number;
+  priceEvents?: {
+    dates: string[];
+    moves: { date: string; changePercent: number }[];
+    selectedDate?: string;
+    select: (date: string) => void;
+  };
 }
 
 export default function PriceHistoryChart({
@@ -43,10 +49,12 @@ export default function PriceHistoryChart({
   asOfLabel,
   horizonLabel,
   avgBuyPrice,
+  priceEvents,
 }: PriceHistoryChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [hovered, setHovered] = useState<number | null>(null);
+  const [hoverIndex, setHovered] = useState<number | null>(null);
+  const hovered = hoverIndex !== null && hoverIndex < prices.length ? hoverIndex : null;
   useEffect(() => {
     const scroller = scrollRef.current;
     if (scroller) scroller.scrollLeft = scroller.scrollWidth;
@@ -87,6 +95,12 @@ export default function PriceHistoryChart({
   const yLast = y(last);
   const yHigh = y(bandHighPrice);
   const yLow = y(bandLowPrice);
+  const markers = priceEvents?.moves.flatMap((move) => {
+    const index = priceEvents.dates.indexOf(move.date);
+    return index >= 0 && index < prices.length
+      ? [{ ...move, x: xAt(index), y: y(prices[index]) }]
+      : [];
+  }) ?? [];
 
   const handleMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -103,7 +117,7 @@ export default function PriceHistoryChart({
   return (
     <div className="min-w-0">
     <div ref={scrollRef} role="region" aria-label="주가 차트 좌우 탐색" tabIndex={0} className="overflow-x-auto [scrollbar-width:thin]">
-    <div className="relative min-w-[860px]">
+    <div className="relative min-w-[860px] @container">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VB_W} ${VB_H}`}
@@ -238,6 +252,33 @@ export default function PriceHistoryChart({
           </g>
         )}
       </svg>
+      {priceEvents && markers.map((marker) => {
+        const left = Math.max(22, marker.x);
+        return <button
+          type="button"
+          key={marker.date}
+          aria-label={`차트에서 ${formatKstDateTime(marker.date)} ${formatSignedPercent(marker.changePercent, 2)} 선택`}
+          aria-pressed={priceEvents.selectedDate === marker.date}
+          onClick={(event) => {
+            const rect = svgRef.current?.getBoundingClientRect();
+            if (!event.detail || !rect) {
+              priceEvents.select(marker.date);
+              return;
+            }
+            // Adjacent 44px targets can overlap, so pointer clicks select the nearest visible point.
+            const x = (event.clientX - rect.left) / rect.width * VB_W;
+            const y = (event.clientY - rect.top) / rect.height * VB_H;
+            const distance = (point: typeof marker) => (point.x - x) ** 2 + (point.y - y) ** 2;
+            const closest = markers.reduce((best, point) => distance(point) < distance(best) ? point : best, marker);
+            priceEvents.select(closest.date);
+          }}
+          className="group absolute z-10 grid size-11 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
+          style={{ left: `${(left / VB_W) * 100}%`, top: `${(marker.y / VB_H) * 100}%` }}
+        >
+          <span className="size-3.5 rounded-full border-2 border-ink bg-surface shadow-sm group-aria-pressed:bg-ink"
+            style={{ transform: `translateX(${(marker.x - left) / VB_W * 100}cqw)` }} aria-hidden />
+        </button>;
+      })}
 
       {hovered !== null && (
         <div

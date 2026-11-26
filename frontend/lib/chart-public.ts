@@ -1,5 +1,5 @@
 import { featureLabel } from "./featureLabels.ts";
-import { isCalendarDate, PRICE_EVENT_HISTORY_SIZE, PRICE_EVENT_METHOD, type DatedClose, type PriceEventBasis } from "./price-events.ts";
+import { isCalendarDate, PRICE_EVENT_HISTORY_SIZE, PRICE_EVENT_METHOD, type DatedClose, type PriceEventBasis, type PriceEventBasisResult } from "./price-events.ts";
 import { getSupabaseClient } from "./supabase.ts";
 
 export type ChartProfile = "stable" | "aggressive";
@@ -43,7 +43,7 @@ export interface ChartSnapshot {
     basis: "adjusted_close";
     source: string;
     history: DatedClose[];
-    eventBasis?: PriceEventBasis;
+    eventBasis: PriceEventBasisResult;
   };
 }
 
@@ -147,9 +147,16 @@ export function parseChartSnapshot(row: ChartRow): ChartSnapshot {
       > inference.contribution_abs_sum + 1e-8
   )) throw new Error("전체 피처 기여도 기준값이 올바르지 않아요.");
   const snapshot = p as unknown as ChartSnapshot;
-  const eventBasis = history.length === PRICE_EVENT_HISTORY_SIZE && history.at(-1)?.date === p.data_asof
-    ? parseEventBasis(prices.event_basis, history[0], p.data_asof, record(p.sources) ? p.sources.prices_sha256 : undefined)
-    : undefined;
+  let eventBasis: PriceEventBasisResult;
+  if (!Object.hasOwn(prices, "event_basis")) {
+    eventBasis = { status: "unavailable", reason: "missing_basis" };
+  } else if (history.length !== PRICE_EVENT_HISTORY_SIZE || history.at(-1)?.date !== p.data_asof ||
+      history.some((point: DatedClose) => !isCalendarDate(point.date))) {
+    eventBasis = { status: "unavailable", reason: "incomplete_sessions" };
+  } else {
+    const basis = parseEventBasis(prices.event_basis, history[0], p.data_asof, record(p.sources) ? p.sources.prices_sha256 : undefined);
+    eventBasis = basis ? { status: "available", basis } : { status: "unavailable", reason: "invalid_basis" };
+  }
   return {
     ...snapshot,
     prices: { basis: "adjusted_close", source: snapshot.prices.source, history, eventBasis },
@@ -191,14 +198,18 @@ export async function loadPublicCharts(codes: string[]): Promise<Map<string, Map
     if (horizons.size !== 2) throw new Error("두 기간의 차트가 모두 준비되지 않았어요.");
     const short = horizons.get(5)!.prices;
     const long = horizons.get(20)!.prices;
-    if (short.eventBasis || long.eventBasis) {
+    const bases = [short.eventBasis, long.eventBasis];
+    const inputFailure = bases.find(basis => basis.status === "unavailable" && basis.reason === "invalid_basis")
+      ?? bases.find(basis => basis.status === "unavailable" && basis.reason === "incomplete_sessions");
+    if (inputFailure) {
+      short.eventBasis = long.eventBasis = inputFailure;
+    } else if (bases.some(basis => basis.status === "available")) {
       const sameHistory = short.history.length === long.history.length && short.history.every((point, index) => {
         const other = long.history[index];
         return point.date === other.date && point.close === other.close && point.volume === other.volume;
       });
       if (!sameHistory || JSON.stringify(short.eventBasis) !== JSON.stringify(long.eventBasis)) {
-        delete short.eventBasis;
-        delete long.eventBasis;
+        short.eventBasis = long.eventBasis = { status: "unavailable", reason: "mismatched_periods" };
       }
     }
   }

@@ -13,6 +13,9 @@ test("recorded display-test horizons retain their dates, counts and prices", () 
     assert.ok([5, 20].includes(parsed.horizon));
     assert.equal(parsed.distribution.histogram.bins.reduce((n, b) => n + b.count, 0), parsed.distribution.sample_count);
     assert.ok(Number.isFinite(chartChange(parsed)));
+    if (!Object.hasOwn(payload.prices, "event_basis")) {
+      assert.deepEqual(parsed.prices.eventBasis, { status: "unavailable", reason: "missing_basis" });
+    }
   }
 });
 
@@ -49,8 +52,11 @@ test("a matching optional public event basis parses independently of legacy pric
   payload.prices.event_basis = basis;
   const parsed = parseChartSnapshot(row(payload));
   assert.deepEqual(parsed.prices.eventBasis, {
-    method: basis.method, dailySigma: .025, returnCount: 60, periodStart: first,
-    periodEnd: payload.data_asof, inputSha256: hash, previousBar: basis.previous_bar,
+    status: "available",
+    basis: {
+      method: basis.method, dailySigma: .025, returnCount: 60, periodStart: first,
+      periodEnd: payload.data_asof, inputSha256: hash, previousBar: basis.previous_bar,
+    },
   });
   for (const invalid of [
     { input_sha256: "b".repeat(64) }, { daily_sigma: 0 }, { return_count: 59 }, { period_end: previous },
@@ -58,9 +64,11 @@ test("a matching optional public event basis parses independently of legacy pric
   ]) {
     payload.prices.event_basis = { ...basis, ...invalid };
     const parsed = parseChartSnapshot(row(payload));
-    assert.equal(parsed.prices.eventBasis, undefined);
+    assert.deepEqual(parsed.prices.eventBasis, { status: "unavailable", reason: "invalid_basis" });
     assert.deepEqual(parsed.prices.history, payload.prices.history);
   }
+  payload.prices.event_basis = null;
+  assert.deepEqual(parseChartSnapshot(row(payload)).prices.eventBasis, { status: "unavailable", reason: "invalid_basis" });
 });
 
 test("a missing displayed trading day disables the event basis for either horizon", () => {
@@ -76,13 +84,13 @@ test("a missing displayed trading day disables the event basis for either horizo
       previous_bar: { date: previous, close: 100, volume: 10 },
     };
     for (const [index, bar] of history.entries()) bar.close = index < 21 ? 100 : index === 21 ? 110 : 121;
-    assert.ok(parseChartSnapshot(row(payload)).prices.eventBasis);
+    assert.equal(parseChartSnapshot(row(payload)).prices.eventBasis.status, "available");
     history.splice(21, 1);
     assert.equal(history.length, 59);
     assert.equal(history[20].close, 100);
     assert.equal(history[21].close, 121);
     const parsed = parseChartSnapshot(row(payload));
     assert.deepEqual(parsed.prices.history, history);
-    assert.equal(parsed.prices.eventBasis, undefined);
+    assert.deepEqual(parsed.prices.eventBasis, { status: "unavailable", reason: "incomplete_sessions" });
   }
 });
