@@ -32,6 +32,7 @@ import { PSYCHOLOGY_SCALE } from "@/lib/profiling/axis-scale";
 import StageBar from "./stage-bar";
 import {
   aggregateSentimentPeriods,
+  combinedProvenance,
   sentimentDaysIncludingLive,
   marketSentimentView,
   type MarketSentimentView,
@@ -46,7 +47,7 @@ import {
 } from "@/lib/providers";
 import { CHART } from "@/lib/chart-colors";
 import ChangeText from "./change-text";
-import { changeMeta, contributionPercent, contributionWord, formatKstDateTime, formatShares, kstDay } from "@/lib/display";
+import { changeMeta, contributionPercent, contributionWord, formatShares, kstDay } from "@/lib/display";
 import type { ChartSnapshot } from "@/lib/chart-public";
 import type { DataProvenance, PredictionReason, StockDetail } from "@/lib/types";
 import { SourceTable } from "./source-line";
@@ -158,7 +159,7 @@ export function NewsSentimentPanel({
   code: string;
   sentimentView?: MarketSentimentView | null;
 }) {
-  const { sentiment, provenance } = insights;
+  const { sentiment } = insights;
   const [selectedSentimentPeriod, setSelectedSentimentPeriod] = useState<SentimentPeriod>("day");
   const sentimentTimelineRef = useRef<HTMLDivElement | null>(null);
   const [tooltipHost, setTooltipHost] = useState<HTMLDivElement | null>(null);
@@ -204,7 +205,6 @@ export function NewsSentimentPanel({
       ) : (
         <Unavailable>이 종목은 아직 뉴스를 모으지 않아요. 보유 종목이나 관심 종목에 넣으면 평일 오전 수집 대상에 들어가요.</Unavailable>
       )}
-      {sentimentView && <p className="m-0 text-xs text-muted">뉴스 수집 {formatKstDateTime(sentimentView.asOf)} 기준</p>}
       {contextualLive && <p className="m-0 text-xs text-muted">{LIVE_NEWS_SCOPE}</p>}
       {(sentiment?.days.length || Boolean(todayLive)) ? (
         <>
@@ -278,12 +278,11 @@ export function NewsSentimentPanel({
                     {headline.title}
                   </a>
                 ) : headline.title}
-                <span className="ml-2 text-2xs text-muted">{headline.press} {formatKstDateTime(headline.date)}</span>
+                <span className="ml-2 text-2xs text-muted">{headline.press}</span>
               </li>
           )} />
         </section>
       ) : null}
-      {sentimentView && <SourceTable rows={[["뉴스 분위기 출처", sentimentView.basis === "live" ? provenance.liveSentiment : provenance.sentiment]]} />}
     </>
   );
 }
@@ -291,10 +290,9 @@ export function NewsSentimentPanel({
 export function DisclosureList({ disclosures }: { disclosures: StockInsights["disclosures"] }) {
   return (
     <section aria-labelledby="disclosure-title" className="flex flex-col gap-2">
-      <h2 id="disclosure-title" className="m-0 text-xl font-semibold text-ink">회사 발표</h2>
-      <p className="m-0 text-xs text-muted">회사가 공식적으로 알린 내용이에요.</p>
+      <h2 id="disclosure-title" className="m-0 text-sm font-medium text-ink">최근 공시</h2>
       {disclosures.length ? (
-        <MoreList items={disclosures} label="회사 발표" render={(item) => (
+        <MoreList items={disclosures} label="최근 공시" render={(item) => (
           <li key={item.rceptNo} className="flex flex-col">
             <a
               href={`https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${item.rceptNo}`}
@@ -305,7 +303,7 @@ export function DisclosureList({ disclosures }: { disclosures: StockInsights["di
               {item.title}
             </a>
             <span className="text-2xs text-muted tabular-nums">
-              {item.filedOn.replaceAll("-", ".")}<span className="ml-3">DART 전자공시</span><span className="ml-3">{(DISCLOSURE_KIND[item.kind] ?? DISCLOSURE_KIND.other).label}</span>
+              {item.filedOn.replaceAll("-", ".")}<span className="ml-3">{(DISCLOSURE_KIND[item.kind] ?? DISCLOSURE_KIND.other).label}</span>
             </span>
           </li>
         )} />
@@ -431,42 +429,8 @@ export function supplyTotals(supply: SupplyDemandDay[]) {
   }));
 }
 
-export function SupplyPanel({ supply, volume, provenance, volumeProvenance }: {
-  supply: SupplyDemandDay[] | null;
-  volume: number | null;
-  provenance: DataProvenance;
-  volumeProvenance?: DataProvenance;
-}) {
-  const hasVolume = volume !== null && Number.isFinite(volume) && volume > 0;
-  const days = supply?.length ?? 0;
-  return (
-    <>
-      <section aria-labelledby="supply-volume" className="flex flex-col gap-2">
-        <h2 id="supply-volume" className="text-xl font-semibold">얼마나 거래됐나</h2>
-        {hasVolume ? (
-          <>
-            <Conclusion>{days > 0 && `최근 ${days}거래일 `}하루 평균 거래량은 {Math.round(volume).toLocaleString("ko-KR")}주예요.</Conclusion>
-            {volumeProvenance && <SourceTable rows={[["거래량 출처", volumeProvenance]]} />}
-          </>
-        ) : (
-          <Unavailable>하루 평균 거래량이 아직 없어요.</Unavailable>
-        )}
-      </section>
-      <section aria-labelledby="supply-investors" className="flex flex-col gap-4">
-        <h2 id="supply-investors" className="text-xl font-semibold">{TERM.supply}</h2>
-        {supply?.length
-          ? <InvestorSupply supply={supply} volume={hasVolume ? volume : null} provenance={provenance} />
-          : <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>}
-      </section>
-    </>
-  );
-}
-
-function InvestorSupply({ supply, volume, provenance }: {
-  supply: SupplyDemandDay[];
-  volume: number | null;
-  provenance: DataProvenance;
-}) {
+export function SupplyPanel({ supply, volume }: { supply: SupplyDemandDay[] | null; volume: number | null }) {
+  if (!supply?.length) return <Unavailable>이 종목은 사고판 기록이 아직 없어요. 코스피 종목은 평일 저녁 수집 뒤 보여요.</Unavailable>;
   const totals = supplyTotals(supply);
   const max = Math.max(...totals.map(({ total }) => Math.abs(total)), 1);
   const buyer = totals.reduce((top, item) => (item.total > top.total ? item : top));
@@ -475,13 +439,13 @@ function InvestorSupply({ supply, volume, provenance }: {
     <>
       <Conclusion>
         {buyer.total > 0 && seller.total < 0 ? <>
-          최근 {supply.length}거래일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
+          최근 {supply.length}영업일 동안 <strong className="font-semibold text-up">{buyer.label}</strong>이 가장 많이 샀고,{" "}
           {seller.label}이 가장 많이 팔았어요.
         </> : buyer.total > 0 ? <>
-          최근 {supply.length}거래일 동안 {buyer.label}의 순매수 수량이 가장 많았어요.
+          최근 {supply.length}영업일 동안 {buyer.label}의 순매수 수량이 가장 많았어요.
         </> : seller.total < 0 ? <>
-          최근 {supply.length}거래일 동안 {seller.label}의 순매도 수량이 가장 많았어요.
-        </> : `최근 ${supply.length}거래일 동안 투자자별 순매수 수량의 합계가 모두 0이에요.`}
+          최근 {supply.length}영업일 동안 {seller.label}의 순매도 수량이 가장 많았어요.
+        </> : `최근 ${supply.length}영업일 동안 투자자별 순매수 수량의 합계가 모두 0이에요.`}
       </Conclusion>
       <ul className="m-0 flex list-none flex-col gap-4 p-0">
         {totals.map(({ key, label, total, latest }) => {
@@ -520,11 +484,10 @@ function InvestorSupply({ supply, volume, provenance }: {
         <TermLabel term="net_buy" /> 수량(주), {supply[0].date.replaceAll("-", ".")} ~ {supply[supply.length - 1].date.replaceAll("-", ".")}
       </div>
       <Why>누가 사고팔았는지를 하루 거래량과 견줘 보면 움직임이 큰지 작은지 알 수 있어요.</Why>
-      <SourceTable rows={[["거래 동향 출처", provenance]]} />
       <details className="disclosure">
         <summary>계산 근거</summary>
         <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
-          <li>순매수 합계 = 최근 {supply.length}거래일 동안 투자자별로 산 주식 수 − 판 주식 수, 기타법인 제외</li>
+          <li>순매수 합계 = 최근 {supply.length}영업일 동안 투자자별로 산 주식 수 − 판 주식 수, 기타법인 제외</li>
           <li>{volume
             ? `하루 평균 거래량 대비 = |순매수 합계| ÷ 같은 기간 하루 평균 거래량(${formatShares(Math.round(volume)).replace(/^\+/, "")})`
             : "같은 기간 거래량 기록이 없어 거래량 대비 비율은 빼고 보여 줘요."}</li>
@@ -542,25 +505,13 @@ function copula(word: string): string {
 export const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
 
 // DB에 업종 분류가 없어 코스피 중간값과 비교한다(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
-export const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
+const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
 
-const FINANCIAL_GROUPS = [
-  { title: "매출과 이익", keys: ["revenue_growth", "operating_margin", "roe"] },
-  { title: "자산과 빚", keys: ["debt_ratio"] },
-  { title: "주가와 비교", keys: ["per", "pbr"] },
-];
-
-export function FinancialPanel({ financial, provenance }: { financial: FinancialSnapshot | null; provenance: DataProvenance }) {
+export function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");
-  const groups = FINANCIAL_GROUPS.map(({ title, keys }) => ({
-    title,
-    metrics: financial.metrics.filter(({ key }) => keys.includes(key)),
-  }));
-  const otherMetrics = financial.metrics.filter(({ key }) => !FINANCIAL_GROUPS.some(({ keys }) => keys.includes(key)));
-  if (otherMetrics.length) groups.push({ title: "기타 재무 지표", metrics: otherMetrics });
   return (
     <>
       {roe != null && debt != null && (
@@ -570,35 +521,25 @@ export function FinancialPanel({ financial, provenance }: { financial: Financial
           <strong className="font-semibold">{oneDecimal(debt)}%</strong> 수준이에요.
         </Conclusion>
       )}
-      {groups.filter(({ metrics }) => metrics.length > 0).map(({ title, metrics }) => (
-        <section key={title} className="flex flex-col gap-3">
-          <h3 className="text-lg font-semibold">{title}</h3>
-          <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            {metrics.map((metric) => {
-              const median = MEDIANS[metric.key]?.median;
-              return (
-                <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
-                  <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
-                  <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
-                    {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
-                  </dd>
-                  <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
-                    {metric.value === null
-                      ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
-                      : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
-                  </dd>
-                </div>
-              );
-            })}
-          </dl>
-          {title === "주가와 비교" && financial.valuationPriceAsOf && (
-            <p className="m-0 text-xs text-muted">{formatKstDateTime(financial.valuationPriceAsOf)} 종가 기준</p>
-          )}
-        </section>
-      ))}
+      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+        {financial.metrics.map((metric) => {
+          const median = MEDIANS[metric.key]?.median;
+          return (
+            <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+              <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
+              <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
+                {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
+              </dd>
+              <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
+                {metric.value === null
+                  ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
+                  : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
+              </dd>
+            </div>
+          );
+        })}
+      </dl>
       <Why>가격과 별개로 회사의 기초 체력을 코스피 다른 회사들과 견줘 볼 수 있어요.</Why>
-      <SourceTable rows={[["재무 자료 출처", provenance]]} />
-      <p className="m-0 text-xs text-muted">{financial.period}{financial.filing && ` (${financial.filing})`}</p>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
@@ -608,6 +549,9 @@ export function FinancialPanel({ financial, provenance }: { financial: Financial
             </li>
           ))}
         </ul>
+        <p className="m-0 mt-3 text-2xs text-muted">
+          재무 {financial.period}{financial.valuationPriceAsOf && `, PER/PBR 주가 ${financial.valuationPriceAsOf.replaceAll("-", ".")} 종가 기준`}
+        </p>
         <p className="m-0 mt-2 text-2xs text-muted tabular-nums">
           비교 기준은 {FINANCIAL_MEDIANS.basis} {FINANCIAL_MEDIANS.companies}개사의 {FINANCIAL_MEDIANS.fiscal_year}년 사업보고서로 계산한 중간값이에요({FINANCIAL_MEDIANS.as_of.replaceAll("-", ".")} 시가총액 기준). 업종 분류가 없어 업종 대신 코스피 전체와 견줘요.
         </p>
@@ -733,11 +677,48 @@ export function PricePsychology({ psychology }: { psychology: NonNullable<StockI
         <StageBar axis={PSYCHOLOGY_SCALE} value={psychology.axis} title="최근 가격 흐름" />
       </div>
       <p className="m-0 text-xs text-muted">{PSYCHOLOGY_NOTE}</p>
-      <SourceTable rows={[["가격 흐름 출처", psychology.provenance]]} />
       <details className="disclosure">
         <summary>계산 근거</summary>
         <p className="m-0 mt-3 text-xs text-muted">{psychologyReason(psychology.axis)}</p>
       </details>
     </section>
+  );
+}
+
+export function SourceList({ detail, insights }: { detail: StockDetail; insights: StockInsights }) {
+  const { provenance: p } = insights;
+  const shown = (data: unknown, provenance: DataProvenance) => (data ? provenance : null);
+  const rows: [string, DataProvenance | null][] = [
+    ["주가", detail.priceProvenance ?? detail.provenance],
+    ["모델 신호와 근거", detail.provenance],
+    [TERM.sentiment, shown(insights.sentiment, p.sentiment)],
+    ["최근 24시간 뉴스", shown(insights.liveSentiment, p.liveSentiment)],
+    [TERM.supply, shown(insights.supply, p.supply)],
+    [TERM.financial, shown(insights.financial, p.financial && insights.financial?.filing
+      ? { ...p.financial, source: `${p.financial.source}, ${insights.financial.filing}` } : p.financial)],
+    ["최근 공시", insights.disclosures.length
+      ? { kind: "real", source: "DART 전자공시(제목과 날짜만 저장, 유형은 제목 규칙으로 분류)", asOf: insights.disclosures[0].filedOn }
+      : null],
+    [TERM.contribution, p.contributions],
+    ...(insights.psychology
+      ? ([["가격 흐름으로 본 분위기", insights.psychology.provenance]] as [string, DataProvenance][])
+      : []),
+    [
+      "확인할 것",
+      combinedProvenance(
+        detail.provenance,
+        ...[shown(insights.supply, p.supply), shown(insights.sentiment, p.sentiment)].filter((item) => item !== null),
+      ),
+    ],
+  ];
+  return (
+    <SourceTable rows={rows}>
+      {detail.priceProvenance?.source.includes("수정주가") && (
+        <p className="col-span-2 m-0 mt-1 text-xs text-muted">
+          주가는 수정주가예요. 그 뒤에 있었던 배당과 주식 나눔을 반영해 과거 가격을 다시 계산한 값이라, 그날 실제로 거래된
+          가격과 조금 다를 수 있어요. 가격 흐름과 등락률을 비교하기에는 이 방식이 정확해요.
+        </p>
+      )}
+    </SourceTable>
   );
 }

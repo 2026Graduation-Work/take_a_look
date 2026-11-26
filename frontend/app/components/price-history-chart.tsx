@@ -2,13 +2,14 @@
 
 import { CHART } from "@/lib/chart-colors";
 import { useEffect, useRef, useState } from "react";
+import { changeMeta, formatSignedPercent, type SignalMeta } from "@/lib/display";
+import type { ReturnBand } from "@/lib/types";
 
 const VB_W = 560;
 const VB_H = 264;
 const PAD = { top: 20, bottom: 34 };
 const X0 = 14;
-const X1 = 460;
-const XAXIS = X1 + 10;
+const XH = 500;
 
 function niceStep(rough: number) {
   if (!Number.isFinite(rough) || rough <= 0) return 1;
@@ -23,12 +24,18 @@ function niceStep(rough: number) {
 
 interface PriceHistoryChartProps {
   prices: number[];
+  band?: ReturnBand;
+  signal: SignalMeta;
+  horizonLabel: string;
   asOfLabel: string;
   avgBuyPrice?: number;
 }
 
 export default function PriceHistoryChart({
   prices,
+  band,
+  signal,
+  horizonLabel,
   asOfLabel,
   avgBuyPrice,
 }: PriceHistoryChartProps) {
@@ -47,10 +54,15 @@ export default function PriceHistoryChart({
     return null;
   }
 
+  const rangeBand = band && Number.isFinite(band.low) && Number.isFinite(band.high) && band.low <= band.high ? band : null;
+  const X1 = rangeBand ? 374 : 460;
+  const XAXIS = X1 + 10;
   const last = prices[prices.length - 1];
+  const bandHighPrice = rangeBand ? last * (1 + rangeBand.high / 100) : last;
+  const bandLowPrice = rangeBand ? last * (1 + rangeBand.low / 100) : last;
   const avg = avgBuyPrice && Number.isFinite(avgBuyPrice) && avgBuyPrice > 0 ? avgBuyPrice : null;
-  const rawMin = Math.min(...prices, avg ?? Infinity);
-  const rawMax = Math.max(...prices, avg ?? -Infinity);
+  const rawMin = Math.min(...prices, bandLowPrice, avg ?? Infinity);
+  const rawMax = Math.max(...prices, bandHighPrice, avg ?? -Infinity);
   const rawRange = rawMax - rawMin;
   const padValue = rawRange > 0 ? rawRange * 0.08 : Math.max(Math.abs(rawMax) * 0.01, 1);
   const vMin = rawMin - padValue;
@@ -70,6 +82,8 @@ export default function PriceHistoryChart({
   const minIndex = prices.indexOf(Math.min(...prices));
   const clampX = (x: number) => Math.min(Math.max(x, X0 + 40), X1 - 40);
   const yLast = y(last);
+  const yHigh = y(bandHighPrice);
+  const yLow = y(bandLowPrice);
 
   const handleMove = (event: React.MouseEvent<SVGSVGElement>) => {
     const rect = svgRef.current?.getBoundingClientRect();
@@ -93,6 +107,7 @@ export default function PriceHistoryChart({
         className="block w-full"
         role="img"
         aria-label="최근 주가 흐름"
+        aria-describedby={rangeBand ? "overview-return-range" : undefined}
         onMouseMove={handleMove}
         onMouseLeave={() => setHovered(null)}
       >
@@ -146,6 +161,62 @@ export default function PriceHistoryChart({
           </text>
         )}
 
+        {rangeBand && (
+          <g>
+            <rect
+              x={XH - 8}
+              y={yHigh}
+              width={16}
+              height={yLow - yHigh}
+              rx={8}
+              style={{ fill: signal.ink }}
+              opacity={0.16}
+            />
+            <line
+              x1={XH - 11}
+              y1={yHigh}
+              x2={XH + 11}
+              y2={yHigh}
+              style={{ stroke: signal.ink }}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+            <line
+              x1={XH - 11}
+              y1={yLow}
+              x2={XH + 11}
+              y2={yLow}
+              style={{ stroke: signal.ink }}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+            />
+            <line x1={XH} y1={yHigh + 3} x2={XH} y2={yLow - 3} style={{ stroke: signal.ink }} strokeWidth={1.5} />
+            <text
+              x={XH}
+              y={yHigh - 9}
+              fontSize={14}
+              fontWeight={600}
+              style={{ fill: changeMeta(rangeBand.high, 1).color }}
+              textAnchor="middle"
+            >
+              {formatSignedPercent(rangeBand.high)}
+            </text>
+            <text
+              x={XH}
+              y={yLow + 17}
+              fontSize={14}
+              fontWeight={600}
+              style={{ fill: changeMeta(rangeBand.low, 1).color }}
+              textAnchor="middle"
+            >
+              {formatSignedPercent(rangeBand.low)}
+            </text>
+            <text x={XH} y={baseline + 17} fontSize={13} style={{ fill: "var(--color-muted)" }} textAnchor="middle">
+              {horizonLabel}
+            </text>
+          </g>
+        )}
+
         {hovered !== null && (
           <g pointerEvents="none">
             <line
@@ -186,7 +257,7 @@ export default function PriceHistoryChart({
       )}
     </div>
     </div>
-    <p className="m-0 mt-2 text-2xs text-muted xl:hidden">차트를 좌우로 밀면 지난 주가와 최근 종가를 볼 수 있어요.</p>
+    <p className="m-0 mt-2 text-2xs text-muted xl:hidden">차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.</p>
     </div>
   );
 }

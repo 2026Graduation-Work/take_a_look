@@ -99,7 +99,7 @@ test("M02: a one-week dashboard signal opens the same model, band and feature ba
   const tile = page.getByRole("listitem", { name: /^삼성전자,.*앞으로 1주 하락 신호$/ });
   await expect(tile).toBeVisible();
   await tile.click();
-  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
   await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
   const band = snapshots.find((p: typeof snapshots[number]) => p.horizon === 5).distribution.histogram.central_68;
@@ -127,7 +127,7 @@ test("M02: searched stock rows use the selected horizon before opening detail", 
   await expect(row).toContainText("1주,");
   await expect(row).toContainText("하락");
   await row.click();
-  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
   await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
 });
@@ -179,7 +179,7 @@ test("M06: clicked sentiment tooltip stays within the visible scrolled chart and
   await ready(page);
   await charts(page);
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "뉴스", exact: true }).click();
+  await page.getByRole("tab", { name: "시장 분위기", exact: true }).click();
   const timeline = page.getByLabel("감성 시점 탐색", { exact: true });
   await timeline.scrollIntoViewIfNeeded();
   const dots = timeline.locator("circle[data-sentiment-mood], circle[data-sentiment-few]");
@@ -255,7 +255,7 @@ test("M02: horizon still changes when storage is readable but writes fail", asyn
   await page.getByRole("tab", { name: "1주", exact: true }).click();
   await expect(page.getByRole("tab", { name: "1주", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("listitem", { name: /^삼성전자,.*앞으로 1주 하락 신호$/ }).click();
-  await page.getByRole("tab", { name: "모델 예측", exact: true }).click();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
   await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
 });

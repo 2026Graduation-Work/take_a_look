@@ -149,8 +149,8 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
   await expect(page.getByText("데모 계정")).toBeVisible();
   const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
   await expect(overview.getByRole("heading", { name: "최근 주가" })).toBeVisible();
-  await overview.getByRole("button", { name: /^모델 예측/ }).click();
-  await expect(page.getByRole("tabpanel", { name: "모델 예측" }).getByRole("heading", { name: /^모델 신호/ })).toBeVisible();
+  await overview.getByRole("button", { name: /^모델이 본 이유/ }).click();
+  await expect(page.getByRole("tabpanel", { name: "모델이 본 이유" }).getByRole("heading", { name: /^모델 신호/ })).toBeVisible();
 
   await page.locator("footer").getByRole("link", { name: "모델 성적표" }).click();
   await expect(page).toHaveURL(/\/performance$/);

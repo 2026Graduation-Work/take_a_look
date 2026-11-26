@@ -8,9 +8,9 @@ import {
   ContributionPanel,
   DisclosureList,
   FinancialPanel,
-  MEDIANS,
   NewsSentimentPanel,
   PricePsychology,
+  SourceList,
   SupplyPanel,
   moodWord,
   oneDecimal,
@@ -23,7 +23,6 @@ import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale
 import { classifyBit, type CardId } from "@/lib/profiling/bit";
 import GainText from "./gain-text";
 import ChangeText from "./change-text";
-import { SourceTable } from "./source-line";
 import TermLabel from "./term-tip";
 import { costBasis, parseSavedHoldings } from "@/lib/holdings-rules";
 import { loadLatestCloses, type LatestCloses } from "@/lib/latest-closes";
@@ -34,7 +33,7 @@ import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
 import {
   barrierRule,
-  compareLine,
+  bandSentence,
   HORIZON_AHEAD,
   HORIZON_LABEL,
   riskLevel,
@@ -49,24 +48,26 @@ import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import { marketSentimentView, riskSnapshot, type HoldingWeight, type StockInsights } from "@/lib/providers";
 import type { InvestorProfileSummary, MarketStatus, StockDetail, StyleAxes } from "@/lib/types";
-import FINANCIAL_MEDIANS from "@/lib/financial-medians.json";
 
-const STOCK_TABS = [
-  ["overview", "한눈에 보기"],
-  ["model", "모델 예측"],
-  ["trading", "거래 동향"],
-  ["company", "회사 상태"],
-  ["news", "뉴스"],
-] as const;
+const TAB_LABELS = {
+  overview: "한눈에 보기",
+  model: TERM.contribution,
+  trading: TERM.supply,
+  news: TERM.market,
+  company: TERM.financial,
+};
 
-type StockTab = (typeof STOCK_TABS)[number][0];
+type StockTab = keyof typeof TAB_LABELS;
 type DetailTab = Exclude<StockTab, "overview">;
 
-const SUMMARY_TABS: Partial<Record<CardId, DetailTab>> = {
+const DEFAULT_DETAIL_TABS: readonly DetailTab[] = ["model", "trading", "news", "company"];
+
+const CARD_TO_TAB: Partial<Record<CardId, DetailTab>> = {
   contribution: "model",
   supply: "trading",
-  financial: "company",
   sentiment: "news",
+  risk: "news",
+  financial: "company",
 };
 
 interface StockDetailViewProps {
@@ -153,25 +154,21 @@ export default function StockDetailView({
   const safeMaxRiskTier =
     Number.isInteger(maxRiskTier) && maxRiskTier >= 1 && maxRiskTier <= 5 ? maxRiskTier : 4;
   const risk = riskSnapshot(detail);
+  const riskLabel = riskLevel(detail.riskGrade).word;
   const volatility = detail.volatilityAnnual == null ? null : `${(detail.volatilityAnnual * 100).toFixed(1)}%`;
   const volatilityRank = detail.volatilityPercentile == null ? null : Math.max(1, Math.round((1 - detail.volatilityPercentile) * 100));
   const riskNote = styleAxes && detail.riskGrade < safeMaxRiskTier
     ? `설문에서 위험 감수를 ‘${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))}’ 쪽으로 답했어요. ${volatility && volatilityRank !== null
         ? `이 종목의 최근 1년 변동성은 ${volatility}, 코스피 전 종목 중 큰 쪽 상위 ${volatilityRank}%예요.`
-        : `이 종목의 위험도는 ${riskLevel(detail.riskGrade).word}이에요.`}`
+        : `이 종목의 위험도는 ${riskLabel}이에요.`}`
     : null;
 
-  const { supply, financial, provenance, psychology, disclosures } = insights;
+  const { supply, financial, psychology, disclosures } = insights;
   const institution = supply?.length ? supplyTotals(supply).find(({ key }) => key === "institution") : null;
-  const supplyDate = supply?.at(-1)?.date;
   const metric = financial?.metrics.find(({ key, value }) => key === "debt_ratio" && value != null)
     ?? financial?.metrics.find(({ value }) => value != null);
-  const median = metric ? MEDIANS[metric.key]?.median : undefined;
-  const financialCompare = metric?.value != null && median !== undefined
-    ? compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit) : null;
   const sentimentView = marketSentimentView(insights);
-  const newsSource = sentimentView?.basis === "live" ? provenance.liveSentiment : provenance.sentiment;
-  const range = hasBand ? (
+  const range = (
     <>
       <ChangeText value={detail.returnBand.low} precision={1}>{formatSignedPercent(detail.returnBand.low)}</ChangeText>
       {currentPrice !== null && <span className="font-normal text-body"> ({bandPrice(currentPrice, detail.returnBand.low)})</span>}
@@ -179,35 +176,21 @@ export default function StockDetailView({
       <ChangeText value={detail.returnBand.high} precision={1}>{formatSignedPercent(detail.returnBand.high)}</ChangeText>
       {currentPrice !== null && <span className="font-normal text-body"> ({bandPrice(currentPrice, detail.returnBand.high)})</span>}
     </>
-  ) : "미제공";
+  );
   const summary: Record<DetailTab, ReactNode> = {
-    model: preview && !direction && !hasBand ? "모델 분류 및 과거 유사 사례 미제공" : (
-      <>
-        {HORIZON_LABEL[horizon]} 모델 분류 <span style={{ color: signal.ink }}>{signal.label}</span>
-        {hasBand && <span className="block">과거 유사 사례 가운데 {ciPercent}% {range}</span>}
-        {detail.asOf && <span className="block text-xs text-muted">{formatKstDateTime(detail.asOf)} 기준</span>}
-      </>
-    ),
-    trading: institution && supplyDate
-      ? <>최근 {supply?.length}거래일 기관 <ChangeText value={institution.total}>{formatShares(institution.total)}</ChangeText>
-          <span className="block text-xs text-muted">{formatKstDateTime(supplyDate)}까지</span></>
+    model: signal.label,
+    trading: institution
+      ? <>기관 <ChangeText value={institution.total}>{formatShares(institution.total)}</ChangeText></>
       : "투자자별 순매수 미제공",
-    company: financial && metric?.value != null
-      ? <>{TERM_INFO[metric.key as keyof typeof TERM_INFO]?.label ?? metric.label} {oneDecimal(metric.value)}{metric.unit}
-          {financialCompare && <span className="block text-xs text-muted">{financialCompare}</span>}
-          <span className="block text-xs text-muted">{financial.period}</span></>
+    company: metric?.value != null
+      ? <>{TERM_INFO[metric.key as keyof typeof TERM_INFO]?.label ?? metric.label} {oneDecimal(metric.value)}{metric.unit}</>
       : "재무 지표 미제공",
-    news: sentimentView
-      ? <>{sentimentView.basis === "live" ? "최근 24시간" : "과거"} 기사 표현은 {moodWord(sentimentView.score)}이에요.
-          <span className="block text-xs text-muted">
-            {formatKstDateTime(sentimentView.asOf)} 수집 기준{newsSource.kind === "real" && `, ${newsSource.source.replaceAll("\u00b7", ", ")}`}
-          </span></>
-      : "뉴스 분위기 미제공",
+    news: sentimentView ? moodWord(sentimentView.score) : "뉴스 분위기 미제공",
   };
-  const summaryOrder = [...new Set<DetailTab>([
-    ...(bit?.cardOrder ?? []).flatMap((card) => SUMMARY_TABS[card] ?? []),
-    ...STOCK_TABS.flatMap(([id]) => id === "overview" ? [] : [id]),
-  ])];
+  const detailTabs = bit
+    ? [...new Set(bit.cardOrder.flatMap((card) => CARD_TO_TAB[card] ?? []))]
+    : DEFAULT_DETAIL_TABS;
+  const tabs = ["overview", ...detailTabs] as const;
 
   function selectTab(tab: StockTab, moveFocus = false) {
     setActiveTab(tab);
@@ -215,8 +198,8 @@ export default function StockDetailView({
   }
 
   function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const current = STOCK_TABS.findIndex(([id]) => id === activeTab);
-    const last = STOCK_TABS.length - 1;
+    const current = tabs.indexOf(activeTab);
+    const last = tabs.length - 1;
     const tabIndexByKey: Partial<Record<string, number>> = {
       ArrowLeft: current === 0 ? last : current - 1,
       ArrowRight: current === last ? 0 : current + 1,
@@ -226,7 +209,7 @@ export default function StockDetailView({
     const index = tabIndexByKey[event.key];
     if (index === undefined) return;
     event.preventDefault();
-    selectTab(STOCK_TABS[index][0], true);
+    selectTab(tabs[index], true);
   }
 
   return (
@@ -260,6 +243,7 @@ export default function StockDetailView({
             <span className="flex flex-wrap gap-x-3 text-2xs text-muted tabular-nums">
               <span>{detail.code}</span>
               <span>{detail.market}</span>
+              <span className="whitespace-nowrap text-xs">위험도 <strong className="font-medium text-ink">{riskLabel}</strong></span>
               {detail.riskFlags.map((flag) => <span key={flag}>{RISK_FLAG_LABEL[flag]}</span>)}
             </span>
             <div className="flex flex-wrap items-center gap-x-1">
@@ -301,8 +285,8 @@ export default function StockDetailView({
           </div>
         </section>
 
-        <div role="tablist" aria-label="종목 상세" onKeyDown={onTabKeyDown} className="grid grid-cols-[1.18fr_repeat(3,1fr)_0.72fr] border-b border-line sm:flex sm:gap-4">
-          {STOCK_TABS.map(([id, label]) => (
+        <div role="tablist" aria-label="종목 상세" onKeyDown={onTabKeyDown} className="flex min-w-0 overflow-x-auto border-b border-line [scrollbar-width:thin] sm:gap-4">
+          {tabs.map((id) => (
             <button
               key={id}
               ref={(node) => { tabRefs.current[id] = node; }}
@@ -313,14 +297,14 @@ export default function StockDetailView({
               aria-controls={`stock-panel-${id}`}
               tabIndex={activeTab === id ? 0 : -1}
               onClick={() => selectTab(id)}
-              className="min-h-11 whitespace-nowrap border-b-2 border-transparent px-1 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:px-4 sm:text-sm"
+              className="min-h-11 min-w-11 grow shrink-0 whitespace-nowrap border-b-2 border-transparent px-0.5 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:grow-0 sm:px-4 sm:text-sm"
             >
-              {label}
+              {TAB_LABELS[id]}
             </button>
           ))}
         </div>
 
-        {STOCK_TABS.map(([id]) => (
+        {tabs.map((id) => (
           <div
             key={id}
             role="tabpanel"
@@ -335,31 +319,46 @@ export default function StockDetailView({
                   <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
                     <section aria-labelledby="recent-price" className="surface flex min-w-0 flex-col gap-4 p-4 sm:p-6">
                       <h2 id="recent-price" className="text-xl font-semibold">최근 주가</h2>
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <div className="flex flex-wrap items-center gap-x-2">
+                          <h3 className="text-xl font-semibold">모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span></h3>
+                          {preview && direction && <span className="text-xs text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
+                          {!preview && <span className="text-xs text-muted">{topPercentLabel(detail.rankPercentile)}</span>}
+                          <MarketDetail title="모델 신호 설명" className="inline-flex"
+                            label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">모델 신호 설명 보기</span></>}>
+                            <p className="m-0">{TERM_INFO.model_signal.define} {TERM_INFO.model_signal.read}</p>
+                          </MarketDetail>
+                        </div>
+                        {preview && onHorizonChange && <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />}
+                      </div>
+                      {hasBand && <p id="overview-return-range" className="m-0 text-sm text-body">
+                        {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
+                        <strong className="font-semibold tabular-nums text-ink">{range}</strong>
+                      </p>}
                       {priceHistory.length >= 2 ? (
                         <PriceHistoryChart
                           prices={priceHistory}
+                          band={hasBand ? detail.returnBand : undefined}
+                          signal={signal}
+                          horizonLabel={HORIZON_LABEL[horizon]}
                           asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
                           avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
                         />
                       ) : (
-                        <p className="m-0 text-sm text-muted">최근 주가 기록이 아직 없어요.</p>
+                        <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
                       )}
                       {volatility && (
                         <>
                           <div className="text-sm text-body">
                             최근 1년 <TermLabel term="volatility" /> <strong>{volatility}</strong>
                             {volatilityRank !== null && <span className="block text-xs text-muted">코스피 전 종목 중 큰 쪽 상위 {volatilityRank}%</span>}
-                            {detail.riskAsOf && <span className="block text-xs text-muted">{formatKstDateTime(detail.riskAsOf)} 변동성 기준</span>}
+                            {risk?.asOf && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
                           </div>
                           {risk && <dl className="m-0 grid grid-cols-2 gap-3 text-xs text-muted">
                             <div><dt>3개월 최고가 대비</dt><dd className="m-0"><ChangeText value={risk.drawdownFrom3mHigh * 100}>{signedPercent(risk.drawdownFrom3mHigh)}</ChangeText></dd></div>
                             <div><dt>최근 3거래일</dt><dd className="m-0"><ChangeText value={risk.return3d * 100}>{signedPercent(risk.return3d)}</ChangeText></dd></div>
                           </dl>}
                         </>
-                      )}
-                      {priceHistory.length >= 2 && <SourceTable rows={[["주가 출처", detail.priceProvenance ?? detail.provenance]]} />}
-                      {(detail.priceProvenance?.source.includes("수정주가") || detail.priceProvenance?.source.includes("수정종가")) && priceHistory.length >= 2 && (
-                        <p className="m-0 text-xs text-muted">배당과 주식 나눔을 반영한 수정주가예요. 그날 실제로 거래된 가격과 다를 수 있어요.</p>
                       )}
                       {volatility && <details className="disclosure">
                         <summary>계산 근거</summary>
@@ -378,7 +377,7 @@ export default function StockDetailView({
                   <section aria-labelledby="stock-summaries" className="flex flex-col gap-2">
                     <h2 id="stock-summaries" className="text-xl font-semibold">분야별 근거</h2>
                     <ul className="m-0 grid list-none gap-x-8 p-0 lg:grid-cols-2">
-                      {summaryOrder.map((tab) => (
+                      {detailTabs.map((tab) => (
                         <li key={tab} className="border-b border-line-soft last:border-b-0 lg:nth-last-2:border-b-0">
                           <button
                             type="button"
@@ -386,7 +385,7 @@ export default function StockDetailView({
                             className="flex min-h-11 w-full items-center justify-between gap-4 rounded-sm py-3 text-left hover:bg-track"
                           >
                             <span className="flex min-w-0 flex-col gap-1 break-words">
-                              <span className="font-semibold text-ink">{STOCK_TABS.find(([key]) => key === tab)?.[1]}</span>
+                              <span className="font-semibold text-ink">{TAB_LABELS[tab]}</span>
                               <span className="text-sm text-body">{summary[tab]}</span>
                             </span>
                             <span aria-hidden="true" className="shrink-0 text-muted">›</span>
@@ -410,10 +409,8 @@ export default function StockDetailView({
                         </div>
                         {preview && onHorizonChange && <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />}
                       </div>
-                      {preview && direction && <p className="m-0 text-sm text-body">{HORIZON_AHEAD[signalHorizon]}를 분류한 모델에서 점수가 가장 높은 쪽이에요.</p>}
-                      {!preview && <p className="m-0 text-sm text-muted">{topPercentLabel(detail.rankPercentile)}</p>}
-                      <p className="m-0 text-xs text-muted">모델의 분류이며 미래에 오르거나 내릴 확률을 뜻하지 않아요.</p>
-                      {(!preview || direction) && <SourceTable rows={[["모델 출처", detail.provenance]]} />}
+                      {preview && direction && <p className="m-0 text-xs text-muted">{HORIZON_AHEAD[signalHorizon]}</p>}
+                      {!preview && <p className="m-0 text-xs text-muted">{topPercentLabel(detail.rankPercentile)}</p>}
                       {modelBasis && (
                         <details className="disclosure">
                           <summary>계산 근거</summary>
@@ -426,25 +423,23 @@ export default function StockDetailView({
                       <h2 id="more-distribution" className="text-xl font-semibold">
                         과거 비슷한 신호{detail.similarCaseCount > 0 ? ` ${detail.similarCaseCount.toLocaleString("ko-KR")}건` : ""}의 실제 수익률
                       </h2>
-                      <p className="m-0 text-sm text-body">{HORIZON_LABEL[horizon]} 수익률{hasBand ? `의 가운데 ${ciPercent}% 범위` : " 범위"} <strong>{range}</strong></p>
                       {!preview || similar ? (
                         <p className="m-0 text-xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>
-                          {detail.asOf && `${formatKstDateTime(detail.asOf)} 모델 기준. `}
+                          {detail.asOf && `${formatKstDateTime(detail.asOf)} 기준. `}
                           {similar?.period_start && similar.period_end
                             ? similarCasesLine(similar.period_start, similar.period_end, similar.sample_count, similar.stock_count)
-                            : !preview && `과거에 오늘과 비슷했던 경우의 결과예요.`}
+                            : !preview && `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}
                           {hasBand && currentPrice !== null && " 원은 오늘 종가 기준이에요."}
                         </p>
-                      ) : <p className="m-0 text-xs text-muted" data-testid="preview-provenance">이 기간의 과거 유사 사례 분포 자료가 아직 없어요.</p>}
+                      ) : null}
                       {hasBand && realizedReturns.length > 0 ? (
                         <>
                           <ReturnHistogram bins={realizedReturns} band={detail.returnBand} caseCount={detail.similarCaseCount} signal={signal} horizonLabel={HORIZON_LABEL[horizon]} />
-                          <details className="disclosure">
-                            <summary>계산 근거</summary>
-                            <p className="m-0 mt-3 text-xs text-muted">범위는 과거 유사 사례 수익률 분포의 가운데 {ciPercent}%예요.</p>
-                          </details>
+                          <p className="m-0 text-xs text-muted">
+                            위 범위는 이 분포의 가운데 {ciPercent}%예요. 미래 가격 경로가 아니라 {HORIZON_LABEL[horizon]} 시점의 분포예요.
+                          </p>
                         </>
-                      ) : <p className="m-0 text-xs text-muted">실제 수익률 분포를 그릴 자료가 아직 없어요.</p>}
+                      ) : <p className="m-0 text-xs text-muted">분포 원본이 아직 저장되지 않아 그림은 생략했어요.</p>}
                     </section>
 
                     <section aria-labelledby="model-contributions" className="flex flex-col gap-4">
@@ -455,9 +450,6 @@ export default function StockDetailView({
                         features={preview ? chart?.inference.features ?? [] : undefined}
                         reasons={detail.reasons.filter((reason) => reason.source === "chart")}
                       />
-                      {(chart?.inference.features?.length || detail.reasons.some((reason) => reason.source === "chart")) && (
-                        <SourceTable rows={[["모델 근거 출처", preview ? detail.provenance : provenance.contributions]]} />
-                      )}
                     </section>
 
                     {psychology && <PricePsychology psychology={psychology} />}
@@ -468,12 +460,21 @@ export default function StockDetailView({
                         <p className="m-0 text-sm text-body">{detail.aiAdvice}</p>
                       </section>
                     )}
+                    <details className="disclosure">
+                      <summary>데이터 출처</summary>
+                      <div className="mt-3"><SourceList detail={detail} insights={insights} /></div>
+                    </details>
                   </>}
-                  {id === "trading" && <SupplyPanel supply={supply} volume={insights.supplyVolume} provenance={provenance.supply} volumeProvenance={psychology?.provenance} />}
+                  {id === "trading" && (
+                    <section aria-labelledby="supply-investors" className="flex flex-col gap-4">
+                      <h2 id="supply-investors" className="text-xl font-semibold">{TERM.supply}</h2>
+                      <SupplyPanel supply={supply} volume={insights.supplyVolume} />
+                    </section>
+                  )}
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
                       <h2 id="company-financials" className="text-xl font-semibold">{TERM.financial}</h2>
-                      <FinancialPanel financial={financial} provenance={provenance.financial} />
+                      <FinancialPanel financial={financial} />
                     </section>
                     <DisclosureList disclosures={disclosures} />
                   </>}
