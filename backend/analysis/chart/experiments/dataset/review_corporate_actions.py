@@ -8,8 +8,10 @@ from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
+from shared.data.resolution_snapshot import REVIEW_COLUMNS, ResolutionSnapshot, _load_tables
 from shared.io import atomic_json, sha256
 
+from .census_actions import _write_csv
 from .census_actions import main as census
 
 IDENTITY = ("Code", "ISIN", "ListingDate", "DelistingDate", "Market", "ShareClass", "Date")
@@ -37,7 +39,8 @@ def summarize(folder, baseline=None):
     result = {
         "resolution_counts": dict(Counter(row["Resolution"] for row in rows)),
         "candidate_automatic": sum(identity(row) in candidate_keys and row["Review"] == "False" for row in rows),
-        "market_review": len(reviews), "training_review": manifest.get("training_review_count"),
+        "market_review": len(reviews), "training_review": manifest.get("training_review_count", len(_read(folder, "review_queue"))
+                                                     if (folder / "review_queue.csv").is_file() else None),
         "failed_checks": Counter(row.get("FailedCheck", "") for row in reviews).most_common(),
         "reasons": dict(Counter(row["Reason"] for row in reviews)),
         "http_calls": 0, "tables": manifest["table_sha256"],
@@ -71,6 +74,17 @@ def summarize(folder, baseline=None):
         }
         if changed:
             raise ValueError(f"Changed {len(changed)} previously automatic decisions")
+        if (baseline / "review_queue.csv").is_file():
+            training_keys = {(row["Code"], row["Date"]) for row in _read(baseline, "review_queue")}
+            coverage, windows, sessions, ledgers, notices, refs = _load_tables(folder, manifest)
+            snapshot = ResolutionSnapshot(folder / "manifest.json", manifest, coverage, windows, sessions,
+                                          ledgers, {}, notices, refs, "", "")
+            queue = sorted((row for row in snapshot.review_rows() if (row["Code"], row["Date"]) in training_keys),
+                           key=lambda row: (row["Code"], row["Date"]))
+            if len(queue) != result["training_review"]:
+                raise ValueError("Training review queue differs from census membership count")
+            _write_csv(folder / "review_queue.csv", REVIEW_COLUMNS, queue)
+            result["review_queue"] = {"rows": len(queue), "sha256": sha256(folder / "review_queue.csv")}
     atomic_json(folder / "review-summary.json", result)
     return result
 

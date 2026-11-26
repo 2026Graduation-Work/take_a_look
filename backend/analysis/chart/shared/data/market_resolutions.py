@@ -339,8 +339,11 @@ def _kind_par_change(candidate, prices, listings, market):
     if facts.shares_before not in {None, candidate.shares_before} or facts.shares_after != candidate.shares_after:
         return None, "par_notice_shares_mismatch"
     ratio = Fraction(facts.par_before, facts.par_after)
-    if ratio * candidate.shares_before != candidate.shares_after:
-        return None, "par_shares_exact"
+    expected_shares = ratio * candidate.shares_before
+    if ratio < 1:
+        expected_shares = math.floor(expected_shares)
+    if expected_shares != candidate.shares_after:
+        return None, "par_shares_mismatch"
     if not compatible_base(candidate.base_price, Fraction(candidate.prev_close) / ratio, candidate.date, market):
         return None, "par_reference_price_mismatch"
     return ratio, ""

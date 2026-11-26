@@ -25,18 +25,16 @@ def moa_data():
     return security, raw, listing
 
 
-def test_fractional_share_consolidation_reports_the_exact_share_check(moa_data):
+def test_fractional_share_consolidation_keeps_only_whole_shares(moa_data):
     security, raw, listing = moa_data
     event, = resolve(security, raw, [listing], coverage_complete=True).resolutions
-    assert (event.kind, event.reason, event.review, event.failed_check) == (
-        Resolution.SEGMENT_BREAK, "official_facts_conflict_or_lack_terms", True, "par_shares_exact",
-    )
-    assert event.price_factor is None and event.volume_factor is None
-
-    raw.loc[0, "ListedShares"] = 37_523_580
-    exact, = resolve(security, raw, [listing], coverage_complete=True).resolutions
-    assert (exact.kind, exact.price_factor, exact.volume_factor, exact.review, exact.failed_check) == (
+    assert (event.kind, event.price_factor, event.volume_factor, event.review, event.failed_check) == (
         Resolution.UNIT_CHANGE, 5, Fraction(1, 5), False, "",
+    )
+    raw.loc[0, "ListedShares"] += 5
+    mismatch, = resolve(security, raw, [listing], coverage_complete=True).resolutions
+    assert (mismatch.kind, mismatch.review, mismatch.failed_check) == (
+        Resolution.SEGMENT_BREAK, True, "par_shares_mismatch",
     )
 
 
@@ -87,3 +85,16 @@ def test_notice_failure_reports_check_and_keeps_evidence(moa_data):
         Resolution.SEGMENT_BREAK, "official_notice_format_requires_review", True, "unsupported_form:70768",
     )
     assert evidence in event.evidence
+
+
+@pytest.mark.parametrize("after", [7, 8])
+def test_fractional_share_split_cannot_round_the_issued_share_count(moa_data, after):
+    security, _, listing = moa_data
+    raw = bars(security, [
+        ("2026-11-10", 0, 0, 0, 100, 0, 0, 0, 3),
+        ("2026-11-11", 40, 50, 35, 40, 0, 100, 4000, after),
+    ])
+    listing = replace(listing, facts=replace(listing.facts, reason="액면분할", par_before=500,
+                                            par_after=200, shares_after=after))
+    event, = resolve(security, raw, [listing], coverage_complete=True).resolutions
+    assert (event.kind, event.review, event.failed_check) == (Resolution.SEGMENT_BREAK, True, "par_shares_mismatch")
