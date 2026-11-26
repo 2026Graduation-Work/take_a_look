@@ -1,22 +1,29 @@
-"""DART 공시 목록을 하루 단위로 일괄 수집해 종목 마스터(stocks)에 맞추고 제목으로 유형을 나눈다.
-
-회사를 지정하지 않은 list.json은 하루 전체 공시를 100건씩 준다(하루 약 500건 → 5~6회 호출, 일 한도 20,000회).
-제목·날짜·유형만 저장하고 원문 본문은 저장하지 않는다.
-"""
+"""DART 공시 목록을 접수일별로 수집해 종목 마스터와 연결한다."""
 from __future__ import annotations
 
 import json
 import re
 import time
-from datetime import date, timedelta
-from urllib.error import URLError
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from http.client import HTTPException
+from urllib.error import HTTPError
 from urllib.parse import urlencode
-from urllib.request import urlopen
+from urllib.request import HTTPRedirectHandler, build_opener
+from zoneinfo import ZoneInfo
 
 from .config import SETTINGS
+from .supabase_store import SupabaseWriteError
 
 LIST_URL = "https://opendart.fss.or.kr/api/list.json"
-LOOKBACK_DAYS = 3  # 늦게 올라온 공시까지 겹쳐 받는다(같은 접수번호는 덮어씀)
+LOOKBACK_DAYS = 7
+MAX_RANGE_DAYS = 120
+PAGE_SIZE = 100
+MAX_PAGES = 100
+MAX_HTTP_ATTEMPTS = 2_000
+REQUEST_ATTEMPTS = 3
+WRITE_BATCH_SIZE = 500
+KST = ZoneInfo("Asia/Seoul")
 
 # (유형, 제목 규칙). 위에서부터 처음 맞는 것.
 KIND_RULES: tuple[tuple[str, str], ...] = (
@@ -48,32 +55,148 @@ def classify(title: str) -> str:
     return "other"
 
 
-def _get(url: str, attempts: int = 3) -> dict:
-    # DART 연결 타임아웃은 일시 오류라 짧게 다시 시도한다.
-    for attempt in range(attempts):
+class NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+open_dart = build_opener(NoRedirect()).open
+
+class DartError(RuntimeError):
+    def __init__(self, code: str, *, stop_run: bool = False) -> None:
+        super().__init__(code)
+        self.stop_run = stop_run
+
+
+@dataclass
+class RequestBudget:
+    limit: int = MAX_HTTP_ATTEMPTS
+    used: int = 0
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.limit <= MAX_HTTP_ATTEMPTS:
+            raise ValueError(f"HTTP 시도 상한은 1~{MAX_HTTP_ATTEMPTS}이어야 합니다")
+
+    def take(self) -> None:
+        if self.used >= self.limit:
+            raise DartError("attempt_budget_exhausted", stop_run=True)
+        self.used += 1
+
+
+def filing_days(
+    start: str | None, end: str | None, *, today: date | None = None,
+) -> list[date]:
+    today = today or datetime.now(KST).date()
+    if (start is None) != (end is None):
+        raise ValueError("--start와 --end는 함께 지정해야 합니다")
+    if start is None:
+        return [today - timedelta(days=offset) for offset in range(LOOKBACK_DAYS)]
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", start) or not re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}", end,
+    ):
+        raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다")
+    try:
+        first, last = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise ValueError("유효한 날짜를 지정해야 합니다") from None
+    days = (last - first).days + 1
+    if not 1 <= days <= MAX_RANGE_DAYS or last > today:
+        raise ValueError("과거 또는 오늘까지, 시작일부터 종료일까지 최대 120일을 지정해야 합니다")
+    return [first + timedelta(days=offset) for offset in range(days)]
+
+
+def _get(url: str, budget: RequestBudget | None = None) -> dict:
+    budget = budget or RequestBudget()
+    for attempt in range(REQUEST_ATTEMPTS):
+        budget.take()
         try:
-            with urlopen(url, timeout=30) as response:
-                return json.loads(response.read())
-        except (URLError, TimeoutError):
-            if attempt == attempts - 1:
-                raise
+            with open_dart(url, timeout=30) as response:
+                data = json.loads(response.read())
+        except HTTPError as exc:
+            exc.close()
+            if exc.code != 429 and not 500 <= exc.code <= 599:
+                raise DartError(f"http_{exc.code}", stop_run=exc.code in {401, 403}) from None
+            error = DartError(f"http_{exc.code}", stop_run=exc.code == 429)
+        except (OSError, HTTPException):
+            error = DartError("dart_network_error")
+        except (UnicodeError, ValueError):
+            raise DartError("invalid_response") from None
+        else:
+            if not isinstance(data, dict):
+                raise DartError("invalid_response")
+            return data
+        if attempt == REQUEST_ATTEMPTS - 1:
+            raise error
+        if budget.used < budget.limit:
             time.sleep(10 * (attempt + 1))
+    raise AssertionError("unreachable")
 
 
-def fetch_day(day: date, api_key: str) -> list[dict]:
-    rows, page = [], 1
-    while True:
-        query = urlencode({"crtfc_key": api_key, "bgn_de": day.strftime("%Y%m%d"), "end_de": day.strftime("%Y%m%d"),
-                           "page_no": page, "page_count": 100})
-        data = _get(f"{LIST_URL}?{query}")
-        if data.get("status") == "013":  # 조회된 데이터 없음
-            return rows
-        if data.get("status") != "000":
-            raise RuntimeError(f"DART list.json status {data.get('status')}")
-        rows.extend(data["list"])
-        if page >= int(data.get("total_page", 1)):
-            return rows
-        page += 1
+def _page_number(data: dict, field: str) -> int:
+    value = data.get(field)
+    if type(value) is int:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]{1,9}", value):
+        return int(value)
+    raise DartError("invalid_pagination")
+
+
+def _validate_filing(item: dict, day: date) -> None:
+    if not isinstance(item, dict):
+        raise DartError("invalid_filing")
+    receipt, title, code = (item.get(field) for field in ("rcept_no", "report_nm", "stock_code"))
+    if (
+        not isinstance(receipt, str) or not re.fullmatch(r"[0-9]{14}", receipt)
+        or not isinstance(title, str) or not title.strip()
+        or not isinstance(code, str)
+        or item.get("rcept_dt") != day.strftime("%Y%m%d")
+    ):
+        raise DartError("invalid_filing")
+
+
+def fetch_day(day: date, api_key: str, budget: RequestBudget) -> list[dict]:
+    filings: list[dict] = []
+    expected_total = None
+    for page in range(1, MAX_PAGES + 1):
+        date_param = day.strftime("%Y%m%d")
+        query = urlencode({
+            "crtfc_key": api_key, "bgn_de": date_param, "end_de": date_param,
+            "last_reprt_at": "N", "page_no": page, "page_count": PAGE_SIZE,
+        })
+        data = _get(f"{LIST_URL}?{query}", budget)
+        status = data.get("status")
+        if status == "013" and page == 1:
+            if data.get("list"):
+                raise DartError("invalid_pagination")
+            return []
+        if isinstance(status, str) and status in {"010", "011", "012", "020", "101", "901"}:
+            raise DartError(f"dart_{status}", stop_run=True)
+        if status != "000":
+            code = status if isinstance(status, str) and re.fullmatch(r"[0-9]{3}", status) else "unknown"
+            raise DartError(f"dart_{code}")
+
+        total = _page_number(data, "total_count")
+        pages = _page_number(data, "total_page")
+        if pages > MAX_PAGES:
+            raise DartError("page_budget_exhausted", stop_run=True)
+        if expected_total is None:
+            expected_total = total
+        page_rows = data.get("list")
+        limit = min(PAGE_SIZE, total - len(filings))
+        if (
+            total != expected_total or pages != (total + PAGE_SIZE - 1) // PAGE_SIZE
+            or _page_number(data, "page_no") != page or _page_number(data, "page_count") != PAGE_SIZE
+            or limit <= 0 or not isinstance(page_rows, list) or len(page_rows) != limit
+        ):
+            raise DartError("invalid_pagination")
+        for filing in page_rows:
+            _validate_filing(filing, day)
+        filings.extend(page_rows)
+        if page == pages:
+            if len({filing["rcept_no"] for filing in filings}) != total:
+                raise DartError("duplicate_receipts_in_pages")
+            return filings
+    raise AssertionError("unreachable")
 
 
 def to_rows(filings: list[dict], codes: set[str]) -> list[dict]:
@@ -82,22 +205,59 @@ def to_rows(filings: list[dict], codes: set[str]) -> list[dict]:
         code = (item.get("stock_code") or "").strip()
         if code not in codes:
             continue
-        title = " ".join(str(item["report_nm"]).split())[:300]
-        rows[item["rcept_no"]] = {"rcept_no": item["rcept_no"], "stock_code": code, "title": title,
-                                  "kind": classify(title), "filed_on": date.fromisoformat(
-                                      f"{item['rcept_dt'][:4]}-{item['rcept_dt'][4:6]}-{item['rcept_dt'][6:]}").isoformat()}
+        title = " ".join(item["report_nm"].split())[:300]
+        receipt = item["rcept_no"]
+        rows[receipt] = {
+            "rcept_no": receipt, "stock_code": code, "title": title,
+            "kind": classify(title), "filed_on": date.fromisoformat(item["rcept_dt"]).isoformat(),
+        }
     return list(rows.values())
 
 
-def sync(client, today: date | None = None) -> int:
+@dataclass
+class DayResult:
+    day: date
+    status: str
+    fetched: int = 0
+    matched: int = 0
+    written: int = 0
+    reason: str | None = None
+
+
+def sync(client, *, days: list[date], budget: RequestBudget) -> list[DayResult]:
     api_key = SETTINGS.dart_api_key
     if not api_key:
         raise RuntimeError("DART_API_KEY가 필요합니다")
-    today = today or date.today()
     codes = {row["code"] for row in client.select("stocks", params={"select": "code", "order": "code"})}
-    filings = [item for back in range(LOOKBACK_DAYS) for item in fetch_day(today - timedelta(days=back), api_key)]
-    rows = to_rows(filings, codes)
-    if rows:
-        client.upsert("disclosures", rows, on_conflict="rcept_no")
-    print(json.dumps({"event": "disclosures", "fetched": len(filings), "matched": len(rows)}, ensure_ascii=False))
-    return len(rows)
+    if not codes:
+        raise RuntimeError("종목 마스터가 비어 있습니다")
+
+    results = []
+    stop_reason = None
+    for day in days:
+        result = DayResult(day, "not_attempted")
+        results.append(result)
+        if stop_reason:
+            result.reason = stop_reason
+            continue
+        try:
+            filings = fetch_day(day, api_key, budget)
+        except DartError as exc:
+            result.status = "incomplete"
+            result.reason = str(exc)
+            if exc.stop_run:
+                stop_reason = result.reason
+            continue
+        rows = to_rows(filings, codes)
+        result.fetched, result.matched = len(filings), len(rows)
+        try:
+            for offset in range(0, len(rows), WRITE_BATCH_SIZE):
+                batch = rows[offset:offset + WRITE_BATCH_SIZE]
+                client.upsert("disclosures", batch, on_conflict="rcept_no")
+                result.written += len(batch)
+        except SupabaseWriteError:
+            result.status = "incomplete"
+            result.reason = "supabase_write_failed"
+        else:
+            result.status = "complete"
+    return results
