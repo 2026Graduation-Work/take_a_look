@@ -145,6 +145,7 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
             label={
               <>
                 시장 흔들림 <Level score={status.volatilityScore} />
+                <span className="ml-3">거래</span> <Level score={status.volumeScore} />
                 <span aria-hidden className="ml-1 text-muted">ⓘ</span>
                 <span className="sr-only">설명 보기</span>
               </>
@@ -152,9 +153,6 @@ export default function MarketStatusBar({ status: snapshot, rotateQuotesOnMobile
           >
             <p className="m-0">
               KOSPI 최근 20거래일 가격 흔들림이 지난 1년 중 아래에서 {status.volatilityScore}% 위치예요.
-            </p>
-            <p className="m-0 mt-2">
-              거래 <Level score={status.volumeScore} />
             </p>
             <p className="m-0 mt-1">최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 {status.volumeScore}% 위치예요.</p>
             <p className="m-0 mt-2 text-muted">{meta.comment}.</p>

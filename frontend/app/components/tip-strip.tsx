@@ -126,10 +126,10 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
         <div className="col-span-2 row-start-2 min-w-0 overflow-hidden focus-within:overflow-visible sm:col-span-1 sm:col-start-2 sm:row-start-1">
           <p
             key={tip.id}
-            className={`m-0 min-h-[3.2em] text-sm text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
+            className={`m-0 min-h-[3.2em] text-xs text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
           >
             {tip.title}{" "}
-            <Link href={`/guide#tip-${tip.id}`} className="whitespace-nowrap text-xs text-brand underline underline-offset-2">
+            <Link href={`/guide#tip-${tip.id}`} className="ml-2 whitespace-nowrap text-tip-link text-brand underline underline-offset-2">
               자세히 보기
             </Link>
           </p>
@@ -137,7 +137,7 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
         <button
           type="button"
           onClick={onDismiss}
-          className="col-start-2 row-start-1 min-h-11 min-w-11 justify-self-end whitespace-nowrap text-xs text-body hover:underline sm:col-start-3"
+          className="col-start-2 row-start-1 min-h-11 min-w-11 justify-self-end whitespace-nowrap text-xs text-body hover:underline sm:col-start-3 sm:pointer-fine:min-h-8"
         >
           오늘은 그만 보기
         </button>
