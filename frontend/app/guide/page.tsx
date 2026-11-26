@@ -3,7 +3,7 @@ import Link from "next/link";
 import BrandHeader from "../components/brand-header";
 import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
-import { TIP_STRIP_TIPS } from "@/lib/tip-strip-tips";
+import { BEGINNER_TIPS } from "@/lib/beginner-tips";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
 
@@ -133,11 +133,23 @@ export default function GuidePage() {
 
           <Section id="beginner-tips" title={SECTIONS[5][1]}>
             <dl className="m-0 flex flex-col gap-6">
-              {TIP_STRIP_TIPS.map(tip => (
-                <div key={tip.id} className="flex flex-col gap-1">
-                  <dt className="text-base font-semibold text-ink">{tip.headline}</dt>
-                  <dd className="m-0 max-w-2xl text-sm text-body">{tip.description}</dd>
-                  <dd className="m-0 text-xs text-muted tabular-nums">계산 예시 {tip.source}</dd>
+              {BEGINNER_TIPS.map(tip => (
+                <div key={tip.id} id={`tip-${tip.id}`} className="flex scroll-mt-20 flex-col gap-1">
+                  <dt className="text-base font-semibold text-ink">{tip.title}</dt>
+                  <dd className="m-0 max-w-2xl text-sm text-body">{tip.summary}</dd>
+                  {tip.detail.map(line => (
+                    <dd key={line} className="m-0 max-w-2xl text-sm text-body">{line}</dd>
+                  ))}
+                  {tip.formula && <dd className="m-0 text-xs text-muted tabular-nums">계산 예시 {tip.formula}</dd>}
+                  {tip.inService && <dd className="m-0 max-w-2xl text-sm text-body">{tip.inService}</dd>}
+                  <dd className="m-0 text-xs text-muted">
+                    출처 {tip.sources.map((source, index) => (
+                      <span key={source.label}>
+                        {index > 0 && ", "}
+                        {source.url ? <a href={source.url} className="underline underline-offset-2">{source.label}</a> : source.label}
+                      </span>
+                    ))}
+                  </dd>
                 </div>
               ))}
             </dl>

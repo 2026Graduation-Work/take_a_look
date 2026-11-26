@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-import { TIP_STRIP_TIPS } from "../../lib/tip-strip-tips";
+import { BEGINNER_TIPS } from "../../lib/beginner-tips";
 import { STORAGE_KEYS } from "../../lib/storage-keys";
 import { finishDemo } from "./demo-steps";
 
 const TODAY = new Date("2026-11-25T13:00:00.000Z");
 const BEFORE_MIDNIGHT = new Date("2026-11-25T14:59:00.000Z");
-const [first, second, third] = TIP_STRIP_TIPS;
+const [first, second, third, fourth] = BEGINNER_TIPS;
 
 function tipStrip(page: Page) {
   return page.getByRole("region", { name: "알고 계셨나요?" });
@@ -27,29 +27,29 @@ test("팁은 5초마다 바뀌고 마우스, 가려진 탭, 키보드 포커스�
   await page.clock.install({ time: TODAY });
   await finishDemo(page);
   const strip = tipStrip(page);
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(first.title);
   await page.clock.fastForward(5_100);
-  await expect(strip).toContainText(second.headline);
+  await expect(strip).toContainText(second.title);
 
   await strip.hover();
   const box = (await strip.boundingBox())!;
   await page.mouse.move(10, box.y + box.height / 2);
   await page.clock.fastForward(20_000);
-  await expect(strip).toContainText(second.headline);
+  await expect(strip).toContainText(second.title);
   await page.mouse.move(0, 0);
   await page.clock.fastForward(4_000);
-  await expect(strip).toContainText(second.headline);
+  await expect(strip).toContainText(second.title);
   await page.clock.fastForward(1_100);
-  await expect(strip).toContainText(third.headline);
+  await expect(strip).toContainText(third.title);
 
   await setTabHidden(page, true);
   await page.clock.fastForward(20_000);
-  await expect(strip).toContainText(third.headline);
+  await expect(strip).toContainText(third.title);
   await setTabHidden(page, false);
   await page.clock.fastForward(4_000);
-  await expect(strip).toContainText(third.headline);
+  await expect(strip).toContainText(third.title);
   await page.clock.fastForward(1_100);
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(fourth.title);
 
   await marketBar(page).getByRole("button", { name: /시장 흔들림/ }).focus();
   const link = strip.getByRole("link", { name: "자세히 보기" });
@@ -57,7 +57,7 @@ test("팁은 5초마다 바뀌고 마우스, 가려진 탭, 키보드 포커스�
   await expect(link).toBeFocused();
   await page.clock.fastForward(20_000);
   await expect(link).toBeFocused();
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(fourth.title);
 });
 
 test.describe("터치", () => {
@@ -67,45 +67,51 @@ test.describe("터치", () => {
     await page.clock.install({ time: TODAY });
     await finishDemo(page);
     const strip = tipStrip(page);
-    await expect(strip).toContainText(first.headline);
-    await strip.getByText(first.headline, { exact: false }).tap({ position: { x: 8, y: 8 } });
+    await expect(strip).toContainText(first.title);
+    await strip.getByText(first.title, { exact: false }).tap({ position: { x: 8, y: 8 } });
     await expect(page).toHaveURL("/");
     await page.clock.fastForward(9_000);
-    await expect(strip).toContainText(first.headline);
+    await expect(strip).toContainText(first.title);
     await page.clock.fastForward(1_100);
-    await expect(strip).toContainText(second.headline);
+    await expect(strip).toContainText(second.title);
 
-    const sentence = strip.getByText(second.headline, { exact: false });
+    const sentence = strip.getByText(second.title, { exact: false });
     await sentence.dispatchEvent("pointerdown", { pointerType: "touch" });
     await page.clock.fastForward(12_000);
-    await expect(strip).toContainText(second.headline);
+    await expect(strip).toContainText(second.title);
     await sentence.dispatchEvent("pointercancel", { pointerType: "touch" });
     await page.clock.fastForward(9_000);
-    await expect(strip).toContainText(second.headline);
+    await expect(strip).toContainText(second.title);
     await page.clock.fastForward(1_100);
-    await expect(strip).toContainText(third.headline);
+    await expect(strip).toContainText(third.title);
   });
 });
 
-test("문장 바로 뒤의 밑줄 링크를 누르면 계산 예시가 있는 이용 안내로 간다", async ({ page }) => {
+test("문장 바로 뒤의 밑줄 링크를 누르면 해당 팁의 설명과 출처로 간다", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await finishDemo(page);
   const strip = tipStrip(page);
-  const sentence = strip.getByText(first.headline, { exact: false });
+  const sentence = strip.getByText(first.title, { exact: false });
   const link = sentence.getByRole("link", { name: "자세히 보기" });
-  await expect(sentence).toHaveText(first.headline + " 자세히 보기");
+  await expect(sentence).toHaveText(first.title + " 자세히 보기");
   await expect(link).toHaveCSS("text-decoration-line", "underline");
   await expect(strip.getByRole("link")).toHaveCount(1);
   await sentence.click({ position: { x: 8, y: 8 } });
   await expect(page).toHaveURL("/");
   await link.click();
-  await expect(page).toHaveURL("/guide#beginner-tips");
+  await expect(page).toHaveURL(`/guide#tip-${first.id}`);
   const section = page.getByRole("region", { name: "알고 계셨나요?" });
-  await expect(section.getByRole("heading")).toBeInViewport();
-  for (const { headline, description, source } of TIP_STRIP_TIPS) {
-    await expect(section).toContainText(headline);
-    await expect(section).toContainText(description);
-    await expect(section).toContainText(source);
+  await expect(page.locator(`#tip-${first.id}`)).toBeInViewport();
+  await expect(section.locator("dt")).toHaveText(BEGINNER_TIPS.map(tip => tip.title));
+  for (const tip of BEGINNER_TIPS) {
+    const item = section.locator(`#tip-${tip.id}`);
+    await expect(item).toContainText(tip.summary);
+    for (const line of tip.detail) await expect(item).toContainText(line);
+    if (tip.formula) await expect(item).toContainText(tip.formula);
+    for (const source of tip.sources) {
+      await expect(item).toContainText(source.label);
+      if (source.url) await expect(item.getByRole("link", { name: source.label, exact: true })).toHaveAttribute("href", source.url);
+    }
   }
 });
 
@@ -142,7 +148,7 @@ test("그만 보면 시장 바를 남기고 본문이 올라오며 서울 자정
   await expect(strip).toHaveCount(0);
 
   await page.clock.fastForward(61_000);
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(first.title);
   await page.reload();
   await expect(strip).toBeVisible();
 });
@@ -152,9 +158,9 @@ test("동작 줄이기 설정에서는 팁 하나를 고정하고 즉시 숨긴�
   await page.clock.install({ time: TODAY });
   await finishDemo(page);
   const strip = tipStrip(page);
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(first.title);
   await page.clock.fastForward(20_000);
-  await expect(strip).toContainText(first.headline);
+  await expect(strip).toContainText(first.title);
   await strip.getByRole("button", { name: "오늘은 그만 보기" }).click();
   await expect(page.locator('section[aria-label="알고 계셨나요?"]')).toHaveCount(0);
   await expect(marketBar(page)).toBeVisible();
@@ -231,14 +237,15 @@ test("종목 로딩이 1초를 넘기면 팁을 보여 주고 로딩 완료 후�
   await page.clock.install({ time: TODAY });
   await finishDemo(page);
   await expect(tipStrip(page)).toBeVisible();
-  const loadChunks = Promise.withResolvers<void>();
-  await page.route("**/_next/static/chunks/*.js", async route => {
-    await loadChunks.promise;
-    await route.continue();
-  });
   await page.getByRole("searchbox", { name: "종목 검색" }).fill("010130");
   const stock = page.getByRole("link", { name: /로딩 확인 종목/ });
   await expect(stock).toBeVisible();
+  const loadChunks = Promise.withResolvers<void>();
+  await page.route("**/_next/static/**/chunks/*.js", async route => {
+    await loadChunks.promise;
+    await route.continue();
+  });
+  await page.clock.pauseAt(new Date(TODAY.getTime() + 60_000));
   await stock.click();
   const loading = page.getByRole("main").filter({ hasText: "종목 정보를 불러오는 중이에요." });
   const strip = tipStrip(page);
@@ -248,13 +255,29 @@ test("종목 로딩이 1초를 넘기면 팁을 보여 주고 로딩 완료 후�
     await page.clock.fastForward(800);
     await expect(strip).toHaveCount(0);
     await page.clock.fastForward(300);
-    await expect(strip).toContainText(first.headline);
+    await page.clock.runFor(50);
+    await expect(strip).toContainText(first.title);
     await expect(loading).toBeVisible();
   } finally {
     loadChunks.resolve();
+    await page.clock.resume();
   }
 
   await expect(page.getByRole("heading", { name: "로딩 확인 종목", exact: true })).toBeVisible();
   await expect(marketBar(page)).toBeVisible();
   await expect(strip).toHaveCount(1);
+});
+
+test("정본의 모든 팁을 순서대로 보여 준 뒤 첫 팁으로 돌아온다", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install({ time: TODAY });
+  await finishDemo(page);
+  await page.mouse.move(0, 0);
+  const strip = tipStrip(page);
+  for (const tip of BEGINNER_TIPS) {
+    await expect(strip).toContainText(tip.title);
+    await expect(strip.getByRole("link", { name: "자세히 보기" })).toHaveAttribute("href", `/guide#tip-${tip.id}`);
+    await page.clock.fastForward(5_100);
+  }
+  await expect(strip).toContainText(first.title);
 });

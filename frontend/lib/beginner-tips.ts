@@ -1,4 +1,4 @@
-// "알고 계셨나요" 팁 띠(#491)와 이용 안내 "초보가 자주 하는 실수"의 문구 정본.
+// "알고 계셨나요?" 팁 띠와 이용 안내가 함께 불러오는 전체 팁 데이터 정본.
 // 모든 문구는 사람이 쓰고 출처를 단다(LLM 생성 금지). 선정 기준과 레퍼런스 조사는 docs/research/beginner-tips-sources.md.
 // 매매 지시, 상승 확률 단정을 쓰지 않는다. 사실, 계산, 연구 결과만 말하고 판단은 사용자가 한다.
 
@@ -18,7 +18,7 @@ export interface BeginnerTip {
   category: TipCategory;
   // 띠에 보이는 한 줄(36자 이하)
   title: string;
-  // 띠를 눌렀을 때 펼치는 한 줄 설명
+  // 이용 안내에서 제목 아래 보여 주는 한 줄 설명
   summary: string;
   // 이용 안내 "자세히 보기" 문단. 한 문장씩
   detail: readonly string[];

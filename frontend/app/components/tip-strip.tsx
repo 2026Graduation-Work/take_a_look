@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { TIP_STRIP_TIPS } from "@/lib/tip-strip-tips";
+import { BEGINNER_TIPS } from "@/lib/beginner-tips";
 import { dismissTipToday, isTipDismissed, nextKstMidnight } from "@/lib/tip-dismissal";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
 import { useDelayed } from "./waiting";
@@ -75,7 +75,7 @@ export default function TipStrip() {
 function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: () => void }) {
   const [step, setStep] = useState(0);
   const [pause, setPause] = useState({ hover: false, touching: false, touchUntil: 0, keyboard: false });
-  const tip = TIP_STRIP_TIPS[step % TIP_STRIP_TIPS.length];
+  const tip = BEGINNER_TIPS[step % BEGINNER_TIPS.length];
 
   useEffect(() => {
     if (closing || pause.hover || pause.touching || pause.keyboard) return;
@@ -128,8 +128,8 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
             key={tip.id}
             className={`m-0 min-h-[3.2em] text-sm text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
           >
-            {tip.headline}{" "}
-            <Link href="/guide#beginner-tips" className="whitespace-nowrap text-xs text-brand underline underline-offset-2">
+            {tip.title}{" "}
+            <Link href={`/guide#tip-${tip.id}`} className="whitespace-nowrap text-xs text-brand underline underline-offset-2">
               자세히 보기
             </Link>
           </p>
