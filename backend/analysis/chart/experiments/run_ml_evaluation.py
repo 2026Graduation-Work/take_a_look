@@ -3,7 +3,6 @@
 import argparse
 from pathlib import Path
 
-import json
 import os
 
 import numpy as np
@@ -219,8 +218,7 @@ def main(config_path, predictions_path=None):
     model_metrics_df.to_csv(os.path.join(out_dir, "model_metrics_by_fold.csv"), index=False)
     calibration_df.to_csv(os.path.join(out_dir, "calibration_by_fold.csv"), index=False)
 
-    with open(os.path.join(out_dir, "ml_metrics_summary.json"), "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=4, ensure_ascii=False)
+    atomic_json(Path(out_dir) / "ml_metrics_summary.json", summary)
 
     print(f"✅ ML 평가지표 산출 완료: {out_dir}")
 
