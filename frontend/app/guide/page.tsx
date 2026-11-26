@@ -146,7 +146,7 @@ export default function GuidePage() {
                     출처 {tip.sources.map((source, index) => (
                       <span key={source.label}>
                         {index > 0 && ", "}
-                        {source.url ? <a href={source.url} className="underline underline-offset-2">{source.label}</a> : source.label}
+                        {source.url ? <a href={source.url} className="inline-flex min-h-11 items-center underline underline-offset-2">{source.label}</a> : source.label}
                       </span>
                     ))}
                   </dd>

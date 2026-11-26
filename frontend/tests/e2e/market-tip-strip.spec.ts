@@ -237,14 +237,14 @@ test("종목 로딩이 1초를 넘기면 팁을 보여 주고 로딩 완료 후�
   await page.clock.install({ time: TODAY });
   await finishDemo(page);
   await expect(tipStrip(page)).toBeVisible();
-  await page.getByRole("searchbox", { name: "종목 검색" }).fill("010130");
-  const stock = page.getByRole("link", { name: /로딩 확인 종목/ });
-  await expect(stock).toBeVisible();
   const loadChunks = Promise.withResolvers<void>();
   await page.route("**/_next/static/**/chunks/*.js", async route => {
     await loadChunks.promise;
     await route.continue();
   });
+  await page.getByRole("searchbox", { name: "종목 검색" }).fill("010130");
+  const stock = page.getByRole("link", { name: /로딩 확인 종목/ });
+  await expect(stock).toBeVisible();
   await page.clock.pauseAt(new Date(TODAY.getTime() + 60_000));
   await stock.click();
   const loading = page.getByRole("main").filter({ hasText: "종목 정보를 불러오는 중이에요." });
