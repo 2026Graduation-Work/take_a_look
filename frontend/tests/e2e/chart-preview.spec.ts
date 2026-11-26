@@ -10,7 +10,7 @@ const rows = snapshots.map((payload: { batch_id: string; stock_code: string; hor
 
 test("stock header uses one down arrow and leaves flat changes unsigned", async ({ page }) => {
   for (const [difference, expected] of [
-    [-15_000, "전일 대비 하락 ▼ 15,000원 (5.8%)"],
+    [-15_000, "전일 대비 하락 ▼ -15,000원 (-5.8%)"],
     [0, "전일 대비 보합 0원 (0.0%)"],
   ] as const) {
     const selected = structuredClone(rows);

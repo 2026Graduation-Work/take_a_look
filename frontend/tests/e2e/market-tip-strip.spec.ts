@@ -211,6 +211,7 @@ test("좁은 화면에도 두 지수의 절대값, 등락률, 오래된 데이�
   });
   await finishDemo(page);
   const bar = marketBar(page);
+  const detail = bar.getByRole("button", { name: /시장 흔들림 보통 거래 높음/ });
   for (const width of [1280, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     for (const value of ["KOSPI", "4,214.17", "+0.15%", "KOSDAQ", "925.47", "-0.76%", "5일 전 데이터예요"]) {
@@ -218,16 +219,15 @@ test("좁은 화면에도 두 지수의 절대값, 등락률, 오래된 데이�
     }
     expect(await bar.evaluate(el => el.scrollWidth - el.clientWidth)).toBe(0);
     await expect(bar.getByText("KOSPI 200", { exact: true })).toHaveCount(0);
-    await expect(bar).not.toContainText("거래");
+    await expect(detail).toBeInViewport({ ratio: 1 });
   }
 
   await expect(bar.getByText("+0.15%", { exact: true })).toHaveCSS("color", "rgb(176, 52, 42)");
   await expect(bar.getByText("-0.76%", { exact: true })).toHaveCSS("color", "rgb(39, 75, 150)");
-  const detail = bar.getByRole("button", { name: /시장 흔들림 보통/ });
   expect((await detail.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await detail.click();
   const popover = page.getByRole("region", { name: "시장 흔들림 설명" });
-  await expect(popover).toContainText("거래 높음");
+  await expect(popover).toContainText("최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 81% 위치예요.");
   await expect(popover.locator("p").last()).toHaveText("2026.11.20 기준");
   await expect(bar.getByText("2026.11.20 기준", { exact: true })).toHaveCount(0);
   await expect(popover.getByText("2026.11.20 기준", { exact: true })).toHaveCount(1);

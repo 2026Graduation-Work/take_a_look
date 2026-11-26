@@ -45,7 +45,7 @@ import {
   SIGNAL_WORD,
   topPercentLabel,
 } from "@/lib/copy-glossary";
-import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
+import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, formatWonChange, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import { marketSentimentView, riskSnapshot, type HoldingWeight, type StockInsights } from "@/lib/providers";
@@ -282,8 +282,8 @@ export default function StockDetailView({
                         <span className="sr-only">전일 대비 {changeWord} </span>
                         {changeArrow && <span aria-hidden="true">{changeArrow} </span>}
                         {changeWon === null
-                          ? `${Math.abs(changePercent).toFixed(1)}%`
-                          : `${Math.round(Math.abs(changeWon)).toLocaleString("ko-KR")}원 (${Math.abs(changePercent).toFixed(1)}%)`}
+                          ? formatSignedPercent(changePercent)
+                          : formatWonChange(changeWon, changePercent)}
                       </span>
                     )}
                   </div>
