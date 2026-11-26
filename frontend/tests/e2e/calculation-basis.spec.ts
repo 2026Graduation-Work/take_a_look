@@ -22,11 +22,15 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
 
   const header = page.getByRole("region", { name: "SK하이닉스", exact: true });
   const name = header.getByRole("heading", { level: 1 });
-  const risk = header.getByText("위험도 보통", { exact: true });
+  const risk = header.getByText(/^위험도 보통\s*5칸 중 3칸$/);
   const quote = header.getByText("275,000원", { exact: true });
   const change = header.getByText("전일 대비 상승 ▲ 15,000원 (5.8%)", { exact: true });
   await expect(change).toBeVisible();
   await expect(risk).toBeVisible();
+  const riskCells = risk.locator('span[aria-hidden="true"] > span');
+  await expect(riskCells).toHaveCount(5);
+  await expect(riskCells.filter({ visible: true })).toHaveCount(5);
+  await expect(riskCells.and(risk.locator(".bg-ink"))).toHaveCount(3);
   for (const width of [1280, 1024, 1023, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     expect((await risk.boundingBox())!.y).toBeLessThan((await name.boundingBox())!.y);

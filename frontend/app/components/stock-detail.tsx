@@ -70,6 +70,21 @@ const CARD_TO_TAB: Partial<Record<CardId, DetailTab>> = {
   financial: "company",
 };
 
+function RiskMeter({ grade }: { grade: StockDetail["riskGrade"] }) {
+  const { word, filled } = riskLevel(grade);
+  return (
+    <span className="inline-flex items-center gap-2 text-sm text-body">
+      위험도 <strong className="font-semibold text-ink">{word}</strong>
+      <span className="flex gap-1" aria-hidden>
+        {Array.from({ length: 5 }, (_, index) => (
+          <span key={index} className={`h-2 w-3 rounded-[2px] ${index < filled ? "bg-ink" : "bg-track"}`} />
+        ))}
+      </span>
+      <span className="sr-only">5칸 중 {filled}칸</span>
+    </span>
+  );
+}
+
 interface StockDetailViewProps {
   signalHorizon?: 5 | 20;
   onHorizonChange?: (horizon: 5 | 20) => void;
@@ -240,10 +255,10 @@ export default function StockDetailView({
 
         <section aria-labelledby="stock-name" className="flex flex-col gap-2 px-1">
           <div className="flex min-w-0 flex-col gap-2">
-            <span className="flex flex-wrap gap-x-3 text-2xs text-muted tabular-nums">
+            <span className="flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
               <span>{detail.code}</span>
               <span>{detail.market}</span>
-              <span className="whitespace-nowrap text-xs">위험도 <strong className="font-medium text-ink">{riskLabel}</strong></span>
+              <RiskMeter grade={detail.riskGrade} />
               {detail.riskFlags.map((flag) => <span key={flag}>{RISK_FLAG_LABEL[flag]}</span>)}
             </span>
             <div className="flex flex-wrap items-center gap-x-1">
