@@ -13,9 +13,12 @@ jobs:
       matrix:
         sample: [1, 2, 3]
     steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
       - name: One stock master KIND request without credentials or database access
         run: |
-          python3 - <<'PYTHON'
+          python - <<'PYTHON'
           import hashlib
           import json
           import platform
