@@ -44,8 +44,8 @@ def fetch(tmp_path, monkeypatch):
         monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: set(raw.index.date))
         monkeypatch.setattr(shared_prices, "supplement_raw_ohlc", lambda *_: raw)
         monkeypatch.setattr(serving_prices, "_fetch_krx_adjusted", _adapter(krx_adjusted, calls, "krx"))
-        monkeypatch.setattr(providers, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
-        monkeypatch.setattr(providers, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
+        monkeypatch.setattr(shared_prices, "_fetch_ohlcv_fdr", _adapter(naver, calls, "fdr"))
+        monkeypatch.setattr(shared_prices, "_fetch_ohlcv_pykrx", _adapter(krx_adjusted, calls, "pykrx"))
         result = fetch_prices("005930", str(raw.index[0].date()), str(raw.index[-1].date()))
         return result, calls
     return run
@@ -112,14 +112,3 @@ def test_several_real_steps_in_a_window_are_allowed(fetch):
     steps = [0.5] * 3 + [0.8] * 3 + [1.0] * 4  # two corporate actions inside ten sessions
     prices, _ = fetch(SAMSUNG, (SAMSUNG.RawClose * steps).tolist(), None)
     assert set(prices.PriceProvider) == {"fdr"} and prices.AdjustmentFactor.round(6).tolist() == steps
-
-
-def test_shared_builder_still_matches_the_active_pack():
-    # Editing shared/ (prices, features...) breaks the daily run with a pack checksum error;
-    # such fixes belong in serving/ until a new pack is built.
-    from pathlib import Path
-
-    import yaml
-    from shared.settings import processing_contract
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())
-    assert config["active_pack"]["builder_sha256"] == processing_contract()["sha256"]

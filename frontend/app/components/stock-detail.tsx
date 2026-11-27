@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import {
@@ -62,6 +62,23 @@ type StockTab = ReadingTab;
 type DetailTab = Exclude<StockTab, "overview">;
 
 const DEFAULT_DETAIL_TABS: readonly DetailTab[] = ["model", "trading", "news", "company"];
+
+const STOCK_TAB_CHANGE = "stock-tab-change";
+
+function subscribeToStockTab(onChange: () => void) {
+  window.addEventListener(STOCK_TAB_CHANGE, onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener(STOCK_TAB_CHANGE, onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}
+
+function stockTabFromLocation(): StockTab {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return tab && Object.hasOwn(TAB_LABELS, tab) ? tab as StockTab : "overview";
+}
+
 
 const CARD_TO_TAB: Partial<Record<CardId, DetailTab>> = {
   contribution: "model",
@@ -128,7 +145,7 @@ export default function StockDetailView({
 }: StockDetailViewProps) {
   const currentMarketStatus = useMarketStatus(marketStatus);
   const bit = styleAxes ? classifyBit(styleAxes) : null;
-  const [activeTab, setActiveTab] = useState<StockTab>("overview");
+  const selectedTab = useSyncExternalStore(subscribeToStockTab, stockTabFromLocation, () => "overview" as const);
   const tabRefs = useRef<Partial<Record<StockTab, HTMLButtonElement | null>>>({});
   const [query, setQuery] = useState("");
   const savedList = parseSavedHoldings(
@@ -226,11 +243,16 @@ export default function StockDetailView({
     ? [...new Set(bit.cardOrder.flatMap((card) => CARD_TO_TAB[card] ?? []))]
     : DEFAULT_DETAIL_TABS;
   const tabs = ["overview", ...detailTabs] as const;
+  const activeTab: StockTab = tabs.includes(selectedTab) ? selectedTab : "overview";
 
-  function selectTab(tab: StockTab, moveFocus = false) {
-    setActiveTab(tab);
+  const selectTab = useCallback((tab: StockTab, moveFocus = false) => {
+    const next = new URL(window.location.href);
+    if (tab === "overview") next.searchParams.delete("tab");
+    else next.searchParams.set("tab", tab);
+    window.history.replaceState(null, "", next);
+    window.dispatchEvent(new Event(STOCK_TAB_CHANGE));
     if (moveFocus) tabRefs.current[tab]?.focus();
-  }
+  }, []);
 
   const hasHistogram = hasBand && realizedReturns.length > 0;
   const readingMetric = metric && metric.key in TERM_INFO ? metric : null;
@@ -242,7 +264,7 @@ export default function StockDetailView({
     historyKey: loading ? null : readingHistoryKey,
     invite: readingInvite,
     code: detail.code,
-    selectTab: setActiveTab,
+    selectTab,
     root: readingRoot,
     replayButton: readingReplay,
     steps: readingSteps(tabs, {

@@ -33,7 +33,11 @@ from shared.io import atomic_json
 
 
 def _run_local_period(config, predictions, prices, out, on_progress=None):
-    from experiments.backtest.local_execution import save_execution, simulate
+    from experiments.backtest.local_execution import (
+        PositionCrossesTrainingSegment,
+        save_execution,
+        simulate,
+    )
 
     if predictions.empty or prices.empty:
         raise ValueError("Backtest period has no predictions/prices")
@@ -41,24 +45,28 @@ def _run_local_period(config, predictions, prices, out, on_progress=None):
     entries = SwingStrategy(config).generate_signals(predictions, prices)
     try:
         result = simulate(config, entries, prices)
+        returns = result.returns()
+        metrics = calculate_trading_metrics(returns, result.trades)
+        metrics["turnover"] = result.turnover()
+        benchmark = configured_benchmark(config, returns.index, prices)
+        metrics["benchmark"] = calculate_trading_metrics(benchmark)
+        metrics["initial_cash"] = config["backtest"]["initial_cash"]
+        metrics["final_equity"] = float(result.value().iloc[-1])
+        metrics["unclosed_positions"] = len(result.open_positions)
+        runs = config.get("evaluation", {}).get("random_baseline_runs", 0)
+        if runs:
+            summary, distribution = compare_with_random(
+                config, predictions, prices, result, metrics, runs, on_progress=on_progress,
+            )
+            metrics.update(summary)
+    except PositionCrossesTrainingSegment as exc:
+        atomic_json(Path(out) / "execution_error.json", {**exc.details, "message": str(exc)})
+        raise
     except Exception as exc:
         atomic_json(Path(out) / "execution_error.json", {"reason": str(exc), "config": config})
         raise
     save_execution(result, out)
-    returns = result.returns()
-    metrics = calculate_trading_metrics(returns, result.trades)
-    metrics["turnover"] = result.turnover()
-    benchmark = configured_benchmark(config, returns.index, prices)
-    metrics["benchmark"] = calculate_trading_metrics(benchmark)
-    metrics["initial_cash"] = config["backtest"]["initial_cash"]
-    metrics["final_equity"] = float(result.value().iloc[-1])
-    metrics["unclosed_positions"] = len(result.open_positions)
-    runs = config.get("evaluation", {}).get("random_baseline_runs", 0)
     if runs:
-        summary, distribution = compare_with_random(
-            config, predictions, prices, result, metrics, runs, on_progress=on_progress,
-        )
-        metrics.update(summary)
         distribution.to_csv(Path(out) / "random_baseline.csv", index=False)
     (Path(out) / "execution_error.json").unlink(missing_ok=True)
     pd.DataFrame({"Portfolio": returns, "Benchmark": benchmark}).to_csv(
@@ -121,7 +129,7 @@ def _run_backtest(config, predictions_path, out, record):
     prices = load_parquet_data(
         find_processed_dir(config, __file__), start, end,
         columns_only=["Date", "Code", "Open", "High", "Low", "Close", "Sigma", "Trading_Halt",
-                      "Amount"],
+                      "Amount", "SegmentId"],
         tickers=resolve_tickers(config, __file__), strict=True,
         universe_intervals=load_universe_intervals(config),
     )

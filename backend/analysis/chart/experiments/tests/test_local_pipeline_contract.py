@@ -17,18 +17,28 @@ from experiments.train_src.labels import (
     apply_fixed_barrier_labeling,
 )
 from experiments.train_src.loaders import load_parquet_data
+from shared.data.calendar import scheduled_sessions
 from shared.features.builder import build_feature_frame, normalize_trading_halts
+from shared.settings import TRAINING_PRICE_BASIS
+from shared.tests.official_fixtures import (
+    fake_isin,
+    fake_split,
+    fixture_snapshot,
+    listing_segment,
+    price_provenance,
+)
 
 
 @pytest.fixture
 def local_dataset(tmp_path):
-    days = pd.bdate_range("2023-01-02", periods=340)
+    days = scheduled_sessions(pd.Timestamp("2023-01-02"), pd.Timestamp("2024-12-31"))[:340]
     close = 100 + 8 * np.sin(np.arange(len(days)) / 6) + np.arange(len(days)) * 0.02
     frame = pd.DataFrame(
         {
             "Date": days,
             "Code": "005930",
             "Name": "Synthetic",
+            "SegmentId": listing_segment("005930", str(days[0].date())),
             "IsDelisted": False,
             "Open": close,
             "High": close * 1.02,
@@ -75,15 +85,19 @@ def local_dataset(tmp_path):
     atomic_parquet(path, frame)
     atomic_json(
         root / "dataset_manifest.json",
-        {"contract_version": 3, "prices_complete": True, "raw_files": {path.name: sha256(path)}},
+        {"contract_version": 3, "prices_complete": True, "raw_files": {path.name: sha256(path)},
+         "price_basis": TRAINING_PRICE_BASIS, **price_provenance(root, ["005930"], days)},
     )
     atomic_json(
         root / "calendar.json",
         {"validation_version": 3, "trading_days": [str(day.date()) for day in days]},
     )
-    pd.DataFrame({"Code": ["005930"], "ListingDate": [days[0]], "DelistingDate": [pd.NaT]}).to_csv(
-        root / "ticker_metadata.csv", index=False
-    )
+    from experiments.dataset.pipeline import _require_current_training_prices, training_metadata
+
+    manifest = json.loads((root / "dataset_manifest.json").read_text())
+    snapshot = _require_current_training_prices(manifest, root)
+    calendar = json.loads((root / "calendar.json").read_text())
+    training_metadata(snapshot, settings["collection"], calendar).to_csv(root / "ticker_metadata.csv", index=False)
     atomic_parquet(root / "benchmarks" / "KOSPI.parquet", frame[["Date", "Close"]])
     preprocess_dataset(dataset_config)
     config = yaml.safe_load((CHART_ROOT / "experiments/configs/local_h5.yaml").read_text())
@@ -123,6 +137,27 @@ def test_local_features_are_causal_and_161_explicit(local_dataset):
         c for c in BASE_FEATURES if c != "kmid"
     ]
     assert "Individual_BuyAmount" not in BASE_FEATURES
+
+
+@pytest.mark.parametrize("legacy_fields", [
+    {"price_basis": "krx_raw_base_price_events_v1"},
+    {"price_basis": "krx_raw_ohlc_uniform_close_ratio_v1"},
+    {"price_policy": "immutable_krx_raw_with_events_as_of_dataset_end"},
+    {"price_policy": "krx_raw_ohlc_uniform_close_ratio_snapshot_not_point_in_time_archive"},
+])
+def test_previous_price_policy_requires_collection_before_using_processed_data(local_dataset, legacy_fields):
+    from experiments.dataset.pipeline import validate_processed_inputs
+
+    _, settings, dataset_path, _ = local_dataset
+    manifest_path = Path(settings["root"]) / "dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    atomic_json(manifest_path, {**manifest, **legacy_fields})
+
+    for allow_partial in (False, True):
+        with pytest.raises(ValueError, match="rerun collection"):
+            preprocess_dataset(dataset_path, allow_partial=allow_partial)
+    with pytest.raises(ValueError, match="rerun collection"):
+        validate_processed_inputs(settings)
 
 
 def test_partial_collection_uses_only_verified_files(local_dataset):
@@ -314,7 +349,8 @@ def test_flow_ab_matching_preserves_price_paths(local_dataset):
     atomic_parquet(raw_path, raw)
     atomic_json(
         Path(settings["root"]) / "dataset_manifest.json",
-        {"prices_complete": True, "raw_files": {raw_path.name: sha256(raw_path)}},
+        {**json.loads((Path(settings["root"]) / "dataset_manifest.json").read_text()),
+         "prices_complete": True, "raw_files": {raw_path.name: sha256(raw_path)}},
     )
     preprocess_dataset(dataset_path, rebuild=True)
     cfg = yaml.safe_load(config_path.read_text())
@@ -451,14 +487,11 @@ def test_cli_train_ml_and_backtest_share_predictions(local_dataset, horizon, wit
 
 def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
-    from shared.data import providers as price_collector
     from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05")
     frame = pd.DataFrame({"Close": 100.0}, index=dates)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: frame)
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: frame)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: frame)
     monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: frame)
     collection = {"start_date": "2024-01-02", "end_date": "2024-01-07"}
     calendar = build_calendar(tmp_path, collection)
@@ -471,20 +504,33 @@ def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch
         build_calendar(tmp_path, collection)
     old = frame.iloc[:1]
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: old)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: old)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: old)
     monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: old)
     collection["end_date"] = "2024-01-19"
     with pytest.raises(ValueError, match="boundary coverage"):
         build_calendar(tmp_path, collection)
 
 
+def _synthetic_krx_raw(frame):
+    raw = frame[["Date", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]].copy()
+    fields = ["RawOpen", "RawHigh", "RawLow", "RawClose"]
+    raw[fields] = raw[fields].round().astype(int)
+    raw["Amount"] = raw.RawClose * raw.RawVolume
+    raw["RawChange"] = raw.RawClose.diff().fillna(0).astype(int)
+    raw["ListedShares"] = 100_000
+    return raw
+
+
 def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, monkeypatch):
     from experiments.dataset import pipeline as module
-    from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
-    raw = raw.iloc[:3].copy()
+    raw = _synthetic_krx_raw(raw.iloc[:3])
+    raw.loc[2, ["RawOpen", "RawHigh", "RawLow", "RawClose"]] = [50, 53, 49, 51]
+    raw.loc[2, "Amount"] = raw.RawClose.iloc[2] * raw.RawVolume.iloc[2]
+    raw.loc[2, "RawChange"] = 1
+    raw.loc[2, "ListedShares"] = 200_000
+    raw.loc[1, "RawClose"] = 100
+    raw.loc[1, "RawChange"] = raw.RawClose.iloc[1] - raw.RawClose.iloc[0]
     settings["root"] = str(tmp_path / "fresh")
     settings["collection"].update(
         end_date=str(raw.Date.iloc[-1].date()), investor_flows=False, tickers=["005930"]
@@ -502,31 +548,17 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
         atomic_json(root / "calendar.json", result)
         return result
 
-    monkeypatch.setattr("shared.data.prices.supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
-    monkeypatch.setattr(
-        module,
-        "load_metadata",
-        lambda *_: pd.DataFrame(
-            {
-                "Code": ["005930"],
-                "Name": ["Synthetic"],
-                "Market": ["KOSPI"],
-                "ListingDate": [raw.Date.iloc[0]],
-                "DelistingDate": [pd.NaT],
-                "IsDelisted": [False],
-            }
-        ),
-    )
-    partial = raw.iloc[1:].set_index("Date")
-    monkeypatch.setattr(price_collector, "_fetch_ohlcv_fdr", lambda *_, **kwargs: partial)
-    monkeypatch.setattr(price_collector, "_fetch_ohlcv_pykrx", lambda *_, **kwargs: partial)
+    monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw.iloc[1:])
+    snapshot = fixture_snapshot(tmp_path / "remote", ["005930"], pd.DatetimeIndex(raw.Date),
+                                [fake_split(raw.Date.iloc[2].date(), 1, 2, (100_000, 200_000))], raw=raw)
     with pytest.raises(RuntimeError, match="incomplete"):
-        module.collect_dataset(path, rebuild=True)
+        module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     root = Path(settings["root"])
     assert not (root / "raw/005930.parquet").exists()
-    monkeypatch.setattr(price_collector, "_fetch_ohlcv_fdr", lambda *_, **kwargs: raw.set_index("Date"))
+    assert not (root / "krx_raw_prices/005930.parquet").exists()
+    monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw)
     module.collect_dataset(path)
     stored = pd.read_parquet(root / "raw/005930.parquet")
     assert stored.Date.min() == raw.Date.min()
@@ -534,15 +566,100 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
         module.collect_dataset(path, rebuild=True)
     pd.testing.assert_frame_equal(stored, pd.read_parquet(root / "raw/005930.parquet"))
 
-    revised = raw.copy()
-    for column in ["Open", "High", "Low", "Close", "VWAP", "AdjustmentFactor"]:
-        revised[column] *= 0.5
-    monkeypatch.setattr(price_collector, "_fetch_ohlcv_fdr", lambda *_, **kwargs: revised.set_index("Date"))
+    original_path = root / "krx_raw_prices/005930.parquet"
+    derived_path = root / "raw/005930.parquet"
+    original_hash = sha256(original_path)
+    manifest_path = root / "dataset_manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["krx_raw_files"] == {original_path.name: original_hash}
+    events_path = root / manifest["price_events"]["path"]
+    event_hash = sha256(events_path)
+    event_bytes = events_path.read_bytes()
+    assert manifest["price_events"]["sha256"] == event_hash
+    assert pd.read_parquet(events_path).PriceFactor.tolist() == [0.5]
+    from experiments.dataset.verify_training_prices import verify
+
+    assert verify(root) == [{"code": "005930", "raw_rows": 3, "applied_events": 1, "spac_excluded_rows": 0}]
+    assert stored.AdjustmentFactor.tolist() == [0.5, 0.5, 1.0]
+    np.testing.assert_array_equal(stored.Volume, raw.RawVolume * [2, 2, 1])
+
+    def no_repeat(*_, **kwargs):
+        pytest.fail("Verified KRX source must not be requested again")
+
+    monkeypatch.setattr(module, "fetch_raw_window", no_repeat)
+    revised = stored.copy()
+    revised.loc[0, "Close"] += 1
+    atomic_parquet(derived_path, revised)
+    module.collect_dataset(path, mode="update")
+    pd.testing.assert_frame_equal(stored, pd.read_parquet(derived_path))
+    assert sha256(original_path) == original_hash
+    assert json.loads(manifest_path.read_text())["price_events"] == manifest["price_events"]
+
+    revised.loc[0, "RawHigh"] += 1
+    atomic_parquet(derived_path, revised)
+    revised_hash = sha256(derived_path)
+
+    def interrupt_manifest(destination, value):
+        if destination == manifest_path:
+            raise KeyboardInterrupt()
+        atomic_json(destination, value)
+
+    with monkeypatch.context() as interrupted:
+        interrupted.setattr(module, "atomic_json", interrupt_manifest)
+        with pytest.raises(KeyboardInterrupt):
+            module.collect_dataset(path, mode="update")
+    assert json.loads(manifest_path.read_text())["price_events"] == manifest["price_events"]
+    assert events_path.read_bytes() == event_bytes
+
     with pytest.raises(RuntimeError, match="incomplete"):
         module.collect_dataset(path, mode="update")
-    pd.testing.assert_frame_equal(stored, pd.read_parquet(root / "raw/005930.parquet"))
-    revision = json.loads(next((root / "price_revisions").glob("*.json")).read_text())
-    assert "AdjustmentFactor" in revision["changed_columns"]
+    assert sha256(derived_path) == revised_hash
+    assert sha256(original_path) == original_hash
+    failed_manifest = json.loads(manifest_path.read_text())
+    assert failed_manifest["price_events"]["path"] != events_path.name
+    failed_events = root / failed_manifest["price_events"]["path"]
+    assert failed_manifest["price_events"]["sha256"] == sha256(failed_events)
+    assert pd.read_parquet(failed_events).empty
+    assert sha256(events_path) == event_hash
+
+
+def test_unresolved_event_retains_verified_raw_and_reports_the_boundary(local_dataset, tmp_path, monkeypatch):
+    from experiments.dataset import pipeline as module
+
+    _, settings, _, _ = local_dataset
+    fixture = CHART_ROOT / "shared/tests/fixtures/004920_2020.csv"
+    raw = pd.read_csv(fixture, comment="#", parse_dates=["Date"])
+    root = tmp_path / "unconfirmed_event"
+    end = str(raw.Date.iloc[-1].date())
+    settings["root"] = str(root)
+    settings["collection"].update(
+        start_date=str(raw.Date.iloc[0].date()), end_date=end, investor_flows=False, tickers=["123456"]
+    )
+    path = tmp_path / "unconfirmed_event.yaml"
+    path.write_text(yaml.safe_dump(settings))
+    atomic_json(root / "calendar.json", {
+        "validation_version": 3, "observed_end": end, "requested_end": end,
+        "trading_days": raw.Date.astype(str).tolist(),
+    })
+    monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
+    monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw)
+    snapshot = fixture_snapshot(tmp_path / "remote", ["123456"], pd.DatetimeIndex(raw.Date), raw=raw)
+    module.collect_dataset(path, action_snapshot=snapshot)
+    original_path = root / "krx_raw_prices/123456.parquet"
+    raw_hash = sha256(original_path)
+    pd.testing.assert_frame_equal(pd.read_parquet(original_path), raw)
+    adjusted = pd.read_parquet(root / "raw/123456.parquet")
+    assert adjusted.SegmentId.nunique() == 2
+    assert adjusted.loc[adjusted.Date.eq("2020-03-20"), "Change"].isna().all()
+    queue = pd.read_csv(root / "review_queue.csv")
+    assert queue.Date.tolist() == ["2020-03-20"]
+
+    def no_repeat(*_, **kwargs):
+        pytest.fail("Verified KRX source must not be requested again")
+
+    monkeypatch.setattr(module, "fetch_raw_window", no_repeat)
+    module.collect_dataset(path)
+    assert sha256(original_path) == raw_hash
 
 
 def test_mature_h20_and_observation_boundary():
@@ -629,24 +746,9 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
         atomic_json(root / "calendar.json", result)
         return result
 
-    monkeypatch.setattr("shared.data.prices.supplement_raw_ohlc", lambda *args: raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]])
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
-    monkeypatch.setattr(
-        module,
-        "load_metadata",
-        lambda *_: pd.DataFrame(
-            {
-                "Code": ["005930"],
-                "Name": ["Synthetic"],
-                "Market": ["KOSPI"],
-                "ListingDate": [raw.Date.iloc[0]],
-                "DelistingDate": [pd.NaT],
-                "IsDelisted": [False],
-            }
-        ),
-    )
-    monkeypatch.setattr(price_collector, "_fetch_ohlcv_fdr", lambda *_, **kwargs: raw.set_index("Date"))
+    monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: _synthetic_krx_raw(raw))
 
     def fetch(day, **kwargs):
         if flow_status == "interrupted":
@@ -667,11 +769,13 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
 
     monkeypatch.setattr(module, "atomic_parquet", tracked_write)
     monkeypatch.setattr(price_collector, "_fetch_investor_day", fetch)
+    snapshot = fixture_snapshot(tmp_path / "remote", ["005930"], pd.DatetimeIndex(raw.Date),
+                                raw=_synthetic_krx_raw(raw))
     if flow_status == "interrupted":
         with pytest.raises(KeyboardInterrupt):
-            module.collect_dataset(path, rebuild=True)
+            module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     else:
-        module.collect_dataset(path, rebuild=True)
+        module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     root = Path(settings["root"])
     manifest = json.loads((root / "dataset_manifest.json").read_text())
     assert manifest["prices_complete"] and not manifest["flows_complete"]
@@ -702,35 +806,38 @@ def test_short_selected_features_do_not_force_sixty_day_warmup(local_dataset):
     assert config["feature_columns"] == ["kmid", "roc_5"]
 
 
-def test_stale_calendar_cache_retries_direct_index(tmp_path, monkeypatch):
+def test_calendar_uses_krx_indexes_and_rejects_incomplete_kosdaq(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
     from shared.data import providers as price_collector
-    from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-12")
-    full = pd.DataFrame({"Close": 100.0}, index=dates)
-    stale = full.iloc[:-2]
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: stale)
-    monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: full)
+    kospi = pd.DataFrame({"Close": 2500.0}, index=dates)
+    kosdaq = pd.DataFrame({"Close": 800.0}, index=dates)
     calls = []
 
-    def fdr(symbol, *_):
-        calls.append(symbol)
-        return stale if symbol == "KQ11" else full
+    def fetch(start, end, ticker, *, name_display):
+        assert (start, end, name_display) == ("20240102", "20240112", False)
+        calls.append(ticker)
+        return {"1001": kospi, "2001": kosdaq}[ticker]
 
-    monkeypatch.setattr(price_collector.fdr, "DataReader", fdr)
-    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: full)
-    monkeypatch.setattr(price_collector.krx, "get_index_ohlcv_by_date", lambda *_: full)
-    result = build_calendar(tmp_path, {"start_date": "2024-01-02", "end_date": "2024-01-12"})
+    monkeypatch.setattr(price_collector.krx, "get_index_ohlcv_by_date", fetch)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: kospi)
+    collection = {"start_date": "2024-01-02", "end_date": "2024-01-12"}
+    result = build_calendar(tmp_path, collection)
     assert result["verified_end"] == "2024-01-12"
-    assert calls == ["KQ11"]
-    assert len(result["fallbacks"]) == 2
-    assert result["providers"][0] == "KRX authenticated MDCSTAT00301"
-    assert result["providers"][2] == "pykrx KOSDAQ 2001"
-    assert len(pd.read_parquet(tmp_path / "benchmarks/KOSDAQ.parquet")) == len(dates)
+    assert calls == ["1001", "2001"]
+    assert result["providers"] == ["pykrx KOSPI 1001", "KRX authenticated MDCSTAT00301", "pykrx KOSDAQ 2001"]
+    assert result["fallbacks"] == []
+    assert pd.read_parquet(tmp_path / "benchmarks/KOSDAQ.parquet").Close.tolist() == [800.0] * len(dates)
+
+    kosdaq = kosdaq.iloc[:-1]
+    with pytest.raises(ValueError, match="KOSDAQ index has missing sessions"):
+        build_calendar(tmp_path / "incomplete", collection)
+    assert not (tmp_path / "incomplete/calendar.json").exists()
 
 
-def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypatch):
+@pytest.mark.parametrize("ticker", ["1001", "2001"])
+def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypatch, ticker):
     from experiments.dataset.pipeline import fetch_authenticated_index
     from shared.data import providers as price_collector
 
@@ -751,23 +858,22 @@ def test_direct_calendar_uses_authenticated_session_and_bounded_chunks(monkeypat
             return Response()
 
     monkeypatch.setattr(price_collector, "get_krx_session", Session)
-    result = fetch_authenticated_index(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-03"))
+    result = fetch_authenticated_index(pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-03"), ticker)
     assert [(c["strtDd"], c["endDd"]) for c in calls] == [
         ("20200101", "20211231"), ("20220101", "20231231"), ("20240101", "20240103")
     ]
+    assert {(c["indIdx"], c["indIdx2"]) for c in calls} == {(ticker[0], ticker[1:])}
     assert result.Close.tolist() == [2500.5] * 3
 
 
 def test_calendar_rejects_missing_day_shared_by_price_providers(tmp_path, monkeypatch):
     from experiments.dataset.pipeline import build_calendar
-    from shared.data import providers as price_collector
     from shared.data import trading_calendar
 
     dates = pd.bdate_range("2024-01-02", "2024-01-05").delete(1)
     incomplete = pd.DataFrame({"Close": 100.0}, index=dates)
-    monkeypatch.setattr(trading_calendar, "_fetch_fdr_index", lambda *_: incomplete)
     monkeypatch.setattr(trading_calendar, "_fetch_pykrx_index", lambda *_: incomplete)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: incomplete)
+    monkeypatch.setattr("shared.data.calendar.fetch_authenticated_index", lambda *_: incomplete)
     with pytest.raises(ValueError, match="missing_sessions=.*2024-01-03"):
         build_calendar(tmp_path, {"start_date": "2024-01-02", "end_date": "2024-01-05"})
     assert not (tmp_path / "calendar.json").exists()
@@ -787,27 +893,9 @@ def test_independent_schedule_announced_closures_and_end_boundary():
         verify_calendar_schedule(payload)
 
 
-def test_revision_detection_preserves_snapshot_and_records_non_close_changes(local_dataset):
-    from experiments.dataset.pipeline import reject_price_revision
-
-    previous, settings, _, _ = local_dataset
-    root = Path(settings["root"])
-    original_hash = sha256(root / "raw/005930.parquet")
-    # A corrected intraday high must be detected even if Close is unchanged.
-    current = previous.copy()
-    current.loc[0, "High"] *= 1.01
-    with pytest.raises(ValueError, match="Historical prices revised"):
-        reject_price_revision(root, "005930", previous, current)
-    assert sha256(root / "raw/005930.parquet") == original_hash
-    record = json.loads(next((root / "price_revisions").glob("*.json")).read_text())
-    assert record["changed_columns"] == ["High"]
-    assert record["rows"] == 1
-    reject_price_revision(root, "005930", previous, previous.copy())
-
-
-def test_active_listing_dates_are_per_security_including_preferred_and_global(monkeypatch):
-    from experiments.dataset.pipeline import fetch_active_listing_intervals
+def test_krx_active_listings_keep_equities_with_own_dates_and_kosdaq_global(monkeypatch):
     from shared.data import providers as price_collector
+    from shared.data.metadata import fetch_active_listing_intervals
 
     rows = [
         {"ISU_SRT_CD": "001040", "ISU_ABBRV": "Common", "MKT_TP_NM": "KOSPI",
@@ -818,6 +906,10 @@ def test_active_listing_dates_are_per_security_including_preferred_and_global(mo
          "LIST_DD": "1997/11/10", "SECUGRP_NM": "주권"},
         {"ISU_SRT_CD": "123456", "ISU_ABBRV": "Fund", "MKT_TP_NM": "KOSPI",
          "LIST_DD": "2020/01/02", "SECUGRP_NM": "투자회사"},
+        {"ISU_SRT_CD": "234567", "ISU_ABBRV": "DR", "MKT_TP_NM": "KOSPI",
+         "LIST_DD": "2020/01/03", "SECUGRP_NM": "주식예탁증권"},
+        {"ISU_SRT_CD": "345678", "ISU_ABBRV": "Foreign", "MKT_TP_NM": "KOSDAQ",
+         "LIST_DD": "2020/01/06", "SECUGRP_NM": "외국주권"},
     ]
 
     class Response:
@@ -835,37 +927,38 @@ def test_active_listing_dates_are_per_security_including_preferred_and_global(mo
 
     monkeypatch.setattr(price_collector, "get_krx_session", Session)
     kospi = fetch_active_listing_intervals("KOSPI").set_index("Code")
-    assert len(kospi) == 2
+    assert set(kospi.index) == {"001040", "00104K"}
     assert kospi.loc["00104K", "ListingDate"] == pd.Timestamp("2019-08-09")
     assert kospi.loc["001040", "ListingDate"] == pd.Timestamp("1973-06-29")
     kosdaq = fetch_active_listing_intervals("KOSDAQ")
     assert kosdaq.Code.tolist() == ["009520"]
-    assert kosdaq.Market.tolist() == ["KOSDAQ"]
+    assert kosdaq.Market.eq("KOSDAQ").all()
 
 
-def test_incomplete_fdr_listing_response_falls_back_to_security_metadata(monkeypatch):
-    from experiments.dataset import pipeline as module
-    from shared.data import providers as price_collector
-
-    incomplete = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [None]})
-    complete = incomplete.assign(ListingDate=pd.Timestamp("2019-08-09"))
-    monkeypatch.setattr(price_collector.fdr, "StockListing", lambda *_: incomplete)
+def test_load_metadata_records_krx_listing_source_and_rejects_missing_date(monkeypatch):
+    from shared.data import metadata as module
     from shared.data import metadata as shared_metadata
-    monkeypatch.setattr(shared_metadata, "fetch_active_listing_intervals", lambda *_: complete)
-    result = module.load_metadata({"start_date": "2016-01-01", "markets": ["KOSPI"],
-                                   "include_delisted": False}, "2026-10-06")
+
+    frame = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [pd.Timestamp("2019-08-09")]})
+    monkeypatch.setattr(shared_metadata, "fetch_active_listing_intervals", lambda *_: frame)
+    collection = {"start_date": "2016-01-01", "markets": ["KOSPI"], "include_delisted": False}
+    result = module.load_metadata(collection, "2026-10-06")
     assert result.ListingDate.iloc[0] == pd.Timestamp("2019-08-09")
     assert result.Source.iloc[0] == "KRX individual securities MDCSTAT01901"
+    frame["ListingDate"] = pd.NaT
+    with pytest.raises(ValueError, match="Unknown listing interval"):
+        module.load_metadata(collection, "2026-10-06")
 
 
 def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_path, monkeypatch):
     from contextlib import nullcontext
 
     from experiments.dataset import pipeline as module
+    from shared.data import bulk_prices, segmented_prices
     from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
-    raw = raw.iloc[:3].copy()
+    raw = _synthetic_krx_raw(raw.iloc[:3])
     codes = [f"{n:06d}" for n in range(10)]
     days = pd.DatetimeIndex(raw.Date)
     settings["root"] = str(tmp_path / "bulk_dataset")
@@ -882,38 +975,31 @@ def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_pa
 
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda _: {})
-    monkeypatch.setattr(module, "load_metadata", lambda *_: pd.DataFrame({
-        "Code": codes, "Name": "Synthetic", "Market": "KOSPI", "ListingDate": days[0],
-        "DelistingDate": pd.NaT, "IsDelisted": False,
-    }))
     monkeypatch.setattr(price_collector, "_krx_request_timeout", nullcontext)
     daily_calls, fallback_calls = [], []
 
-    def daily(day, **kwargs):
-        daily_calls.append(day)
-        row = raw.loc[raw.Date.eq(pd.Timestamp(day))].iloc[0]
-        present = codes if pd.Timestamp(day) != days[-1] else codes[:-1]
-        return pd.DataFrame({"시가": row.RawOpen, "고가": row.RawHigh, "저가": row.RawLow, "종가": row.RawClose, "거래량": row.RawVolume,
-                             "거래대금": row.Amount}, index=present)
+    def daily(day):
+        daily_calls.append(day.strftime("%Y%m%d"))
+        row = raw.loc[raw.Date.eq(day)].iloc[0]
+        present = codes if day != days[-1] else codes[:-1]
+        return pd.DataFrame({**row.to_dict(), "Code": present})
 
-    monkeypatch.setattr(price_collector.krx, "get_market_ohlcv_by_ticker", daily)
-    adjusted = raw.set_index("Date")[["Open", "High", "Low", "Close", "Volume", "Change"]].copy()
-    adjusted["Change"] /= 100
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: adjusted)
+    def individual(security, start, end):
+        assert (start, end, security.delisting) == (days[0], days[-1], None)
+        assert security.isin == fake_isin(security.code)
+        fallback_calls.append(security.code)
+        return raw
 
-    def individual(start, end, code, *, adjusted):
-        assert adjusted is False
-        fallback_calls.append(code)
-        return raw.set_index("Date")[["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]].rename(columns={
-            "RawOpen": "시가", "RawHigh": "고가", "RawLow": "저가", "RawClose": "종가", "RawVolume": "거래량", "Amount": "거래대금",
-        })
-
-    monkeypatch.setattr(price_collector.krx, "get_market_ohlcv_by_date", individual)
-    module.collect_dataset(config)
+    monkeypatch.setattr(bulk_prices, "request_day", daily)
+    monkeypatch.setattr(bulk_prices.time, "sleep", lambda _: None)
+    monkeypatch.setattr(segmented_prices, "request_history", individual)
+    snapshot = fixture_snapshot(tmp_path / "remote", codes, days, raw=raw)
+    module.collect_dataset(config, action_snapshot=snapshot)
     assert daily_calls == days.strftime("%Y%m%d").tolist()
     assert fallback_calls == [codes[-1]]
     root = Path(settings["root"])
     assert len(list((root / "raw").glob("*.parquet"))) == 10
+    assert len(list((root / "krx_raw_prices").glob("*.parquet"))) == 10
     before = {p.name: sha256(p) for p in (root / "raw").glob("*.parquet")}
     daily_calls.clear()
     fallback_calls.clear()
@@ -1012,6 +1098,28 @@ def test_previous_builder_processed_data_is_preserved(local_dataset):
     with pytest.raises(ValueError, match="new dataset root"):
         preprocess_dataset(dataset_path)
     assert {path: sha256(path) for path in before} == before
+
+
+def test_direct_training_fails_when_current_dataset_no_longer_allows_feature_input(local_dataset):
+    from experiments.comparison.runner import ComparisonConfigError, _load_split
+    from experiments.experiment_utils import find_processed_dir
+
+    _, settings, _, config_path = local_dataset
+    config = load_experiment_config(config_path)
+    panel = prepare_local_panel(config)
+    store = Path(find_processed_dir(config, __file__))
+    stale = store / "000000.parquet"
+    stale.write_bytes(b"previous build")
+    assert set(panel["file_hashes"]) == {"005930.parquet"}
+    assert load_parquet_data(str(store)).Code.unique().tolist() == ["005930"]
+    data_path = Path(settings["root"]) / "dataset_manifest.json"
+    data = json.loads(data_path.read_text())
+    atomic_json(data_path, {**data, "prices_complete": False, "raw_files": {}})
+    with pytest.raises(ValueError, match="Dataset or processed official action provenance differs"):
+        find_processed_dir(config, __file__)
+    with pytest.raises(ComparisonConfigError, match="Dataset or processed official action provenance differs"):
+        _load_split(store, start="2023-01-02", end="2023-12-01", label_observation_end=None,
+                    tickers=None, label_params={}, features=[])
 
 
 @pytest.mark.parametrize("key,value,message", [

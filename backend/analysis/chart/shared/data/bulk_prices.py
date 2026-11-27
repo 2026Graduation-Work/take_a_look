@@ -8,32 +8,34 @@ import pandas as pd
 
 from shared.io import append_collection_event, atomic_json, atomic_parquet
 
-CACHE_VERSION = 1
-RAW_COLUMNS = ["RawClose", "RawVolume", "Amount"]
-OHLC_COLUMNS = ["RawOpen", "RawHigh", "RawLow"]
+from .training_prices import parse_krx_fields
+from .validation import KRX_RAW_COLUMNS, expected_sessions
+
+CACHE_VERSION = 2
 
 
 def validate_day(frame, day):
-    required = {"Date", "Code", *RAW_COLUMNS}
-    if frame.empty or required - set(frame):
+    required = ["Code", *KRX_RAW_COLUMNS]
+    if frame.empty or set(required) - set(frame):
         raise ValueError("Empty/incomplete daily KRX price response")
-    frame = frame.copy()
+    frame = frame[required].copy()
     frame["Date"] = pd.to_datetime(frame.Date).dt.normalize()
     frame["Code"] = frame.Code.astype(str)
     if (not frame.Date.eq(day).all() or frame.Code.duplicated().any()
             or not frame.Code.str.fullmatch(r"[0-9A-Z]{6}").all()):
         raise ValueError("Invalid daily KRX dates/codes/duplicates")
-    extra = [col for col in OHLC_COLUMNS if col in frame]
-    values = frame[[*RAW_COLUMNS, *extra]].apply(pd.to_numeric, errors="coerce")
-    if not np.isfinite(values.to_numpy()).all() or values.lt(0).any().any():
+    values = frame[KRX_RAW_COLUMNS[1:]].apply(pd.to_numeric, errors="raise")
+    if not np.isfinite(values.to_numpy()).all() or values.drop(columns="RawChange").lt(0).any().any():
         raise ValueError("Invalid daily KRX raw prices/volume/amount")
-    traded = values.RawVolume.gt(0)
-    if values.loc[traded, ["RawClose", "Amount"]].le(0).any().any():
-        raise ValueError("Traded daily row lacks price or amount")
-    if values.loc[~traded, "Amount"].ne(0).any():
-        raise ValueError("Zero-volume daily row has nonzero amount")
     frame[values.columns] = values
-    return frame[["Date", "Code", *RAW_COLUMNS, *extra]]
+    return frame
+
+
+def request_day(day):
+    from pykrx.website.krx.market.core import 전종목시세
+
+    rows = 전종목시세().fetch(day.strftime("%Y%m%d"), "ALL")
+    return parse_krx_fields(rows).rename(columns={"ISU_SRT_CD": "Code"}).assign(Date=day)
 
 
 def fetch_day(source, day, record):
@@ -42,18 +44,7 @@ def fetch_day(source, day, record):
         started = time.monotonic()
         try:
             with source._krx_request_timeout():
-                frame = source.krx.get_market_ohlcv_by_ticker(
-                    day.strftime("%Y%m%d"), market="ALL", alternative=False
-                )
-            if frame is None or frame.empty:
-                raise RuntimeError("Empty daily KRX response")
-            frame = frame.rename_axis("Code").reset_index().rename(columns={
-                "시가": "RawOpen", "고가": "RawHigh", "저가": "RawLow",
-                "종가": "RawClose", "거래량": "RawVolume", "거래대금": "Amount",
-            }).assign(Date=day)
-            if set(OHLC_COLUMNS) - set(frame):
-                raise ValueError("Daily KRX response lacks raw OHLC fields")
-            return validate_day(frame, day)
+                return validate_day(request_day(day), day)
         except Exception as exc:
             response = getattr(exc, "response", None)
             details = getattr(exc, "details", {})
@@ -70,30 +61,20 @@ def fetch_day(source, day, record):
             time.sleep(delay)
 
 
-def prepare_bulk_prices(root, metadata, calendar, mode, report, source):
+def prepare_bulk_prices(root, metadata, calendar, report, source):
     """Skip saved stocks; amortize daily requests only when cheaper than histories."""
     from shared.io import sha256
-
-    from .validation import expected_sessions, validate_prices
 
     needed = {}
     for code, intervals in metadata.groupby("Code", sort=True):
         days = expected_sessions(intervals, calendar)
-        if days.empty:
+        if days.empty or (root / "krx_raw_prices" / f"{code}.parquet").exists():
             continue
-        path = root / "raw" / f"{code}.parquet"
-        if mode == "full" and path.exists():
-            try:
-                validate_prices(pd.read_parquet(path), days)
-                continue
-            except Exception:
-                pass
         needed[code] = days
     if not needed:
         return None
     days = pd.DatetimeIndex(np.unique(np.concatenate([d.values for d in needed.values()])))
-    cache_root = root / "price_day_cache"
-    # Small ticker experiments are faster with their existing history adapters.
+    cache_root = root / "krx_price_day_cache"
     estimated_history_requests = sum(max(1, int((d[-1] - d[0]).days / 731) + 1) for d in needed.values())
     if estimated_history_requests <= len(days) and not cache_root.exists():
         print(f"Price source: individual histories ({len(needed)} pending stocks)", flush=True)
@@ -125,7 +106,7 @@ def prepare_bulk_prices(root, metadata, calendar, mode, report, source):
         record({"date": str(day.date()), "state": "checking_cache"})
         try:
             frame = None
-            if mode != "update" and cache.exists() and sidecar.exists():
+            if cache.exists() and sidecar.exists():
                 try:
                     meta = json.loads(sidecar.read_text())
                     if meta.get("version") == CACHE_VERSION and meta.get("sha256") == sha256(cache):
@@ -138,31 +119,7 @@ def prepare_bulk_prices(root, metadata, calendar, mode, report, source):
                 atomic_parquet(cache, frame)
                 atomic_json(sidecar, {"version": CACHE_VERSION, "sha256": sha256(cache),
                                       "date": str(day.date()), "rows": len(frame),
-                                      "source": "pykrx KRX daily ALL, alternative=False"})
-            if set(OHLC_COLUMNS) - set(frame):
-                # Enrich legacy snapshots separately; never overwrite their source fields.
-                supplement = root / "price_ohlc_day_cache" / cache.name
-                supplement_meta = supplement.with_suffix(".json")
-                enriched = None
-                if mode != "update" and supplement.exists() and supplement_meta.exists():
-                    meta = json.loads(supplement_meta.read_text())
-                    if meta.get("version") == CACHE_VERSION and meta.get("sha256") == sha256(supplement):
-                        enriched = validate_day(pd.read_parquet(supplement), day)
-                        if set(OHLC_COLUMNS) - set(enriched):
-                            enriched = None
-                cached = enriched is not None
-                if enriched is None:
-                    enriched = fetch_day(source, day, record)
-                old = frame.set_index("Code")
-                new = enriched.set_index("Code").reindex(old.index)
-                if not np.allclose(old[RAW_COLUMNS], new[RAW_COLUMNS],
-                                   rtol=1e-10, atol=1e-12, equal_nan=False):
-                    raise ValueError("Daily OHLC supplement disagrees with preserved source fields")
-                if not cached:
-                    atomic_parquet(supplement, enriched)
-                    atomic_json(supplement_meta, {"version": CACHE_VERSION, "sha256": sha256(supplement),
-                                                 "source": "pykrx KRX daily ALL OHLC supplement"})
-                frame = enriched
+                                      "source": "KRX MDCSTAT01501 daily ALL"})
             if not cached:
                 time.sleep(max(0, 1.0 - (time.monotonic() - tick)))
             selected = frame.loc[frame.Code.isin(needed)].copy()
@@ -208,5 +165,5 @@ def stock_raw(bulk, code, days):
         frame = bulk.get_group(code).set_index("Date").sort_index()
     except KeyError:
         return None
-    frame = frame.loc[frame.index.isin(days)].drop(columns="Code")
-    return frame if frame.index.equals(days) else None
+    frame = frame.loc[frame.index.isin(days)].reset_index()
+    return frame[KRX_RAW_COLUMNS] if pd.DatetimeIndex(frame.Date).equals(days) else None

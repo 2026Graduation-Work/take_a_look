@@ -46,6 +46,21 @@ export function eventDisclosures(code, date) {
   }));
 }
 
+export const eventNewsSelect = "stock_code,track,news_id,title,press,url,article_date,published_at";
+export function isEventNewsQuery(url) {
+  return url.pathname.endsWith("/news_articles") && url.searchParams.get("select") === eventNewsSelect;
+}
+
+export function eventNews(code, date) {
+  if (!Object.hasOwn(eventStocks, code) || !eventDates.includes(date)) return [];
+  return [5, 4, 3, null].map((hour, index) => ({
+    stock_code: code, track: "live", article_date: date, news_id: `${date}-${index + 1}`,
+    title: `${eventStocks[code]} 가상 뉴스 ${index + 1}`, press: "가상 언론사",
+    url: index === 2 ? "javascript:alert(1)" : `https://example.test/news/${code}/${date}/${index + 1}`,
+    published_at: hour === null ? null : `${date}T0${hour}:00:00+00:00`,
+  }));
+}
+
 export function priceEventsFixture(url) {
   const { pathname, searchParams } = url;
   const select = searchParams.get("select");
@@ -63,6 +78,12 @@ export function priceEventsFixture(url) {
     const from = filters.find(value => value.startsWith("gte."))?.slice(4);
     const through = filters.find(value => value.startsWith("lte."))?.slice(4);
     return eventDates.filter(date => from <= date && date <= through).flatMap(date => eventDisclosures(code, date));
+  }
+  if (isEventNewsQuery(url)) {
+    if (searchParams.get("track") !== "eq.live") return [];
+    const code = searchParams.get("stock_code")?.replace(/^eq\./, "");
+    const date = searchParams.get("article_date")?.replace(/^eq\./, "");
+    return eventNews(code, date);
   }
   return null;
 }

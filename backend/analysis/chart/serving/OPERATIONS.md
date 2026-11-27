@@ -1,6 +1,6 @@
 # Serving 운영
 
-기준일: 2026-11-23 (`main` `5b38d94`)
+기준일: 2026-11-27 (#511)
 
 모든 명령은 chart 디렉터리에서 실행한다. 운영 파일은 기본 `workspace/serving/`에 저장하며 `CHART_SERVING_DATA_DIR`로 운영 저장소만 명시적으로 바꿀 수 있다.
 
@@ -29,7 +29,7 @@ KRX 인증과 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`가 필요하다. 기본 활�
 
 당일 가격은 한국 시간 18시 이후에 확정된 날짜만 실행한다. 날짜를 생략한 실행이 공통 KRX 일정상 휴장일이면 DB 입력 조회 전에 `holiday`로 종료한다. 명시적인 과거 날짜 재실행에는 보관된 입력이 계속 필요하다. 첫 수집은 2016년과 확인된 개별 종목 상장일 중 늦은 날짜부터 전체 관측 이력, 이후 갱신은 최근 240일과 상장일 중 늦은 날짜부터다. 상장 구간은 shared의 동일 공급자 함수로 검증하며 확인되지 않은 상장일은 거부한다. 상장 메타데이터도 운영 캐시에 별도로 보관한다. 겹치는 구간은 최신 응답으로 교체한다. 과거 rolling 상관의 수치 재현을 위해 전체 이력을 유지한다.
 
-Storage에는 날짜별 최근 원본 최대 61행과 전체 입력 해시를 보관하고, 공통 builder 계약 해시가 붙은 계산 완료 피처를 함께 저장한다. 전체 현재 이력은 운영 가격 저장소에 남긴다. 재실행은 해당 계약의 피처가 없으면 중단한다.
+Storage에는 날짜별 최근 원본 최대 61행과 전체 입력 해시를 보관하고, 서빙 계약과 기대값 파일 해시로 키를 만든 계산 완료 피처를 함께 저장한다. 전체 현재 이력은 운영 가격 저장소에 남긴다. 재실행은 새 키를 먼저 조회하고, 필요한 경우 팩이 기록한 이전 계약 키로 같은 입력 해시를 조회한다. 두 키에 해당하는 피처가 없으면 중단한다.
 
 공개 차트 가격은 최근 60거래일이다. 같은 수정종가 입력과 거래일을 확인한 경우에만 `prices.event_basis`에 최근 최대 250일 로그수익률의 표본 표준편차와 첫 표시일의 직전 가격을 넣는다. 기준을 저장한 archive는 보관 가격과 객체의 해시를 검증해 재실행한다. 운영 가격 이력에 수정 기준을 확인한 첫 날짜를 기록한다. 이 기록이 없거나 겹친 종가가 달라지면 새 응답 구간부터 다시 확인한다. 확인된 구간의 최소 60개, 최대 250개 로그수익률을 변동 기준에 쓴다. 이전 60행 archive에 기록된 기준이 없을 때도 가격만 제공한다. 운영 공개 전에 서빙 계약 추가를 팀에서 확인한다.
 
@@ -39,11 +39,38 @@ Storage에는 날짜별 최근 원본 최대 61행과 전체 입력 해시를 �
 
 ## pack 전환과 되돌리기
 
-새 pack은 `python -m experiments.export.refresh_pack ... --activate`로 검증 후 활성화한다. pack 내부 `processing_contract`에 설정·코드 SHA-256이 있고 `builder/`에는 해당 공통 구현 원본이 있다.
+새 팩은 `python -m experiments.export.refresh_pack ... --activate`로 검증 후 로컬에서 활성화한다. 새 팩을 만들 때 `golden/<pack_id>.json`을 팩에 포함하며 manifest와 로컬 활성 설정에 SHA-256을 기록한다. 운영 설정을 새 팩으로 바꿀 때 팩에 든 기대값 파일을 `serving/golden/`에도 추가한다. 이미 운영 중인 팩의 기대값 파일은 고정한다. 피처 계산 결과가 달라지면 새 팩에서 새 기대값을 만든다.
 
-`serving/config.yaml`은 수급 포함 pack `kospi_shared_v3_flow_train2023_2025_20261014`을 사용한다. 기본 161개 + 수급 9개 입력을 쓰며, 필요한 수급 입력이 결측이면 `flow_window_incomplete`로 해당 모델·종목 추론을 제외한다. GitHub Release의 tar.gz SHA-256은 `20da6a515edc32f5e906116f748484bac0fd224220ad4d9b9c0e1561f9b88086`다. 다운로드 후 builder 계약과 모델·사례 파일 해시를 모두 검사한다.
+`serving/config.yaml`은 수급 포함 팩 `kospi_shared_v3_flow_train2023_2025_20261014`의 기존 릴리스와 `serving/golden/<pack_id>.json`을 지정한다. 기본 161개와 수급 9개 입력을 쓴다. 필요한 수급 입력이 결측이면 해당 모델·종목 추론을 `flow_window_incomplete`로 제외한다.
 
-이전 pack으로 되돌릴 때는 그 pack을 만든 커밋의 builder 코드와 `serving/config.yaml`을 함께 복원한다. 현재 builder에 설정만 되돌리면 계약 검사에서 중단된다. 이전 pack은 GitHub Release의 `chart-serving-*` 태그에 모두 보존돼 있다.
+팩 로딩은 builder ID, 가격 기준, 전처리 설정, H5/H20 모델의 피처 기대값을 확인한다. 비교가 실패하면 입력 경우와 달라진 피처 이름을 출력한다. 압축 파일, 모델, 과거 사례, 달력은 각 SHA-256으로 검증한다. 기대값 검사는 수정 가격과 VWAP가 준비된 입력부터 시작한다. KRX 응답을 수정 가격·VWAP로 변환하는 단계는 별도로 검증해야 한다.
+
+팩 내보내기는 학습 산출물의 연구 계약 해시가 현재 코드와 일치해야 진행된다. 주석만 바뀌어도 해시 대상 파일이면 기존 산출물로 새 팩을 내보낼 수 없다. 팩에 기록한 `processing_contract`와 `builder/` 사본은 학습 당시 구현을 추적하기 위한 기록이다.
+
+종목 목록 캐시는 날짜, 파일 해시와 서빙 계약을 확인해 재사용한다. 상장 구간 판정 코드만 바꾸면 같은 날짜의 캐시는 그대로 적중한다. 해당 날짜를 다시 검증할 때는 `cache/listings/`의 대상 날짜 캐시와 JSON 메타데이터를 지운 뒤 다시 수집한다.
+
+새 로컬 프리뷰 입력 manifest는 `feature_cache_key`를 쓴다. 이전 manifest의 `processing_contract_sha256`도 팩에 맞는 해시라면 읽을 수 있다.
+
+이전 팩으로 되돌릴 때는 해당 버전의 서빙 코드와 설정을 함께 복원한다. 그 팩을 새 서빙 코드에서 사용하려면 해당 팩의 검증된 기대값 파일과 해시가 필요하다. 이전 팩은 GitHub Release의 `chart-serving-*` 태그에 보존돼 있다.
+
+### 현재 운영 팩 기대값 재현
+
+기대값 파일이 있는 checkout의 chart 디렉터리에서 생성 도구의 커밋을 찾는다.
+
+```bash
+golden_source=$(git log -1 --diff-filter=A --format=%H -- serving/golden/kospi_shared_v3_flow_train2023_2025_20261014.json)
+```
+
+같은 셸에서 `16be22b1ad6f5c2d65a2dcbe8c18262d1004cab8`에 만든 별도 worktree의 chart 디렉터리로 이동한다. 기존 계약 해시를 먼저 확인한다. Python 3.12.16, pandas 2.3.3, NumPy 2.5.5를 사용한다.
+
+```bash
+python -m pytest serving/tests/test_regular_session_close.py::test_shared_builder_still_matches_the_active_pack
+git restore --source "$golden_source" --worktree -- experiments/export/golden.py shared/golden.py
+python -m experiments.export.golden --pack-id kospi_shared_v3_flow_train2023_2025_20261014 --inputs shared/tests/fixtures/v3-golden.json --out serving/golden/kospi_shared_v3_flow_train2023_2025_20261014.json
+shasum -a 256 serving/golden/kospi_shared_v3_flow_train2023_2025_20261014.json
+```
+
+SHA-256은 `d85f39143b021238b21176a806ec80b413937baf99e724993afad53efbf83983`이다. 입력은 기존 네 경우와 봉 모양·거래대금을 바꾼 합성 경우다. 이 경우의 고정 식별자는 `corporate_event`다. 고가와 선택 행은 봉·롤링 피처를, 거래대금은 수급 피처를 검증한다. 수정 배율과 원시 OHLC는 피처 빌더가 입력으로 소비하는 값에 포함되지 않는다. 생성은 재현용 worktree에서 실행한다.
 
 시장 상태·수급·종목 마스터·보존 정리는 별도 명령이다. `python -m serving.supply`, `python -m serving.stock_master`, `python -m serving.retention`.
 

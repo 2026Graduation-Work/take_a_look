@@ -53,15 +53,16 @@ export function priceEventSourceMessages(name: EventSource, result: SourceResult
       message = previous ? "지난번 자료에는 코스피 등락률이 없었어요." : "이날 코스피 등락률이 자료에 없어요.";
     }
   }
-  if (name === "disclosures") {
-    if (!items.length) message = previous ? "지난번에 조회된 공시가 없었어요." : "조회된 공시가 없어요.";
+  if (name === "disclosures" || name === "news") {
+    const label = name === "news" ? "뉴스" : "공시";
+    if (!items.length) message = previous ? `지난번에 조회된 ${label}가 없었어요.` : `조회된 ${label}가 없어요.`;
     if (truncated) {
-      const limitNote = "조회 한도에 도달해 공시가 더 있는지 확인하지 못했어요.";
-      coverageNote = coverage === "known_partial" ? `형식이 맞지 않는 공시는 뺐어요. ${limitNote}` : limitNote;
+      const limitNote = `조회 한도에 도달해 ${label}가 더 있는지 확인하지 못했어요.`;
+      coverageNote = coverage === "known_partial" ? `형식이 맞지 않는 ${label}는 뺐어요. ${limitNote}` : limitNote;
     } else if (coverage === "known_partial") {
-      coverageNote = "형식이 맞지 않는 공시를 빼고 일부만 표시해요.";
+      coverageNote = `형식이 맞지 않는 ${label}를 빼고 일부만 표시해요.`;
     } else {
-      coverageNote = "수집 범위를 확인하지 못했어요.";
+      coverageNote = name === "news" ? "저장된 뉴스만 조회해요." : "수집 범위를 확인하지 못했어요.";
     }
   }
   let refreshNote;

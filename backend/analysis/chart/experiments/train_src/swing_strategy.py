@@ -68,4 +68,9 @@ class SwingStrategy:
         )
         for offset in range(1, lag + 1):
             entries &= prediction_dates.shift(offset).fillna(False)
+
+        if "SegmentId" in market:
+            segments = market.pivot(index="Date", columns="Code", values="SegmentId")
+            entries &= segments.notna() & segments.eq(segments.shift(lag))
+
         return entries

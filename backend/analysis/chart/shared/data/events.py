@@ -1,80 +1,98 @@
-"""Corporate-action events derived from immutable KRX raw bars.
-
-RawBars: one stock, columns Date (normalized, unique, sorted), RawOpen, RawHigh, RawLow,
-RawClose, RawChange, RawVolume, Amount, ListedShares. RawChange is KRX's CMPPREVDD_PRC, the
-close minus the day's base price. Halt rows repeat the previous close with RawChange 0,
-RawVolume 0 and 0 as RawOpen/High/Low.
-
-KRX sets each day's base price, the reference for its change rate and the ±30% price limit, to
-the previous close unless a corporate action resets it. A base price that differs from the
-previous close is therefore an event, and base / previous close is its exact price factor.
-
-Events: one row per basis change, sorted by ExDate (the first trading day on the new basis).
-PriceFactor multiplies every bar dated before ExDate; VolumeFactor is 1/PriceFactor for a
-share-count change and 1.0 otherwise.
-"""
-import math
-from collections.abc import Sequence
-from datetime import date
-from enum import StrEnum
+"""Detect KRX observations and apply only officially verified share-unit changes."""
 
 import numpy as np
 import pandas as pd
 
-SOURCE = "krx_base_price"
-SHARE_TOLERANCE = 1e-3
-EVENT_COLUMNS = ["Code", "ExDate", "PriceFactor", "VolumeFactor", "Kind", "Source",
-                 "PrevClose", "BasePrice", "SharesBefore", "SharesAfter"]
+from .actions import compatible_base
+
+EVENT_COLUMNS = [
+    "Code", "ExDate", "PriceFactor", "VolumeFactor", "Kind", "EventId", "Revision",
+    "RatioEvidence", "DatesEvidence", "ImplementationEvidence", "AuctionEvidence",
+    "PrevClose", "BasePrice", "SharesBefore", "SharesAfter",
+]
 
 
-class EventKind(StrEnum):
-    SHARE_CHANGE = "share_change"
-    PRICE_ONLY = "price_only"
-
-
-def _classify(price_factor: float, shares_before: float, shares_after: float) -> EventKind:
-    if shares_before != shares_after and math.isclose(
-            price_factor * shares_after / shares_before, 1.0, rel_tol=SHARE_TOLERANCE):
-        return EventKind.SHARE_CHANGE
-    return EventKind.PRICE_ONLY
-
-
-def derive_events(code: str, raw: pd.DataFrame,
-                  expected_dates: pd.DatetimeIndex | Sequence[date | str]) -> pd.DataFrame:
-    """Record base-price changes after checking all KRX sessions in the requested range.
-
-    Supply expected_dates for the full range, including sessions when the stock was halted.
-    """
+def _observations(raw, expected_dates):
     expected = pd.DatetimeIndex(expected_dates)
     if not expected.is_unique or not expected.is_monotonic_increasing:
         raise ValueError("Expected KRX trading dates must be unique and sorted")
     observed = pd.DatetimeIndex(raw.Date)
-    if len(observed) != len(expected) or not (observed == expected).all():
+    if not observed.equals(expected):
         raise ValueError("Raw bar dates must match expected KRX trading dates in order")
-
     base = raw.RawClose - raw.RawChange
     if not (base > 0).all():
         raise ValueError("KRX base price must be positive")
-    prev = raw.RawClose.shift()
-    moved = (base - prev).abs() > 0.5
 
+    previous = raw[["RawClose", "RawVolume", "RawOpen", "RawHigh", "RawLow", "ListedShares"]].shift()
+    return observed, base, observation_mask(raw, base, previous)
+
+
+def observation_mask(raw, base, previous):
+    moved = (base - previous.RawClose).abs().gt(0.5)
+    paused = previous.RawVolume.eq(0) | previous[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)
+    return moved | (paused & raw.ListedShares.ne(previous.ListedShares))
+
+
+def verify_events(code, raw, expected_dates, actions):
+    """Confirm official terms against KRX sessions and observations before use."""
+    observed, base, candidates = _observations(raw, expected_dates)
+    actions_by_date = {pd.Timestamp(action.ex_date): action for action in actions}
+    if len(actions_by_date) != len(actions):
+        raise ValueError(f"{code}: multiple verified actions on a KRX session")
+    if missing := actions_by_date.keys() - set(observed):
+        raise ValueError(f"{code}: official action date absent from KRX calendar: {sorted(missing)}")
     rows = []
-    for at in np.flatnonzero(moved):
-        prev_close, base_price = prev.iloc[at], base.iloc[at]
-        price_factor = base_price / prev_close
-        shares_before, shares_after = raw.ListedShares.iloc[at - 1], raw.ListedShares.iloc[at]
-        kind = _classify(price_factor, shares_before, shares_after)
-        rows.append({"Code": code, "ExDate": observed[at], "PriceFactor": price_factor,
-                     "VolumeFactor": 1 / price_factor if kind is EventKind.SHARE_CHANGE else 1.0,
-                     "Kind": kind.value, "Source": SOURCE, "PrevClose": prev_close, "BasePrice": base_price,
-                     "SharesBefore": shares_before, "SharesAfter": shares_after})
+    for at, day in enumerate(observed):
+        if at == 0:
+            continue
+        action = actions_by_date.get(day)
+        if action is None:
+            if candidates.iloc[at]:
+                raise ValueError(f"{code} {day:%Y-%m-%d}: KRX observation requires official evidence")
+            continue
+        rows.append(verify_action(code, raw, observed, at, base.iloc[at], action))
     events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
     events["ExDate"] = pd.to_datetime(events.ExDate)
     return events
 
 
+def verify_action(code, raw, observed, at, current_base, action):
+    day = observed[at]
+    previous, current = raw.iloc[at - 1], raw.iloc[at]
+    shares = (previous.ListedShares, current.ListedShares)
+    converted = float(previous.RawClose / action.factor)
+    if action.kind in {"reduction", "reference_reset"}:
+        auction = action.auction
+        matches_base = (auction is not None and compatible_base(auction.evaluation, converted, action.ex_date, action.market)
+                        and auction.low <= current_base <= auction.high and current.RawOpen == current_base)
+    else:
+        matches_base = compatible_base(current_base, converted, action.ex_date, action.market)
+    if action.kind == "bonus":
+        matches_base = matches_base and action.base == current_base and shares[0] == shares[1]
+        if action.listing and pd.Timestamp(action.listing) in observed:
+            listing_at = observed.get_loc(pd.Timestamp(action.listing))
+            if listing_at <= at or observed[listing_at - 1] < day:
+                raise ValueError(f"{code} {day:%Y-%m-%d}: invalid official bonus listing sequence")
+            before = raw.ListedShares.iloc[listing_at - 1]
+            after = raw.ListedShares.iloc[listing_at]
+            if before * action.factor != after:
+                raise ValueError(f"{code} {day:%Y-%m-%d}: bonus shares disagree at listing")
+    if not matches_base or (action.shares is not None and shares != action.shares):
+        raise ValueError(f"{code} {day:%Y-%m-%d}: KRX prices or shares disagree with official evidence")
+    return {
+        "Code": code, "ExDate": day, "PriceFactor": float(1 / action.factor),
+        "VolumeFactor": float(action.factor), "Kind": action.kind, "EventId": action.event_id,
+        "Revision": action.revision, "RatioEvidence": action.ratio_evidence.source.sha256,
+        "DatesEvidence": action.dates_evidence.source.sha256,
+        "ImplementationEvidence": action.implementation_evidence.source.sha256,
+        "AuctionEvidence": action.auction.evidence.source.sha256 if action.auction else None,
+        "PrevClose": previous.RawClose, "BasePrice": current_base,
+        "SharesBefore": shares[0], "SharesAfter": shares[1],
+    }
+
+
 def apply_events(raw: pd.DataFrame, events: pd.DataFrame, as_of=None) -> pd.DataFrame:
-    """Adjust raw bars by every event with Date < ExDate <= as_of (all events when as_of is None)."""
+    """Adjust raw bars by every event with Date < ExDate <= as_of."""
     active = events if as_of is None else events.loc[events.ExDate <= pd.Timestamp(as_of)]
     price = np.ones(len(raw))
     volume = np.ones(len(raw))

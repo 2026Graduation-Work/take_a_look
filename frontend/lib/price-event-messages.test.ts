@@ -77,3 +77,19 @@ test("부분 자료와 상한 안내를 함께 보존하고 성공 0건에는 �
   assert.equal(current.lastCheckedAt, undefined);
   assert.equal(current.canRetry, false);
 });
+
+test("뉴스 0건은 저장 범위를 안내하고 갱신 실패는 이전 결과와 확인 시각을 보존한다", () => {
+  const current = priceEventSourceMessages("news", empty);
+  assert.equal(current.message, "조회된 뉴스가 없어요.");
+  assert.equal(current.coverageNote, "저장된 뉴스만 조회해요.");
+  const emptyRefresh = priceEventSourceMessages("news", { ...empty, refresh: { status: "loading" } });
+  assert.equal(emptyRefresh.message, "지난번에 조회된 뉴스가 없었어요.");
+  const previous = priceEventSourceMessages("news", {
+    ...empty, items: [{}], coverage: "known_partial", truncated: true,
+    refresh: { status: "failed", reason: "rate_limited" },
+  });
+  assert.equal(previous.coverageNote, "형식이 맞지 않는 뉴스는 뺐어요. 조회 한도에 도달해 뉴스가 더 있는지 확인하지 못했어요.");
+  assert.match(previous.refreshNote ?? "", /조회 요청이 제한돼.*이전 조회 자료를 표시해요/);
+  assert.equal(previous.lastCheckedAt, checkedAt);
+  assert.equal(previous.canRetry, true);
+});

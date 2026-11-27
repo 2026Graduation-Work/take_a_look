@@ -121,7 +121,7 @@ def verify(output, pack=None):
         from serving.internal.inference import infer_batch
         from serving.internal.pack import load_pack
 
-        manifest, paths = load_pack(pack)
+        manifest, paths, _ = load_pack(pack)
         for horizon, (model_path, _) in paths.items():
             model = lgb.Booster(model_file=str(model_path))
             names = model.feature_name()

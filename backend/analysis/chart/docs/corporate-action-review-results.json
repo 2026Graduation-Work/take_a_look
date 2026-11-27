@@ -1,0 +1,1374 @@
+{
+  "baseline": {
+    "candidate_automatic": 3333,
+    "failed_checks": [
+      [
+        "",
+        1474
+      ]
+    ],
+    "http_calls": 0,
+    "market_review": 1474,
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 964,
+      "official_notice_format_requires_review": 396,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 746,
+      "reference_reset": 474,
+      "rights": 644,
+      "segment_break": 1824,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 335
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "92e22f4e33eee22b3679068923cf2852dbde5e5d22f9edbd8cd572185a76b894",
+      "notices": "22c23e6170c0985809e2b64004b26074261e8f7688c1c357ec3a220a505a481b",
+      "resolutions": "7d38831ee0f2d026f914509fcedb493121f1661347655181f64a5af784f067ed"
+    },
+    "training_review": 1301
+  },
+  "final": {
+    "candidate_automatic": 3704,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        218
+      ],
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_shares_mismatch",
+        10
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 75,
+      "remaining_failed_checks": {
+        "combined_bonus_listing_session_unavailable": 1,
+        "combined_bonus_listing_source_missing": 8,
+        "combined_bonus_reference_price_mismatch": 3,
+        "ex_price_reason_or_form_unsupported": 1,
+        "notice_parse_failed": 8,
+        "notice_security_unresolved": 3
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1103,
+    "new_automatic": 371,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 815,
+      "official_notice_format_requires_review": 174,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 830,
+      "reference_reset": 474,
+      "rights": 655,
+      "segment_break": 1453,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 611
+    },
+    "review_queue": {
+      "rows": 931,
+      "sha256": "eec251aefa955040b08130e7bec7478185c65fa2663d2adbabe6985032b17945"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "936d1ddea3946b558a1685a3df95a6d3ae579115c8adc3f8516a3fb4468d3d98"
+    },
+    "training_review": 931
+  },
+  "final_correction_examples": {
+    "20160428000303": [
+      "20160212000830",
+      "20160215000632",
+      "20160225000785",
+      "20160404000438"
+    ],
+    "20160722000097": [
+      "20160602000426",
+      "20160621000099"
+    ]
+  },
+  "final_seal": {
+    "dart_http_calls": 0,
+    "evidence_sha256": "70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9",
+    "examples_verified": 2,
+    "kind_http_calls": 0,
+    "security_intervals": 3563,
+    "segmentation_sha256": "3b46a39609c3b07dfe674af7f33b6506e16cfca096a0567ebe11898017924411",
+    "snapshot": "workspace/corporate-action-review/final-official-actions/snapshots/ab3796817140a0b88f019e709f7f27c8b018cfd03731b7978d0a971e2356bac8.json",
+    "snapshot_sha256": "ab3796817140a0b88f019e709f7f27c8b018cfd03731b7978d0a971e2356bac8",
+    "training_intervals": 3219,
+    "training_review_queue": {
+      "rows": 931,
+      "sha256": "eec251aefa955040b08130e7bec7478185c65fa2663d2adbabe6985032b17945"
+    },
+    "whole_security_intervals_removed": 0
+  },
+  "latest_stage": "unpaid_reduction",
+  "stage1": {
+    "candidate_automatic": 3333,
+    "failed_checks": [
+      [
+        "par_shares_exact",
+        239
+      ],
+      [
+        "reduction_reason_conflict",
+        216
+      ],
+      [
+        "notice_security_unresolved",
+        153
+      ],
+      [
+        "official_terms_unmatched",
+        132
+      ],
+      [
+        "reduction_notice_pair_missing",
+        114
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        56
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "reduction_dart_action_missing",
+        35
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        9
+      ],
+      [
+        "reduction_shares_mismatch",
+        8
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        2
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1474,
+    "new_automatic": 0,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 964,
+      "official_notice_format_requires_review": 396,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 746,
+      "reference_reset": 474,
+      "rights": 644,
+      "segment_break": 1824,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 335
+    },
+    "review_queue": {
+      "rows": 1301,
+      "sha256": "1595dc1e30bc0299e0b8196372d778499e9b5c830e6a986ac883a968ec8ca946"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "936d953012a88693ca42991b7a5786d38279c12cc7b913568ede33d8ef40416f",
+      "notices": "22c23e6170c0985809e2b64004b26074261e8f7688c1c357ec3a220a505a481b",
+      "resolutions": "85b2f934a44102f09e57ee74ff69b1b7daacdd0d81ac5a2da608755cfadb0906"
+    },
+    "training_review": 1301
+  },
+  "stage2": {
+    "candidate_automatic": 3566,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        216
+      ],
+      [
+        "notice_security_unresolved",
+        153
+      ],
+      [
+        "official_terms_unmatched",
+        132
+      ],
+      [
+        "reduction_notice_pair_missing",
+        114
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        56
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "reduction_dart_action_missing",
+        35
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        9
+      ],
+      [
+        "reduction_shares_mismatch",
+        8
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        2
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1241,
+    "new_automatic": 233,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 731,
+      "official_notice_format_requires_review": 396,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 746,
+      "reference_reset": 474,
+      "rights": 644,
+      "segment_break": 1591,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 568
+    },
+    "review_queue": {
+      "rows": 1069,
+      "sha256": "8d49a0657380f10d7cd99f7fee6f921071722872c52dc63852f0bcaa9ce52901"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "936d953012a88693ca42991b7a5786d38279c12cc7b913568ede33d8ef40416f",
+      "notices": "22c23e6170c0985809e2b64004b26074261e8f7688c1c357ec3a220a505a481b",
+      "resolutions": "612e2dec77e87582dfbcdc83a89a74f7af01c49d8f21ed9ffd96ad59b2fb4ee3"
+    },
+    "training_review": 1069
+  },
+  "stage3": {
+    "candidate_automatic": 3601,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        216
+      ],
+      [
+        "notice_security_unresolved",
+        153
+      ],
+      [
+        "official_terms_unmatched",
+        132
+      ],
+      [
+        "reduction_notice_pair_missing",
+        114
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        56
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        9
+      ],
+      [
+        "reduction_shares_mismatch",
+        8
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        2
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1206,
+    "new_automatic": 268,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 696,
+      "official_notice_format_requires_review": 396,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 746,
+      "reference_reset": 474,
+      "rights": 644,
+      "segment_break": 1556,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 603
+    },
+    "review_queue": {
+      "rows": 1034,
+      "sha256": "6b53fff1f271502b826040ff8aaebe2922d86b62d7b109c2f198c47643e85b0a"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "936d953012a88693ca42991b7a5786d38279c12cc7b913568ede33d8ef40416f",
+      "notices": "22c23e6170c0985809e2b64004b26074261e8f7688c1c357ec3a220a505a481b",
+      "resolutions": "820d0dca3c47b4a1b59e03a8016341411493a78babc2c909b1df4ecc5a3eca71"
+    },
+    "training_review": 1034
+  },
+  "stage4": {
+    "candidate_automatic": 3629,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        218
+      ],
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_security_unresolved",
+        110
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        58
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_shares_mismatch",
+        10
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1178,
+    "new_automatic": 296,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 711,
+      "official_notice_format_requires_review": 353,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 755,
+      "reference_reset": 474,
+      "rights": 655,
+      "segment_break": 1528,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 611
+    },
+    "review_queue": {
+      "rows": 1006,
+      "sha256": "899286749c7e35e3eb0dce3f59a11adc0374f0763ab8e7ca9b7720081872814a"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "2626b875747441d3916a55dcc2d1adfbbf7528f139546a41f7ab3fd94ba0c43f",
+      "notices": "b2ad9d02aec645d6bd9332f06ab2f05060bc2ac625c4023835b07034b81f9eb3",
+      "resolutions": "3e961b94b892b5f5be48490987cb5fbe6ee832edb95667b2c65b54b1331e38c6"
+    },
+    "training_review": 1006
+  },
+  "stage5_registry": {
+    "candidate_automatic": 3629,
+    "failed_checks": [
+      [
+        "reduction_reason_conflict",
+        218
+      ],
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_security_unresolved",
+        110
+      ],
+      [
+        "unsupported_form:11308",
+        99
+      ],
+      [
+        "notice_parse_failed",
+        90
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        58
+      ],
+      [
+        "unsupported_form:70768",
+        42
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        23
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_shares_mismatch",
+        10
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        4
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 0,
+      "remaining_failed_checks": {
+        "unsupported_form:11308": 99
+      }
+    },
+    "http_calls": 0,
+    "market_review": 1178,
+    "new_automatic": 296,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 711,
+      "official_notice_format_requires_review": 353,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 755,
+      "reference_reset": 474,
+      "rights": 655,
+      "segment_break": 1528,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 611
+    },
+    "review_queue": {
+      "rows": 1006,
+      "sha256": "899286749c7e35e3eb0dce3f59a11adc0374f0763ab8e7ca9b7720081872814a"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "2626b875747441d3916a55dcc2d1adfbbf7528f139546a41f7ab3fd94ba0c43f",
+      "notices": "b2ad9d02aec645d6bd9332f06ab2f05060bc2ac625c4023835b07034b81f9eb3",
+      "resolutions": "3e961b94b892b5f5be48490987cb5fbe6ee832edb95667b2c65b54b1331e38c6"
+    },
+    "training_review": 1006
+  },
+  "unpaid_reduction": {
+    "candidate_automatic": 3815,
+    "failed_checks": [
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        54
+      ],
+      [
+        "reduction_reason_conflict",
+        45
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "reduction_shares_mismatch",
+        22
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "form_11308": {
+      "baseline_review": 99,
+      "became_bonus": 75,
+      "remaining_failed_checks": {
+        "combined_bonus_listing_session_unavailable": 1,
+        "combined_bonus_listing_source_missing": 8,
+        "combined_bonus_reference_price_mismatch": 3,
+        "ex_price_reason_or_form_unsupported": 1,
+        "notice_parse_failed": 8,
+        "notice_security_unresolved": 3
+      }
+    },
+    "http_calls": 0,
+    "market_review": 992,
+    "new_automatic": 482,
+    "previous_automatic_decision_changes": [],
+    "previous_automatic_metadata_changes": [],
+    "reasons": {
+      "completed_search_without_official_proof": 113,
+      "official_facts_conflict_or_lack_terms": 704,
+      "official_notice_format_requires_review": 174,
+      "superseded_implementation_requires_review": 1
+    },
+    "resolution_counts": {
+      "bonus": 830,
+      "reference_reset": 481,
+      "rights": 655,
+      "segment_break": 1342,
+      "shares_only": 644,
+      "spac_premerger": 106,
+      "tick_rounding": 410,
+      "unit_change": 715
+    },
+    "review_queue": {
+      "rows": 826,
+      "sha256": "2a9f8a0ef4a9f91ef7df4828148c183c879851673cdf6aa053e5db10b29cfa3f"
+    },
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "8e1e0cab3acf413920cfb4b0ae4e9737b0bb1062f932c492a3186e28c2cd1e11"
+    },
+    "training_review": 826
+  },
+  "unpaid_reduction_previous_pr_comparison": {
+    "all_resolution_identities_equal": true,
+    "candidate_bytes_equal": true,
+    "market_review": 992,
+    "new_automatic": 111,
+    "new_resolution_counts": {
+      "reference_reset": 7,
+      "unit_change": 104
+    },
+    "notice_bytes_equal": true,
+    "only_expected_111_changed": true,
+    "previous_automatic_changes": 0,
+    "previous_pr_commit": "60d98e22d0db7d5cf47e2fa9bb241050dfa5521e",
+    "remaining_failed_checks": [
+      [
+        "official_terms_unmatched",
+        137
+      ],
+      [
+        "ex_price_reason_or_form_unsupported",
+        115
+      ],
+      [
+        "reduction_notice_pair_missing",
+        115
+      ],
+      [
+        "official_evidence_missing",
+        113
+      ],
+      [
+        "notice_parse_failed",
+        82
+      ],
+      [
+        "notice_security_unresolved",
+        80
+      ],
+      [
+        "bonus_prior_shares_mismatch",
+        57
+      ],
+      [
+        "reduction_opening_auction_mismatch",
+        54
+      ],
+      [
+        "reduction_reason_conflict",
+        45
+      ],
+      [
+        "par_notice_price_mismatch",
+        31
+      ],
+      [
+        "par_listing_count",
+        28
+      ],
+      [
+        "reduction_shares_mismatch",
+        22
+      ],
+      [
+        "listing_shares_mismatch",
+        21
+      ],
+      [
+        "ex_price_shares_changed",
+        14
+      ],
+      [
+        "reduction_evaluation_price_mismatch",
+        10
+      ],
+      [
+        "bonus_record_date_mismatch",
+        10
+      ],
+      [
+        "par_combined_reference",
+        8
+      ],
+      [
+        "combined_bonus_listing_source_missing",
+        8
+      ],
+      [
+        "bonus_listing_shares_mismatch",
+        7
+      ],
+      [
+        "par_shares_mismatch",
+        6
+      ],
+      [
+        "unsupported_form:99324",
+        5
+      ],
+      [
+        "unsupported_form:99403",
+        5
+      ],
+      [
+        "reduction_notice_shares_mismatch",
+        4
+      ],
+      [
+        "combined_bonus_record_date_mismatch",
+        4
+      ],
+      [
+        "bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "combined_bonus_reference_price_mismatch",
+        3
+      ],
+      [
+        "bonus_terms_missing",
+        1
+      ],
+      [
+        "unsupported_form:99337",
+        1
+      ],
+      [
+        "structural_implementation_superseded",
+        1
+      ],
+      [
+        "unsupported_form:99325",
+        1
+      ],
+      [
+        "combined_bonus_listing_session_unavailable",
+        1
+      ]
+    ],
+    "remaining_review_diagnostic_changes": 62,
+    "tables": {
+      "candidates": "7d48c0e6c9e8017ff55083155d7d0a9d7aaa5cbf06485180257cec13029ecf27",
+      "coverage": "d20f93395f50bb9cca1b500dd068f2956df93b255d8257e71612fbdc286999a4",
+      "notices": "d29f2bff5a73c829b876de07fc7fecd1527894b83e1577442bb7caf1736bbc93",
+      "resolutions": "8e1e0cab3acf413920cfb4b0ae4e9737b0bb1062f932c492a3186e28c2cd1e11"
+    },
+    "training_review": 826,
+    "unchanged_previous_automatic": 4080,
+    "unchanged_remaining_review": 992
+  },
+  "unpaid_reduction_seal": {
+    "dart_http_calls": 0,
+    "evidence_sha256": "70f5ac151376eaba47c4c45ccd2e961bb40ade675f42ce5c3dfbf7e4c6ed7ec9",
+    "examples_verified": 2,
+    "kind_http_calls": 0,
+    "security_intervals": 3563,
+    "segmentation_sha256": "cb7175a7d76a0f86d8c33d07e42e61acfc54ecf15f425a13af657b49240b2af2",
+    "snapshot": "workspace/corporate-action-review/unpaid-reduction-official-actions/snapshots/10632fce8a293412bade6ec40b81054db1aef9221cec3a879940544485d26cd6.json",
+    "snapshot_sha256": "10632fce8a293412bade6ec40b81054db1aef9221cec3a879940544485d26cd6",
+    "training_intervals": 3219,
+    "training_review_queue": {
+      "rows": 826,
+      "sha256": "2a9f8a0ef4a9f91ef7df4828148c183c879851673cdf6aa053e5db10b29cfa3f"
+    },
+    "unpaid_reduction_examples_verified": 111,
+    "whole_security_intervals_removed": 0
+  }
+}

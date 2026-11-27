@@ -73,7 +73,7 @@ def test_qlib_contract_is_rejected_by_existing_serving_pack_gate():
     from serving.internal.pack import validate_builder
 
     contract = processing_contract(QLIB_PREPROCESSING)
-    with pytest.raises(ValueError, match="checksum mismatch"):
+    with pytest.raises(ValueError, match="builder settings mismatch"):
         validate_builder({"feature_builder_id": contract["builder_id"], "processing_contract": contract})
 
 

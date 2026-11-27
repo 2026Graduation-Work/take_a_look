@@ -8,12 +8,14 @@ from experiments.export_oos import attach_outcomes, export, outcomes
 from experiments.features.psychology.market_psychology import RAW_FEATURES
 from shared.io import sha256
 from shared.settings import BASE_FEATURES, FLOW_FEATURES
+from shared.tests.official_fixtures import NEW_POLICY
 
 
 def prices(count=60):
     return pd.DataFrame({"Date": pd.bdate_range("2019-01-07", periods=count),
                          "Code": "00088K", "High": np.arange(count) + 101.,
-                         "Close": np.arange(count) + 100., "Sigma": .02, "Trading_Halt": 0})
+                         "Close": np.arange(count) + 100., "Sigma": .02, "Trading_Halt": 0,
+                         "SegmentId": "synthetic", "SampleEligible": True})
 
 
 def labels(horizon):
@@ -57,7 +59,7 @@ def completed_suite(tmp_path):
     frame.to_parquet(path, index=False)
     columns = list(BASE_FEATURES) + list(FLOW_FEATURES)
     feature_manifest = feature_root / "feature_manifest.json"
-    feature_manifest.write_text(json.dumps({"feature_columns": columns + list(RAW_FEATURES),
+    feature_manifest.write_text(json.dumps({**NEW_POLICY, "feature_columns": columns + list(RAW_FEATURES),
                                            "file_hashes": {path.name: sha256(path)}}))
     pinned = {"run_id": "completed", "run_manifest_sha256": {},
               "sigma_feature_manifest_sha256": sha256(feature_manifest)}
@@ -83,7 +85,7 @@ def completed_suite(tmp_path):
                 current["data"]["price_dir"] = str(feature_root)
                 current["features"]["groups"].append("psychology")
             manifest = folder / "run_manifest.json"
-            manifest.write_text(json.dumps({"config": current, "processing_contract": {},
+            manifest.write_text(json.dumps({**NEW_POLICY, "config": current, "processing_contract": {},
                 "feature_columns": columns + (list(RAW_FEATURES) if variant == "B" else [])}))
             pinned["run_manifest_sha256"][name] = sha256(manifest)
             oos = folder / "oos_history.parquet"

@@ -3,10 +3,11 @@ import Link from "next/link";
 import BrandHeader from "../components/brand-header";
 import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
-import { BEGINNER_TIPS } from "@/lib/beginner-tips";
-import { READING_REPLAY_HASH } from "@/lib/evidence-reading";
+import ReadingNavigation from "../components/reading-navigation";
+import LegacyTipLink from "./legacy-tip-link";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
-import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
+import { HORIZON_GUIDE } from "@/lib/copy-glossary";
+import { READING_REPLAY_HASH } from "@/lib/evidence-reading";
 
 export const metadata: Metadata = {
   title: "이용 안내",
@@ -15,12 +16,10 @@ export const metadata: Metadata = {
 
 const SECTIONS = [
   ["about", "Take a Look은 이런 서비스예요"],
+  ["notes", "먼저 알아 둘 점"],
   ["start", "이렇게 시작해요"],
   ["routine", "하루 5분 공부 루틴"],
   ["screens", "화면 읽는 법"],
-  ["terms", "용어 모음"],
-  ["beginner-tips", "알고 계셨나요?"],
-  ["notes", "알아 둘 점"],
 ] as const;
 
 const START: [string, string, string][] = [
@@ -52,12 +51,13 @@ const NOTES = [
 ];
 
 export default function GuidePage() {
-  const terms = Object.values(TERM_INFO).sort((a, b) => a.label.localeCompare(b.label, "ko"));
   return (
     <div className="w-full">
       <BrandHeader>
         <GuideAccount />
       </BrandHeader>
+      <ReadingNavigation current="guide" />
+      <LegacyTipLink />
 
       <main className="page pb-12 pt-8">
         <article className="page-wide flex flex-col gap-12">
@@ -83,7 +83,13 @@ export default function GuidePage() {
             </p>
           </Section>
 
-          <Section id="start" title={SECTIONS[1][1]}>
+          <Section id="notes" title={SECTIONS[1][1]} surface>
+            <ul className="m-0 flex list-disc flex-col gap-2 pl-5 text-sm text-body">
+              {NOTES.map((note) => <li key={note} className="max-w-2xl">{note}</li>)}
+            </ul>
+          </Section>
+
+          <Section id="start" title={SECTIONS[2][1]}>
             <ol className="m-0 flex list-none flex-col gap-4 p-0">
               {START.map(([title, body, href], index) => (
                 <li key={title} className="flex gap-4">
@@ -97,7 +103,7 @@ export default function GuidePage() {
             </ol>
           </Section>
 
-          <Section id="routine" title={SECTIONS[2][1]}>
+          <Section id="routine" title={SECTIONS[3][1]}>
             <p className="m-0 text-sm text-muted">하루에 하나씩, 근거를 보는 습관을 들이는 예시예요.</p>
             <ol className="m-0 flex list-none flex-col gap-2 p-0">
               {ROUTINE.map((step, index) => (
@@ -109,7 +115,7 @@ export default function GuidePage() {
             </ol>
           </Section>
 
-          <Section id="screens" title={SECTIONS[3][1]}>
+          <Section id="screens" title={SECTIONS[4][1]}>
             <Link href={`/stocks/005930${READING_REPLAY_HASH}`} className="btn-text inline-flex min-h-11 self-start">
               종목 상세 읽는 법
             </Link>
@@ -122,48 +128,6 @@ export default function GuidePage() {
               ))}
             </dl>
           </Section>
-
-          <Section id="terms" title={SECTIONS[4][1]}>
-            <p className="m-0 text-sm text-muted">화면의 ⓘ와 같은 설명이에요.</p>
-            <dl className="m-0 flex flex-col gap-4">
-              {terms.map((term) => (
-                <div key={term.label} className="flex flex-col gap-1">
-                  <dt className="text-base font-medium text-ink">{term.label}</dt>
-                  <dd className="m-0 max-w-2xl text-sm text-body">{term.define} {term.read}</dd>
-                </div>
-              ))}
-            </dl>
-          </Section>
-
-          <Section id="beginner-tips" title={SECTIONS[5][1]}>
-            <dl className="m-0 flex flex-col gap-6">
-              {BEGINNER_TIPS.map(tip => (
-                <div key={tip.id} id={`tip-${tip.id}`} className="flex scroll-mt-20 flex-col gap-1">
-                  <dt className="text-base font-semibold text-ink">{tip.title}</dt>
-                  <dd className="m-0 max-w-2xl text-sm text-body">{tip.summary}</dd>
-                  {tip.detail.map(line => (
-                    <dd key={line} className="m-0 max-w-2xl text-sm text-body">{line}</dd>
-                  ))}
-                  {tip.formula && <dd className="m-0 text-xs text-muted tabular-nums">계산 예시 {tip.formula}</dd>}
-                  {tip.inService && <dd className="m-0 max-w-2xl text-sm text-body">{tip.inService}</dd>}
-                  <dd className="m-0 text-xs text-muted">
-                    출처 {tip.sources.map((source, index) => (
-                      <span key={source.label}>
-                        {index > 0 && ", "}
-                        {source.url ? <a href={source.url} className="inline-flex min-h-11 items-center underline underline-offset-2">{source.label}</a> : source.label}
-                      </span>
-                    ))}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </Section>
-
-          <Section id="notes" title={SECTIONS[6][1]}>
-            <ul className="m-0 flex list-disc flex-col gap-2 pl-5 text-sm text-body">
-              {NOTES.map((note) => <li key={note} className="max-w-2xl">{note}</li>)}
-            </ul>
-          </Section>
         </article>
       </main>
       <DisclaimerFooter fixed={false} />
@@ -171,9 +135,9 @@ export default function GuidePage() {
   );
 }
 
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+function Section({ id, title, surface, children }: { id: string; title: string; surface?: boolean; children: React.ReactNode }) {
   return (
-    <section id={id} aria-labelledby={`${id}-title`} className="flex scroll-mt-20 flex-col gap-4 px-1">
+    <section id={id} aria-labelledby={`${id}-title`} className={`flex scroll-mt-20 flex-col gap-4 ${surface ? "surface px-4 py-6 sm:px-6" : "px-1"}`}>
       <h2 id={`${id}-title`} className="text-xl font-semibold">{title}</h2>
       {children}
     </section>

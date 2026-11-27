@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { selectPriceMoves, type DisclosureWindow } from "./price-events.ts";
-import { canRetryEventSource, loadEventDisclosures, loadEventMarket, type EventDisclosure, type MarketMove, type SourceResult, type SourceUnavailableReason } from "./providers/price-event-context.ts";
+import { canRetryEventSource, isEventNewsEnabled, loadEventDisclosures, loadEventMarket, loadEventNews, type EventDisclosure, type EventNews, type MarketMove, type SourceResult, type SourceUnavailableReason } from "./providers/price-event-context.ts";
 import type { ChartSnapshot } from "./chart-public.ts";
 
 const LOADING = { status: "loading" } as const;
 const QUERY_FAILED = { status: "unavailable", reason: "query_failed" } as const;
-const NEWS = { status: "unavailable", reason: "usage_not_approved" } as const;
+const NEWS_DISABLED = { status: "unavailable", reason: "usage_not_approved" } as const;
 
 type Requests = {
   stockCode: string;
@@ -17,6 +17,7 @@ type Requests = {
 type ContextRows = {
   market: Map<string, SourceResult<MarketMove>>;
   disclosures: Map<string, SourceResult<EventDisclosure>>;
+  news: Map<string, SourceResult<EventNews>>;
 };
 type ContextSession = {
   key: string;
@@ -28,7 +29,7 @@ type ContextSession = {
 const disclosureKey = ({ from, through }: DisclosureWindow) => `${from}/${through}`;
 
 function createSession(key: string, { stockCode, dates, windows }: Requests, publish: (rows: ContextRows) => void): ContextSession {
-  const rows: ContextRows = { market: new Map(), disclosures: new Map() };
+  const rows: ContextRows = { market: new Map(), disclosures: new Map(), news: new Map() };
   const pending = new Map<string, number>();
   const queue: Array<() => Promise<void>> = [];
   const active = new Set<AbortController>();
@@ -36,7 +37,7 @@ function createSession(key: string, { stockCode, dates, windows }: Requests, pub
   let sequence = 0;
   let running = 0;
 
-  const emit = () => publish({ market: new Map(rows.market), disclosures: new Map(rows.disclosures) });
+  const emit = () => publish({ market: new Map(rows.market), disclosures: new Map(rows.disclosures), news: new Map(rows.news) });
   const runNext = () => {
     while (!disposed && running < 4 && queue.length) {
       const task = queue.shift()!;
@@ -112,17 +113,24 @@ function createSession(key: string, { stockCode, dates, windows }: Requests, pub
     enqueue("disclosures", rows.disclosures, [id], async (_, signal) =>
       new Map([[id, await loadEventDisclosures(stockCode, window, signal)]]));
   };
+  const queryNews = (date: string) => {
+    if (!isEventNewsEnabled()) return;
+    enqueue("news", rows.news, [date], async (_, signal) =>
+      new Map([[date, await loadEventNews(stockCode, date, signal)]]));
+  };
   return {
     key,
     refresh() {
       if (disposed) return;
       queryMarket(dates);
       for (const window of Object.values(windows)) queryDisclosures(window);
+      for (const date of dates) queryNews(date);
     },
     retry(source, date) {
       if (disposed || !windows[date]) return;
       if (source === "market") queryMarket([date]);
-      else queryDisclosures(windows[date]);
+      else if (source === "disclosures") queryDisclosures(windows[date]);
+      else queryNews(date);
     },
     dispose() {
       disposed = true;
@@ -185,7 +193,7 @@ export function usePriceEvents(chart: ChartSnapshot | undefined, chartRevision: 
     disclosureWindow: move.disclosureWindow,
     market: rows?.market.get(move.date) ?? LOADING,
     disclosures: rows?.disclosures.get(disclosureKey(move.disclosureWindow)) ?? LOADING,
-    news: NEWS,
+    news: isEventNewsEnabled() ? rows?.news.get(move.date) ?? LOADING : NEWS_DISABLED,
   } : null;
 
   return {

@@ -11,8 +11,11 @@ import numpy as np
 import pandas as pd
 import yaml
 from lightgbm import LGBMClassifier
+from shared.data.resolution_snapshot import price_store_manifest
 
+from ..dataset.pipeline import validate_processed_inputs
 from ..evaluation.metrics import calculate_classification_metrics
+from ..experiment_utils import verified_feature_manifest
 from ..train_src.loaders import load_parquet_data
 from .metrics import expected_calibration_error, select_volatile_dates
 
@@ -121,6 +124,31 @@ def _fingerprint(frame: pd.DataFrame, columns: list[str]) -> str:
     return hashlib.sha256(hashes.tobytes()).hexdigest()
 
 
+def _verified_price_files(price_dir):
+    feature_manifest = price_dir / "feature_manifest.json"
+    features = json.loads(feature_manifest.read_text()) if feature_manifest.is_file() else {}
+    local_dataset = price_dir.parent.parent / "dataset_manifest.json"
+    local_store = (price_dir.parent.name == "feature_store" and local_dataset.is_file()
+                   and json.loads(local_dataset.read_text()).get("contract_version") == 3)
+    if local_store or "dataset_id" in features or "price_policy" in features:
+        if not feature_manifest.is_file():
+            raise ComparisonConfigError("Current KRX comparison requires a verified feature manifest")
+        _, manifest = verified_feature_manifest({
+            "data": {"price_dir": str(price_dir)},
+            "dataset": {"root": str(price_dir.parent.parent)},
+            "feature_columns": features["feature_columns"],
+        })
+        return manifest["file_hashes"]
+    dataset_manifest = price_dir.parent / "dataset_manifest.json"
+    if price_dir.name == "processed" and dataset_manifest.is_file():
+        if json.loads(dataset_manifest.read_text()).get("contract_version") == 3:
+            processed = json.loads((price_dir.parent / "processed_manifest.json").read_text())
+            return validate_processed_inputs({
+                "root": str(price_dir.parent), "preprocessing": processed["settings"],
+            })["files"]
+    return None
+
+
 def _load_split(
     price_dir: Path,
     *,
@@ -134,6 +162,7 @@ def _load_split(
     if not price_dir.is_dir():
         raise ComparisonConfigError(f"feature-store directory does not exist: {price_dir}")
     try:
+        file_names = _verified_price_files(price_dir)
         frame = load_parquet_data(
             str(price_dir),
             start,
@@ -143,14 +172,19 @@ def _load_split(
             label_params=label_params,
             label_observation_end=label_observation_end,
             training=False,
+            sample_only=True,
+            file_names=file_names,
         )
-    except (ValueError, KeyError) as exc:
+    except (ValueError, KeyError, OSError) as exc:
         raise ComparisonConfigError(f"failed to load feature store {price_dir}: {exc}") from exc
     required = ["Date", "Code", "Sigma", "Y_Label", *features]
     missing = [column for column in required if column not in frame.columns]
     if missing:
         raise ComparisonConfigError(f"feature store {price_dir} missing columns: {missing}")
-    frame = frame[required].copy()
+    keep = [*required, "SegmentId"] if "SegmentId" in frame else required
+    frame = frame[keep].copy()
+    if provenance := price_store_manifest(price_dir).get("official_actions"):
+        frame.attrs["official_actions"] = provenance
     frame["Date"] = pd.to_datetime(frame["Date"], errors="coerce").dt.tz_localize(None)
     frame["Code"] = frame["Code"].astype("string").str.strip().str.zfill(6)
     frame = frame.sort_values(["Date", "Code"], kind="stable", ignore_index=True)
@@ -177,7 +211,12 @@ def _assert_ab_alignment(
     split: str,
     baseline_features: list[str],
 ) -> None:
+    if (baseline.attrs.get("official_actions") != treatment.attrs.get("official_actions")
+            or ("SegmentId" in baseline) != ("SegmentId" in treatment)):
+        raise ComparisonConfigError(f"{profile} {split} A/B price provenance differs")
     columns = ["Date", "Code", "Y_Label", "Sigma", *baseline_features]
+    if "SegmentId" in baseline:
+        columns.append("SegmentId")
     left = baseline[columns].reset_index(drop=True)
     right = treatment[columns].reset_index(drop=True)
     if not left.equals(right):
@@ -253,6 +292,8 @@ def prepare_profile_data(
             "test": "post_test_right_buffer_allowed_for_outcome_observation",
         },
     }
+    if provenance := loaded["baseline", "train"].attrs.get("official_actions"):
+        metadata["official_actions"] = provenance
     return (
         loaded[("baseline", "train")],
         loaded[("baseline", "test")],

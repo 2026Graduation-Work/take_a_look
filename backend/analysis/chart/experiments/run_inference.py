@@ -8,6 +8,7 @@ import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
+from functools import lru_cache
 from multiprocessing import cpu_count
 from pathlib import Path
 
@@ -92,7 +93,14 @@ def init_worker(model_path, legacy_without_manifest=False):
     _model, _preprocessing = model, settings
 
 
-def _qlib_history(history, path, target_date):
+@lru_cache(maxsize=1)
+def _research_snapshot(root, manifest_bytes):
+    from experiments.dataset.pipeline import _require_current_training_prices
+
+    return _require_current_training_prices(json.loads(manifest_bytes), root)
+
+
+def _research_history(history, path, target_date):
     from shared.data.validation import expected_sessions, validate_prices
     from shared.settings import VALIDATION_VERSION
 
@@ -115,7 +123,18 @@ def _qlib_history(history, path, target_date):
     days = expected_sessions(active, calendar)
     days = days[days <= target_date]
     history = history.loc[history.Date.ge(active.ListingDate.iloc[0])]
-    return validate_prices(history, days), days
+    segmented = "SegmentId" in history
+    history = validate_prices(history, days, event_adjusted=segmented)
+    if segmented:
+        from experiments.dataset.pipeline import eligible_training_prices
+
+        snapshot = _research_snapshot(root, (root / "dataset_manifest.json").read_bytes())
+        history = eligible_training_prices(history, active, snapshot)
+        if history.empty or history.Date.iloc[-1] != target_date:
+            raise ValueError("Target date has no eligible training segment")
+        history = history.loc[history.SegmentId.eq(history.SegmentId.iloc[-1])]
+        days = days[days >= history.Date.iloc[0]]
+    return history, days
 
 
 def process_ticker(file_path, target_date, threshold):
@@ -143,8 +162,10 @@ def process_ticker(file_path, target_date, threshold):
         from shared.processing import build_feature_frame
 
         columns = _model.feature_name()
+        research_history = uses_qlib or "SegmentId" in df_slice
+        if research_history:
+            df_slice, days = _research_history(df_slice, path, target_dt)
         if uses_qlib:
-            df_slice, days = _qlib_history(df_slice, path, target_dt)
             lookback = max(
                 (int(match[1]) for name in columns if (match := re.search(r"_(5|10|20|30|60)$", name))),
                 default=1,
@@ -154,10 +175,11 @@ def process_ticker(file_path, target_date, threshold):
         else:
             if len(df_slice) < 65:
                 return None
-            from shared.data.trading_calendar import get_krx_trading_days
+            if not research_history:
+                from shared.data.trading_calendar import get_krx_trading_days
 
-            df_slice = df_slice.tail(85)
-            days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
+                df_slice = df_slice.tail(85)
+                days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
         frame = build_feature_frame(df_slice, days, _preprocessing)
         if uses_qlib:
             from shared.features.columns import FLOW_FEATURES
