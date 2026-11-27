@@ -29,6 +29,7 @@ def fetch_active_listing_intervals(market):
     frame = pd.DataFrame(response.json()["OutBlock_1"]).rename(columns={
         "ISU_SRT_CD": "Code", "ISU_ABBRV": "Name", "MKT_TP_NM": "Market",
         "LIST_DD": "ListingDate", "SECUGRP_NM": "SecurityGroup",
+        "ISU_CD": "Isin", "KIND_STKCERT_TP_NM": "ShareClass",
     })
     required = {"Code", "Name", "Market", "ListingDate", "SecurityGroup"}
     if required - set(frame):
@@ -40,7 +41,13 @@ def fetch_active_listing_intervals(market):
     frame["ListingDate"] = pd.to_datetime(frame.ListingDate, errors="coerce")
     if frame.empty or frame.Code.duplicated().any() or frame.ListingDate.isna().any():
         raise ValueError(f"{market}: invalid KRX individual-security listing metadata")
-    return frame[["Code", "Name", "Market", "ListingDate"]]
+    if "ShareClass" in frame:
+        share_class = frame.ShareClass.astype("string")
+        frame["ShareClass"] = share_class.map(
+            lambda value: "preferred" if isinstance(value, str) and "우선주" in value else
+            "common" if value == "보통주" else None, na_action="ignore",
+        )
+    return frame.reindex(columns=["Code", "Name", "Market", "ListingDate", "Isin", "ShareClass"])
 
 
 def load_metadata(collection, end):
@@ -48,19 +55,11 @@ def load_metadata(collection, end):
 
     parts = []
     for market in collection["markets"]:
-        active_source = f"{market}-DESC"
-        try:
-            frame = source.fdr.StockListing(f"{market}-DESC").copy()
-            if {"Code", "Name", "ListingDate"} - set(frame) or pd.to_datetime(
-                frame.ListingDate, errors="coerce"
-            ).isna().any():
-                raise ValueError("FDR listing dates incomplete; use KRX individual securities")
-        except Exception:
-            active_source = "KRX individual securities MDCSTAT01901"
-            frame = fetch_active_listing_intervals(market)
+        active_source = "KRX individual securities MDCSTAT01901"
+        frame = fetch_active_listing_intervals(market)
         required = {"Code", "Name", "ListingDate"}
         if required - set(frame):
-            raise ValueError(f"{market}-DESC lacks verified listing dates")
+            raise ValueError(f"{market}: KRX lacks verified listing dates")
         frame = frame.assign(
             Market=market, DelistingDate=pd.NaT, IsDelisted=False, Source=active_source
         )
@@ -71,8 +70,8 @@ def load_metadata(collection, end):
         parts.append(
             frame.rename(columns={"Symbol": "Code"}).assign(IsDelisted=True, Source="KRX-DELISTING")
         )
-    columns = ["Code", "Name", "Market", "ListingDate", "DelistingDate", "IsDelisted", "Source"]
-    metadata = pd.concat([part[columns] for part in parts], ignore_index=True)
+    columns = ["Code", "Name", "Market", "ListingDate", "DelistingDate", "IsDelisted", "Source", "Isin", "ShareClass"]
+    metadata = pd.concat([part.reindex(columns=columns) for part in parts], ignore_index=True)
     metadata["Code"] = metadata.Code.astype(str).str.zfill(6)
     if collection.get("tickers"):
         metadata = metadata.loc[
@@ -151,13 +150,9 @@ def fetch_current_universe(as_of, *, root, code=None):
 
 
 def fetch_security_listing(market):
-    from .providers import fdr
+    import FinanceDataReader as fdr
+
     return fdr.StockListing(market)
-
-
-def fetch_index_prices(symbol, start, end):
-    from .providers import fdr
-    return fdr.DataReader(symbol, start, end)
 
 
 def parse_managed_names(page):

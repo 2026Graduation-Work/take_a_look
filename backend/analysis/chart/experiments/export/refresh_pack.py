@@ -9,35 +9,44 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
+from experiments.dataset.pipeline import (
+    _require_current_training_prices,
+    build_segment_features,
+    eligible_training_prices,
+    verify_training_metadata,
+)
 from experiments.experiment_utils import resolve_splits
 from serving.internal.inference import infer_batch
 from serving.internal.pack import feature_cache_key, load_pack
 from shared.data.calendar import verify_calendar_schedule
 from shared.data.providers import _attach_actual_vwap
-from shared.data.validation import validate_prices
+from shared.data.resolution_snapshot import require_price_provenance
+from shared.data.validation import expected_sessions, validate_prices
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256_file
-from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS, processing_contract
+from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, processing_contract
 
 from .pack import build_pack
 
 
-def verify_inputs(dataset, names, feature_store=None):
+def verify_inputs(dataset, names, feature_store=None, operational=False):
     original = json.loads((dataset / "dataset_manifest.json").read_text())
     processed = json.loads((dataset / "processed_manifest.json").read_text())
     calendar = json.loads((dataset / "calendar.json").read_text())
     verify_calendar_schedule(calendar)
+    snapshot = _require_current_training_prices(original, dataset)
+    official_actions = snapshot.provenance
     if (original.get("contract_version") != 3 or not original.get("prices_complete")
-            or original.get("price_basis") != PRICE_BASIS
+            or require_price_provenance(processed) != official_actions
+            or processed.get("dataset_manifest_sha256") != sha256_file(dataset / "dataset_manifest.json")
             or processed["settings"] != PREPROCESSING
             or processed["raw_files"] != original["raw_files"]):
         raise ValueError("Preserved v3 dataset settings or raw provenance mismatch")
     contract = processing_contract()
     if processed.get("processing_contract") != contract:
         raise ValueError("Processed data processing contract mismatch")
-    metadata = pd.read_csv(dataset / "ticker_metadata.csv", dtype={"Code": str},
-                           parse_dates=["ListingDate", "DelistingDate"])
+    metadata = verify_training_metadata(dataset, snapshot, original["config"]["collection"], calendar)
     days = pd.to_datetime(calendar["trading_days"])
     checked_rows, unavailable_rows, range_rows = 0, 0, 0
     cases = []
@@ -47,34 +56,40 @@ def verify_inputs(dataset, names, feature_store=None):
     comparison = list(dict.fromkeys(["Open", "High", "Low", "Close", "Volume", "VWAP",
                                     "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount",
                                     "RegularSessionUnavailable", "Trading_Halt", "Log_Ret", "Sigma", *names]))
-    for index, (name, expected_hash) in enumerate(sorted(processed["files"].items()), 1):
+    for index, (name, raw_hash) in enumerate(sorted(original["raw_files"].items()), 1):
         source, expected_path = dataset / "raw" / name, dataset / "processed" / name
-        if sha256_file(source) != original["raw_files"][name] or sha256_file(expected_path) != expected_hash:
-            raise ValueError(f"Preserved raw/processed checksum mismatch: {name}")
-        raw = pd.read_parquet(source)
+        if sha256_file(source) != raw_hash:
+            raise ValueError(f"Preserved raw checksum mismatch: {name}")
+        intervals = metadata.loc[metadata.Code.eq(Path(name).stem)]
+        raw = validate_prices(pd.read_parquet(source), expected_sessions(intervals, calendar), event_adjusted=True)
+        eligible = eligible_training_prices(raw, intervals, snapshot)
+        if len(raw) - len(eligible) != processed["spac_excluded_rows"].get(name, 0):
+            raise ValueError(f"SPAC exclusion differs from pinned inputs: {name}")
+        if operational and (raw.SegmentId.nunique() != 1 or len(eligible) != len(raw)):
+            raise ValueError(f"Segmented training prices differ from serving price parity: {name}")
+        if eligible.empty:
+            if name in processed["files"]:
+                raise ValueError(f"SPAC policy retained an excluded processed file: {name}")
+            continue
+        if name not in processed["files"] or sha256_file(expected_path) != processed["files"][name]:
+            raise ValueError(f"Preserved processed checksum mismatch: {name}")
         expected = pd.read_parquet(expected_path)
+        if operational:
+            indexed = raw.set_index("Date")
+            fields = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]
+            parity = _attach_actual_vwap(indexed, indexed[fields])
+            frame_cols = ["Open", "High", "Low", "Close", "Volume", "VWAP"]
+            if not np.allclose(parity[frame_cols], indexed[frame_cols], rtol=1e-8, atol=1e-10, equal_nan=True):
+                raise ValueError(f"Official-adjusted prices differ from serving price parity: {name}")
         if feature_store is not None:
-            trained = pd.read_parquet(feature_store / name, columns=["Date", *names])
-            if (not pd.to_datetime(trained.Date).equals(pd.to_datetime(expected.Date))
+            trained = pd.read_parquet(feature_store / name, columns=["Date", "SegmentId", *names])
+            if (not trained.SegmentId.equals(expected.SegmentId)
+                    or not pd.to_datetime(trained.Date).equals(pd.to_datetime(expected.Date))
                     or not np.allclose(trained[base_names].to_numpy(dtype=float), expected[base_names].to_numpy(dtype=float), rtol=1e-8, atol=1e-10, equal_nan=True)):
                 raise ValueError(f"Model training store/v3 processed input mismatch: {name}")
-        indexed = raw.set_index("Date")
-        fields = [f"Raw{c}" for c in ("Open", "High", "Low", "Close", "Volume")] + ["Amount"]
-        attached = _attach_actual_vwap(indexed, indexed[fields]).reset_index()
-        pieces = []
-        for interval in metadata.loc[metadata.Code.eq(Path(name).stem)].itertuples():
-            active = pd.to_datetime(attached.Date).ge(interval.ListingDate)
-            if pd.notna(interval.DelistingDate):
-                active &= pd.to_datetime(attached.Date).lt(interval.DelistingDate)
-            subset = attached.loc[active].copy()
-            if subset.empty:
-                continue
-            active_days = days[(days >= subset.Date.min()) & (days <= subset.Date.max())]
-            subset = validate_prices(subset, pd.DatetimeIndex(active_days))
-            pieces.append(build_feature_frame(subset, days, PREPROCESSING))
-        rebuilt = pd.concat(pieces, ignore_index=True)
-        if not pd.to_datetime(rebuilt.Date).equals(pd.to_datetime(expected.Date)):
-            raise ValueError(f"Shared/v3 session or listing interval mismatch: {name}")
+        rebuilt = build_segment_features(eligible, days, PREPROCESSING)
+        if not rebuilt[["Date", "SegmentId"]].equals(expected[["Date", "SegmentId"]]):
+            raise ValueError(f"Shared/v3 session or training segment mismatch: {name}")
         base_comparison = [name for name in comparison if name not in FLOW_FEATURES]
         if not np.allclose(rebuilt[base_comparison].to_numpy(dtype=float), expected[base_comparison].to_numpy(dtype=float),
                            rtol=1e-8, atol=1e-10, equal_nan=True):
@@ -86,7 +101,7 @@ def verify_inputs(dataset, names, feature_store=None):
             ):
                 raise ValueError(f"Shared/training flow feature mismatch: {name}")
             flow_missing_rows += int(rebuilt[flow_names].isna().any(axis=1).sum())
-        checked_rows += len(raw)
+        checked_rows += len(rebuilt)
         unavailable_rows += int(expected.RegularSessionUnavailable.sum())
         range_rows += int(expected.VWAPOutsideDailyRange.sum())
         if Path(name).stem in {"005930", "000040", "001527", "015540", "016380", "016385", "047810", "145210"}:
@@ -111,6 +126,7 @@ def verify_runs(result_dirs, *, with_flows=False):
     for horizon, result in result_dirs.items():
         manifest_path = result / "run_manifest.json"
         manifest = json.loads(manifest_path.read_text())
+        official_actions = require_price_provenance(manifest)
         cfg = manifest["config"]
         if (cfg.get("contract_version") != 3 or cfg["features"]["groups"] != groups
                 or cfg["labels"]["horizon"] != horizon or manifest["feature_columns"] != names
@@ -146,7 +162,7 @@ def verify_runs(result_dirs, *, with_flows=False):
         store = (CHART_ROOT / Path(cfg["features"]["materialized_dir"])).resolve()
         feature_manifest_path = store / "feature_manifest.json"
         feature_manifest = json.loads(feature_manifest_path.read_text())
-        if feature_manifest["feature_columns"] != names:
+        if require_price_provenance(feature_manifest) != official_actions or feature_manifest["feature_columns"] != names:
             raise ValueError("Training feature store order differs from the models")
         for name, digest in feature_manifest["file_hashes"].items():
             if sha256_file(store / name) != digest:
@@ -159,7 +175,7 @@ def verify_runs(result_dirs, *, with_flows=False):
             "feature_manifest_sha256": sha256_file(feature_manifest_path), "training_feature_store": str(store), "fold": last,
             "oos_period": {"start": prediction.Date.min().date().isoformat(), "end": "2026-10-06"},
             "labels": cfg["labels"], "prediction_rows": len(prediction),
-            "feature_groups": groups, "feature_columns": names}
+            "feature_groups": groups, "feature_columns": names, "official_actions": official_actions}
         configs.append(cfg)
     if configs[0]["dataset"] != configs[1]["dataset"]:
         raise ValueError("H5/H20 datasets disagree")
@@ -179,8 +195,15 @@ def main(argv=None):
     stores = {source["training_feature_store"] for source in sources.values()}
     if len(stores) != 1:
         raise ValueError("H5/H20 training feature stores disagree")
-    evidence = verify_inputs(dataset, sources["h5"]["feature_columns"], Path(next(iter(stores))))
+    feature_store = Path(next(iter(stores)))
+    evidence = verify_inputs(dataset, sources["h5"]["feature_columns"], feature_store, args.activate)
+    price_manifest = json.loads((dataset / "dataset_manifest.json").read_text())
+    official_actions = require_price_provenance(price_manifest)
+    if any(source["official_actions"] != official_actions for source in sources.values()):
+        raise ValueError("Model runs and export inputs use different official snapshots")
     info = {"feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
+            "price_policy": price_manifest["price_policy"], "official_actions": official_actions,
+            "processed_manifest_sha256": evidence["processed_manifest_sha256"],
             "training_period": {"start": "2023-01-01", "end": "2025-12-31"},
             "data_period": {"start": "2016-01-04", "end": "2026-10-06", "partial_years": [2026]},
             "validation_status": "all_preserved_v3_price_feature_hashes_and_local_inference_passed",
@@ -197,9 +220,12 @@ def main(argv=None):
         predictions=predictions, processed_dir=dataset / "processed",
         calendar_file=dataset / "calendar.json", research_manifest=info)
     pack, paths, golden_sha256 = load_pack(root)
-    raw = pd.read_parquet(dataset / "raw/005930.parquet")
-    days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
-    features = build_feature_frame(raw, set(days.date)).tail(1)
+    if args.activate:
+        raw = pd.read_parquet(dataset / "raw/005930.parquet")
+        days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
+        features = build_feature_frame(raw, set(days.date)).tail(1)
+    else:
+        features = pd.read_parquet(feature_store / "005930.parquet").sort_values("Date").tail(1)
     if args.with_flows and features[list(FLOW_FEATURES)].isna().any(axis=None):
         raise ValueError("Flow-model activation requires a complete operational preview input")
     scores = {str(h): infer_batch(paths[h][0], features)[0][0] for h in (5, 20)}

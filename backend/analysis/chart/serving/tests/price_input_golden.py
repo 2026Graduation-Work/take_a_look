@@ -119,8 +119,8 @@ def run(case, data_dir):
         patch.setattr(krx, "install_request_timeout", lambda: None)
         patch.setattr(providers, "krx", response(raw, expect_adjusted=False))
         patch.setattr(providers, "_krx_request_timeout", nullcontext)
-        patch.setattr(providers, "_fetch_ohlcv_fdr", no_fallback)
-        patch.setattr(providers, "_fetch_ohlcv_pykrx", no_fallback)
+        patch.setattr(prices, "_fetch_ohlcv_fdr", no_fallback)
+        patch.setattr(prices, "_fetch_ohlcv_pykrx", no_fallback)
         patch.setattr(providers, "time", SimpleNamespace(sleep=lambda _: None))
         # Importing real pykrx can start authentication before the first price request.
         patch.setitem(sys.modules, "pykrx.website.krx.market.wrap", response(case["adjusted"], expect_adjusted=True))

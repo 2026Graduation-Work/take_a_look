@@ -27,6 +27,8 @@ from experiments.features.psychology.demo_panel import (  # noqa: E402
     DEMO_SEED,
     build_demo_price_panel,
 )
+from shared.data.resolution_snapshot import PRICE_POLICY, price_store_manifest  # noqa: E402
+from shared.data.segmented_prices import validate_segments  # noqa: E402
 
 DEFAULT_OUTPUT = "data/external/psychology_market_v1.parquet"
 
@@ -46,6 +48,10 @@ def _read_price_frame(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
+def _segmented_store(folder):
+    return price_store_manifest(folder).get("price_policy") == PRICE_POLICY
+
+
 def load_price_panel(
     *,
     price_dir: Path | None = None,
@@ -63,23 +69,27 @@ def load_price_panel(
             "warning": "합성 데이터입니다. 연구 결과로 보고하지 마세요.",
         }
     if price_file is not None:
-        return _read_price_frame(price_file), {"kind": "file", "path": str(price_file)}
+        frame = _read_price_frame(price_file)
+        validate_segments(frame, required=_segmented_store(price_file.parent))
+        return frame, {"kind": "file", "path": str(price_file)}
     if price_dir is None:
         raise PsychologyInputError("--price-dir, --price-file, --demo 중 하나가 필요합니다.")
-    files = sorted(price_dir.glob("*.parquet"))
+    files = sorted(path for path in price_dir.glob("*.parquet") if path.name != "sample_keys.parquet")
     if not files:
         raise PsychologyInputError(f"가격 Parquet이 없습니다: {price_dir}")
     frames = []
+    segmented = _segmented_store(price_dir)
     for file in files:
         frame = _read_price_frame(file)
         if "Code" not in frame.columns:
             frame = frame.assign(Code=file.stem)
+        validate_segments(frame, required=segmented)
         frames.append(frame[[column for column in frame.columns if column in _WANTED_COLUMNS]])
     panel = pd.concat(frames, ignore_index=True)
     return panel, {"kind": "directory", "path": str(price_dir), "files": len(files)}
 
 
-_WANTED_COLUMNS = {"Date", "Code", "Close", "Volume"}
+_WANTED_COLUMNS = {"Date", "Code", "Close", "Volume", "SegmentId"}
 
 
 def _filter_panel(
@@ -188,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         codes = args.codes.split(",") if args.codes else None
         panel = _filter_panel(panel, codes=codes, start=args.start, end=args.end)
         features, metadata = build_psychology_features(panel, config)
-    except (PsychologyInputError, FileNotFoundError) as error:
+    except (ValueError, FileNotFoundError) as error:
         parser.exit(2, f"심리 피처 생성 오류: {error}\n")
 
     metadata["source"] = source_info

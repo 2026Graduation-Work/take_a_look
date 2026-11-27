@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-from experiments.dataset.pipeline import flow_coverage, supplement_raw_ohlc, validate_prices
+from experiments.dataset.pipeline import flow_coverage
 from experiments.features.flow import build_flow_features
 from shared.data import providers as source
+from shared.data.prices import supplement_raw_ohlc
+from shared.data.validation import validate_prices
 from shared.features.builder import normalize_trading_halts
 
 CAPTURE = json.loads((Path(__file__).parent / "fixtures/provider_failures.json").read_text())
@@ -21,7 +23,6 @@ def test_actual_turnover_without_regular_session_bar_is_preserved_and_excluded(c
     adjusted = pd.DataFrame({"Close": raw["종가"] / 2, "Volume": raw["거래량"]})
     attached = source._attach_actual_vwap(adjusted, raw).rename_axis("Date").reset_index()
     verified = validate_prices(attached, days)
-    assert source._has_complete_actual_vwap(verified)
     assert verified.RegularSessionUnavailable.all()
     assert not verified.Trading_Halt.any()  # No inference of an official suspension.
     assert verified.RawVolume.iloc[0] == case["raw"]["거래량"]
@@ -145,6 +146,8 @@ def test_full_history_is_one_request_and_old_chunks_are_reused(tmp_path):
 
 
 def test_missing_ranking_investor_is_retained_and_windows_excluded(tmp_path):
+    from shared.io import sha256
+
     case = CAPTURE["flow_case"]
     assert not case["present_in_ranking"] and case["detail_buy_volume"] == 0
     days = pd.bdate_range(case["date"], periods=25)
@@ -158,7 +161,7 @@ def test_missing_ranking_investor_is_retained_and_windows_excluded(tmp_path):
     for window in (1, 5, 20):
         assert flow[f"flow_institution_{window}"].iloc[:window].isna().all()
         assert flow[f"flow_institution_{window}"].iloc[window] == 0
-    report = flow_coverage(tmp_path, source._INVESTORS, source._FLOW_COLUMNS, days)
+    report = flow_coverage(tmp_path, source._INVESTORS, source._FLOW_COLUMNS, days, price_files={"101930.parquet": sha256(tmp_path / "raw/101930.parquet")})
     institution = next(row for row in report if row["investor"] == "Institution")
     assert institution["not_returned_rows"] == institution["missing_traded_rows"] == 1
     assert institution["amount_window_coverage"]["20"]["excluded_rows"] == 20

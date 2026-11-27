@@ -9,23 +9,25 @@ from serving import pack as pack_cli
 from serving.internal import pack as serving_pack
 from serving.internal.pack import load_pack
 from serving.internal.storage import _pack_releases
+from shared.data.calendar import scheduled_sessions
 from shared.features.columns import BASE_FEATURES
 from shared.io import atomic_json, sha256_file
 from shared.processing import QLIB_PREPROCESSING
 from shared.processing import processing_contract as research_contract
-from shared.settings import BUILDER_ID, processing_contract
+from shared.settings import BUILDER_ID, TRAINING_PRICE_BASIS, processing_contract
+from shared.tests.official_fixtures import price_provenance
 
 
 @pytest.fixture
 def pack_inputs(tmp_path):
     contract = processing_contract()
-    days = pd.bdate_range("2019-01-02", periods=25)
+    days = scheduled_sessions(pd.Timestamp("2019-01-02"), pd.Timestamp("2019-03-01"))[:25]
     calendar = tmp_path / "calendar.json"
     atomic_json(calendar, {"trading_days": days.astype(str).tolist()})
     processed = tmp_path / "processed"
     processed.mkdir()
     pd.DataFrame({"Date": days, "Close": 100. + np.arange(len(days)),
-                  "Trading_Halt": 0, "Sigma": .02}).to_parquet(processed / "005930.parquet")
+                  "Trading_Halt": 0, "Sigma": .02, "SegmentId": "fixture"}).to_parquet(processed / "005930.parquet")
 
     features = pd.DataFrame(np.tile(np.arange(15.)[:, None], (1, len(BASE_FEATURES))), columns=BASE_FEATURES)
     model = lgb.train({"objective": "multiclass", "num_class": 3, "num_threads": 1,
@@ -39,8 +41,17 @@ def pack_inputs(tmp_path):
         pd.DataFrame({"Date": days[:1], "Code": "005930", "fold_id": 0,
                       "prob_up": .4}).to_parquet(predictions[horizon])
 
+    proof = price_provenance(tmp_path, ["005930"], days)
+    dataset_manifest = tmp_path / "dataset_manifest.json"
+    processed_manifest = tmp_path / "processed_manifest.json"
+    files = {"005930.parquet": sha256_file(processed / "005930.parquet")}
+    atomic_json(dataset_manifest, {**proof, "price_basis": TRAINING_PRICE_BASIS,
+                                  "prices_complete": True, "raw_files": files})
+    atomic_json(processed_manifest, {**proof, "files": files, "raw_files": files, "spac_excluded_rows": {},
+                                    "dataset_manifest_sha256": sha256_file(dataset_manifest)})
     period = {"start": "2019-01-02", "end": "2019-01-31"}
-    provenance = {"feature_builder_id": BUILDER_ID, "processing_contract": contract,
+    provenance = {**proof, "processed_manifest_sha256": sha256_file(processed_manifest),
+                  "feature_builder_id": BUILDER_ID, "processing_contract": contract,
                   "models": {f"h{h}": {"labels": {"up_mult": 1.5, "down_mult": 1.2}} for h in models},
                   "known_issues": [], "validation_status": "synthetic_test",
                   "training_period": period, "data_period": period}

@@ -2,7 +2,10 @@
 import numpy as np
 import pandas as pd
 
-from shared.settings import PRICE_BASIS
+from shared.settings import PRICE_BASIS, TRAINING_PRICE_BASIS
+
+KRX_RAW_COLUMNS = ["Date", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
+                   "RawVolume", "Amount", "ListedShares"]
 
 
 def validate_index(frame, start, end):
@@ -28,7 +31,7 @@ def expected_sessions(intervals, calendar):
         expected = expected.union(days[active])
     return expected.sort_values()
 
-def validate_prices(frame, expected):
+def _validate_price_dates(frame, expected):
     if "Date" not in frame:
         raise ValueError("Missing Date")
     frame = frame.copy()
@@ -38,6 +41,30 @@ def validate_prices(frame, expected):
     ):
         missing = expected.difference(pd.DatetimeIndex(frame.Date))
         raise ValueError(f"Price coverage mismatch; missing {missing[:5].tolist()}")
+    return frame.sort_values("Date").reset_index(drop=True)
+
+
+def validate_krx_raw(frame, expected):
+    if frame.empty or set(KRX_RAW_COLUMNS) - set(frame):
+        raise ValueError("Missing KRX raw price fields")
+    raw = _validate_price_dates(frame[KRX_RAW_COLUMNS], expected)
+    values = raw[KRX_RAW_COLUMNS[1:]].apply(pd.to_numeric, errors="raise")
+    array = values.to_numpy(dtype=float, na_value=np.nan)
+    if not np.isfinite(array).all() or (array != np.trunc(array)).any():
+        raise ValueError("KRX raw values must be finite integers")
+    values = values.astype("int64")
+    if (values.drop(columns="RawChange").lt(0).any().any()
+            or values[["RawClose", "ListedShares"]].le(0).any().any()
+            or values.RawClose.le(values.RawChange).any()):
+        raise ValueError("Invalid KRX raw price, base price or listed shares")
+    if values.RawVolume.gt(0).ne(values.Amount.gt(0)).any():
+        raise ValueError("KRX raw volume and amount disagree")
+    raw[values.columns] = values
+    return raw
+
+
+def validate_prices(frame, expected, *, event_adjusted=False):
+    frame = _validate_price_dates(frame, expected)
     required = [
         "Open",
         "High",
@@ -60,7 +87,10 @@ def validate_prices(frame, expected):
     ):
         raise ValueError("Invalid volume/amount")
     traded = frame.Volume.gt(0)
-    if not np.array_equal(frame.Volume.to_numpy(), frame.RawVolume.to_numpy()):
+    if event_adjusted:
+        if not traded.equals(frame.RawVolume.gt(0)):
+            raise ValueError("Adjusted volume changed whether the stock traded")
+    elif not np.array_equal(frame.Volume.to_numpy(), frame.RawVolume.to_numpy()):
         raise ValueError("Volume disagrees with KRX RawVolume")
     unavailable = frame[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)
     regular = traded & ~unavailable
@@ -90,7 +120,7 @@ def validate_prices(frame, expected):
     frame["RegularSessionUnavailable"] = unavailable
     frame["VWAPOutsideDailyRange"] = regular & ((frame.VWAP < frame.Low) | (frame.VWAP > frame.High))
     frame["VWAPScope"] = "KRX_amount_volume_scope_unverified"
-    frame["PriceBasis"] = PRICE_BASIS
+    frame["PriceBasis"] = TRAINING_PRICE_BASIS if event_adjusted else PRICE_BASIS
     halt = ~traded
     if (frame.loc[halt, ["RawVolume", "Amount"]] != 0).any().any():
         raise ValueError("Zero-volume row has inconsistent source amount")

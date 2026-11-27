@@ -7,13 +7,18 @@ import pandas as pd
 import pytest
 import yaml
 from experiments.config import load_experiment_config
-from experiments.dataset.pipeline import preprocess_dataset
+from experiments.dataset.pipeline import preprocess_dataset, training_metadata
 from experiments.features.local_panel import prepare_local_panel
 from experiments.run_inference import init_worker, parse_args, process_ticker, resolve_model_path
 from shared.data import trading_calendar
+from shared.data.market_notices import SecurityKey
+from shared.data.market_resolutions import Resolution
+from shared.data.resolution_snapshot import PRICE_POLICY, read_resolution_snapshot, segment_id
 from shared.features.columns import BASE_FEATURES
 from shared.io import atomic_json, atomic_parquet, sha256
 from shared.processing import QLIB_PREPROCESSING, build_feature_frame, processing_contract
+from shared.settings import TRAINING_PRICE_BASIS
+from shared.tests.official_fixtures import fake_isin, fixture_snapshot
 from test_local_pipeline_contract import local_dataset as local_dataset
 
 
@@ -148,6 +153,7 @@ def test_worker_predicts_with_qlib_contract_or_explicit_legacy_defaults(
     with pytest.raises(ValueError, match="Missing model manifest"):
         init_worker(model_path)
     init_worker(model_path, legacy_without_manifest=True)
+    atomic_parquet(path, raw.drop(columns="SegmentId"))
     legacy_result = process_ticker(path, str(target.date()), 0.5)
     tail = history.tail(85)
     legacy_features = build_feature_frame(tail, tail.Date)
@@ -157,39 +163,56 @@ def test_worker_predicts_with_qlib_contract_or_explicit_legacy_defaults(
     assert dates_requested == [(tail.Date.iloc[0], target)]
 
 
-@pytest.mark.parametrize("relisted", [False, True])
+@pytest.mark.parametrize("history", ["first_listing", "relisted", "segment_break"])
 def test_qlib_inference_matches_training_panel_after_60_rows(
-    local_dataset, research_model, tmp_path, monkeypatch, relisted,
+    local_dataset, research_model, tmp_path, monkeypatch, history,
 ):
     raw, config, _, experiment_path = local_dataset
     model_path, model, _, _ = research_model
     root = tmp_path / "qlib"
     days = raw.Date
-    start = 100 if relisted else 0
-    current = raw.iloc[start : start + 61]
-    intervals = [("005930", days.iloc[start], pd.NaT)]
-    if relisted:
-        current = pd.concat([raw.iloc[:70], current], ignore_index=True)
-        intervals.insert(0, ("005930", days.iloc[0], days.iloc[70]))
+    start = 0 if history == "first_listing" else 100
+    sessions = pd.DatetimeIndex(days.iloc[: start + 61])
+    code = "005930"
+    isin = fake_isin(code)
+    first, boundary = sessions[0].date().isoformat(), sessions[start].date().isoformat()
+    active = SecurityKey(code, isin, first, None, "KOSPI", "common")
+    keys, events = [active], []
+    current = raw.iloc[: len(sessions)].copy()
+    if history == "relisted":
+        prior = SecurityKey(code, isin, first, sessions[70].date().isoformat(), "KOSPI", "common")
+        active = SecurityKey(code, isin, boundary, None, "KOSPI", "common")
+        keys = [prior, active]
+        current = pd.concat([current.iloc[:70], current.iloc[start:]], ignore_index=True)
+    elif history == "segment_break":
+        events = [(boundary, Resolution.SEGMENT_BREAK, None, None)]
+    current.loc[current.Date.ge(sessions[start]), "SegmentId"] = segment_id(active, boundary)
     path = root / "raw/005930.parquet"
     atomic_parquet(path, current)
-    atomic_json(root / "calendar.json", {
-        "validation_version": 3,
-        "trading_days": days.iloc[: start + 61].dt.strftime("%Y-%m-%d").tolist(),
-    })
+    calendar = {"validation_version": 3, "trading_days": sessions.strftime("%Y-%m-%d").tolist()}
+    atomic_json(root / "calendar.json", calendar)
+    snapshot = read_resolution_snapshot(fixture_snapshot(root, [code], sessions, keys=keys, events=events))
     atomic_json(root / "dataset_manifest.json", {
+        "price_basis": TRAINING_PRICE_BASIS,
         "prices_complete": True,
         "raw_files": {path.name: sha256(path)},
+        "price_policy": PRICE_POLICY,
+        "official_actions": snapshot.provenance,
     })
-    pd.DataFrame(intervals, columns=["Code", "ListingDate", "DelistingDate"]).to_csv(
-        root / "ticker_metadata.csv", index=False,
-    )
+    config["collection"]["end_date"] = sessions[-1].date().isoformat()
+    training_metadata(snapshot, config["collection"], calendar).to_csv(root / "ticker_metadata.csv", index=False)
     dataset_path = tmp_path / "qlib.yaml"
     dataset_path.write_text(yaml.safe_dump({
         **config, "root": str(root), "dataset_id": "qlib", "preprocessing": "qlib_alpha158",
     }))
     experiment = yaml.safe_load(experiment_path.read_text())
     experiment["dataset"] = str(dataset_path)
+    end = sessions[-1].date().isoformat()
+    experiment["data"].update(
+        end_date=end,
+        splits=[{"fold_id": 0, "train_start": first, "train_end": "2023-01-13",
+                 "test_start": "2023-02-01", "test_end": end}],
+    )
     experiment["features"] = {"groups": [], "include": model.feature_name()}
     experiment_path.write_text(yaml.safe_dump(experiment))
     preprocess_dataset(dataset_path)
@@ -206,7 +229,7 @@ def test_qlib_inference_matches_training_panel_after_60_rows(
     assert not panel.SampleEligible.iloc[-2]
     assert panel.SampleEligible.iloc[-1]
     assert process_ticker(path, str(days.iloc[start + 59].date()), 0.5) is None
-    result = process_ticker(path, target if relisted else None, 0.5)
+    result = process_ticker(path, target if history == "relisted" else None, 0.5)
     expected = model.predict(panel[model.feature_name()].tail(1), num_threads=1)[0, 2]
     assert result["Date"] == target
     assert result["Model_Score"] == pytest.approx(expected)
