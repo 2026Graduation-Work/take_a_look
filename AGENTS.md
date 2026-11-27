@@ -35,7 +35,7 @@
 
 | 변경 대상 | 먼저 볼 곳 |
 |---|---|
-| 화면·문구·브랜드 | [화면 규칙](frontend/DESIGN.md) · [브랜드 텍스트](frontend/lib/brand.ts) · [로고](docs/brand/README.md) |
+| 화면·문구·브랜드 | [화면 규칙](frontend/DESIGN.md) · [UX 라이팅](frontend/UX_WRITING.md) · [브랜드 텍스트](frontend/lib/brand.ts) · [로고](docs/brand/README.md) |
 | 설문·점수 | [프로파일링](backend/profiling/README.md) · [문항](frontend/lib/profiling/style-questions.json) · [채점](frontend/lib/profiling/style-scoring.ts) · [골든 케이스](frontend/lib/profiling/style-golden-cases.json) |
 | 차트 서빙·종목 위험 태그 | [서빙 운영](backend/analysis/chart/serving/OPERATIONS.md) · [종목 마스터 규칙](docs/stock-master-rules.md) |
 | 뉴스·재무·가치투자 출력 | [텍스트 블록](backend/analysis/text/README.md) · [가치투자 출력 검증](backend/analysis/text/VALUE_PIPELINE_VALIDATION.md). 데이터셋에 넣기 전에 검증 절차를 읽는다. |
