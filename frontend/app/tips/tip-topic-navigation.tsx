@@ -14,7 +14,7 @@ export default function TipTopicNavigation({ topicsById }: { topicsById: Readonl
   const topics = Object.keys(TIP_TOPICS) as TipTopic[];
 
   return (
-    <nav aria-label="투자 팁 주제" className="min-w-0 lg:col-start-1 lg:row-start-1">
+    <nav aria-label="알고 계셨나요? 주제" className="min-w-0 lg:col-start-1 lg:row-start-1">
       <form
         action="/tips"
         className="flex items-end gap-2 lg:hidden"

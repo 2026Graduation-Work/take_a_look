@@ -4,7 +4,7 @@ import { BEGINNER_TIPS } from "@/lib/beginner-tips";
 import { TIP_PAGE_SIZE, TIP_TOPICS, tipHref, tipPage, tipPageCount, tipReturnPath, tipTopic, type TipTopic } from "@/lib/tip-navigation";
 import TipList from "./tip-list";
 
-export const metadata: Metadata = { title: "투자 팁" };
+export const metadata: Metadata = { title: "알고 계셨나요?" };
 
 export default async function TipsPage({ searchParams }: PageProps<"/tips">) {
   const query = await searchParams;
@@ -23,7 +23,7 @@ export default async function TipsPage({ searchParams }: PageProps<"/tips">) {
 
   return (
     <div className="page-narrow flex flex-col gap-6">
-      <h1 className="m-0 text-3xl font-semibold">{topic === "all" ? "투자 팁" : TIP_TOPICS[topic]}</h1>
+      <h1 className="m-0 text-3xl font-semibold">{topic === "all" ? "알고 계셨나요?" : TIP_TOPICS[topic]}</h1>
       {visibleTips.length ? <TipList tips={visibleTips} /> : <p className="m-0 text-sm text-body">이 주제에 팁이 없어요.</p>}
       {pageCount > 1 && <TipPagination page={page} pageCount={pageCount} topic={topic} returnTo={returnTo} />}
       {returnTo && (
@@ -72,7 +72,7 @@ function TipPagination({ page, pageCount, topic, returnTo }: {
   );
 
   return (
-    <nav aria-label="투자 팁 페이지" className="tabular-nums">
+    <nav aria-label="알고 계셨나요? 페이지" className="tabular-nums">
       <div className="hidden items-center justify-center gap-1 sm:flex">
         {previous}
         {numbers}

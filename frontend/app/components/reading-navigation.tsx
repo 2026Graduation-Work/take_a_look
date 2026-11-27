@@ -27,7 +27,7 @@ function ReadingLinks({ current, returnTo }: { current: ReadingSection; returnTo
     <ul className="page my-0 flex list-none gap-6">
       {([
         ["guide", "/guide", "이용 안내"],
-        ["tips", "/tips", "투자 팁"],
+        ["tips", "/tips", "알고 계셨나요?"],
         ["glossary", "/glossary", "용어 모음"],
       ] as const).map(([key, href, label]) => (
         <li key={key}>

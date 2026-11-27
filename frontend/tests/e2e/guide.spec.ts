@@ -13,7 +13,7 @@ test("이용 안내와 용어 모음은 별도 메뉴로 열리고 용어는 가
   const toc = page.getByRole("navigation", { name: "목차" });
   await expect(toc.getByRole("link")).toHaveCount(5);
   await expect(toc.getByRole("link", { name: /알고 계셨나요/ })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "투자 팁", exact: true })).toHaveAttribute("href", /\/tips/);
+  await expect(page.getByRole("link", { name: "알고 계셨나요?", exact: true })).toHaveAttribute("href", /\/tips/);
   await expect(toc.getByRole("link", { name: /용어 모음/ })).toHaveCount(0);
   await expect(page.locator("#terms")).toHaveCount(0);
   await expect(page.locator("#notes")).toContainText("투자 판단과 책임은 투자자 본인에게 있어요.");
@@ -22,7 +22,7 @@ test("이용 안내와 용어 모음은 별도 메뉴로 열리고 용어는 가
   await expect(page.getByRole("heading", { level: 1, name: "용어 모음" })).toBeVisible();
   const labels = Object.values(TERM_INFO).map(({ label }) => label).sort((a, b) => a.localeCompare(b, "ko"));
   await expect(page.locator("main dt")).toHaveText(labels);
-  await expect(page.getByRole("navigation", { name: "안내 메뉴" }).getByRole("link")).toHaveText(["이용 안내", "투자 팁", "용어 모음"]);
+  await expect(page.getByRole("navigation", { name: "안내 메뉴" }).getByRole("link")).toHaveText(["이용 안내", "알고 계셨나요?", "용어 모음"]);
   await page.reload();
   await expect(page).toHaveURL(/\/glossary$/);
   await expect(page.locator("main dt")).toHaveText(labels);

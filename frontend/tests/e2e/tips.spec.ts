@@ -8,11 +8,11 @@ const habit = BEGINNER_TIPS.find(tip => tip.category === "투자 습관")!;
 test("데스크톱은 상세에서도 같은 주제 바를 유지하고 목록 필터를 복원한다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto("/tips?category=habits");
-  const navigation = page.getByRole("navigation", { name: "투자 팁 주제" });
+  const navigation = page.getByRole("navigation", { name: "알고 계셨나요? 주제" });
   await expect(navigation).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("투자 습관");
   const navBox = await navigation.boundingBox();
-  const listBox = await page.getByRole("list", { name: "투자 팁 목록", exact: true }).boundingBox();
+  const listBox = await page.getByRole("list", { name: "알고 계셨나요? 목록", exact: true }).boundingBox();
   expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(listBox!.x);
   await expect(page.getByText(/개 중 .*번부터/)).toHaveCount(0);
   await page.getByRole("link", { name: habit.title, exact: true }).click();
@@ -22,7 +22,7 @@ test("데스크톱은 상세에서도 같은 주제 바를 유지하고 목록 �
   const detailNavBox = await navigation.boundingBox();
   const articleBox = await page.getByRole("article").boundingBox();
   expect(detailNavBox!.x + detailNavBox!.width).toBeLessThanOrEqual(articleBox!.x);
-  await page.getByRole("link", { name: "투자 팁 목록", exact: true }).click();
+  await page.getByRole("link", { name: "알고 계셨나요? 목록", exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === "/tips" && url.searchParams.get("category") === "habits");
   await expect(page.getByRole("link", { name: habit.title, exact: true })).toBeVisible();
 });
@@ -34,7 +34,7 @@ test("전체 목록에서 읽은 팁은 전체 선택을 유지하며 직접 주
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(first.title);
   await expect(page.getByRole("link", { name: "원래 화면으로 돌아가기", exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "투자 팁 목록", exact: true }).click();
+  await page.getByRole("link", { name: "알고 계셨나요? 목록", exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === "/tips" && [null, "all"].includes(url.searchParams.get("category")));
 });
 
@@ -117,7 +117,7 @@ test("안내 탭을 거쳐 팁을 읽어도 처음 보던 종목 화면과 선�
   const menus = page.getByRole("navigation", { name: "안내 메뉴" });
   await menus.getByRole("link", { name: "용어 모음", exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === "/glossary" && url.searchParams.get("returnTo") === "/stocks/005930?tab=company");
-  await menus.getByRole("link", { name: "투자 팁", exact: true }).click();
+  await menus.getByRole("link", { name: "알고 계셨나요?", exact: true }).click();
   await page.getByRole("link", { name: first.title, exact: true }).click();
   const back = page.getByRole("link", { name: "원래 화면으로 돌아가기", exact: true });
   await expect(back).toHaveAttribute("href", "/stocks/005930?tab=company");
@@ -136,7 +136,7 @@ test("안내 링크를 새 탭으로 열어도 원래 화면의 위치 주소를
   await expect.poll(async () => new URL((await entry.getAttribute("href"))!, "http://localhost").searchParams.get("returnTo")).toBe("/profile#account");
   const other = await context.newPage();
   await other.goto((await entry.getAttribute("href"))!);
-  await other.getByRole("navigation", { name: "안내 메뉴" }).getByRole("link", { name: "투자 팁", exact: true }).click();
+  await other.getByRole("navigation", { name: "안내 메뉴" }).getByRole("link", { name: "알고 계셨나요?", exact: true }).click();
   await other.getByRole("link", { name: first.title, exact: true }).click();
   await expect(other.getByRole("link", { name: "원래 화면으로 돌아가기", exact: true })).toHaveAttribute("href", "/profile#account");
   await other.close();
@@ -152,11 +152,11 @@ test("존재하지 않는 팁은 다른 팁으로 대체하지 않는다", async
 test("번호로 다음 페이지를 읽고 돌아와도 같은 페이지와 팁 위치를 복원한다", async ({ page, context }) => {
   await page.goto("/tips?returnTo=%2Fportfolio");
   const readTip = BEGINNER_TIPS[11];
-  const list = page.getByRole("list", { name: "투자 팁 목록", exact: true });
+  const list = page.getByRole("list", { name: "알고 계셨나요? 목록", exact: true });
   await expect(list.getByRole("link")).toHaveCount(6);
   await expect(page.getByRole("button", { name: /더 보기/ })).toHaveCount(0);
   await expect(page.getByRole("link", { name: readTip.title, exact: true })).toHaveCount(0);
-  const pager = page.getByRole("navigation", { name: "투자 팁 페이지", exact: true });
+  const pager = page.getByRole("navigation", { name: "알고 계셨나요? 페이지", exact: true });
   await pager.getByRole("link", { name: "2페이지", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(url => url.pathname === "/tips" && url.searchParams.get("page") === "2" && url.searchParams.get("returnTo") === "/portfolio");
@@ -165,7 +165,7 @@ test("번호로 다음 페이지를 읽고 돌아와도 같은 페이지와 팁 
   await expect(nextTip).toBeVisible();
   await nextTip.click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(readTip.title);
-  await page.getByRole("link", { name: "투자 팁 목록", exact: true }).click();
+  await page.getByRole("link", { name: "알고 계셨나요? 목록", exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === "/tips" && url.searchParams.get("page") === "2" && url.hash === `#tip-${readTip.id}`);
   const restored = page.getByRole("link", { name: readTip.title, exact: true });
   await expect(restored).toBeInViewport();
@@ -185,19 +185,19 @@ test("페이지를 순서대로 읽으면 42개 팁이 중복이나 빠짐 없�
   const titles: string[] = [];
   for (let current = 1; current <= 7; current++) {
     await page.goto(`/tips?page=${current}`);
-    const list = page.getByRole("list", { name: "투자 팁 목록", exact: true });
+    const list = page.getByRole("list", { name: "알고 계셨나요? 목록", exact: true });
     await expect(list.getByRole("link")).toHaveCount(6);
     titles.push(...await list.getByRole("heading", { level: 2 }).allTextContents());
   }
   expect(titles).toEqual(BEGINNER_TIPS.map(tip => tip.title));
-  await expect(page.getByRole("navigation", { name: "투자 팁 페이지" }).getByRole("link", { name: "다음 페이지", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "알고 계셨나요? 페이지" }).getByRole("link", { name: "다음 페이지", exact: true })).toHaveCount(0);
 });
 
 test("모바일 페이지 번호는 넘치지 않고 주제를 바꾸면 첫 페이지로 돌아간다", async ({ page }) => {
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/tips?page=4&returnTo=%2Fperformance");
-    const pager = page.getByRole("navigation", { name: "투자 팁 페이지", exact: true });
+    const pager = page.getByRole("navigation", { name: "알고 계셨나요? 페이지", exact: true });
     await expect(pager).toBeVisible();
     await expect(pager.getByRole("link", { name: "4페이지", exact: true })).toHaveAttribute("aria-current", "page");
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
@@ -215,7 +215,7 @@ test("모바일 페이지 번호는 넘치지 않고 주제를 바꾸면 첫 페
 test("각 팁은 독립된 면과 간격으로 나뉘며 설명은 제목보다 들여쓴다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto("/tips");
-  const list = page.getByRole("list", { name: "투자 팁 목록", exact: true });
+  const list = page.getByRole("list", { name: "알고 계셨나요? 목록", exact: true });
   const one = list.getByRole("link", { name: first.title, exact: true });
   const two = list.getByRole("link", { name: BEGINNER_TIPS[1].title, exact: true });
   const titleBox = await one.getByRole("heading").boundingBox();
@@ -233,7 +233,7 @@ test("각 팁은 독립된 면과 간격으로 나뉘며 설명은 제목보다 
 test("존재하지 않는 페이지 번호를 넣어도 빈 목록 대신 유효한 페이지를 보여 준다", async ({ page }) => {
   await page.goto("/tips?page=999");
   await expect(page.getByRole("link", { name: BEGINNER_TIPS[41].title, exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "투자 팁 페이지" }).getByRole("link", { name: "7페이지", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "알고 계셨나요? 페이지" }).getByRole("link", { name: "7페이지", exact: true })).toHaveAttribute("aria-current", "page");
   await page.goto("/tips?page=not-a-number");
   await expect(page.getByRole("link", { name: first.title, exact: true })).toBeVisible();
 });

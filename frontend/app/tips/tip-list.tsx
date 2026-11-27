@@ -24,7 +24,7 @@ export default function TipList({ tips }: { tips: readonly { id: string; title: 
   }, [tips]);
 
   return (
-    <ul ref={listRef} aria-label="투자 팁 목록" className="m-0 flex list-none flex-col gap-6 p-0">
+    <ul ref={listRef} aria-label="알고 계셨나요? 목록" className="m-0 flex list-none flex-col gap-6 p-0">
       {tips.map(({ id, href, title, summary }) => (
         <li key={id} id={`tip-${id}`} className="scroll-mt-20">
           <Link

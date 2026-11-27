@@ -9,7 +9,7 @@ type TipPageProps = PageProps<"/tips/[id]">;
 export async function generateMetadata({ params }: TipPageProps): Promise<Metadata> {
   const { id } = await params;
   const tip = BEGINNER_TIPS.find(item => item.id === id);
-  return tip ? { title: tip.title, description: tip.summary } : { title: "투자 팁" };
+  return tip ? { title: tip.title, description: tip.summary } : { title: "알고 계셨나요?" };
 }
 
 export default async function TipDetailPage({ params, searchParams }: TipPageProps) {
@@ -26,8 +26,8 @@ export default async function TipDetailPage({ params, searchParams }: TipPagePro
     <div className="page-narrow flex flex-col gap-6">
       <Link
         href={listHref}
-        aria-label="투자 팁 목록"
-        title="투자 팁 목록"
+        aria-label="알고 계셨나요? 목록"
+        title="알고 계셨나요? 목록"
         className="flex size-11 items-center justify-center rounded-md bg-brand-soft text-brand hover:text-brand-deep"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
