@@ -109,14 +109,20 @@ export function Checkpoints({
   detail: StockDetail;
   insights: StockInsights;
   holdings: HoldingWeight[];
-  extra: string | null;
+  extra: { text: string; reason: string } | null;
 }) {
   const market = toNudgeMarket(detail, insights, holdings);
   const nudges = bit && market ? selectNudges(bit, market) : [];
-  const items = checkpointItems(nudges, extra);
+  const items = checkpointItems(nudges, extra?.text ?? null);
+  const reasonOf = (key: string) => {
+    if (key === "risk") return extra?.reason;
+    const nudge = nudges.find(({ id }) => id === key);
+    return nudge && market ? checkpointReason(nudge, market) : undefined;
+  };
 
+  // 결론 한 줄씩만 보이고, 왜 표시했는지는 ⓘ 안에 둔다(11/27 사용자 피드백: 내용 단순화)
   return (
-    <section aria-labelledby="checkpoint-title" className="surface flex min-w-0 flex-col gap-4 p-4 sm:p-6">
+    <section aria-labelledby="checkpoint-title" className="surface flex min-w-0 flex-col gap-3 p-4 sm:p-6">
       <h2
         id="checkpoint-title"
         data-bit-type={bit ? (bit.lowConfidence ? "low_confidence" : bit.type) : undefined}
@@ -127,14 +133,19 @@ export function Checkpoints({
       {!bit && <Unavailable>성향을 진단하면 나에게 맞춘 확인 사항을 볼 수 있어요.</Unavailable>}
       {bit?.lowConfidence && <Unavailable>설문 응답이 서로 엇갈려 참고로만 봐 주세요.</Unavailable>}
       {items.length > 0 ? (
-        <ul className="m-0 flex list-none flex-col gap-4 p-0">
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {items.map((item) => {
-            const nudge = nudges.find(({ id }) => id === item.key);
+            const reason = reasonOf(item.key);
             return (
-              <li key={item.key} data-nudge={item.key}>
-                <p className="m-0 text-base text-ink">{item.text}</p>
-                {nudge && market && <p className="m-0 mt-1 text-xs text-muted">{checkpointReason(nudge, market)}</p>}
-                {item.key === "N05" && <p className="m-0 mt-1 text-xs text-muted">매도 지시가 아님</p>}
+              <li key={item.key} data-nudge={item.key} className="text-base text-ink">
+                {item.text}
+                {reason && (
+                  <MarketDetail title="표시한 이유" className="inline-flex align-middle"
+                    label={<><span aria-hidden className="px-2 text-muted">ⓘ</span><span className="sr-only">표시한 이유 보기</span></>}>
+                    <p className="m-0">{reason}</p>
+                  </MarketDetail>
+                )}
+                {item.key === "N05" && <span className="block text-xs text-muted">매도 지시가 아님</span>}
               </li>
             );
           })}

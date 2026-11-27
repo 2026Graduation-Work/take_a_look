@@ -1,7 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { finishDemo } from "./demo-steps";
 
-test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 읽을 수 있다", async ({ page }) => {
+test("종목 상세는 주가, 개인화 안내, 판단 근거 탭을 이어서 읽을 수 있다", async ({ page }) => {
   await finishDemo(page);
   await page.evaluate(() => {
     const profile = JSON.parse(localStorage.getItem("takealook.ips-profile.v1")!);
@@ -13,7 +13,7 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
   const tabs = tabList.getByRole("tab");
   await expect(tabs).toHaveText(["한눈에 보기", "모델이 본 이유", "회사 상태", "시장 분위기", "누가 사고팔았나"]);
   const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
-  await expect(overview.getByRole("button", { name: /^회사 상태/ })).toContainText("104.8%");
+  await expect(overview.getByRole("region", { name: "분야별 근거" })).toHaveCount(0);
   const price = overview.getByRole("region", { name: "최근 주가" });
   const graph = price.getByRole("img", { name: "최근 주가 흐름" });
   const firstDate = graph.locator("text").filter({ hasText: /^3개월 전$/ });
@@ -21,7 +21,9 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
   const scrollHint = price.getByText("차트를 좌우로 밀면 지난 주가와 기준 가격을 볼 수 있어요.");
   const checkpoint = page.getByRole("region", { name: "나에게 해당하는 확인 사항" });
   await expect(graph).toBeVisible();
-  await expect(checkpoint.getByText("설문에서 보유 기간이 짧은 쪽으로 답해 표시했어요.")).toBeVisible();
+  await checkpoint.getByRole("button", { name: /표시한 이유 보기/ }).first().click();
+  await expect(page.getByRole("region", { name: "표시한 이유" })).toContainText("설문에서 보유 기간이 짧은 쪽으로 답해 표시했어요.");
+  await page.keyboard.press("Escape");
   await expect(page.getByText("설문 8가지 답", { exact: true })).toHaveCount(0);
   await expect(page.getByText("더 알아보기", { exact: true })).toHaveCount(0);
 
@@ -44,15 +46,11 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
     expect(quoteBox!.y).toBeGreaterThanOrEqual(nameBox!.y + nameBox!.height);
     if (width >= 1024) expect(changeBox!.x).toBeGreaterThan(quoteBox!.x + quoteBox!.width);
     const [headerBox, chart, guide, navigation] = await Promise.all([
-      header.boundingBox(), price.boundingBox(), checkpoint.boundingBox(), tabList.boundingBox(),
+      header.boundingBox(), price.boundingBox(), checkpoint.boundingBox(), tabList.locator("..").boundingBox(), // 탭 줄과 오른쪽 끝 읽는 법을 묶은 줄
     ]);
-    if (width >= 1024) {
-      expect(headerBox!.y).toBe(guide!.y);
-      expect(headerBox!.x + headerBox!.width).toBeLessThan(guide!.x);
-    } else {
-      expect(headerBox!.x).toBe(guide!.x);
-      expect(headerBox!.y + headerBox!.height).toBeLessThan(guide!.y);
-    }
+    // 11/27: 확인 사항은 모든 폭에서 머리 아래 한 단으로 둔다
+    expect(headerBox!.x).toBe(guide!.x);
+    expect(headerBox!.y + headerBox!.height).toBeLessThan(guide!.y);
     expect(guide!.y + guide!.height).toBeLessThan(navigation!.y);
     expect(navigation!.y + navigation!.height).toBeLessThan(chart!.y);
     expect(chart!.x).toBe(navigation!.x);
@@ -87,7 +85,7 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
     expect(content.width).toBe(chartContent.width);
   }
 
-  await overview.getByRole("button", { name: /^누가 사고팔았나/ }).click();
+  await tabs.getByText("누가 사고팔았나", { exact: true }).click();
   await expect(tabs.getByText("누가 사고팔았나", { exact: true })).toBeFocused();
   const trading = page.getByRole("tabpanel", { name: "누가 사고팔았나" });
   await expect(trading.getByRole("heading", { name: "누가 사고팔았나" })).toBeVisible();
@@ -117,7 +115,7 @@ test("종목 상세는 주가, 개인화 안내, 분야별 근거를 이어서 �
   await expect(news.getByText("가상 공시 테스트")).toHaveCount(0);
   await page.keyboard.press("Home");
 
-  await overview.getByRole("button", { name: /^모델이 본 이유/ }).click();
+  await tabs.getByText("모델이 본 이유", { exact: true }).click();
   const model = page.getByRole("tabpanel", { name: "모델이 본 이유" });
   await expectWideTab(model);
   const mood = model.getByRole("region", { name: "가격 흐름 분위기" });
