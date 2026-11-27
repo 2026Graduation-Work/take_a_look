@@ -1,10 +1,11 @@
+import sys
 from contextlib import nullcontext
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
-from shared.data import bulk_prices
-from shared.data import providers as price_collector
+from shared.data import bulk_prices, providers
+from shared.data import prices as shared_prices
 from shared.io import atomic_json, atomic_parquet, sha256
 
 
@@ -55,18 +56,35 @@ def test_bulk_cache_resume_corruption_and_missing_stock(tmp_path, monkeypatch):
     assert calls == []
 
 
-def test_price_adapter_supplied_raw_skips_individual_krx_request(monkeypatch):
+@pytest.mark.parametrize("price_provider", ["fdr", "pykrx"])
+def test_price_adapter_supplied_raw_skips_individual_krx_request(tmp_path, monkeypatch, price_provider):
     days = pd.bdate_range("2024-01-02", periods=3)
-    adjusted = pd.DataFrame({"Open": 50, "High": 51, "Low": 49, "Close": 50,
-                             "Volume": 10, "Change": 0}, index=days)
+    adjusted_prices = pd.DataFrame(
+        {"Open": 50, "High": 51, "Low": 49, "Close": 50, "Volume": 10, "Change": 0.02}, index=days
+    )
     raw = pd.DataFrame({"RawOpen": 100, "RawHigh": 102, "RawLow": 98, "RawClose": 100, "RawVolume": 10, "Amount": 1000}, index=days)
-    monkeypatch.setattr(price_collector.fdr, "DataReader", lambda *_: adjusted)
+    calls = []
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("individual raw request was repeated")
+    def read_fdr(code, start, end):
+        assert (code, start, end) == ("005930", "2024-01-02", "2024-01-04")
+        calls.append("fdr")
+        return adjusted_prices if price_provider == "fdr" else pd.DataFrame()
 
-    monkeypatch.setattr(price_collector.krx, "get_market_ohlcv_by_date", forbidden)
-    result = price_collector._fetch_ohlcv_fdr("005930", "2024-01-02", "2024-01-04", raw_df=raw)
+    def read_pykrx(start, end, code, *, adjusted):
+        assert (start, end, code) == ("20240102", "20240104", "005930")
+        assert adjusted
+        calls.append("pykrx")
+        return adjusted_prices.assign(Change=2).rename(columns={
+            "Open": "시가", "High": "고가", "Low": "저가", "Close": "종가", "Volume": "거래량", "Change": "등락률"
+        })
+
+    monkeypatch.setitem(sys.modules, "FinanceDataReader", SimpleNamespace(DataReader=read_fdr))
+    monkeypatch.setattr(providers.krx, "get_market_ohlcv_by_date", read_pykrx)
+    source = SimpleNamespace(_krx_request_timeout=nullcontext, time=SimpleNamespace(sleep=lambda _: None))
+    result = shared_prices.fetch_price_window("005930", days, root=tmp_path, raw=raw, source=source)
+    assert calls == (["fdr"] if price_provider == "fdr" else ["fdr"] * 3 + ["pykrx"])
+    assert result.PriceProvider.tolist() == [price_provider] * 3
+    assert result.Change.tolist() == [2] * 3
     assert result.VWAP.tolist() == [50] * 3
     assert result.AdjustmentFactor.tolist() == [0.5] * 3
 

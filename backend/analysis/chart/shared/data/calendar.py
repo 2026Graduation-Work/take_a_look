@@ -1,4 +1,4 @@
-"""v3 cross-provider and independent KRX calendar verification."""
+"""KRX index sessions checked against the XKRX exchange schedule."""
 from pathlib import Path
 
 import pandas as pd
@@ -41,13 +41,15 @@ def latest_confirmed_market_day(cutoff):
             raise ValueError("KRX could not establish a completed session before cutoff")
     return latest
 
-def fetch_authenticated_index(start, end):
+def fetch_authenticated_index(start, end, ticker="1001"):
     """Read KRX's index endpoint using the existing authenticated session."""
     from shared.data.providers import get_krx_session
 
     session = get_krx_session()
     if session is None:
         raise ValueError("Authenticated KRX session required for direct index verification")
+    if ticker not in {"1001", "2001"}:
+        raise ValueError("Only KOSPI 1001 and KOSDAQ 2001 are supported")
     frames = []
     current = start
     while current <= end:
@@ -56,7 +58,7 @@ def fetch_authenticated_index(start, end):
             "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
             data={
                 "bld": "dbms/MDC/STAT/standard/MDCSTAT00301",
-                "indIdx": "1", "indIdx2": "001",
+                "indIdx": ticker[0], "indIdx2": ticker[1:],
                 "strtDd": current.strftime("%Y%m%d"),
                 "endDd": chunk_end.strftime("%Y%m%d"),
                 "share": "1", "money": "1", "csvxls_isNo": "false",
@@ -111,7 +113,6 @@ def verify_calendar_schedule(payload):
 
 def build_calendar(root, collection):
     from shared.data import trading_calendar as calendar
-    from shared.data.providers import fdr
 
     start = pd.Timestamp(collection["start_date"])
     # A live session must never enter a historical dataset before its close.
@@ -128,52 +129,22 @@ def build_calendar(root, collection):
     )
     if latest_reference is not None:
         end = latest_reference
-    secondary = validate_index(calendar._fetch_pykrx_index(start, end), start, end)
-    fallbacks = []
-    primary_provider = "FinanceDataReader KS11"
-    try:
-        primary = validate_index(calendar._fetch_fdr_index(start, end), start, end)
-        if not primary.index.equals(secondary.index):
-            raise ValueError("KS11 dates differ from KRX (stale or partial cache)")
-        if primary.index[-1] < end - pd.Timedelta(7, unit="D"):
-            raise ValueError("KS11 does not establish requested boundary coverage")
-        if latest_reference is not None and primary.index[-1] != latest_reference:
-            raise ValueError("KS11 is older than the latest confirmed KRX session")
-    except Exception as exc:
-        fallbacks.append({"provider": primary_provider, "reason": str(exc)})
-        primary_provider = "KRX authenticated MDCSTAT00301"
-        primary = validate_index(
-            fetch_authenticated_index(start, end), start, end
-        )
+    primary_provider = "pykrx KOSPI 1001"
+    primary = validate_index(calendar._fetch_pykrx_index(start, end), start, end)
+    secondary = validate_index(fetch_authenticated_index(start, end), start, end)
     if not primary.index.equals(secondary.index):
         raise ValueError(
             "Calendar providers disagree; no verified coverage: "
             f"only {primary_provider}={primary.index.difference(secondary.index).strftime('%Y-%m-%d').tolist()}, "
-            f"only pykrx={secondary.index.difference(primary.index).strftime('%Y-%m-%d').tolist()}"
+            f"only direct KRX={secondary.index.difference(primary.index).strftime('%Y-%m-%d').tolist()}"
         )
     if primary.index[0] > start + pd.Timedelta(7, unit="D") or primary.index[-1] < end - pd.Timedelta(7, unit="D"):
         raise ValueError("Index response does not establish requested boundary coverage")
     effective_end = primary.index[-1]
     if latest_reference is not None and effective_end != latest_reference:
         raise ValueError("Index response is stale relative to KRX latest-session reference")
-    kosdaq_provider = "FinanceDataReader KQ11"
-    try:
-        kosdaq = validate_index(
-            fdr.DataReader("KQ11", str(start.date()), str(effective_end.date())),
-            start, effective_end,
-        )
-        if not kosdaq.index.equals(primary.index):
-            raise ValueError("KQ11 dates differ from verified KOSPI sessions")
-    except Exception as exc:
-        fallbacks.append({"provider": kosdaq_provider, "reason": str(exc)})
-        kosdaq_provider = "pykrx KOSDAQ 2001"
-        from shared.data.providers import krx
-
-        kosdaq = validate_index(
-            krx.get_index_ohlcv_by_date(
-                start.strftime("%Y%m%d"), effective_end.strftime("%Y%m%d"), "2001"
-            ), start, effective_end,
-        )
+    kosdaq_provider = "pykrx KOSDAQ 2001"
+    kosdaq = validate_index(calendar._fetch_pykrx_index(start, effective_end, "2001"), start, effective_end)
     if not kosdaq.index.equals(primary.index):
         raise ValueError("KOSDAQ index has missing sessions")
     payload = {
@@ -186,8 +157,8 @@ def build_calendar(root, collection):
         "verified_start": str(primary.index[0].date()),
         "verified_end": str(effective_end.date()),
         "trading_days": [str(day.date()) for day in primary.index],
-        "providers": [primary_provider, "pykrx KOSPI 1001", kosdaq_provider],
-        "fallbacks": fallbacks,
+        "providers": [primary_provider, "KRX authenticated MDCSTAT00301", kosdaq_provider],
+        "fallbacks": [],
         "latest_confirmed_reference": str(latest_reference.date())
         if latest_reference is not None
         else None,

@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 
 import lightgbm as lgb
@@ -20,22 +21,42 @@ from shared.settings import BUILDER_ID, processing_contract
 
 
 @pytest.mark.parametrize("with_flows", [False, True])
-def test_collection_training_export_and_serving(tmp_path, monkeypatch, capsys, with_flows):
+def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, capsys, with_flows):
+    from pykrx.website.krx.market import wrap
+
     days = pd.bdate_range("2019-01-07", periods=230)
     close = 100 + np.sin(np.arange(len(days)) / 4) * 8
     raw = pd.DataFrame({"RawOpen": close - .2, "RawHigh": close + .8, "RawLow": close - .8,
                         "RawClose": close, "RawVolume": 1000., "Amount": close * 1000.}, index=days)
-    adjusted = pd.DataFrame({"Open": close, "High": close, "Low": close,
-                            "Close": close / 2, "Volume": 1000., "Change": 0.}, index=days)
-    adjusted.Change = adjusted.Close.pct_change(fill_method=None).fillna(0)
-    monkeypatch.setattr(providers.fdr, "DataReader", lambda *_: adjusted.copy())
-    monkeypatch.setattr(providers.krx, "get_market_ohlcv_by_date", lambda *_, **kwargs: raw.copy())
+    adjusted = pd.DataFrame({"시가": close, "고가": close, "저가": close,
+                             "종가": close / 2, "거래량": 1000.}, index=days)
+    adjusted["등락률"] = adjusted["종가"].pct_change(fill_method=None).fillna(0) * 100
+
+    def fetch_adjusted(start, end, code, adjusted_price):
+        assert (start, end, code, adjusted_price) == (days[0].strftime("%Y%m%d"), days[-1].strftime("%Y%m%d"), "005930", True)
+        return adjusted.copy()
+
+    def fetch_fdr(code, start, end):
+        assert (code, start, end) == ("005930", str(days[0].date()), str(days[-1].date()))
+        return adjusted.assign(**{"등락률": adjusted["등락률"] / 100}).rename(columns={
+            "시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "등락률": "Change"
+        })
+
+    def fetch_raw(start, end, code, *, adjusted):
+        assert adjusted is False
+        return raw.copy()
+
+    monkeypatch.setitem(sys.modules, "FinanceDataReader", SimpleNamespace(DataReader=fetch_fdr))
+    monkeypatch.setattr(wrap, "get_market_ohlcv_by_date", fetch_adjusted)
+    monkeypatch.setattr(providers.krx, "get_market_ohlcv_by_date", fetch_raw)
     monkeypatch.setattr(calendar, "get_krx_trading_days", lambda *_: set(days.date))
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
-    research = fetch_price_window("005930", days, root=tmp_path / "research", raw=raw)
+    legacy = fetch_price_window("005930", days, root=tmp_path / "legacy", raw=raw)
     operational = prices.fetch_prices("005930", str(days[0].date()), str(days[-1].date()))
-    pd.testing.assert_frame_equal(research, operational)
-    inputs = research.assign(Code="005930")
+    assert legacy.PriceProvider.eq("fdr").all()
+    assert operational.PriceProvider.eq("pykrx").all()
+    pd.testing.assert_frame_equal(legacy.drop(columns="PriceProvider"), operational.drop(columns="PriceProvider"))
+    inputs = legacy.assign(Code="005930")
     for investor in ("Individual", "Institution", "Foreign"):
         inputs[f"{investor}_BuyAmount"] = inputs.Amount * .2
         inputs[f"{investor}_SellAmount"] = inputs.Amount * .1

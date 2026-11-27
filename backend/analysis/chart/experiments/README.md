@@ -74,7 +74,19 @@ python -m experiments.dataset.verify_training_prices --env .env --root workspace
 
 근거는 [004920의 병합 공시](https://kind.krx.co.kr/external/2019/12/30/000788/20191230001882/11309.htm), [003410의 보통주 액면감액 조건](https://kind.krx.co.kr/external/2021/09/10/000502/20210910001141/10002.htm), [KRX의 시가기준가 안내](https://regulation.krx.co.kr/contents/RGL/03/03010100/RGL03010100T6.jsp)다. 당시 가격은 보존한 KRX 원주가로 대조했다. KRX 현행 안내의 호가범위를 2020년 당시 규정으로 소급해 검증한 것은 아니다.
 
-`shared/` 변경은 `processing_contract`와 pack 해시를 바꾼다. 기존 활성 pack을 이 checkout에서 그대로 실행할 수 없다. 이 작업은 pack 재생성·활성화·운영 게시를 수행하지 않는다. 서빙 전환과 재학습은 후속 작업이다.
+`shared/` 변경은 연구용 `processing_contract`를 바꾼다. 기존 운영 팩은 서빙 계약과 고정 피처 기대값으로 별도 검증한다.
+
+## 학습 경로의 KRX 원천
+
+학습 영업일은 pykrx 지수 1001·2001에서 받고 KRX 직접 조회 MDCSTAT00301 및 `exchange_calendars` XKRX 일정과 대조한다. pykrx와 직접 조회는 같은 KRX 원천이며 XKRX가 별도 일정 검사다. 이전 달력 캐시는 출처 버전과 XKRX 날짜가 맞아야 재사용한다.
+
+활성 종목 상장일은 KRX MDCSTAT01901, 상장폐지 이력은 MDCSTAT23801을 사용한다. 기존 KRX `주권` 범위를 유지한다. FDR의 일반 상장 목록과 실제 학습 목록은 다르다. 기존 `-DESC` 목록에는 상장일 누락이 있어 KRX 보조 경로를 사용했다. 2026-11-20 기준 기존·변경 수집기를 직접 실행한 목록은 KOSPI 908개·KOSDAQ 1,816개로 같았다. 리츠·외국주 등의 추가는 이번 작업에 포함하지 않았다.
+
+2016-01-01부터 2026-11-20까지 두 시장의 2,669영업일이 기존 지수 목록 및 XKRX와 일치했다. 실제 5종목 검증에서는 학습 코드의 FDR import를 금지하고도 수집이 완료됐다. 변경 전후 원주가·파생 가격 파일 해시와 두 지수의 날짜·종가·수익률이 같았다.
+
+백테스트는 `evaluation.benchmark_file`에 지정한 동결 지수 파일을 사용한다. 학습 수집기가 pykrx KOSPI 1001과 KOSDAQ 2001을 검증해 `benchmarks/`에 저장한다. 백테스트 실행 중 지수를 다시 다운로드하지 않는다.
+
+FDR은 `shared/requirements.txt`에서 제거하고 `serving/requirements.txt`에 남겼다. 서빙 전환이 완료될 때까지 종목 마스터와 기존 서빙 가격 대체 어댑터만 사용한다. 가격 어댑터는 `shared/data/prices.py`로 옮겨 동작을 보존했고 학습 수집기는 해당 어댑터를 호출하지 않는다.
 
 ## v3 실험 결과를 pack으로 내보내기
 

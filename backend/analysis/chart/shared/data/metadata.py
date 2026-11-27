@@ -48,19 +48,11 @@ def load_metadata(collection, end):
 
     parts = []
     for market in collection["markets"]:
-        active_source = f"{market}-DESC"
-        try:
-            frame = source.fdr.StockListing(f"{market}-DESC").copy()
-            if {"Code", "Name", "ListingDate"} - set(frame) or pd.to_datetime(
-                frame.ListingDate, errors="coerce"
-            ).isna().any():
-                raise ValueError("FDR listing dates incomplete; use KRX individual securities")
-        except Exception:
-            active_source = "KRX individual securities MDCSTAT01901"
-            frame = fetch_active_listing_intervals(market)
+        active_source = "KRX individual securities MDCSTAT01901"
+        frame = fetch_active_listing_intervals(market)
         required = {"Code", "Name", "ListingDate"}
         if required - set(frame):
-            raise ValueError(f"{market}-DESC lacks verified listing dates")
+            raise ValueError(f"{market}: KRX lacks verified listing dates")
         frame = frame.assign(
             Market=market, DelistingDate=pd.NaT, IsDelisted=False, Source=active_source
         )
@@ -151,13 +143,9 @@ def fetch_current_universe(as_of, *, root, code=None):
 
 
 def fetch_security_listing(market):
-    from .providers import fdr
+    import FinanceDataReader as fdr
+
     return fdr.StockListing(market)
-
-
-def fetch_index_prices(symbol, start, end):
-    from .providers import fdr
-    return fdr.DataReader(symbol, start, end)
 
 
 def parse_managed_names(page):

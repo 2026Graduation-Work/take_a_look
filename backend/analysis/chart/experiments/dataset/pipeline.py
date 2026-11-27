@@ -21,7 +21,6 @@ from shared.data.calendar import (  # noqa: F401
 )
 from shared.data.events import EVENT_COLUMNS
 from shared.data.metadata import fetch_active_listing_intervals, load_metadata  # noqa: F401
-from shared.data.prices import supplement_raw_ohlc  # noqa: F401
 from shared.data.training_prices import (
     PRICE_SOURCE,
     adjust_training_window,
