@@ -1,0 +1,10 @@
+# 선택 설치 확장(#534). 없으면 experiments는 Python 계산을 쓴다. 빌드: maturin develop --release
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "takealook_native"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = ["numpy"]
