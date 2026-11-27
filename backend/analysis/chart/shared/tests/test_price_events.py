@@ -80,19 +80,19 @@ def test_2026_ten_to_one_reverse_split_is_the_only_event(code, ex_date):
 
 
 @pytest.mark.parametrize("name", ALL_FIXTURES)
-def test_adjusted_returns_are_krx_change_rates_inside_the_price_limit(name):
+def test_standard_split_fixtures_match_exchange_returns(name):
     raw = load(name)
     adjusted = apply_events(raw, derive_events(name[:6], raw, pd.DatetimeIndex(raw.Date)))
 
     krx_rate = raw.RawChange / (raw.RawClose - raw.RawChange)
     returns = adjusted.Close.pct_change()
     np.testing.assert_allclose(returns[1:], krx_rate[1:], rtol=0, atol=1e-12)
-    assert returns.abs().max() <= PRICE_LIMIT
+    assert krx_rate.abs().max() <= PRICE_LIMIT
     assert raw.RawClose.pct_change().abs().max() > PRICE_LIMIT
 
 
-def test_price_only_event_keeps_volume_when_shares_do_not_match():
-    raw = bars([10_000, 10_000, 9_700, 9_700], [1_000_000, 1_000_000, 1_200_000, 1_200_000], {2: 0.97})
+def test_price_only_rights_event_keeps_volume_when_shares_are_unchanged():
+    raw = bars([10_000, 10_000, 9_700, 9_700], 1_000_000, {2: 0.97})
     events = derive_events("000006", raw, pd.DatetimeIndex(raw.Date))
 
     event = events.iloc[0]
@@ -100,6 +100,21 @@ def test_price_only_event_keeps_volume_when_shares_do_not_match():
     adjusted = apply_events(raw, events)
     assert adjusted.Close.tolist() == pytest.approx([9_700, 9_700, 9_700, 9_700])
     assert adjusted.Volume.tolist() == [1000] * 4
+
+
+def test_nonproportional_share_change_requires_documented_evidence():
+    raw = bars([10_000, 9_700], [1_000_000, 1_200_000], {1: 0.97})
+
+    with pytest.raises(ValueError, match=r"000006.*2024-01-03.*evidence"):
+        derive_events("000006", raw, pd.DatetimeIndex(raw.Date))
+
+
+def test_change_after_turnover_without_regular_hours_requires_documented_evidence():
+    raw = bars([10_000, 9_700], 1_000_000, {1: 0.97})
+    raw.loc[0, ["RawOpen", "RawHigh", "RawLow"]] = 0
+
+    with pytest.raises(ValueError, match=r"000006.*2024-01-03.*evidence"):
+        derive_events("000006", raw, pd.DatetimeIndex(raw.Date))
 
 
 def test_two_events_compose_multiplicatively():

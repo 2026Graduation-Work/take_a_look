@@ -5,18 +5,17 @@ RawClose, RawChange, RawVolume, Amount, ListedShares. RawChange is KRX's CMPPREV
 close minus the day's base price. Halt rows repeat the previous close with RawChange 0,
 RawVolume 0 and 0 as RawOpen/High/Low.
 
-KRX sets each day's base price, the reference for its change rate and the ±30% price limit, to
-the previous close unless a corporate action resets it. A base price that differs from the
-previous close is therefore an event, and base / previous close is its exact price factor.
+A change in KRX base price relative to the previous close is a candidate event. The
+confirmed events below distinguish share conversions from reference-price resets after a
+halt. A reference reset records the raw KRX base price while preserving the market gap.
 
-Events: one row per basis change, sorted by ExDate (the first trading day on the new basis).
-PriceFactor multiplies every bar dated before ExDate; VolumeFactor is 1/PriceFactor for a
-share-count change and 1.0 otherwise.
+Events are sorted by ExDate. PriceFactor and VolumeFactor multiply bars before ExDate.
 """
 import math
 from collections.abc import Sequence
 from datetime import date
 from enum import StrEnum
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -30,18 +29,36 @@ EVENT_COLUMNS = ["Code", "ExDate", "PriceFactor", "VolumeFactor", "Kind", "Sourc
 class EventKind(StrEnum):
     SHARE_CHANGE = "share_change"
     PRICE_ONLY = "price_only"
+    REFERENCE_RESET = "reference_reset"
 
 
-def _classify(price_factor: float, shares_before: float, shares_after: float) -> EventKind:
-    if shares_before != shares_after and math.isclose(
-            price_factor * shares_after / shares_before, 1.0, rel_tol=SHARE_TOLERANCE):
-        return EventKind.SHARE_CHANGE
-    return EventKind.PRICE_ONLY
+class _ConfirmedEvent(NamedTuple):
+    observed_close_base_shares: tuple[int, int, int, int]
+    price_factor: float
+    volume_factor: float
+    kind: EventKind
+    source: str
+
+
+_CONFIRMED_EVENTS = {
+    "004920": {
+        pd.Timestamp("2020-03-20"): _ConfirmedEvent(
+            (295, 636, 54_212_316, 18_070_772), 3, 1 / 3, EventKind.SHARE_CHANGE,
+            "https://kind.krx.co.kr/external/2019/12/30/000788/20191230001882/11309.htm",
+        ),
+    },
+    "003410": {
+        pd.Timestamp("2020-12-04"): _ConfirmedEvent(
+            (5550, 6080, 503_859_595, 503_859_595), 1, 1, EventKind.REFERENCE_RESET,
+            "https://kind.krx.co.kr/external/2021/09/10/000502/20210910001141/10002.htm",
+        ),
+    },
+}
 
 
 def derive_events(code: str, raw: pd.DataFrame,
                   expected_dates: pd.DatetimeIndex | Sequence[date | str]) -> pd.DataFrame:
-    """Record base-price changes after checking all KRX sessions in the requested range.
+    """Resolve candidate events after checking all KRX sessions in the requested range.
 
     Supply expected_dates for the full range, including sessions when the stock was halted.
     """
@@ -55,18 +72,41 @@ def derive_events(code: str, raw: pd.DataFrame,
     base = raw.RawClose - raw.RawChange
     if not (base > 0).all():
         raise ValueError("KRX base price must be positive")
-    prev = raw.RawClose.shift()
-    moved = (base - prev).abs() > 0.5
+    known_events = _CONFIRMED_EVENTS.get(code, {})
+    moved = (base - raw.RawClose.shift()).abs().gt(0.5)
+    previous_unavailable = raw.RawVolume.shift().eq(0) | raw[["RawOpen", "RawHigh", "RawLow"]].shift().eq(0).all(axis=1)
+    changed_shares_after_pause = previous_unavailable & raw.ListedShares.ne(raw.ListedShares.shift())
+    candidates = moved.to_numpy() | observed.isin(known_events) | changed_shares_after_pause.to_numpy()
+    candidates[:1] = False
 
     rows = []
-    for at in np.flatnonzero(moved):
-        prev_close, base_price = prev.iloc[at], base.iloc[at]
-        price_factor = base_price / prev_close
-        shares_before, shares_after = raw.ListedShares.iloc[at - 1], raw.ListedShares.iloc[at]
-        kind = _classify(price_factor, shares_before, shares_after)
-        rows.append({"Code": code, "ExDate": observed[at], "PriceFactor": price_factor,
-                     "VolumeFactor": 1 / price_factor if kind is EventKind.SHARE_CHANGE else 1.0,
-                     "Kind": kind.value, "Source": SOURCE, "PrevClose": prev_close, "BasePrice": base_price,
+    for at in np.flatnonzero(candidates):
+        ex_date = observed[at]
+        previous = raw.iloc[at - 1]
+        prev_close, base_price = previous.RawClose, base.iloc[at]
+        shares_before, shares_after = previous.ListedShares, raw.ListedShares.iloc[at]
+        confirmed = known_events.get(ex_date)
+        price_factor = confirmed.price_factor if confirmed else base_price / prev_close
+        source = SOURCE
+        if confirmed:
+            evidence = (prev_close, base_price, shares_before, shares_after)
+            if evidence != confirmed.observed_close_base_shares:
+                raise ValueError(f"{code} {ex_date:%Y-%m-%d}: KRX inputs disagree with confirmed event {confirmed.source}")
+            volume_factor = confirmed.volume_factor
+            kind, source = confirmed.kind, confirmed.source
+        elif moved.iloc[at] and shares_before != shares_after and math.isclose(
+                price_factor * shares_after / shares_before, 1.0, rel_tol=SHARE_TOLERANCE):
+            kind, volume_factor = EventKind.SHARE_CHANGE, 1 / price_factor
+        elif shares_before == shares_after and previous[["RawVolume", "RawOpen", "RawHigh", "RawLow"]].gt(0).all():
+            kind, volume_factor = EventKind.PRICE_ONLY, 1.0
+        else:
+            raise ValueError(
+                f"{code} {ex_date:%Y-%m-%d}: KRX base-price change requires evidence "
+                "of the share conversion or reference-price reset"
+            )
+        rows.append({"Code": code, "ExDate": ex_date, "PriceFactor": price_factor,
+                     "VolumeFactor": volume_factor, "Kind": kind.value, "Source": source,
+                     "PrevClose": prev_close, "BasePrice": base_price,
                      "SharesBefore": shares_before, "SharesAfter": shares_after})
     events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
     events["ExDate"] = pd.to_datetime(events.ExDate)
