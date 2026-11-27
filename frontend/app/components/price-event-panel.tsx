@@ -50,10 +50,11 @@ type EventItem = { id: string; title: string; url: string | null; date: string; 
 
 function EventItems({ items }: { items: EventItem[] }) {
   const [expanded, setExpanded] = useState(false);
+  const initialCount = 2;
   return (
     <>
       <ul className="m-0 list-none p-0">
-        {(expanded ? items : items.slice(0, 3)).map(item => (
+        {(expanded ? items : items.slice(0, initialCount)).map(item => (
           <li key={item.id} className="flex flex-col gap-1 py-2">
             {item.url
               ? <a href={item.url} target="_blank" rel="noopener noreferrer" className="min-h-11 content-center text-sm text-ink underline underline-offset-4 [overflow-wrap:anywhere]">{item.title}</a>
@@ -65,8 +66,8 @@ function EventItems({ items }: { items: EventItem[] }) {
           </li>
         ))}
       </ul>
-      {!expanded && items.length > 3 && <button type="button" onClick={() => setExpanded(true)}
-        className="min-h-11 self-start text-sm text-ink underline underline-offset-4">더 보기({items.length - 3})</button>}
+      {!expanded && items.length > initialCount && <button type="button" onClick={() => setExpanded(true)}
+        className="min-h-11 self-start text-sm text-ink underline underline-offset-4">더 보기({items.length - initialCount})</button>}
     </>
   );
 }
