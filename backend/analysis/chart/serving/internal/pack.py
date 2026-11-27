@@ -70,14 +70,18 @@ def _validate_golden(root, manifest, configured_digest):
     path = SERVING_DIR / "golden" / f"{pack_id}.json"
     if manifest_digest is not None and not path.is_file():
         path = root / "golden" / f"{pack_id}.json"
-    if digest is None:
-        active = yaml.safe_load(DEFAULT_CONFIG.read_text())["active_pack"]
-        if active["pack_id"] == pack_id:
-            digest = active.get("golden_sha256")
     if not path.is_file():
         raise GoldenError(f"{pack_id}: missing golden file {path}")
+    if digest is None:
+        for config in dict.fromkeys((config_path(), DEFAULT_CONFIG)):
+            active = yaml.safe_load(config.read_text())["active_pack"]
+            if active["pack_id"] == pack_id and active.get("golden_sha256"):
+                digest = active["golden_sha256"]
+                break
+    if not digest:
+        raise GoldenError(f"{pack_id}: missing golden checksum in active pack configuration or manifest")
     data = path.read_bytes()
-    if not digest or hashlib.sha256(data).hexdigest() != digest:
+    if hashlib.sha256(data).hexdigest() != digest:
         raise GoldenError(f"{pack_id}: golden checksum mismatch")
     golden = json.loads(data)
     contract = serving_contract()

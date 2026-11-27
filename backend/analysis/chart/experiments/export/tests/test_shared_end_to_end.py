@@ -86,12 +86,22 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch, capsys, w
     preview_input = tmp_path / "inputs/raw/005930.parquet"
     preview_input.parent.mkdir(parents=True)
     inputs.assign(Name="Synthetic stock").to_parquet(preview_input)
-    key = feature_cache_key(golden_sha256) if with_flows else pack["processing_contract"]["sha256"]
-    atomic_json(preview_input.with_suffix(".manifest.json"), {
-        "source_sha256": sha256_file(preview_input), "processing_contract_sha256": key, "pack_id": "mock_e2e",
-    })
-    local_preview.main(["--code", "005930", "--as-of", str(days[-1].date()), "--compute-only"])
-    assert '"event": "local_preview_computed"' in capsys.readouterr().out
+    key = feature_cache_key(golden_sha256)
+    provenance = {"source_sha256": sha256_file(preview_input), "pack_id": "mock_e2e"}
+    input_manifest = preview_input.with_suffix(".manifest.json")
+    argv = ["--code", "005930", "--as-of", str(days[-1].date()), "--compute-only"]
+    for key_field in (
+        {"feature_cache_key": key},
+        {"processing_contract_sha256": key},
+        {"processing_contract_sha256": pack["processing_contract"]["sha256"]},
+    ):
+        atomic_json(input_manifest, {**provenance, **key_field})
+        local_preview.main(argv)
+        assert '"event": "local_preview_computed"' in capsys.readouterr().out
+
+    atomic_json(input_manifest, {**provenance, "feature_cache_key": "invalid", "processing_contract_sha256": key})
+    with pytest.raises(ValueError, match="input provenance mismatch"):
+        local_preview.main(argv)
 
     pack["processing_contract"]["preprocessing"]["sigma_window"] = 21
     atomic_json(root / "manifest.json", pack)

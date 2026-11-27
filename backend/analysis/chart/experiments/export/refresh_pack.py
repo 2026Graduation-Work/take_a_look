@@ -232,7 +232,7 @@ def main(argv=None):
                 shutil.copy2(previous_metadata, backup.with_suffix(".manifest.json"))
         shutil.copy2(source, destination)
         atomic_json(destination.with_suffix(".manifest.json"), {"source": str(source), "source_sha256": sha256_file(source),
-                    "processing_contract_sha256": feature_cache_key(golden_sha256), "pack_id": args.pack_id,
+                    "feature_cache_key": feature_cache_key(golden_sha256), "pack_id": args.pack_id,
                     "purpose": "explicit local preview input transfer"})
     atomic_json(CHART_ROOT / "docs/local-pack-validation.json", {
         "pack_id": args.pack_id, "processing_contract": pack["processing_contract"],

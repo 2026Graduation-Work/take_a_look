@@ -363,11 +363,14 @@ def run_preview(args):
         dataset = root / "inputs"
         input_path = dataset / "raw" / f"{args.code}.parquet"
         input_manifest = json.loads(input_path.with_suffix(".manifest.json").read_text())
-        verified_keys = {feature_cache_key(golden_sha256)}
-        if legacy_digest := pack["processing_contract"].get("sha256"):
-            verified_keys.add(legacy_digest)
+        expected_key = feature_cache_key(golden_sha256)
+        if "feature_cache_key" in input_manifest:
+            valid_key = input_manifest["feature_cache_key"] == expected_key
+        else:
+            legacy_key = input_manifest.get("processing_contract_sha256")
+            valid_key = bool(legacy_key) and legacy_key in (expected_key, pack["processing_contract"].get("sha256"))
         if (input_manifest["source_sha256"] != sha256_file(input_path)
-                or input_manifest["processing_contract_sha256"] not in verified_keys
+                or not valid_key
                 or input_manifest["pack_id"] != pack["pack_id"]):
             raise ValueError("Operational preview input provenance mismatch")
         raw = pd.read_parquet(input_path)

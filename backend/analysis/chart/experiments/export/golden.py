@@ -15,17 +15,17 @@ from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS
 DEFAULT_INPUTS = Path("shared/tests/fixtures/v3-golden.json")
 
 
-def corporate_event(normal):
+def varied_candle_and_turnover(normal):
     raw = [row.copy() for row in normal["raw"]]
-    event = 40
-    for row in raw[:event]:
+    selected_bar = 40
+    for row in raw[:selected_bar]:
         row["AdjustmentFactor"] = 0.5
         for column in ("RawOpen", "RawHigh", "RawLow", "RawClose", "Amount"):
             row[column] *= 2
-    raw[event]["High"] += 4
-    raw[event]["RawHigh"] = raw[event]["High"]
+    raw[selected_bar]["High"] += 4
+    raw[selected_bar]["RawHigh"] = raw[selected_bar]["High"]
     return {"name": "corporate_event", "kind": "corporate_event", "raw": raw,
-            "rows": sorted({*normal["rows"], 29, 30, event - 1, event, event + 1})}
+            "rows": sorted({*normal["rows"], 29, 30, selected_bar - 1, selected_bar, selected_bar + 1})}
 
 
 def generate(pack_id, inputs, out, *, model_features=None):
@@ -33,7 +33,7 @@ def generate(pack_id, inputs, out, *, model_features=None):
               "raw": case["raw"], "rows": case["rows"]}
              for case in json.loads(Path(inputs).read_text())["cases"]]
     if Path(inputs).resolve() == CHART_ROOT / DEFAULT_INPUTS:
-        cases.append(corporate_event(next(case for case in cases if case["name"] == "normal")))
+        cases.append(varied_candle_and_turnover(next(case for case in cases if case["name"] == "normal")))
     names = [*BASE_FEATURES, *FLOW_FEATURES]
     for case, values in zip(cases, compute(cases, names), strict=True):
         case["expected"] = np.where(np.isnan(values), None, values).tolist()
