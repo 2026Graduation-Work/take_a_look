@@ -1,0 +1,975 @@
+"""Build the auditable market-action ledger from cached KRX prices and official disclosures."""
+
+import argparse
+import csv
+import fcntl
+import json
+import re
+import tempfile
+from collections import Counter, defaultdict
+from dataclasses import asdict
+from datetime import date, datetime, timedelta
+from fractions import Fraction
+from itertools import chain
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pandas as pd
+from shared.data.actions import FieldEvidence, action_from_record, read_snapshot
+from shared.data.calendar import scheduled_sessions
+from shared.data.disclosures import DisclosureError, DocumentFormatError, Evidence, require
+from shared.data.events import observation_mask
+from shared.data.kind_market import (
+    EXCHANGE,
+    CorrectionError,
+    KindMarket,
+    KindUnavailable,
+    kind_withdrawal,
+)
+from shared.data.market_notices import (
+    NoticeError,
+    SecurityKey,
+    auction_identity_links,
+    auction_identity_witness,
+    auction_listing_index,
+    can_join_auction_identity,
+    kind_topic,
+    match_notice,
+    normal_company,
+    notice_security_scope,
+    parse_notice,
+    share_identity,
+)
+from shared.data.market_resolutions import (
+    BONUS,
+    COMBINED_LISTING_FAILURE_FIELD,
+    DIVIDEND,
+    NoticeFailure,
+    Resolution,
+    ambiguous_final_documents,
+    combined_bonus_observation,
+    issuer_merger_boundaries,
+    merger_facts,
+    observe_candidates,
+    raw_window_fingerprint,
+    resolve_events,
+    role_correction_kind,
+    role_correction_windows,
+    structural_closure,
+    structural_review_evidence,
+    superseded_merger_review,
+)
+from shared.data.resolution_archive import notice_facts_columns
+from shared.data.resolution_snapshot import (
+    CANDIDATE_COLUMNS,
+    CONFIRMATION_COLUMNS,
+    NOTICE_COLUMNS,
+    RESOLUTION_COLUMNS,
+    SECURITY_COLUMNS,
+    _csv,
+    _day,
+    _security,
+    kind_document_url,
+)
+from shared.data.validation import KRX_RAW_COLUMNS
+from shared.io import atomic_json, canonical_hash, sha256
+
+POLICY_VERSION = 1
+MARKETS = {"KOSPI", "KOSDAQ", "KONEX"}
+PRICES = ["Code", *KRX_RAW_COLUMNS, "ISU_ABBRV", "MKT_NM", "SECT_TP_NM"]
+
+
+def calendar_days(start, end):
+    return (start + timedelta(days=offset) for offset in range((end - start).days + 1))
+
+
+def _price_frame(path, sessions, codes):
+    frames, receipts = [], {}
+    for day in sessions:
+        file = path / f"{day:%Y-%m-%d}.parquet"
+        require(file.is_file(), f"Missing preserved KRX session: {file.name}")
+        rows = pd.read_parquet(file, columns=PRICES)
+        require(not rows.empty and rows.Date.eq(day).all() and not rows.Code.duplicated().any(),
+                f"Invalid KRX session: {file.name}")
+        require(rows.Code.str.fullmatch(r"[0-9A-Z]{6}").all(), f"Invalid KRX short code: {file.name}")
+        receipts[day.date().isoformat()] = sha256(file)
+        if codes:
+            rows = rows[rows.Code.isin(codes)]
+        for col in ("Code", "ISU_ABBRV", "MKT_NM", "SECT_TP_NM"):
+            rows[col] = rows[col].astype("string[pyarrow]")
+        frames.append(rows)
+    raw = pd.concat(frames, ignore_index=True).rename(columns={"MKT_NM": "Market"})
+    raw["Market"] = raw.Market.replace({"KOSDAQ GLOBAL": "KOSDAQ"})
+    return raw, receipts
+
+
+def _security_master(active_path, delisted_path):
+    active = pd.read_parquet(active_path).rename(columns={
+        "ISU_SRT_CD": "Code", "ISU_CD": "ISIN", "ISU_NM": "Name", "ISU_ABBRV": "ShortName",
+        "MKT_TP_NM": "Market", "SECUGRP_NM": "Group", "LIST_DD": "ListingDate",
+    }).assign(DelistingDate=pd.NaT)
+    delisted = pd.read_parquet(delisted_path).rename(columns={"Symbol": "Code", "SecuGroup": "Group"})
+    fields = {"Code", "ISIN", "Name", "Market", "Group", "ListingDate", "DelistingDate", "KIND_STKCERT_TP_NM"}
+    require(not (fields - set(active) or fields - set(delisted)), "KRX masters lack official security or listing fields")
+    master = pd.concat([active, delisted], ignore_index=True)
+    master["Market"] = master.Market.replace({"KOSDAQ GLOBAL": "KOSDAQ"})
+    master["ListingDate"] = pd.to_datetime(master.ListingDate, errors="raise")
+    master["DelistingDate"] = pd.to_datetime(master.DelistingDate, errors="raise")
+    return master
+
+
+def _share_class(label):
+    if label == "보통주":
+        return "common"
+    if "우선주" in label or label in {"종류주권", "종류주식"}:
+        return "preferred"
+    raise DisclosureError(f"Unsupported KRX share class: {label}")
+
+
+def master_security_aliases(master):
+    universe = {}
+    for row in master.itertuples(index=False):
+        if row.Group not in {"주권", "외국주권", "주식예탁증권", "부동산투자회사"}:
+            continue
+        key = SecurityKey(row.Code, row.ISIN, row.ListingDate.date().isoformat(),
+                          row.DelistingDate.date().isoformat() if pd.notna(row.DelistingDate) else None,
+                          row.Market, _share_class(row.KIND_STKCERT_TP_NM))
+        universe.setdefault(key, set()).update(normal_company(str(name)) for name in (row.Name, row.ShortName)
+                                                if pd.notna(name))
+    return universe
+
+
+def _windows(raw, master, sessions, market_observed):
+    securities, expected_days, aliases, anchors, failures = {}, {}, {}, {}, []
+    other_groups, listing_starts = {}, set()
+    training_intervals = set()
+    by_code = master.groupby("Code").indices
+    for code, bars in raw.groupby("Code", sort=True):
+        if code not in by_code:
+            failures.append({"Code": code, "Stage": "identity", "Reason": "KRX masters lack this observed code"})
+            continue
+        intervals = master.iloc[by_code[code]]
+        intervals = intervals[(intervals.ListingDate <= sessions[-1]) &
+                              (intervals.DelistingDate.isna() | (intervals.DelistingDate > sessions[0]))]
+        claimed = pd.Series(False, index=bars.index)
+        for interval in intervals.itertuples(index=False):
+            dates = bars.Date >= interval.ListingDate
+            if pd.notna(interval.DelistingDate):
+                dates &= bars.Date < interval.DelistingDate
+            exact_market = bars.Market.eq(interval.Market)
+            same_market = intervals[intervals.Market.eq(interval.Market)]
+            other_market = intervals[~intervals.Market.eq(interval.Market)]
+            if len(same_market) > 1 or not other_market.empty:
+                dates &= exact_market
+            match = bars.loc[dates]
+            if match.empty:
+                continue
+            if interval.Group not in {"주권", "외국주권", "주식예탁증권", "부동산투자회사"}:
+                other_groups.update({(code, day.date().isoformat()): interval.Group for day in match.Date
+                                     if (code, day.date().isoformat()) in market_observed})
+                claimed |= dates
+                continue
+            try:
+                require(interval.Market in MARKETS and not (claimed & dates).any(),
+                        "Ambiguous KRX listing intervals")
+                key = SecurityKey(code, interval.ISIN, interval.ListingDate.date().isoformat(),
+                                  interval.DelistingDate.date().isoformat() if pd.notna(interval.DelistingDate) else None,
+                                  interval.Market, _share_class(interval.KIND_STKCERT_TP_NM))
+                require(key not in securities, "Duplicate official KRX security key")
+                expected = sessions[sessions >= interval.ListingDate]
+                if pd.notna(interval.DelistingDate):
+                    expected = expected[expected < interval.DelistingDate]
+                sorted_bars = match.sort_values("Date").reset_index(drop=True)
+                claimed |= dates
+                expected_days[key] = expected
+                securities[key] = sorted_bars
+                aliases[key] = {normal_company(str(name)) for name in (
+                    *match.ISU_ABBRV.dropna().unique(), interval.Name, interval.ShortName) if pd.notna(name)}
+                first_at = sessions.get_loc(expected[0])
+                if first_at and interval.ListingDate == expected[0]:
+                    listing_starts.add((code, key.listing))
+                    previous = bars[bars.Date.eq(sessions[first_at - 1]) & bars.Market.ne(key.market)]
+                    if len(previous) == 1:
+                        anchors[key] = previous
+                if interval.Group == "주권" and key.market in {"KOSPI", "KOSDAQ"}:
+                    training_intervals.add(key)
+            except (ValueError, TypeError) as exc:
+                failures.append({"Code": code, "Stage": "identity", "Reason": str(exc)})
+        if (~claimed).any():
+            failures.append({"Code": code, "Stage": "identity", "Reason": "Some KRX bars lack a unique listing interval",
+                             "Rows": int((~claimed).sum())})
+    return securities, expected_days, aliases, anchors, training_intervals, other_groups, listing_starts, failures
+
+
+def _anchor_sources(securities, anchors):
+    ending = defaultdict(list)
+    for key in securities:
+        if key.delisting:
+            ending[key.code, key.delisting, key.market].append(key)
+    sources = {}
+    for key, anchor in anchors.items():
+        found = ending[key.code, key.listing, anchor.Market.iloc[0]]
+        if len(found) == 1 and found[0].active(anchor.Date.iloc[0].date().isoformat()):
+            sources[key] = found[0]
+    return sources
+
+
+def _candidate_range(candidate):
+    return (date.fromisoformat(candidate.prev_date) - timedelta(days=7),
+            date.fromisoformat(candidate.date) + timedelta(days=3))
+
+
+def _in_scope(filing, candidate):
+    start, end = _candidate_range(candidate)
+    return start <= filing.published <= end
+
+
+def _kind_inventory(client, start, end, company_cache, codes, registered=frozenset()):
+    daily, company, targeted, failures, rows = {}, defaultdict(list), defaultdict(list), [], {}
+    for day in calendar_days(start, end):
+        try:
+            filings, span = client.day(day)
+            daily[day] = span
+            for filing in filings:
+                if kind_topic(filing) or filing.accession in registered:
+                    rows.setdefault(filing.accession, filing)
+        except (ValueError, OSError) as exc:
+            failures.append({"Date": str(day), "Stage": "kind_daily", "Reason": str(exc)})
+    if company_cache:
+        for cache in sorted(company_cache.glob("*_p1.html")):
+            found = re.fullmatch(r"([0-9A-Z]{6})_(\d{4}-\d\d-\d\d)_(\d{4}-\d\d-\d\d)_p1.html", cache.name)
+            if not found or codes and found[1] not in codes:
+                continue
+            code, lo, hi = found[1], date.fromisoformat(found[2]), date.fromisoformat(found[3])
+            if lo > end or hi < start:
+                continue
+            try:
+                filings, span = client.cached_company(code, lo, hi)
+                company[code].append(span)
+                for filing in filings:
+                    if start <= filing.published <= end and (kind_topic(filing) or filing.accession in registered):
+                        rows.setdefault(filing.accession, filing)
+            except (ValueError, OSError) as exc:
+                failures.append({"Code": code, "Stage": "kind_company", "Reason": str(exc)})
+    for code, filings, span in client.archived_market_lists(start, end, codes):
+        targeted[code].append(span)
+        for filing in filings:
+            if start <= filing.published <= end and (kind_topic(filing) or filing.accession in registered):
+                rows.setdefault(filing.accession, filing)
+    return daily, company, targeted, tuple(rows.values()), failures
+
+
+def _final_filing(client, referral, published, daily, issuer):
+    accession = referral.route.accession
+    route_day = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
+    hints = {route_day, *published.get(accession, ())}
+    matches = [target for day in sorted(hints) if (span := daily.get(day))
+               and (target := client.dated_filing(span, accession))]
+    require(len(matches) == 1, "KIND final document is absent or ambiguous in verified daily lists")
+    target, = matches
+    require(issuer and (target.company_id or target.stock_code)[:5] == issuer,
+            "KIND final document identifies another issuer")
+    return target
+
+
+def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded,
+                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None, identity_universe=None,
+                     raw_prices=None):
+    by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
+    for key, names in aliases.items():
+        for name in names:
+            by_name[name].add(key)
+        by_code[key.code].add(key)
+        by_company[key.code[:5]].add(key)
+    complete_identity = identity_universe is not None
+    identity_universe = aliases if identity_universe is None else identity_universe
+    identity_by_company = defaultdict(dict)
+    for key, names in identity_universe.items():
+        identity_by_company[key.code[:5]][key] = names
+    parsed, blocked, unparsed, failures = defaultdict(list), defaultdict(set), defaultdict(lambda: defaultdict(list)), []
+    structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
+    selected, fetched, verified, families = set(), set(), {}, []
+    parse_failures = {}
+    missing_merger_sources = set()
+    pending_auctions, pending_families = [], []
+    structural_reviews = defaultdict(list)
+    supplemental, supplement_failures = defaultdict(dict), {}
+    additions_by_issuer = defaultdict(list)
+    raw_prices = {} if raw_prices is None else raw_prices
+
+    def has_session(key, day):
+        return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
+
+    def affected_candidates(filing, keys):
+        if kind_topic(filing) != "terms":
+            return [(key, candidate) for key in keys for candidate in candidates[key] if _in_scope(filing, candidate)]
+        reasons = DIVIDEND if "주식배당" in re.sub(r"\s+", "", filing.title) else BONUS
+        return [(key, candidate) for key in keys for candidate in candidates[key]
+                if abs((date.fromisoformat(candidate.date) - filing.published).days) <= 120
+                and any(notice.final and notice.facts.kind == "ex_price" and notice.facts.effective == candidate.date
+                        and re.sub(r"\s+", "", notice.facts.reason) in reasons for notice in parsed[key])]
+
+    def supplemental_failure(filing, refs, exc, targets, failure_record):
+        check = ("combined_bonus_listing_source_missing" if isinstance(exc, KindUnavailable)
+                 else "combined_bonus_listing_source_unverified")
+        item = NoticeFailure(tuple(FieldEvidence(filing.accession, ref, COMBINED_LISTING_FAILURE_FIELD)
+                                   for ref in refs), check, scope="combined_bonus_listing")
+        for key, day in sorted(targets, key=lambda target: (str(target[0]), target[1])):
+            if not targets[key, day] and isinstance(exc, KindUnavailable):
+                continue
+            unparsed[key][day].append(item)
+            failure_record.setdefault("CombinedBonusListing", []).append({
+                **_security_columns(key), "Date": day, "FailedCheck": check,
+            })
+        return check
+
+    def failed(filing, structural, keys, affected, refs, exc, check="notice_parse_failed", *, form=None, body=None,
+               supplemental_only=False):
+        if not structural and form is not None and body is not None:
+            try:
+                targets = notice_security_scope(filing, form, body, identity_universe)
+            except ValueError:
+                targets = set()
+            if targets:
+                affected = [(key, candidate) for key, candidate in affected if (key, candidate.date) in targets]
+        check = getattr(exc, "failed_check", check)
+        stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or (
+            len(refs) == 1 and not isinstance(exc, CorrectionError)) else "kind_notice"
+        if isinstance(exc, (CorrectionError, DocumentFormatError)):
+            refs += exc.evidence
+        failure_record = {"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
+                          "Topic": kind_topic(filing), "Reason": str(exc), "Evidence": [asdict(ref) for ref in refs]}
+        if filing.accession in addition_accessions:
+            supplement_failures[filing.accession] = (refs, exc, failure_record)
+        if supplemental_only:
+            stage = "kind_notice"
+            check = supplemental_failure(filing, refs, exc, supplemental[filing.accession], failure_record)
+        failure_record.update(Stage=stage, FailedCheck=check)
+        failures.append(failure_record)
+        if structural:
+            for key in keys:
+                structural_gaps[key].add(filing.accession)
+        for key, candidate in affected:
+            if stage == "kind_document":
+                blocked[key].add(candidate.date)
+            else:
+                unparsed[key][candidate.date].append(NoticeFailure(
+                    tuple(FieldEvidence(filing.accession, ref, "KIND notice awaiting review") for ref in refs), check))
+
+    def bind(filing, form, body, acquired, issuer, keys, structural, affected):
+        sections = parse_notice(filing, form, body)
+        if not sections:
+            require(form == "68155" and body.final, "KIND notice lacks verified listing sections")
+            nonstock.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FormId": form,
+                             "Evidence": [asdict(ref) for ref in (filing.evidence, *acquired)]})
+        matched = []
+        securities = identity_by_company[issuer] if issuer else identity_universe
+        for facts in sections:
+            if (complete_identity and body.final and issuer and issuer not in unresolved_issuers
+                    and facts.kind in {"bonus_terms", "dividend_terms"} and facts.code is None and facts.isin is None
+                    and share_identity(facts.share_label) == ("preferred", "", "")
+                    and any(notice.security.share_class == "common" and notice.facts.kind == facts.kind
+                            and notice.facts.effective == facts.effective for notice in matched)
+                    and not any(key.share_class == "preferred" and (key.active(facts.effective)
+                                or facts.listing and key.active(facts.listing)) for key in securities)):
+                continue
+            outside_merger_source = (
+                bounded and body.final and filing.company_id[:5] == issuer and issuer
+                and merger_facts(facts.kind, facts.reason)
+                and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
+                and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)
+            )
+            try:
+                notice = match_notice(filing, form, facts, body, acquired, securities,
+                                      identity_universe=securities)
+            except DisclosureError as exc:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+                    continue
+                if not can_join_auction_identity(form, facts, body.final):
+                    raise
+                pending_auctions.append((filing, form, facts, body, acquired, securities, structural, keys, affected, exc))
+                continue
+            if notice.security not in keys:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+                continue
+            parsed[notice.security].append(notice)
+            matched.append(notice)
+        verified[filing.accession] = matched
+
+    def bind_final(filing, form, body, acquired, issuer, keys, structural, affected):
+        accession = filing.accession
+        if accession in verified:
+            return
+        if accession in parse_failures:
+            raise parse_failures[accession]
+        try:
+            require(body.final, "KIND normal notice parser requires a final document")
+            if filing.withdrawn or kind_withdrawal(filing.title):
+                raise NoticeError("correction_withdrawn", "KIND final disclosure is withdrawn or cancelled")
+            bind(filing, form, body, acquired, issuer, keys, structural, affected)
+        except (ValueError, OSError) as exc:
+            parse_failures[accession] = exc
+            raise
+
+    def supplemental_filings():
+        if not raw_prices:
+            return
+        ambiguous = ambiguous_final_documents(notice for rows in parsed.values() for notice in rows)
+        queued = {}
+        for key, rows in parsed.items():
+            if key not in raw_prices:
+                continue
+            bars = raw_prices[key]
+            days = pd.DatetimeIndex(bars.Date)
+            for notice in rows:
+                if notice.form != "11308" or notice.document_no in ambiguous:
+                    continue
+                facts = notice.facts
+                candidate = max((item for item in candidates[key] if item.date < facts.effective),
+                                key=lambda item: item.date, default=None)
+                if candidate is None:
+                    continue
+                observation, _ = combined_bonus_observation(candidate, facts, bars, days)
+                if observation is None:
+                    continue
+                _, (before, after) = observation
+                listing = date.fromisoformat(facts.listing)
+                related_filings = [row for row in additions_by_issuer[key.code[:5]]
+                                   if -7 <= (row.published - listing).days <= 3]
+                needs_totals = (facts.paid_listing == facts.listing or after - before != facts.added_shares
+                                or any(row.withdrawn or kind_withdrawal(row.title)
+                                       or not re.fullmatch(r"(?:\[(?:정정|기재정정)\])*추가상장\(무상증자\)",
+                                                           re.sub(r"\s+", "", row.title)) for row in related_filings))
+                for related in related_filings:
+                    targets = supplemental[related.accession]
+                    target = key, candidate.date
+                    targets[target] = targets.get(target, False) or needs_totals
+                    queued.setdefault(related.accession, related)
+        for accession, related in queued.items():
+            if related.withdrawn or kind_withdrawal(related.title):
+                failed(related, False, (), (), (related.evidence,),
+                       NoticeError("correction_withdrawn", "KIND additional listing is withdrawn or cancelled"),
+                       supplemental_only=True)
+                continue
+            if accession in supplement_failures:
+                refs, exc, failure_record = supplement_failures[accession]
+                supplemental_failure(related, refs, exc, supplemental[accession], failure_record)
+            if accession not in selected:
+                yield related
+
+    ordered = sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession))
+    published = defaultdict(set)
+    for filing in ordered:
+        published[filing.accession].add(filing.published)
+        issuer = (filing.company_id or filing.stock_code)[:5]
+        if (raw_prices and issuer and filing.submitter in EXCHANGE and kind_topic(filing)
+                and "추가상장" in re.sub(r"\s+", "", filing.title)):
+            additions_by_issuer[issuer].append(filing)
+    addition_accessions = {filing.accession for rows in additions_by_issuer.values() for filing in rows}
+    for filing in chain(ordered, supplemental_filings()):
+        if filing.accession in selected:
+            continue
+        topic = kind_topic(filing)
+        if topic is None and filing.accession not in registered:
+            continue
+        issuer = (filing.company_id or filing.stock_code)[:5]
+        keys = by_company[issuer] if issuer else by_name[normal_company(filing.company)]
+        if not keys:
+            if topic == "structural" and not bounded and (not issuer or issuer in unresolved_issuers):
+                unattributed_structure.add(filing.accession)
+                failures.append({"AcptNo": filing.accession, "Date": str(filing.published), "Stage": "structural_identity",
+                                 "Topic": topic, "Reason": "No verified security matches the KIND list row",
+                                 "Evidence": [asdict(filing.evidence)]})
+            continue
+        affected = affected_candidates(filing, keys)
+        structural = (topic == "structural" or topic in {"transfer", "new_listing"} and bool(keys & anchors.keys())
+                      or topic == "rename" and bool(keys & spac_keys))
+        supplemental_only = not affected and not structural and filing.accession not in registered
+        if supplemental_only and filing.accession not in supplemental:
+            continue
+        selected.add(filing.accession)
+        refs = (filing.evidence,)
+        form = body = None
+        scope_form = scope_body = None
+        check = "notice_parse_failed"
+        options = {"cache_only": True} if supplemental_only else {}
+        try:
+            form, body, acquired = client.document(filing, **options)
+            scope_form, scope_body = form, body
+            refs += acquired
+            fetched.add(filing.accession)
+            if body.final:
+                bind_final(filing, form, body, acquired, issuer, keys, structural, affected)
+                continue
+            original_refs = refs
+            check = "correction_final_unresolved"
+            referral = client.final_referral(filing, body, acquired, **options)
+            refs += (referral.evidence,)
+            target = _final_filing(client, referral, published, daily or {}, issuer)
+            refs += (target.evidence,)
+            accession = target.accession
+            target_affected = affected_candidates(target, keys)
+            affected = list({(key, candidate.date): (key, candidate) for key, candidate in [*affected, *target_affected]}.values())
+            target_form, target_body, target_refs = client.document(target, expected=referral, **options)
+            selected.add(accession)
+            scope_form, scope_body = target_form, target_body
+            refs += target_refs
+            fetched.add(accession)
+            check = "notice_parse_failed"
+            bind_final(target, target_form, target_body, target_refs, issuer, keys, structural, target_affected)
+            family = {"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
+                      "FinalDocNo": target_body.document_no, "FormId": target_form,
+                      "Evidence": [asdict(ref) for ref in (filing.evidence, acquired[0], referral.evidence,
+                                                           target.evidence, *target_refs)]}
+            pending_families.append((filing, structural, keys, affected, original_refs, target_refs, family, form, body, refs,
+                                     supplemental_only))
+        except (ValueError, OSError) as exc:
+            failed(filing, structural, keys, affected, refs, exc, check, form=scope_form, body=scope_body,
+                   supplemental_only=supplemental_only)
+
+    listings = auction_listing_index(notice for rows in parsed.values() for notice in rows)
+    for filing, form, facts, body, acquired, securities, structural, keys, affected, initial_error in pending_auctions:
+        witness = auction_identity_witness(form, facts, filing.company_id, body.final,
+                                           listings.get((filing.company_id, facts.effective), ()))
+        try:
+            if not witness:
+                raise initial_error
+            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness,
+                                  identity_universe=securities)
+            if notice.security not in keys:
+                continue
+            parsed[notice.security].append(notice)
+            verified[filing.accession].append(notice)
+        except DisclosureError as exc:
+            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc, form=form, body=body)
+
+    for filing, structural, keys, affected, original_refs, target_refs, family, form, body, refs, supplemental_only in pending_families:
+        try:
+            accession = family["FinalAcptNo"]
+            rows = [row for row in verified[accession] if row.security in keys and row.document_no == family["FinalDocNo"]
+                    and row.evidence[1:] == target_refs]
+            require(rows, "KIND final document identifies no affected stock")
+            review = None
+            if structural and form == family["FormId"] and role_correction_kind(filing, form):
+                closed = affected_keys = role_correction_windows(
+                    filing, form, parse_notice(filing, form, body), rows, keys, has_session)
+                family["OriginalNoticeEvidence"] = [asdict(ref) for ref in original_refs[2:]]
+            elif structural and form == "68151" and family["FormId"] == "68155" and all(
+                notice.facts.kind == "rename" for notice in rows
+            ):
+                evidence = structural_review_evidence(filing.accession, accession,
+                                                      tuple(Evidence(**ref) for ref in family["Evidence"]), original_refs[2:])
+                review = superseded_merger_review(filing, form, body, rows, keys, has_session, evidence)
+                family["ReviewWitness"] = {"Security": _security_columns(review.security), "Date": review.date,
+                                           "OriginalFormId": form,
+                                           "OriginalNoticeEvidence": [asdict(ref) for ref in original_refs[2:]]}
+                closed, affected_keys = set(), keys - {review.security}
+            else:
+                closed, affected_keys = structural_closure(rows, keys, has_session) if structural else (set(), set())
+            require(not structural or closed or review, "KIND final document does not confirm an affected structural event")
+            for key in affected_keys - closed:
+                structural_gaps[key].add(filing.accession)
+            families.append({**family, "ClosedWindows": [_security_columns(key) for key in sorted(closed, key=str)]})
+            if review:
+                structural_reviews[review.security].append(review)
+        except (ValueError, OSError) as exc:
+            failed(filing, structural, keys, affected, refs, exc, "correction_final_unresolved", form=form, body=body,
+                   supplemental_only=supplemental_only)
+    require(not missing_merger_sources,
+            "Issuer merger source is outside the bounded census; include --code for "
+            + ", ".join(sorted(missing_merger_sources)))
+    return (parsed, blocked, unparsed, structural_gaps, unattributed_structure, failures, nonstock, families,
+            structural_reviews, len(selected), len(fetched))
+
+
+def _official_action_snapshots(paths):
+    actions = defaultdict(list)
+    for path in paths:
+        data = read_snapshot(path, verify_archive=True)
+        require(path.stem == sha256(path), "Official snapshot filename does not match its hash")
+        for item in data["securities"]:
+            raw = item["security"]
+            key = SecurityKey(*(raw[field] for field in ("code", "isin", "listing", "delisting", "market", "share_class")))
+            for action in map(action_from_record, item["actions"]):
+                if action not in actions[key]:
+                    actions[key].append(action)
+    return actions
+
+
+def _covered(candidate, daily, spans):
+    start, end = _candidate_range(candidate)
+    return all(day in daily for day in calendar_days(start, end)) or any(
+        span.start <= start <= end <= span.end for span in spans)
+
+
+def spac_observations(bars, prices):
+    spac_bars = bars[bars.SECT_TP_NM.str.contains(r"SPAC|기업인수목적|스팩", case=False, regex=True, na=False)]
+    spac_receipts = []
+    if not spac_bars.empty:
+        for at in dict.fromkeys((0, len(spac_bars) - 1)):
+            row = spac_bars.iloc[at]
+            day = row.Date.date().isoformat()
+            spac_receipts.append({"session": day, "field": "SECT_TP_NM", "value": row.SECT_TP_NM,
+                                  "sha256": prices[day]})
+    return spac_receipts
+
+
+def _window_coverage(key, bars, expected, prices, daily, spans, structural_gaps, raw_sha256, ledger, *, sampled,
+                     unattributed_structure):
+    start, end = expected[0].date(), expected[-1].date()
+    publish_start, publish_end = start - timedelta(days=7), end + timedelta(days=3)
+    list_complete = all(day in daily or any(span.start <= day <= span.end for span in spans)
+                        for day in calendar_days(publish_start, publish_end))
+    merger = next((row.date for row in ledger.resolutions if row.kind == Resolution.SPAC_PREMERGER), None) if ledger else None
+    return {**_security_columns(key), "first_session": str(start), "last_session": str(end),
+            "expected_sessions": len(expected), "price_rows": len(bars), "raw_sha256": raw_sha256,
+            "publication_start": str(publish_start), "publication_end": str(publish_end),
+            "publication_complete": list_complete,
+            "structural_documents_incomplete": sorted(structural_gaps),
+            "unattributed_structural_documents_present": unattributed_structure,
+            "required_dates_incomplete": list(ledger.incomplete) if ledger else [],
+            "complete": bool(not sampled and raw_sha256 and ledger and list_complete and not structural_gaps
+                             and not unattributed_structure and not ledger.incomplete),
+            "spac": {"observations": spac_observations(bars, prices), "merger_listing": merger}}
+
+
+def _security_columns(key):
+    return dict(zip(SECURITY_COLUMNS, (key.code, key.isin, key.listing, key.delisting, key.market, key.share_class)))
+
+
+def _candidate_columns(candidate):
+    return {**_security_columns(candidate.security), "Date": candidate.date, "PrevDate": candidate.prev_date,
+            "PrevClose": candidate.prev_close, "BasePrice": candidate.base_price, "SharesBefore": candidate.shares_before,
+            "SharesAfter": candidate.shares_after, "Paused": candidate.paused}
+
+
+def _notice_columns(notice):
+    return {**_security_columns(notice.security), "AcptNo": notice.accession, "FormId": notice.form,
+            "Published": notice.published, "Title": notice.title, **notice_facts_columns(notice.facts),
+            "Sha256": notice.evidence[-1].sha256, "Evidence": json.dumps([asdict(ref) for ref in notice.evidence]),
+            "DocNo": notice.document_no, "Family": json.dumps(notice.family), "Final": notice.final}
+
+
+def _resolution_columns(resolution, observations, price_hashes):
+    evidence = [asdict(ref) for ref in resolution.evidence]
+    dates = {resolution.date}
+    if candidate := observations.get((resolution.security, resolution.date)):
+        dates.add(candidate.prev_date)
+    evidence.extend({"source": "KRX raw", "session": day, "sha256": price_hashes[day]} for day in sorted(dates))
+    if resolution.kind == Resolution.TICK_ROUNDING:
+        evidence.append({"source": "KRX tick table", "market": resolution.security.market,
+                         "effective_from": "2023-01-25" if resolution.date >= "2023-01-25" else None})
+    return {**_security_columns(resolution.security), "Date": resolution.date, "Resolution": resolution.kind,
+            "PriceFactor": resolution.price_factor, "VolumeFactor": resolution.volume_factor,
+            "Evidence": json.dumps(evidence),
+            "Reason": resolution.reason, "Review": resolution.review, "FailedCheck": resolution.failed_check}
+
+
+def _write_csv(path, columns, rows):
+    with tempfile.TemporaryDirectory(dir=path.parent) as tmp:
+        output = Path(tmp) / path.name
+        with output.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(stream, columns)
+            writer.writeheader()
+            writer.writerows(rows)
+        output.replace(path)
+
+
+def _implementation_hashes():
+    chart = Path(__file__).resolve().parents[2]
+    return {name: sha256(chart / name) for name in (
+        "experiments/dataset/census_actions.py", "shared/data/actions.py", "shared/data/events.py",
+        "shared/data/disclosures.py", "shared/data/kind_market.py", "shared/data/market_notices.py",
+        "shared/data/market_resolutions.py", "shared/data/calendar.py", "shared/data/validation.py",
+        "shared/data/issuer_aliases.json",
+        "shared/data/resolution_snapshot.py", "shared/data/resolution_archive.py",
+    )}
+
+
+def read_review_confirmations(path):
+    if path is None:
+        return {}
+    rows = {}
+    for row in _csv(path, CONFIRMATION_COLUMNS):
+        key = (_security(row), _day(row["Date"]))
+        accession = row["OfficialURL"].rsplit("=", 1)[-1]
+        require(key not in rows and re.fullmatch(r"[0-9]{14}", accession)
+                and row["OfficialURL"] == kind_document_url(accession)
+                and re.fullmatch(r"[0-9]{5}", row["FormId"])
+                and int(row["Section"]) > 0 and Fraction(row["Ratio"]) > 0,
+                "Invalid or duplicate official review confirmation")
+        rows[key] = (accession, row)
+    require(rows, "Empty official review confirmations")
+    return rows
+
+
+def verify_review_confirmations(confirmations, notices, resolutions, candidates):
+    indexed = {(row.security, row.date): row for row in resolutions}
+    approved = []
+    for key, (accession, entry) in confirmations.items():
+        security, day = key
+        resolution = indexed.get(key)
+        require(key in candidates and resolution is not None and resolution.volume_factor is not None,
+                f"{security.code} {day}: official review confirmation did not resolve an observed candidate")
+        matching = [notice for notice in notices[security] if notice.accession == accession
+                    and (notice.form, notice.facts.section) == (entry["FormId"], int(entry["Section"]))
+                    and notice.final]
+        field = f"KIND {entry['FormId']}/{entry['Section']}"
+        require(len(matching) == 1 and any(
+            ref.accession == accession and ref.field == field and ref.source == matching[0].evidence[-1]
+            for ref in resolution.evidence
+        ), f"{security.code} {day}: confirmed official section is not part of the resolved event")
+        expected = {
+            Resolution.UNIT_CHANGE: resolution.volume_factor,
+            Resolution.BONUS: resolution.volume_factor - 1,
+            Resolution.RIGHTS: resolution.price_factor,
+            Resolution.REFERENCE_RESET: Fraction(1),
+        }.get(resolution.kind)
+        require(expected is not None and Fraction(entry["Ratio"]) == expected,
+                f"{security.code} {day}: confirmed ratio differs from the verified resolution")
+        approved.append(entry)
+    return approved
+
+
+def build_census(args, client):
+    implementation = _implementation_hashes()
+    registration = getattr(args, "review_confirmations", None)
+    require(not registration or not args.sample, "Review confirmations require an unsampled census")
+    registration_hash = sha256(registration) if registration else None
+    confirmations = read_review_confirmations(registration)
+    registered = {accession for accession, _ in confirmations.values()}
+    sessions = scheduled_sessions(pd.Timestamp(args.start), pd.Timestamp(args.end))
+    require(len(sessions), "No KRX sessions in requested range")
+    sample = set()
+    if args.sample:
+        with args.sample.open(encoding="utf-8-sig", newline="") as stream:
+            sample = {(row["Code"], date.fromisoformat(row["Date"]).isoformat()) for row in csv.DictReader(stream)}
+        require(sample, "Empty candidate sample")
+    codes = set(args.code) | {code for code, _ in sample}
+    raw, prices = _price_frame(args.krx_days, sessions, codes)
+    master = _security_master(args.active_master, args.delisted_master)
+    previous = raw.groupby("Code", sort=False)[["RawClose", "RawVolume", "RawOpen", "RawHigh", "RawLow", "ListedShares"]].shift()
+    baseline_mask = observation_mask(raw, raw.RawClose - raw.RawChange, previous)
+    previous_dates = raw.groupby("Code", sort=False).Date.shift().loc[baseline_mask]
+    market_observed = {(row.Code, row.Date.date().isoformat()): previous_dates.at[row.Index]
+                       for row in raw.loc[baseline_mask, ["Code", "Date"]].itertuples()}
+    del previous
+    if sample:
+        market_observed = {key: value for key, value in market_observed.items() if key in sample}
+    windows = _windows(raw, master, sessions, market_observed)
+    securities, expected_days, aliases, anchors, training, other_groups, listing_starts, failures = windows
+    anchor_sources = _anchor_sources(securities, anchors)
+    raw_count = len(raw)
+    raw_codes = raw.Code.nunique()
+    failures.extend({"Code": code, "Stage": "identity", "Reason": "No preserved KRX prices in this scope"}
+                    for code in sorted(codes - set(raw.Code.unique())))
+    identity_universe = master_security_aliases(master)
+    for key, names in aliases.items():
+        identity_universe.setdefault(key, set()).update(names)
+    del raw, master
+    candidates = defaultdict(tuple)
+    fingerprints = {}
+    for key, bars in securities.items():
+        try:
+            fingerprints[key] = raw_window_fingerprint(bars, expected_days[key])
+            if key in anchor_sources:
+                prior = anchors[key]
+                context = pd.concat([prior, bars], ignore_index=True)
+                found = observe_candidates(key, context, expected_days[key].insert(0, prior.Date.iloc[0]))
+            else:
+                found = observe_candidates(key, bars, expected_days[key])
+            candidates[key] = tuple(c for c in found if not sample or (key.code, c.date) in sample)
+        except ValueError as exc:
+            failures.append({"Code": key.code, "Stage": "krx_candidate", "Reason": str(exc)})
+
+    daily, company, targeted, filings, source_errors = _kind_inventory(
+        client, args.published_start, args.published_end, args.kind_company_cache, codes, registered)
+    spac_keys = {key for key, bars in securities.items()
+                 if bars.SECT_TP_NM.str.contains(r"SPAC|기업인수목적|스팩", case=False, regex=True, na=False).any()}
+    unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
+    acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
+                                spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
+                                registered=registered, daily=daily, expected_days=expected_days,
+                                identity_universe=identity_universe, raw_prices=securities)
+    (notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families,
+     structural_reviews, selected, fetched) = acquired
+    all_notices = [notice for rows in notices.values() for notice in rows]
+    ambiguous_finals = ambiguous_final_documents(all_notices)
+    issuer_mergers = issuer_merger_boundaries(
+        all_notices, securities,
+        lambda key, day: key in expected_days and pd.Timestamp(day) in expected_days[key])
+    actions = _official_action_snapshots(args.action_snapshot)
+    resolved, unresolved, failed_windows, window_coverage = [], [], [], []
+    for key, bars in securities.items():
+        covered = {candidate.date for candidate in candidates[key] if _covered(candidate, daily, company[key.code])}
+        ledger = None
+        try:
+            require(key in fingerprints, "Official KRX raw window failed validation")
+            ledger = resolve_events(key, bars, expected_days[key], notices[key], actions=actions[key],
+                                    covered_dates=covered, blocked_dates=blocked[key], unparsed_dates=unparsed[key],
+                                    transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key),
+                                    issuer_mergers=issuer_mergers.get(key), structural_reviews=structural_reviews[key],
+                                    ambiguous_finals=ambiguous_finals)
+        except ValueError as exc:
+            failed_windows.append({"Code": key.code, "Stage": "resolver", "Reason": str(exc)})
+        coverage_spans = [*company[key.code], *targeted[key.code]]
+        window_coverage.append(_window_coverage(
+            key, bars, expected_days[key], prices, daily, coverage_spans,
+            structural_gaps[key], fingerprints.get(key), ledger, sampled=bool(sample),
+            unattributed_structure=bool(unattributed_structure)))
+        if ledger is None:
+            continue
+        candidates[key] = tuple(c for c in ledger.candidates if not sample or (key.code, c.date) in sample)
+        targets = {c.date for c in candidates[key]}
+        resolved.extend(row for row in ledger.resolutions if not sample or row.date in targets or
+                        row.kind in {Resolution.SEGMENT_BREAK, Resolution.SPAC_PREMERGER} and not row.review)
+        unresolved.extend({**_security_columns(key), "Date": day, "Reason": "Official search or document incomplete"}
+                          for day in ledger.incomplete if not sample or day in targets)
+    all_candidates = [c for values in candidates.values() for c in values]
+    market_counts = Counter(row.kind for row in resolved)
+    training_counts = Counter(row.kind for row in resolved if row.security in training)
+    requested = set(calendar_days(args.published_start, args.published_end))
+    resolutions_by_key = {(r.security, r.date) for r in resolved}
+    observations = {(c.security, c.date): c for c in all_candidates}
+    resolution_count = sum((c.security, c.date) in resolutions_by_key for c in all_candidates)
+    identity_bound = {(c.security.code, c.date) for c in all_candidates}
+    market_candidates_observed = sum((c.security.code, c.date) in market_observed for c in all_candidates)
+    review_candidates_unobserved = sum(row.review and (row.security, row.date) in observations
+                                       and (row.security.code, row.date) not in market_observed for row in resolved)
+    unassigned, market_exclusions = [], []
+    for code, day in sorted(market_observed.keys() - identity_bound):
+        prior = market_observed[code, day]
+        if group := other_groups.get((code, day)):
+            market_exclusions.append({"Code": code, "Date": day, "Reason": "excluded_security_group", "Group": group})
+        elif (code, day) in listing_starts and sessions.get_loc(pd.Timestamp(day)) - sessions.get_loc(prior) > 1:
+            market_exclusions.append({"Code": code, "Date": day, "Reason": "nonconsecutive_listing_history"})
+        else:
+            unassigned.append({"Code": code, "Date": day, "PrevDate": prior.date().isoformat(),
+                               "Reason": "transfer_proof_incomplete" if (code, day) in listing_starts
+                               else "historical_security_identity_or_prices_incomplete"})
+    confirmed = verify_review_confirmations(confirmations, notices, resolved, observations)
+    coverage = {"daily": [asdict(span) for span in daily.values()],
+                "company": {code: [asdict(span) for span in spans] for code, spans in company.items()},
+                "archived_market_actions": {code: [asdict(span) for span in spans] for code, spans in targeted.items()},
+                "windows": window_coverage, "unattributed_structural_documents": sorted(unattributed_structure),
+                "missing_daily_dates": sorted(map(str, requested - set(daily))),
+                "incomplete_candidates": unresolved, "unassigned_market_observations": unassigned,
+                "market_observations_outside_ledger_scope": market_exclusions,
+                "nonstock_notices": nonstock,
+                "kind_auction_identity_links": auction_identity_links(all_notices, auction_listing_index(all_notices)),
+                "kind_final_families": sorted(families, key=lambda row: row["AcptNo"]),
+                "failures": [*failures, *source_errors, *document_errors, *failed_windows]}
+    tables = {
+        "candidates": (CANDIDATE_COLUMNS, map(_candidate_columns, all_candidates)),
+        "notices": (NOTICE_COLUMNS, map(_notice_columns, all_notices)),
+        "resolutions": (RESOLUTION_COLUMNS, (_resolution_columns(r, observations, prices) for r in resolved)),
+    }
+    if confirmed:
+        coverage["review_confirmations"] = confirmed
+    hashes = {}
+    for name, (columns, rows) in tables.items():
+        path = args.output / f"{name}.csv"
+        _write_csv(path, columns, rows)
+        hashes[name] = sha256(path)
+    atomic_json(args.output / "coverage.json", json.loads(json.dumps(coverage, default=str)))
+    hashes["coverage"] = sha256(args.output / "coverage.json")
+    require(implementation == _implementation_hashes(), "Census implementation changed during collection")
+    report = {
+        "version": POLICY_VERSION, "implementation_sha256": implementation, "table_sha256": hashes,
+        "scope": {"start": str(args.start), "end": str(args.end), "published_start": str(args.published_start),
+                  "published_end": str(args.published_end), "codes": sorted(codes),
+                  "sample_sha256": sha256(args.sample) if args.sample else None},
+        "sources": {"krx_sessions": prices, "krx_sha256": canonical_hash(prices),
+                    "active_master_sha256": sha256(args.active_master), "delisted_master_sha256": sha256(args.delisted_master),
+                    "official_action_snapshots": [sha256(path) for path in args.action_snapshot]},
+        "price_rows": raw_count, "price_codes": int(raw_codes), "security_intervals": len(securities),
+        "market_observations_before_identity": len(market_observed), "unassigned_market_observations": len(unassigned),
+        "market_observations_outside_ledger_scope": len(market_exclusions),
+        "market_candidates": len(all_candidates), "training_candidates": sum(c.security in training for c in all_candidates),
+        "market_candidates_with_market_observation": market_candidates_observed,
+        "review_candidates_without_market_observation": review_candidates_unobserved,
+        "candidates_with_resolution": resolution_count, "incomplete_candidates": len(unresolved),
+        "resolutions_without_price_observation": len(resolutions_by_key - observations.keys()),
+        "unmatched_sample_keys": sorted(sample - {(r.security.code, r.date) for r in all_candidates}),
+        "kind_list_dates": len(daily), "requested_kind_list_dates": len(requested),
+        "selected_documents": selected, "retrieved_documents": fetched,
+        "nonstock_notices": len(nonstock),
+        "superseded_documents": len(families),
+        "unattributed_structural_documents": len(unattributed_structure),
+        "kind_http_calls_this_run": client.calls, "dart_http_calls_this_run": 0,
+        "whole_tickers_excluded_by_resolver": None, "training_policy_active": False,
+        "failed_windows": len(failed_windows), "failed_codes": len({e["Code"] for e in [*failures, *failed_windows]}),
+        "complete_windows": sum(window["complete"] for window in window_coverage),
+        "market_review_count": sum(row.review for row in resolved),
+        "training_review_count": sum(row.review for row in resolved if row.security in training),
+        "market_resolution_counts": {kind.value: market_counts[kind] for kind in Resolution},
+        "training_resolution_counts": {kind.value: training_counts[kind] for kind in Resolution},
+        "inventory_complete": len(daily) == len(requested),
+        "ledger_complete": (
+            not codes and len(daily) == len(requested) and resolution_count == len(all_candidates)
+            and not (unassigned or unresolved or failures or failed_windows)
+            and not any(e["Stage"] == "kind_document" for e in document_errors)
+            and all(window["complete"] for window in window_coverage)
+        ),
+    }
+    if confirmed:
+        require(sha256(registration) == registration_hash, "Review confirmation input changed during census")
+        report["sources"]["review_confirmations_sha256"] = canonical_hash(confirmed)
+        report["sources"]["review_confirmations_input_sha256"] = registration_hash
+    atomic_json(args.output / "manifest.json", report)
+    return report
+
+
+def _archive(value):
+    archive, sep, run = value.partition("=")
+    if not sep:
+        raise argparse.ArgumentTypeError("KIND archive must be OBJECT_ROOT=RUN_ROOT")
+    return Path(archive), Path(run)
+
+
+def main(argv=None):
+    cli = argparse.ArgumentParser(description=__doc__)
+    for field in ("start", "end", "published-start", "published-end"):
+        cli.add_argument(f"--{field}", type=date.fromisoformat, required=True)
+    for field in ("krx-days", "active-master", "delisted-master", "kind-root", "output"):
+        cli.add_argument(f"--{field}", type=Path, required=True)
+    cli.add_argument("--kind-daily-cache", type=Path)
+    cli.add_argument("--kind-company-cache", type=Path)
+    cli.add_argument("--kind-legacy-docs", type=Path, action="append", default=[])
+    cli.add_argument("--kind-archive", type=_archive, action="append", default=[])
+    cli.add_argument("--action-snapshot", type=Path, action="append", default=[])
+    cli.add_argument("--review-confirmations", type=Path)
+    cli.add_argument("--sample", type=Path, help="CSV with Code and Date columns")
+    cli.add_argument("--code", action="append", default=[],
+                     help="Restrict to verified securities; include the merger notice's source code for the same issuer")
+    cli.add_argument("--request-budget", type=int, default=0)
+    cli.add_argument("--preview", action="store_true", help="Allow an incomplete market ledger to exit successfully")
+    args = cli.parse_args(argv)
+    try:
+        require(args.published_start <= args.start <= args.end <= args.published_end
+                <= datetime.now(ZoneInfo("Asia/Seoul")).date(), "Invalid census scope")
+        args.output.mkdir(parents=True, exist_ok=True)
+        args.kind_root.mkdir(parents=True, exist_ok=True)
+        client = KindMarket(args.kind_root, budget=args.request_budget, daily_cache=args.kind_daily_cache,
+                            company_cache=args.kind_company_cache, legacy_docs=args.kind_legacy_docs, archives=args.kind_archive)
+        with (args.kind_root / "writer.lock").open("a") as lock, (args.output / "writer.lock").open("a") as output_lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(output_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise DisclosureError("Another census is writing this cache or output") from None
+            require(not (args.output / "manifest.json").exists(), "Census output already published; choose a new output directory")
+            report = build_census(args, client)
+        print(json.dumps({key: val for key, val in report.items() if key not in {
+            "implementation_sha256", "table_sha256", "sources",
+        }}, ensure_ascii=False, indent=2))
+        if not report["ledger_complete"] and not (args.preview or args.sample or args.code):
+            cli.exit(2, "Market ledger incomplete. See coverage.json and resume with a verified cache.\n")
+    except (ValueError, OSError, KeyError) as exc:
+        cli.exit(1, f"{exc}\n")
+
+
+if __name__ == "__main__":
+    main()

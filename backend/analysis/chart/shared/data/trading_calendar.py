@@ -4,41 +4,32 @@ from collections.abc import Collection
 from datetime import date, datetime
 from pathlib import Path
 
-import FinanceDataReader as fdr
 import pandas as pd
 
 # 실행 위치(CWD)와 무관하게 chart/data/ 아래 한 파일을 쓴다(추론 서버 등 CWD가 다른 호출자, #107).
 TRADING_CALENDAR_CACHE_PATH = os.path.join(
     str(Path(__file__).resolve().parents[2]), "workspace", "archive", "data", "krx_trading_calendar.json"
 )
-_KOSPI_INDEX_TICKER = "1001"
-_TRADING_CALENDAR_SOURCE = "KOSPI index trading days"
-_TRADING_CALENDAR_PROVIDERS = {
-    "fdr": "FinanceDataReader KS11",
-    "pykrx": "KRX KOSPI index 1001 via pykrx",
-}
+_TRADING_CALENDAR_SOURCE = "KRX verified trading days v2"
+_TRADING_CALENDAR_PROVIDER = "pykrx KOSPI 1001 + KRX MDCSTAT00301 + XKRX"
 
 
 class TradingCalendarError(RuntimeError):
     """KRX 거래일을 신뢰할 수 있는 출처에서 확정하지 못했을 때 발생합니다."""
 
 
-def _fetch_fdr_index(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    return fdr.DataReader(
-        "KS11", start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
-    )
-
-
-def _fetch_pykrx_index(start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
-    # pykrx는 일부 환경에서 import 시 로그인 경고를 출력하므로 fallback에서만 로드합니다.
-    from pykrx import stock as krx
+def _fetch_pykrx_index(start: pd.Timestamp, end: pd.Timestamp, ticker="1001") -> pd.DataFrame:
+    from .providers import krx
 
     return krx.get_index_ohlcv_by_date(
-        start.strftime("%Y%m%d"),
-        end.strftime("%Y%m%d"),
-        _KOSPI_INDEX_TICKER,
-        name_display=False,
+        start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), ticker, name_display=False,
     )
+
+
+def _fetch_direct_index(start, end):
+    from .calendar import fetch_authenticated_index
+
+    return fetch_authenticated_index(start, end)
 
 
 def _load_trading_calendar_cache(
@@ -64,7 +55,10 @@ def _load_trading_calendar_cache(
             for value in payload["trading_days"]
             if start_date <= pd.Timestamp(value).normalize() <= end_date
         }
-        if not trading_days:
+        from .calendar import scheduled_sessions
+
+        expected = scheduled_sessions(start_date, end_date)
+        if not pd.DatetimeIndex(sorted(trading_days)).equals(expected):
             return set()
         return trading_days
     except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
@@ -120,11 +114,7 @@ def _save_trading_calendar_cache(
 
 
 def get_krx_trading_days(start_date: str, end_date: str) -> set[date]:
-    """요청 범위를 모두 덮는 캐시가 있으면 그것을, 없으면 KOSPI 지수 거래일을 조회합니다.
-
-    지난 거래일은 바뀌지 않으므로 덮는 캐시를 먼저 쓴다. 종목별 추론처럼 반복 호출돼도
-    지수 요청은 캐시가 범위를 못 덮을 때만 나간다(#107).
-    """
+    """검증된 캐시 또는 KRX 지수로 영업일을 확인합니다."""
     start = pd.Timestamp(start_date).normalize()
     end = pd.Timestamp(end_date).normalize()
     if start > end:
@@ -133,43 +123,26 @@ def get_krx_trading_days(start_date: str, end_date: str) -> set[date]:
     if cached_days:
         return cached_days
 
-    provider_calls = (
-        ("fdr", lambda: _fetch_fdr_index(start, end)),
-        ("pykrx", lambda: _fetch_pykrx_index(start, end)),
-    )
-    provider_errors = []
-    for provider_key, fetch_index in provider_calls:
+    from .calendar import scheduled_sessions
+    from .validation import validate_index
+
+    try:
+        primary = validate_index(_fetch_pykrx_index(start, end), start, end)
+        direct = validate_index(_fetch_direct_index(start, end), start, end)
+        scheduled = scheduled_sessions(start, end)
+        if not primary.index.equals(direct.index) or not primary.index.equals(scheduled):
+            raise ValueError("KRX index dates disagree with direct KRX or XKRX sessions")
+        trading_days = set(primary.index.date)
         try:
-            index_df = fetch_index()
-            if index_df.empty:
-                raise ValueError("응답이 비어 있습니다.")
-
-            index_dates = pd.to_datetime(index_df.index, errors="coerce")
-            if index_dates.isna().any():
-                raise ValueError("응답에 잘못된 날짜가 있습니다.")
-
-            trading_days = {
-                timestamp.date()
-                for timestamp in index_dates
-                if start <= timestamp.normalize() <= end
-            }
-            if not trading_days:
-                raise ValueError("요청 범위에 유효한 거래일이 없습니다.")
-
-            provider = _TRADING_CALENDAR_PROVIDERS[provider_key]
-            try:
-                _save_trading_calendar_cache(start, end, trading_days, provider)
-            except OSError as exc:
-                print(f"  ⚠️ KRX 거래일 캐시 저장 실패, 조회 결과를 계속 사용합니다: {exc}")
-            return trading_days
-        except Exception as exc:
-            provider_errors.append(f"{_TRADING_CALENDAR_PROVIDERS[provider_key]}: {exc}")
-
-    raise TradingCalendarError(
-        "KOSPI 지수 거래일 조회에 실패했고 요청 범위를 덮는 캐시도 없습니다. "
-        "잘못된 평일 추정을 피하기 위해 작업을 중단합니다. "
-        f"공급자 오류: {'; '.join(provider_errors)}"
-    )
+            _save_trading_calendar_cache(start, end, trading_days, _TRADING_CALENDAR_PROVIDER)
+        except OSError as exc:
+            print(f"KRX 거래일 캐시 저장 실패: {exc}")
+        return trading_days
+    except Exception as exc:
+        raise TradingCalendarError(
+            "KOSPI 지수 거래일 조회에 실패했고 요청 범위를 덮는 캐시도 없습니다. "
+            f"공급자 오류: {exc}"
+        ) from exc
 
 
 def reindex_to_krx_trading_days(

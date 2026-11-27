@@ -63,6 +63,19 @@ createServer((request, response) => {
   const basisSupply = basisFixture && url.pathname === "/rest/v1/supply_demand" ? [
     { trade_date: "2026-09-21", retail: 10, foreign_investor: -5, institution: -5 },
   ] : null;
+  const basisNewsDays = basisFixture && url.pathname === "/rest/v1/news_sentiment_daily"
+    ? [
+        { sentiment_date: "2026-09-17", sentiment_mean: -0.3, article_count: 6 },
+        { sentiment_date: "2026-09-18", sentiment_mean: 0.05, article_count: 3 },
+        { sentiment_date: "2026-09-21", sentiment_mean: 0.5, article_count: 8 },
+      ].reverse().map(day => ({ ...day, status: "ok", sentiment_std: 0.1, publisher_count: 2 }))
+    : null;
+  const basisNewsTrack = basisFixture && url.pathname === "/rest/v1/news_sentiment_tracks"
+    ? [{ track: "historical", backend: "kr-finbert", status: "ok", source: "bigkinds",
+        as_of: "2026-09-21T18:00:00+09:00", window_start: "2026-09-17", window_end: "2026-09-21",
+        article_count: 17, publisher_count: 2, fetched_count: 17, relevant_count: 17,
+        sentiment_mean: 0.14, sentiment_std: 0.1 }]
+    : null;
   const basisFinancial = basisFixture && url.pathname === "/rest/v1/financial_snapshots" ? [{
     id: "e2e-basis", as_of: "2026-09-21", fiscal_year: 2026, report_code: "11012",
     statement: "CFS", receipt_no: "20260921000001", filed_at: "2026-08-14", shares_basis: "보고서",
@@ -88,5 +101,5 @@ createServer((request, response) => {
     scores: { down: 0.1, neutral: 0.2, up: 0.7 }, why: null });
   const codes = url.pathname === "/rest/v1/stocks" && url.searchParams.get("code")?.match(/^in\.\((.*)\)$/)?.[1].split(",");
   const master = codes && codes.map(code => ({ code, market: "KOSPI", risk_grade: 3, risk_flags: [], ...STOCKS[code] }));
-  response.end(rest && request.method === "GET" ? JSON.stringify(priceEvents ?? basisChart ?? basisSignals ?? basisSupply ?? basisFinancial ?? basisMetrics ?? basisDisclosures ?? basisMaster ?? catalog ?? sentiment ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
+  response.end(rest && request.method === "GET" ? JSON.stringify(priceEvents ?? basisChart ?? basisSignals ?? basisSupply ?? basisFinancial ?? basisMetrics ?? basisDisclosures ?? basisMaster ?? catalog ?? sentiment ?? basisNewsDays ?? basisNewsTrack ?? (stock ? [stock] : strong || master || (chart ? chartRows : []))) : "{}");
 }).listen(Number(process.env.SUPABASE_STUB_PORT ?? "54321"), "127.0.0.1");

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import type { InvestorProfileSummary } from "@/lib/types";
 import { useOnboarding } from "./onboarding-provider";
 import SignOutButton from "./sign-out-button";
+import ReadingEntryLink from "./reading-entry-link";
 
 export default function AccountControls({ profile }: { profile?: InvestorProfileSummary }) {
   const { state } = useOnboarding();
@@ -26,9 +28,9 @@ export default function AccountControls({ profile }: { profile?: InvestorProfile
         <Link href="/profile" className={item}>
           내 투자 성향
         </Link>
-        <Link href="/guide" className={item}>
-          이용 안내
-        </Link>
+        <Suspense fallback={<Link href="/guide" className={item}>이용 안내</Link>}>
+          <ReadingEntryLink href="/guide" className={item}>이용 안내</ReadingEntryLink>
+        </Suspense>
         <Link href="/profile#account" className={item}>
           계정 설정
         </Link>

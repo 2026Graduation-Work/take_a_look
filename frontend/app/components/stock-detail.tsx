@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import {
   Checkpoints,
   ContributionPanel,
+  contributionTargetWord,
   DisclosureList,
   FinancialPanel,
+  FINANCIAL_GROUPS,
   NewsSentimentPanel,
   PricePsychology,
   SourceList,
@@ -19,8 +21,10 @@ import {
 import StockMarks from "./stock-marks";
 import Segmented from "./segmented";
 import MarketDetail from "./market-detail";
+import { useEvidenceReading } from "./reading-controls";
+import { READING_HINT, READING_INVITATION, READING_TAB_LABELS as TAB_LABELS, readingSteps, type ReadingTab } from "@/lib/evidence-reading";
 import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale";
-import { classifyBit, type CardId } from "@/lib/profiling/bit";
+import { BIT_LABEL, classifyBit, type CardId } from "@/lib/profiling/bit";
 import GainText from "./gain-text";
 import ChangeText from "./change-text";
 import TermLabel from "./term-tip";
@@ -51,21 +55,30 @@ import {
 import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, formatWonChange, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
-import { marketSentimentView, riskSnapshot, type HoldingWeight, type StockInsights } from "@/lib/providers";
+import { marketSentimentView, riskSnapshot, todayLiveSentimentView, type HoldingWeight, type StockInsights } from "@/lib/providers";
 import type { InvestorProfileSummary, MarketStatus, StockDetail, StyleAxes } from "@/lib/types";
 
-const TAB_LABELS = {
-  overview: "한눈에 보기",
-  model: TERM.contribution,
-  trading: TERM.supply,
-  news: TERM.market,
-  company: "회사 상태",
-};
-
-type StockTab = keyof typeof TAB_LABELS;
+type StockTab = ReadingTab;
 type DetailTab = Exclude<StockTab, "overview">;
 
 const DEFAULT_DETAIL_TABS: readonly DetailTab[] = ["model", "trading", "news", "company"];
+
+const STOCK_TAB_CHANGE = "stock-tab-change";
+
+function subscribeToStockTab(onChange: () => void) {
+  window.addEventListener(STOCK_TAB_CHANGE, onChange);
+  window.addEventListener("popstate", onChange);
+  return () => {
+    window.removeEventListener(STOCK_TAB_CHANGE, onChange);
+    window.removeEventListener("popstate", onChange);
+  };
+}
+
+function stockTabFromLocation(): StockTab {
+  const tab = new URLSearchParams(window.location.search).get("tab");
+  return tab && Object.hasOwn(TAB_LABELS, tab) ? tab as StockTab : "overview";
+}
+
 
 const CARD_TO_TAB: Partial<Record<CardId, DetailTab>> = {
   contribution: "model",
@@ -106,6 +119,9 @@ interface StockDetailViewProps {
   onRetry?: () => void;
   chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
   chartRevision?: number;
+  readingHistoryKey?: string | null;
+  readingInvite?: boolean;
+  readingUsesDiagnosis?: boolean;
 }
 
 export default function StockDetailView({
@@ -121,12 +137,15 @@ export default function StockDetailView({
   onRetry,
   chartSnapshots,
   chartRevision = 0,
+  readingHistoryKey = null,
+  readingInvite = false,
+  readingUsesDiagnosis = false,
   signalHorizon = 20,
   onHorizonChange,
 }: StockDetailViewProps) {
   const currentMarketStatus = useMarketStatus(marketStatus);
   const bit = styleAxes ? classifyBit(styleAxes) : null;
-  const [activeTab, setActiveTab] = useState<StockTab>("overview");
+  const selectedTab = useSyncExternalStore(subscribeToStockTab, stockTabFromLocation, () => "overview" as const);
   const tabRefs = useRef<Partial<Record<StockTab, HTMLButtonElement | null>>>({});
   const [query, setQuery] = useState("");
   const savedList = parseSavedHoldings(
@@ -199,12 +218,14 @@ export default function StockDetailView({
   const metric = financial?.metrics.find(({ key, value }) => key === "debt_ratio" && value != null)
     ?? financial?.metrics.find(({ value }) => value != null);
   const sentimentView = marketSentimentView(insights);
+  const rangeLow = formatSignedPercent(detail.returnBand.low);
+  const rangeHigh = formatSignedPercent(detail.returnBand.high);
   const range = (
     <>
-      <ChangeText value={detail.returnBand.low} precision={1}>{formatSignedPercent(detail.returnBand.low)}</ChangeText>
+      <ChangeText value={detail.returnBand.low} precision={1}>{rangeLow}</ChangeText>
       {currentPrice !== null && <span className="font-normal text-body"> ({bandPrice(currentPrice, detail.returnBand.low)})</span>}
       {" ~ "}
-      <ChangeText value={detail.returnBand.high} precision={1}>{formatSignedPercent(detail.returnBand.high)}</ChangeText>
+      <ChangeText value={detail.returnBand.high} precision={1}>{rangeHigh}</ChangeText>
       {currentPrice !== null && <span className="font-normal text-body"> ({bandPrice(currentPrice, detail.returnBand.high)})</span>}
     </>
   );
@@ -222,11 +243,54 @@ export default function StockDetailView({
     ? [...new Set(bit.cardOrder.flatMap((card) => CARD_TO_TAB[card] ?? []))]
     : DEFAULT_DETAIL_TABS;
   const tabs = ["overview", ...detailTabs] as const;
+  const activeTab: StockTab = tabs.includes(selectedTab) ? selectedTab : "overview";
 
-  function selectTab(tab: StockTab, moveFocus = false) {
-    setActiveTab(tab);
+  const selectTab = useCallback((tab: StockTab, moveFocus = false) => {
+    const next = new URL(window.location.href);
+    if (tab === "overview") next.searchParams.delete("tab");
+    else next.searchParams.set("tab", tab);
+    window.history.replaceState(null, "", next);
+    window.dispatchEvent(new Event(STOCK_TAB_CHANGE));
     if (moveFocus) tabRefs.current[tab]?.focus();
-  }
+  }, []);
+
+  const hasHistogram = hasBand && realizedReturns.length > 0;
+  const readingMetric = metric && metric.key in TERM_INFO ? metric : null;
+  const targetWord = contributionTargetWord(chart?.inference.contribution_space);
+  const chartReasons = detail.reasons.filter(({ source }) => source === "chart");
+  const readingRoot = useRef<HTMLDivElement>(null);
+  const readingReplay = useRef<HTMLButtonElement>(null);
+  const reading = useEvidenceReading({
+    historyKey: loading ? null : readingHistoryKey,
+    invite: readingInvite,
+    code: detail.code,
+    selectTab,
+    root: readingRoot,
+    replayButton: readingReplay,
+    steps: readingSteps(tabs, {
+      readerType: readingUsesDiagnosis && bit ? { type: bit.type, label: BIT_LABEL[bit.type] } : null,
+      overview: {
+        hasSignal: preview ? direction != null : Boolean(detail.asOf),
+        history: hasBand && detail.similarCaseCount > 0 ? (similar ? "similar" : "legacy") : null,
+      },
+      model: {
+        hasHistogram,
+        hasBars: Boolean(preview && targetWord && chart?.inference.features?.length),
+        hasReason: chartReasons.length > 0,
+        hasPriceMood: Boolean(psychology),
+      },
+      trading: supply?.length ? { days: supply.length } : null,
+      news: {
+        hasSummary: Boolean(sentimentView),
+        hasTimeline: Boolean(insights.sentiment?.days.length || todayLiveSentimentView(insights)),
+      },
+      company: {
+        hasRepresentative: Boolean(readingMetric),
+        groups: FINANCIAL_GROUPS.filter(({ keys }) => financial?.metrics.some(({ key }) => keys.includes(key)))
+          .map(({ readingTarget }) => readingTarget),
+      },
+    }),
+  });
 
   function onTabKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const current = tabs.indexOf(activeTab);
@@ -244,7 +308,8 @@ export default function StockDetailView({
   }
 
   return (
-    <div className="w-full">
+    <>
+    <div ref={readingRoot} inert={reading.state === "reading"} className="w-full">
       <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} rotateQuotesOnMobile />
 
       <main className="page pb-12 pt-6">
@@ -319,7 +384,31 @@ export default function StockDetailView({
           <Checkpoints bit={bit} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
         </div>
 
-        <div role="tablist" aria-label="종목 상세" onKeyDown={onTabKeyDown} className="flex min-w-0 overflow-x-auto border-b border-line [scrollbar-width:thin] sm:gap-4">
+        {readingHistoryKey && !loading && (
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            {reading.entry === "invitation" && (
+              <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-2">
+                <p className="m-0 text-sm text-body">{READING_INVITATION}</p>
+                <button type="button" className="btn-primary" disabled={reading.state === "loading"}
+                  onClick={(event) => reading.start(event.currentTarget)}>같이 읽기</button>
+                <button type="button" className="btn-text min-h-11"
+                  onClick={(event) => reading.dismiss(event.currentTarget)}>직접 둘러보기</button>
+              </div>
+            )}
+            {reading.entry === "hint" && <p role="note" className="m-0 text-sm text-body">{READING_HINT}</p>}
+            <button type="button" ref={readingReplay} className="btn-text min-h-11 self-end sm:ml-auto sm:self-auto"
+              disabled={reading.state === "loading"} onClick={(event) => reading.start(event.currentTarget)}>읽는 법</button>
+            {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
+          </div>
+        )}
+
+        <div
+          role="tablist"
+          aria-label="종목 상세"
+          data-reading-tablist
+          onKeyDown={onTabKeyDown}
+          className={`flex min-w-0 overflow-x-auto border-b border-line [scrollbar-width:thin] sm:gap-4 ${reading.phase === "order" ? "max-sm:flex-wrap" : ""}`}
+        >
           {tabs.map((id) => (
             <button
               key={id}
@@ -343,6 +432,7 @@ export default function StockDetailView({
             key={id}
             role="tabpanel"
             id={`stock-panel-${id}`}
+            data-reading-panel={id}
             aria-labelledby={`stock-tab-${id}`}
             hidden={activeTab !== id}
             tabIndex={0}
@@ -352,7 +442,7 @@ export default function StockDetailView({
                 <div className="flex flex-col gap-8">
                   <section aria-labelledby="recent-price" className="surface flex min-w-0 flex-col gap-4 p-4 sm:p-6">
                     <h2 id="recent-price" className="text-xl font-semibold">최근 주가</h2>
-                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div data-reading-target="overview-summary" className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                       <div className="flex flex-wrap items-center gap-x-2">
                         <h3 className="text-xl font-semibold">모델 신호 <span style={{ color: signal.ink }}>{signal.label}</span></h3>
                         {preview && direction && <span className="text-xs text-muted">{HORIZON_AHEAD[signalHorizon]}</span>}
@@ -364,9 +454,9 @@ export default function StockDetailView({
                       </div>
                       {preview && onHorizonChange && <Segmented label="신호 기간" value={signalHorizon} options={[[5, "1주"], [20, "4주"]]} onChange={onHorizonChange} />}
                     </div>
-                    {hasBand && <p id="overview-return-range" className="m-0 text-sm text-body">
+                    {hasBand && <p id="overview-return-range" data-reading-target="overview-cohort" className="m-0 text-sm text-body">
                       {bandSentence(horizon, detail.returnBand.ciLevel)}:{" "}
-                      <strong className="font-semibold tabular-nums text-ink">{range}</strong>
+                      <strong data-reading-target="overview-range" className="font-semibold tabular-nums text-ink">{range}</strong>
                     </p>}
                     {priceHistory.length >= 2 ? (
                       <PriceHistoryChart
@@ -475,9 +565,11 @@ export default function StockDetailView({
                           {hasBand && currentPrice !== null && showLocalAsOf(priceDate, currentMarketStatus.date) && ` 원은 ${formatKstDateTime(priceDate)} 종가 기준이에요.`}
                         </p>
                       ) : null}
-                      {hasBand && realizedReturns.length > 0 ? (
+                      {hasHistogram ? (
                         <>
-                          <ReturnHistogram bins={realizedReturns} band={detail.returnBand} caseCount={detail.similarCaseCount} signal={signal} horizonLabel={HORIZON_LABEL[horizon]} />
+                          <div data-reading-target="model-histogram" className="[&.driver-active-element]:max-w-[85dvh]">
+                            <ReturnHistogram bins={realizedReturns} band={detail.returnBand} caseCount={detail.similarCaseCount} signal={signal} horizonLabel={HORIZON_LABEL[horizon]} />
+                          </div>
                           <p className="m-0 text-xs text-muted">
                             위 범위는 이 분포의 가운데 {ciPercent}%예요. 미래 가격 경로가 아니라 {HORIZON_LABEL[horizon]} 시점의 분포예요.
                           </p>
@@ -486,12 +578,12 @@ export default function StockDetailView({
                     </section>
 
                     <section aria-labelledby="model-contributions" className="flex flex-col gap-4">
-                      <h2 id="model-contributions" className="text-xl font-semibold">{TERM.contribution}</h2>
+                      <h2 id="model-contributions" data-reading-target="model-heading" className="text-xl font-semibold">{TERM.contribution}</h2>
                       <ContributionPanel
                         space={chart?.inference.contribution_space}
                         total={chart?.inference.contribution_abs_sum}
                         features={preview ? chart?.inference.features ?? [] : undefined}
-                        reasons={detail.reasons.filter((reason) => reason.source === "chart")}
+                        reasons={chartReasons}
                       />
                     </section>
 
@@ -510,20 +602,20 @@ export default function StockDetailView({
                   </>}
                   {id === "trading" && (
                     <section aria-labelledby="supply-investors" className="flex flex-col gap-4">
-                      <h2 id="supply-investors" className="text-xl font-semibold">{TERM.supply}</h2>
+                      <h2 id="supply-investors" data-reading-target="trading-heading" className="text-xl font-semibold">{TERM.supply}</h2>
                       <SupplyPanel supply={supply} volume={insights.supplyVolume} />
                     </section>
                   )}
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
-                      <h2 id="company-financials" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
-                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} />
+                      <h2 id="company-financials" data-reading-target="company-heading" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
+                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} readingMetricKey={readingMetric?.key} />
                     </section>
                     <DisclosureList disclosures={disclosures} />
                   </>}
                   {id === "news" && (
                     <section aria-labelledby="news-sentiment" className="flex min-w-0 flex-col gap-4">
-                      <h2 id="news-sentiment" className="text-xl font-semibold">{TERM.sentiment}</h2>
+                      <h2 id="news-sentiment" data-reading-target="news-heading" className="text-xl font-semibold">{TERM.sentiment}</h2>
                       <NewsSentimentPanel insights={insights} code={detail.code} sentimentView={sentimentView} />
                     </section>
                   )}
@@ -538,5 +630,7 @@ export default function StockDetailView({
 
       <DisclaimerFooter fixed={false} />
     </div>
+    {reading.spotlight}
+    </>
   );
 }

@@ -1,0 +1,54 @@
+.popover:global(.driver-popover) {
+  width: min(22.5rem, calc(100vw - 2rem));
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-modal);
+  font-family: var(--font-sans);
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1rem;
+}
+
+.navButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+}
+
+.navFace {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-track);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  transition: background-color 180ms var(--ease-out);
+}
+
+.navButton:hover .navFace {
+  background: var(--color-line);
+}
+
+.primary .navFace {
+  background: var(--color-brand);
+  color: white;
+}
+
+.primary:hover .navFace {
+  background: var(--color-brand-deep);
+}

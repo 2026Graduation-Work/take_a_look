@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type PointerEvent } from "react";
 import { BEGINNER_TIPS } from "@/lib/beginner-tips";
 import { dismissTipToday, isTipDismissed, nextKstMidnight } from "@/lib/tip-dismissal";
+import { tipHref } from "@/lib/tip-navigation";
 import { STORAGE_KEYS } from "@/lib/storage-keys";
+import ReadingEntryLink from "./reading-entry-link";
 import { useDelayed } from "./waiting";
 
 const ROTATION_MS = 5_000;
@@ -67,7 +68,9 @@ export default function TipStrip() {
       className={`grid bg-brand-soft transition-[grid-template-rows] ease-out motion-reduce:transition-none ${closing ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
       style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
     >
-      <TipStripContent closing={closing} onDismiss={dismiss} />
+      <Suspense>
+        <TipStripContent closing={closing} onDismiss={dismiss} />
+      </Suspense>
     </section>
   );
 }
@@ -129,9 +132,9 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
             className={`m-0 min-h-[3.2em] text-xs text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
           >
             {tip.title}{" "}
-            <Link href={`/guide#tip-${tip.id}`} className="ml-2 whitespace-nowrap text-tip-link text-brand underline underline-offset-2">
+            <ReadingEntryLink href={tipHref({ id: tip.id })} className="ml-2 whitespace-nowrap text-tip-link text-brand underline underline-offset-2">
               자세히 보기
-            </Link>
+            </ReadingEntryLink>
           </p>
         </div>
         <button

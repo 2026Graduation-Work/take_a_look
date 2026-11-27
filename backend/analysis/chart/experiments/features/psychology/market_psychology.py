@@ -23,6 +23,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from shared.data.segmented_prices import validate_segments
 
 FEATURE_PROFILE = "psychology_market_v1"
 GENERATOR_VERSION = "1.0.0"
@@ -110,7 +111,8 @@ def _validate_input(frame: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise PsychologyInputError(f"가격 패널에 필수 컬럼이 없습니다: {missing}")
 
-    panel = frame[list(REQUIRED_INPUT_COLUMNS)].copy()
+    columns = [*REQUIRED_INPUT_COLUMNS, *(["SegmentId"] if "SegmentId" in frame else [])]
+    panel = frame[columns].copy()
 
     dates = pd.to_datetime(panel["Date"], errors="coerce")
     if dates.isna().any():
@@ -122,10 +124,10 @@ def _validate_input(frame: pd.DataFrame) -> pd.DataFrame:
     panel["Date"] = normalized
 
     codes = panel["Code"].astype("string").str.strip()
-    invalid = codes.isna() | ~codes.str.fullmatch(r"\d{1,6}")
+    invalid = codes.isna() | ~codes.str.fullmatch(r"(?:\d{1,6}|\d{4}[0-9A-Z]{2})")
     if invalid.any():
         raise PsychologyInputError(
-            f"Code는 앞자리 0을 보존한 1~6자리 숫자여야 합니다: {codes[invalid].head(3).tolist()}"
+            f"Code는 앞자리 0을 보존한 숫자 또는 KRX 영문 포함 단축코드여야 합니다: {codes[invalid].head(3).tolist()}"
         )
     panel["Code"] = codes.str.zfill(6).astype(object)
 
@@ -143,7 +145,9 @@ def _validate_input(frame: pd.DataFrame) -> pd.DataFrame:
         sample = panel.loc[panel.duplicated(["Code", "Date"]), ["Code", "Date"]].head(3)
         raise PsychologyInputError(f"(Code, Date) 중복 행이 있습니다: {sample.to_dict('records')}")
 
-    return panel.sort_values(["Code", "Date"], kind="stable").reset_index(drop=True)
+    panel = panel.sort_values(["Code", "Date"], kind="stable").reset_index(drop=True)
+    validate_segments(panel)
+    return panel
 
 
 def _safe_divide(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
@@ -209,12 +213,12 @@ def _code_features(panel: pd.DataFrame, config: PsychologyFeatureConfig) -> pd.D
         features["psych_herding"] + features["psych_overreaction"]
     ) / 2.0
 
-    # 관측일 t의 값은 t 다음 거래일부터 쓴다. 마지막 행은 패널에 다음 거래일이 아직
-    # 없으므로 다음 영업일을 기록하고, 결합 단계에서 실제 개장일로 앞당겨 매핑한다.
     next_date = panel["Date"].shift(-1)
-    features["AvailableDate"] = next_date.fillna(
-        panel["Date"].iloc[-1] + pd.tseries.offsets.BusinessDay(1)
-    ).to_numpy()
+    if "SegmentId" in panel:
+        features["SegmentId"] = panel["SegmentId"].to_numpy()
+    else:
+        next_date = next_date.fillna(panel["Date"].iloc[-1] + pd.tseries.offsets.BusinessDay(1))
+    features["AvailableDate"] = next_date.to_numpy()
     return features
 
 
@@ -247,14 +251,15 @@ def build_psychology_features(
     input_fingerprint = _fingerprint(panel)
     input_rows = int(len(panel))
 
+    keys = ["Code", "SegmentId"] if "SegmentId" in panel else ["Code"]
     frames = [
         _code_features(group.reset_index(drop=True), config)
-        for _, group in panel.groupby("Code", sort=True, observed=True)
+        for _, group in panel.groupby(keys, sort=True, observed=True)
     ]
     features = pd.concat(frames, ignore_index=True)
-    features = features[list(OUTPUT_COLUMNS)]
+    features = features[[*OUTPUT_COLUMNS, *keys[1:]]]
 
-    complete = features[list(FEATURE_COLUMNS)].notna().all(axis=1)
+    complete = features.AvailableDate.notna() & features[list(FEATURE_COLUMNS)].notna().all(axis=1)
     finite = np.isfinite(features[list(FEATURE_COLUMNS)].to_numpy(dtype=float)).all(axis=1)
     features = features.loc[complete & finite].copy()
     features = features.sort_values(["Code", "Date"], kind="stable").reset_index(drop=True)

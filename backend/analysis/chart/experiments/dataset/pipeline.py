@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import tempfile
 from pathlib import Path
@@ -19,55 +20,61 @@ from shared.data.calendar import (  # noqa: F401
     scheduled_sessions,
     verify_calendar_schedule,
 )
-from shared.data.metadata import fetch_active_listing_intervals, load_metadata  # noqa: F401
-from shared.data.prices import fetch_price_window, supplement_raw_ohlc  # noqa: F401
+from shared.data.market_notices import SecurityKey
+from shared.data.resolution_snapshot import (
+    PRICE_POLICY,
+    REVIEW_COLUMNS,
+    SEGMENT_COLUMN,
+    pin_resolution_snapshot,
+    read_resolution_snapshot,
+    require_price_provenance,
+    snapshot_path,
+)
+from shared.data.segmented_prices import (
+    ADJUSTMENT_COLUMNS,
+    adjust_price_history,
+    fetch_raw_window,
+    validate_segments,
+)
+from shared.data.training_prices import (
+    PRICE_SOURCE,
+    check_raw_overlap,
+    load_training_raw,
+    preserve_training_raw,
+)
 from shared.data.validation import (  # noqa: F401
     expected_sessions,
     validate_flow,
     validate_index,
+    validate_krx_raw,
     validate_prices,
 )
 from shared.io import sha256
 from shared.processing import build_feature_frame, processing_contract
-from shared.settings import PRICE_BASIS, VALIDATION_VERSION
+from shared.settings import TRAINING_PRICE_BASIS, VALIDATION_VERSION
+
+from .census_actions import _write_csv
 
 
-def reject_price_revision(root, code, previous, current):
-    columns = ["Open", "High", "Low", "Close", "Volume", "Change", "Amount",
-               "RawVolume", "RawClose", "AdjustmentFactor", "VWAP"]
-    if set(columns) - set(previous):
-        raise ValueError("Existing price basis is unverified; use a new dataset root")
-    overlap = current[["Date", *columns]].merge(
-        previous[["Date", *columns]], on="Date", suffixes=("_new", "_old"), validate="one_to_one"
-    )
-    changes = np.column_stack([
-        ~np.isclose(overlap[f"{column}_new"].to_numpy(dtype=float),
-                    overlap[f"{column}_old"].to_numpy(dtype=float), rtol=1e-10, atol=1e-12,
-                    equal_nan=True)
-        for column in columns
-    ])
-    if changes.any():
-        revised = overlap.loc[changes.any(axis=1)].copy()
-        key = identity(revised.to_json(date_format="iso"))
-        destination = root / "price_revisions" / f"{code}_{key}.parquet"
-        atomic_parquet(destination, revised)
-        atomic_json(destination.with_suffix(".json"), {
-            "code": code, "detected_at": pd.Timestamp.now(tz="UTC").isoformat(),
-            "changed_columns": [column for column, changed in zip(columns, changes.any(axis=0)) if changed],
-            "rows": len(revised), "previous_sha256": sha256(root / "raw" / f"{code}.parquet"),
-            "policy": "preserve_existing_prices_use_new_dataset_for_revision",
-        })
-        raise ValueError(f"Historical prices revised; existing raw preserved. Use a new dataset root; inspect {destination}")
+def write_review_queue(snapshot, path, *, securities):
+    rows = sorted(snapshot.review_rows(securities), key=lambda row: (row["Code"], row["Date"]))
+    _write_csv(path, REVIEW_COLUMNS, rows)
+    return {"rows": len(rows), "sha256": sha256(path)}
 
 
-def flow_coverage(root, investors, columns, market_days):
+def flow_coverage(root, investors, columns, market_days, *, price_files):
     """Missing ranking rows are unknown observations, never inferred zero trades."""
     from shared.features.flow import build_flow_features
 
     coverage = []
-    for path in sorted((root / "raw").glob("*.parquet")):
+    for name in sorted(price_files):
+        path = root / "raw" / name
+        if sha256(path) != price_files[name]:
+            raise ValueError(f"Flow coverage price input changed: {name}")
         frame = pd.read_parquet(path)
-        features = build_flow_features(frame, market_days)
+        features = (pd.concat([build_flow_features(segment, market_days)
+                               for _, segment in frame.groupby(SEGMENT_COLUMN, sort=False)], ignore_index=True)
+                    if SEGMENT_COLUMN in frame else build_flow_features(frame, market_days))
         for investor in investors:
             fields = [col for col in columns if col.startswith(investor + "_")]
             values = frame.reindex(columns=fields)
@@ -98,6 +105,8 @@ def verify_cached_flows(config_path):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
     calendar = json.loads((root / "calendar.json").read_text())
+    manifest = json.loads((root / "dataset_manifest.json").read_text())
+    _require_current_training_prices(manifest, root)
     failures, verified = [], 0
     for day in pd.to_datetime(calendar["trading_days"]):
         cache = root / "investor_flow_cache" / f"{day:%Y-%m-%d}.parquet"
@@ -111,7 +120,8 @@ def verify_cached_flows(config_path):
             failures.append({"date": str(day.date()), "reason": str(exc)})
         if (verified + len(failures)) % 250 == 0:
             print(f"Flow caches checked: {verified + len(failures)}/{len(calendar['trading_days'])}", flush=True)
-    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"])
+    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"],
+                             price_files=manifest["raw_files"])
     summary = {}
     for investor in source._INVESTORS:
         rows = [row for row in coverage if row["investor"] == investor]
@@ -143,23 +153,103 @@ def verify_cached_flows(config_path):
     return report
 
 
-def collect_dataset(config_path, *, mode="full", rebuild=False):
+def training_metadata(snapshot, collection, calendar):
+    requested = {str(code).zfill(6) for code in collection.get("tickers") or []}
+    scope_codes = set(snapshot.manifest["scope"]["codes"])
+    if scope_codes and requested != scope_codes:
+        raise ValueError("Code-scoped resolution snapshot requires its exact code scope in collection.tickers")
+    days = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
+    if not days.equals(snapshot.sessions):
+        raise ValueError("Collection calendar differs from the complete resolution snapshot scope")
+    rows = []
+    for security, name in snapshot.training_names.items():
+        if (security.market not in collection["markets"] or requested and security.code not in requested
+                or security.delisting and not collection["include_delisted"]):
+            continue
+        rows.append({"Code": security.code, "Name": name, "Market": security.market, "Isin": security.isin,
+                     "ListingDate": security.listing, "DelistingDate": security.delisting,
+                     "ShareClass": security.share_class, "IsDelisted": security.delisting is not None,
+                     "Source": "Pinned KRX listing interval", "MarketHistoryVerified": True})
+    if not rows or requested - {row["Code"] for row in rows}:
+        raise ValueError("Resolution snapshot lacks requested training listing windows")
+    frame = pd.DataFrame(rows)
+    for col in ("ListingDate", "DelistingDate"):
+        frame[col] = pd.to_datetime(frame[col])
+    frame = frame.sort_values(["Code", "ListingDate"]).reset_index(drop=True)
+    same_code = frame.Code.eq(frame.Code.shift())
+    former_end = frame.DelistingDate.shift()
+    if (same_code & (former_end.isna() | frame.ListingDate.lt(former_end))).any():
+        raise ValueError("Overlapping official training listing windows")
+    return frame
+
+
+def listing_identity(row):
+    return SecurityKey(row.Code, row.Isin, row.ListingDate.date().isoformat(),
+                       None if pd.isna(row.DelistingDate) else row.DelistingDate.date().isoformat(),
+                       row.Market, row.ShareClass)
+
+
+def verify_training_metadata(root, snapshot, collection, calendar):
+    expected = training_metadata(snapshot, collection, calendar)
+    stored = pd.read_csv(root / "ticker_metadata.csv", dtype={"Code": str},
+                         parse_dates=["ListingDate", "DelistingDate"])
+    stored["DelistingDate"] = pd.to_datetime(stored["DelistingDate"])
+    if not stored.equals(expected):
+        raise ValueError("Dataset metadata differs from pinned KRX listing windows")
+    return stored
+
+
+def collect_dataset(config_path, *, mode="full", rebuild=False, action_snapshot=None):
+    config = load_dataset_config(config_path)
+    root = Path(config["root"])
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "collection.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("A price collector already owns this dataset root") from None
+        return _collect_dataset(config, mode, rebuild, action_snapshot)
+
+
+def pinned_collection_window(snapshot, collection):
+    scope = snapshot.manifest["scope"]
+    settings = {**collection, "end_date": collection.get("end_date") or scope["end"]}
+    expected = scheduled_sessions(pd.Timestamp(settings["start_date"]), pd.Timestamp(settings["end_date"]))
+    training_metadata(snapshot, settings, {"trading_days": expected})
+    return settings
+
+
+def _collect_dataset(config, mode, rebuild, action_snapshot):
     from shared.data import providers as source
 
-    config = load_dataset_config(config_path)
     contract = processing_contract(config["preprocessing"])
     root = Path(config["root"])
     if rebuild and mode != "full":
         raise ValueError("--rebuild requires full")
-    if rebuild and root.exists() and any(root.iterdir()):
+    if rebuild and root.exists() and any(path.name != "collection.lock" for path in root.iterdir()):
         raise FileExistsError("--rebuild requires a new dataset root; preserve existing data")
-    root.mkdir(parents=True, exist_ok=True)
-    append_collection_event(root, {"state": "started", "stage": "collection", "mode": mode})
     manifest_path = root / "dataset_manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+    pin_file = root / "collection_action_pin.json"
     collection_identity = identity(config["collection"])
-    if manifest and manifest["collection_identity"] != collection_identity:
-        raise ValueError("Collection settings changed; use a new dataset root")
+    if manifest or pin_file.exists():
+        pin = manifest if manifest else json.loads(pin_file.read_text())
+        if pin["collection_identity"] != collection_identity:
+            raise ValueError("Collection settings changed; use a new dataset root")
+        snapshot = _require_current_training_prices(pin, root)
+        if action_snapshot is not None and sha256(action_snapshot) != snapshot.path.stem:
+            raise ValueError("Official action snapshot changed; use a new dataset root")
+    else:
+        if action_snapshot is None:
+            raise ValueError("An official resolution snapshot is required for a new dataset")
+        source_snapshot = read_resolution_snapshot(action_snapshot)
+        pinned_collection_window(source_snapshot, config["collection"])
+        snapshot = pin_resolution_snapshot(source_snapshot, root)
+        atomic_json(pin_file, {"price_basis": TRAINING_PRICE_BASIS, "price_policy": PRICE_POLICY,
+                               "official_actions": snapshot.provenance, "collection_identity": collection_identity})
+    action_provenance = snapshot.provenance
+    calendar_settings = pinned_collection_window(snapshot, config["collection"])
+    append_collection_event(root, {"state": "started", "stage": "collection", "mode": mode})
     # End date is immutable inside a build, including resumed and update executions.
     calendar_path = root / "calendar.json"
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "calendar"})
@@ -171,7 +261,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
             calendar["schedule_validation"] = verify_calendar_schedule(calendar)
             atomic_json(calendar_path, calendar)
         else:
-            calendar = build_calendar(root, config["collection"])
+            calendar = build_calendar(root, calendar_settings)
     except Exception as exc:
         append_collection_event(root, {"state": "failed", "stage": "calendar",
                                        "exception_type": type(exc).__name__, "reason": str(exc)})
@@ -184,117 +274,75 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         raise ValueError("Legacy/unverified calendar; use a new dataset root")
     metadata_path = root / "ticker_metadata.csv"
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "metadata"})
-    if metadata_path.exists():
-        metadata = pd.read_csv(
-            metadata_path, dtype={"Code": str}, parse_dates=["ListingDate", "DelistingDate"]
-        )
-    else:
-        try:
-            metadata = load_metadata(config["collection"], calendar["observed_end"])
+    try:
+        if metadata_path.exists():
+            metadata = verify_training_metadata(root, snapshot, config["collection"], calendar)
+        else:
+            metadata = training_metadata(snapshot, config["collection"], calendar)
             metadata.to_csv(metadata_path, index=False)
-        except Exception as exc:
-            append_collection_event(root, {"state": "failed", "stage": "metadata",
-                                           "exception_type": type(exc).__name__, "reason": str(exc)})
-            atomic_json(
-                root / "collection_report.json",
-                {"status": "failed", "stage": "metadata", "reason": str(exc)},
-            )
-            raise
+    except Exception as exc:
+        append_collection_event(root, {"state": "failed", "stage": "metadata",
+                                       "exception_type": type(exc).__name__, "reason": str(exc)})
+        atomic_json(root / "collection_report.json",
+                    {"status": "failed", "stage": "metadata", "reason": str(exc)})
+        raise
+    selected = {listing_identity(row) for row in metadata.itertuples()}
+    review_details = write_review_queue(snapshot, root / "review_queue.csv", securities=selected)
     from shared.data.bulk_prices import prepare_bulk_prices, stock_raw
 
     report = {"prices": [], "flow_failures": [], "market_history_verified": False}
-    bulk = prepare_bulk_prices(root, metadata, calendar, mode, report, source)
+    bulk = prepare_bulk_prices(root, metadata, calendar, report, source)
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "prices"})
+    price_files = {}
+    krx_raw_files = dict((manifest or {}).get("krx_raw_files", {}))
+    price_events = []
+    as_of = pd.Timestamp(calendar["observed_end"])
     for code, intervals in metadata.groupby("Code", sort=True):
         path = root / "raw" / f"{code}.parquet"
+        original_path = root / "krx_raw_prices" / path.name
         expected = expected_sessions(intervals, calendar)
         if expected.empty:
             continue
         try:
-            previous = pd.read_parquet(path) if path.exists() else None
-            changed_price_rows = 0
-            if mode == "full" and previous is not None:
-                try:
-                    verified_previous = validate_prices(previous, expected)
-                    report["prices"].append(
-                        {"code": code, "status": "verified_resume", "rows": len(previous),
-                         "regular_session_unavailable_dates": verified_previous.loc[verified_previous.RegularSessionUnavailable & verified_previous.RawVolume.gt(0), "Date"].dt.strftime("%Y-%m-%d").tolist(),
-                         "vwap_outside_range_rows": int(verified_previous.VWAPOutsideDailyRange.sum()),
-                         "vwap_outside_range_dates": verified_previous.loc[verified_previous.VWAPOutsideDailyRange, "Date"].dt.strftime("%Y-%m-%d").tolist()}
-                    )
-                    atomic_json(root / "collection_report.json", {
-                        **report, "status": "running", "stage": "prices",
-                    })
-                    continue
-                except ValueError:
-                    pass
-                if "RawOpen" not in previous:
-                    preserved = previous.set_index("Date")
-                    raw_window = stock_raw(bulk, code, expected) if bulk is not None else None
-                    if raw_window is None:
-                        raw_window = supplement_raw_ohlc(root, code, expected,
-                            preserved[["RawClose", "RawVolume", "Amount"]], source)
-                    for column in ("RawClose", "RawVolume", "Amount"):
-                        if not np.allclose(raw_window[column], preserved[column],
-                                           rtol=1e-10, atol=1e-12, equal_nan=True):
-                            raise ValueError(f"Daily OHLC supplement disagrees with preserved {column}")
-                    upgraded = source._attach_actual_vwap(preserved, raw_window).rename_axis("Date").reset_index()
-                    upgraded = validate_prices(upgraded, expected)
-                    backup = root / "price_basis_backups" / f"{code}_{sha256(path)}.parquet"
-                    if not backup.exists():
-                        atomic_parquet(backup, previous)
-                    atomic_parquet(path, upgraded)
-                    report["prices"].append({"code": code, "status": "verified_basis_upgrade",
-                        "rows": len(upgraded), "backup": str(backup),
-                        "regular_session_unavailable_dates": upgraded.loc[upgraded.RegularSessionUnavailable & upgraded.RawVolume.gt(0), "Date"].dt.strftime("%Y-%m-%d").tolist(),
-                        "vwap_outside_range_rows": int(upgraded.VWAPOutsideDailyRange.sum()),
-                        "vwap_outside_range_dates": upgraded.loc[upgraded.VWAPOutsideDailyRange, "Date"].dt.strftime("%Y-%m-%d").tolist()})
-                    continue
-            parts = []
-            providers = []
-            for row in intervals.itertuples():
-                days = expected[
-                    (expected >= row.ListingDate)
-                    & (expected < row.DelistingDate if pd.notna(row.DelistingDate) else True)
-                ]
-                if days.empty:
-                    continue
-                raw_window = stock_raw(bulk, code, days) if bulk is not None else None
-                fetched = fetch_price_window(code, days, root=root, raw=raw_window,
-                    is_delisted=row.IsDelisted, source=source,
-                    progress=lambda event: append_collection_event(root, event))
-                providers.append(fetched.PriceProvider.iloc[0])
-                fetched = fetched.assign(Code=code, Name=row.Name, IsDelisted=row.IsDelisted)
-                parts.append(fetched)
-            frame = validate_prices(pd.concat(parts, ignore_index=True), expected)
+            previous = pd.read_parquet(path) if (manifest and path.name in manifest["raw_files"] and path.exists()) else None
+            saved = load_training_raw(original_path, expected, krx_raw_files.get(path.name))
+            windows = [(listing_identity(row), row.Name) for row in intervals.itertuples()]
+            if saved is None:
+                raw_parts = []
+                for security, _ in windows:
+                    days = snapshot.days(security)
+                    raw = stock_raw(bulk, code, days) if bulk is not None else None
+                    if raw is None:
+                        raw = fetch_raw_window(security, days, source=source,
+                            progress=lambda event: append_collection_event(root, event))
+                    raw_parts.append(validate_krx_raw(raw, days))
+                saved = validate_krx_raw(pd.concat(raw_parts, ignore_index=True), expected)
             if previous is not None:
-                reject_price_revision(root, code, previous, frame)
-                if "PriceProvider" not in previous:
-                    raise ValueError("Existing price basis is unverified; use new dataset")
-                overlap = frame.merge(previous, on="Date", suffixes=("_new", "_old"))
-                changed_price_rows = int(
-                    (~np.isclose(overlap.Close_new, overlap.Close_old, rtol=1e-8)).sum()
-                )
-                changed_provider = overlap.PriceProvider_new != overlap.PriceProvider_old
-                if changed_provider.any() and not np.allclose(
-                    overlap.loc[changed_provider, "Close_new"],
-                    overlap.loc[changed_provider, "Close_old"],
-                    rtol=1e-5,
-                ):
-                    raise ValueError("Provider price basis mismatch")
+                previous["Date"] = pd.to_datetime(previous.Date).dt.normalize()
+                check_raw_overlap(previous, saved)
+
+            frame, event_parts = adjust_price_history(windows, saved, expected, as_of, snapshot)
+            if not original_path.exists():
+                preserve_training_raw(original_path, saved)
+            krx_raw_files[path.name] = sha256(original_path)
+            if previous is not None:
                 flows = [col for col in source._FLOW_COLUMNS if col in previous]
                 if flows:
                     frame = frame.merge(
                         previous[["Date", *flows]], on="Date", how="left", validate="one_to_one"
                     )
-            atomic_parquet(path, frame)
+            resumed = previous is not None and previous.equals(frame)
+            if not resumed:
+                atomic_parquet(path, frame)
+            price_files[path.name] = sha256(path)
+            price_events.extend(event_parts)
             report["prices"].append(
                 {
                     "code": code,
-                    "status": "verified",
+                    "status": "verified_resume" if resumed else "verified",
                     "rows": len(frame),
-                    "providers": providers,
-                    "changed_price_rows": changed_price_rows,
+                    "providers": [PRICE_SOURCE],
+                    "events": sum(len(events) for events in event_parts),
                     "regular_session_unavailable_dates": frame.loc[frame.RegularSessionUnavailable & frame.RawVolume.gt(0), "Date"].dt.strftime("%Y-%m-%d").tolist(),
                     "vwap_outside_range_rows": int(frame.VWAPOutsideDailyRange.sum()),
                     "vwap_outside_range_dates": frame.loc[frame.VWAPOutsideDailyRange, "Date"].dt.strftime("%Y-%m-%d").tolist(),
@@ -316,21 +364,37 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
     # Price completion is durable before slow flow requests. Interrupted flow collection
     # must not make independently verified prices unusable for the base experiment.
     price_failed = any(item["status"] == "failed" for item in report["prices"])
-    checkpoint_files = {
-        path.name: sha256(path) for path in sorted((root / "raw").glob("*.parquet"))
-    }
+    event_table = pd.concat(price_events, ignore_index=True) if price_events else pd.DataFrame(columns=ADJUSTMENT_COLUMNS)
+    event_table["ExDate"] = pd.to_datetime(event_table.ExDate)
+    event_key = identity(event_table.to_json(date_format="iso", orient="table"))
+    event_path = root / f"price_events_{event_key}.parquet"
+    if not event_path.exists():
+        with tempfile.TemporaryDirectory(dir=root) as staging:
+            staged = Path(staging) / event_path.name
+            atomic_parquet(staged, event_table)
+            try:
+                event_path.hardlink_to(staged)
+            except FileExistsError:
+                pass
+    if not pd.read_parquet(event_path).equals(event_table):
+        raise ValueError(f"Saved price events differ from the computed table: {event_path.name}")
+    event_details = {"path": event_path.name, "sha256": sha256(event_path), "rows": len(event_table)}
     checkpoint = {
         "contract_version": VALIDATION_VERSION,
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": "krx_raw_ohlc_uniform_close_ratio_snapshot_not_point_in_time_archive",
+        "price_policy": PRICE_POLICY,
+        "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
-        "raw_files": checkpoint_files,
+        "raw_files": price_files,
+        "krx_raw_files": krx_raw_files,
+        "price_events": event_details,
+        "review_queue": review_details,
         "prices_complete": not price_failed,
         "flows_complete": False,
         "flow_queries_complete": False,
-        "price_basis": PRICE_BASIS,
+        "price_basis": TRAINING_PRICE_BASIS,
         "processing_contract": contract,
     }
     atomic_json(manifest_path, checkpoint)
@@ -346,7 +410,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         parts = []
         staging = tempfile.TemporaryDirectory(prefix="flow_merge_", dir=root)
         batch = 0
-        raw_paths = sorted((root / "raw").glob("*.parquet"))
+        raw_paths = [root / "raw" / name for name in price_files]
         raw_codes = {path.stem for path in raw_paths}
         collected_days = []
 
@@ -440,8 +504,8 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         stage_flow_parts()
         merge_staged_flows()
         report["flow_progress"] = progress
-    files = {path.name: sha256(path) for path in sorted((root / "raw").glob("*.parquet"))}
-    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"])
+    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"],
+                             price_files=checkpoint["raw_files"])
     report["flow_coverage"] = coverage
     failed = any(item["status"] == "failed" for item in report["prices"])
     manifest = {
@@ -449,16 +513,20 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": "krx_raw_ohlc_uniform_close_ratio_snapshot_not_point_in_time_archive",
+        "price_policy": PRICE_POLICY,
+        "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
-        "raw_files": files,
+        "raw_files": checkpoint["raw_files"],
+        "krx_raw_files": krx_raw_files,
+        "price_events": event_details,
+        "review_queue": review_details,
         "prices_complete": not failed,
-        "price_basis": PRICE_BASIS,
+        "price_basis": TRAINING_PRICE_BASIS,
         "processing_contract": contract,
         "flow_queries_complete": bool(config["collection"]["investor_flows"])
         and not report["flow_failures"]
         and report.get("flow_progress", {}).get("completed_days") == len(calendar["trading_days"]),
-        "flows_complete": not report["flow_failures"]
+        "flows_complete": bool(coverage) and not report["flow_failures"]
         and all(item["complete_rows"] == item["total_rows"] for item in coverage),
     }
     atomic_json(manifest_path, manifest)
@@ -476,6 +544,33 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
     print(f"Verified dataset: {root}; frozen end: {calendar['observed_end']}")
 
 
+def _require_current_training_prices(manifest, root, *, verify_archive=False):
+    if manifest.get("price_basis") != TRAINING_PRICE_BASIS:
+        raise ValueError("Unsupported dataset price basis; rerun collection before preprocessing")
+    try:
+        evidence = require_price_provenance(manifest)
+    except ValueError:
+        raise ValueError("Unsupported dataset price policy; rerun collection before preprocessing") from None
+    snapshot = read_resolution_snapshot(snapshot_path(root, evidence["sha256"]), verify_archive=verify_archive)
+    if snapshot.provenance != evidence:
+        raise ValueError("Pinned official resolution snapshot provenance differs")
+    return snapshot
+
+
+def eligible_training_prices(raw, intervals, snapshot):
+    validate_segments(raw, required=True)
+    excluded = set().union(*(snapshot.excluded_segment_ids(listing_identity(row))
+                             for row in intervals.itertuples()))
+    return raw.loc[~raw[SEGMENT_COLUMN].isin(excluded)]
+
+
+def build_segment_features(raw, trading_days, settings):
+    return pd.concat([
+        build_feature_frame(segment, trading_days, settings)
+        for _, segment in raw.groupby(SEGMENT_COLUMN, sort=False)
+    ], ignore_index=True)
+
+
 def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
@@ -483,16 +578,13 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     if not manifest_path.exists():
         raise FileNotFoundError("Run price_collector.py --config first")
     manifest = json.loads(manifest_path.read_text())
+    snapshot = _require_current_training_prices(manifest, root)
     if not manifest.get("prices_complete") and not allow_partial:
         raise ValueError("Price collection incomplete; resume collection first")
     calendar = json.loads((root / "calendar.json").read_text())
     if calendar.get("validation_version") != VALIDATION_VERSION:
         raise ValueError("Unverified calendar")
-    metadata = pd.read_csv(
-        root / "ticker_metadata.csv",
-        dtype={"Code": str},
-        parse_dates=["ListingDate", "DelistingDate"],
-    )
+    metadata = verify_training_metadata(root, snapshot, config["collection"], calendar)
     contract = processing_contract(config["preprocessing"])
     previous_processed = root / "processed_manifest.json"
     if previous_processed.exists():
@@ -500,30 +592,27 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         if previous.get("processing_contract") != contract:
             raise ValueError("Preserve the previous processed data; use a new dataset root for this builder")
     reports = []
-    outputs = {}
-    for path in sorted((root / "raw").glob("*.parquet")):
+    outputs, policy_excluded = {}, {}
+    for name in sorted(manifest["raw_files"]):
+        path = root / "raw" / name
         try:
             raw_hash = sha256(path)
             if manifest["raw_files"].get(path.name) != raw_hash:
                 raise ValueError("Raw changed outside collection; run update to revalidate")
             raw = pd.read_parquet(path)
             intervals = metadata.loc[metadata.Code.eq(path.stem)]
-            raw = validate_prices(raw, expected_sessions(intervals, calendar))
-            pieces = []
-            for row in intervals.itertuples():
-                dates = pd.to_datetime(raw.Date)
-                active = dates >= row.ListingDate
-                if pd.notna(row.DelistingDate):
-                    active &= dates < row.DelistingDate
-                subset = raw.loc[active].copy()
-                if subset.empty:
-                    continue
-                pieces.append(
-                    build_feature_frame(
-                        subset, pd.to_datetime(calendar["trading_days"]), config["preprocessing"]
-                    )
-                )
-            frame = pd.concat(pieces, ignore_index=True)
+            raw = validate_prices(
+                raw, expected_sessions(intervals, calendar),
+                event_adjusted=True,
+            )
+            eligible = eligible_training_prices(raw, intervals, snapshot)
+            excluded_rows = len(raw) - len(eligible)
+            if excluded_rows:
+                policy_excluded[name] = excluded_rows
+            if eligible.empty:
+                reports.append({"file": name, "status": "spac_policy", "excluded_rows": excluded_rows})
+                continue
+            frame = build_segment_features(eligible, pd.to_datetime(calendar["trading_days"]), config["preprocessing"])
             from shared.features.columns import BASE_FEATURES
 
             missing = frame[list(BASE_FEATURES)].isna()
@@ -543,7 +632,7 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
             reports.append({"file": path.name, "status": "failed", "reason": str(exc)})
     atomic_json(root / "preprocessing_report.json", reports)
     failed = sum(row["status"] == "failed" for row in reports)
-    if (failed and not allow_partial) or not outputs:
+    if failed and not allow_partial:
         raise RuntimeError(
             f"Preprocessing incomplete; inspect {root / 'preprocessing_report.json'}"
         )
@@ -552,13 +641,19 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         {
             "contract_version": VALIDATION_VERSION,
             "settings": config["preprocessing"],
+            "price_policy": PRICE_POLICY,
+            "official_actions": snapshot.provenance,
+            "dataset_manifest_sha256": sha256(manifest_path),
             "processing_contract": contract,
             "raw_files": (
                 {name: manifest["raw_files"][name] for name in outputs}
                 if allow_partial else manifest["raw_files"]
             ),
             "allow_partial": allow_partial,
+            "excluded_price_files": sorted(set(manifest.get("krx_raw_files", {})) - outputs.keys()
+                                           | (manifest["raw_files"].keys() - outputs.keys())),
             "files": outputs,
+            "spac_excluded_rows": policy_excluded,
             "implementation_sha256": contract["implementation_sha256"]["features/builder.py"],
         },
     )
@@ -574,6 +669,9 @@ def validate_processed_inputs(config):
         raise FileNotFoundError("Run preprocess_data.py --config first")
     processed = json.loads(path.read_text())
     dataset = json.loads((root / "dataset_manifest.json").read_text())
+    evidence = _require_current_training_prices(dataset, root).provenance
+    if require_price_provenance(processed) != evidence:
+        raise ValueError("Processed official action provenance changed")
     if (
         (not dataset.get("prices_complete") and not processed.get("allow_partial"))
         or processed.get("contract_version") != VALIDATION_VERSION
@@ -585,7 +683,8 @@ def validate_processed_inputs(config):
     contract = processing_contract(config["preprocessing"])
     if processed.get("processing_contract") != contract:
         raise ValueError("Shared processing changed; rerun preprocessing in a new dataset root")
-    if processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw:
+    if (processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw
+            or processed.get("dataset_manifest_sha256") != sha256(root / "dataset_manifest.json")):
         raise ValueError("Dataset changed; rerun preprocessing before preparing features")
     if processed["implementation_sha256"] != contract["implementation_sha256"]["features/builder.py"]:
         raise ValueError("Feature implementation changed; rerun preprocessing")
