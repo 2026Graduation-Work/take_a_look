@@ -1,6 +1,7 @@
 import AccountControls from "./account-controls";
 import MarketStatusBar from "./market-status-bar";
 import StockSearch from "./stock-search";
+import TipStrip from "./tip-strip";
 import type { InvestorProfileSummary, MarketStatus } from "@/lib/types";
 import BrandHeader from "./brand-header";
 
@@ -9,9 +10,10 @@ interface SiteHeaderProps {
   marketStatus: MarketStatus;
   query?: string;
   onQueryChange?: (value: string) => void;
+  rotateQuotesOnMobile?: boolean;
 }
 
-export default function SiteHeader({ query, onQueryChange, profile, marketStatus }: SiteHeaderProps) {
+export default function SiteHeader({ query, onQueryChange, profile, marketStatus, rotateQuotesOnMobile }: SiteHeaderProps) {
   return (
     <>
       <BrandHeader>
@@ -23,7 +25,8 @@ export default function SiteHeader({ query, onQueryChange, profile, marketStatus
 
         <AccountControls profile={profile} />
       </BrandHeader>
-      <MarketStatusBar status={marketStatus} />
+      <MarketStatusBar status={marketStatus} rotateQuotesOnMobile={rotateQuotesOnMobile} />
+      <TipStrip />
     </>
   );
 }

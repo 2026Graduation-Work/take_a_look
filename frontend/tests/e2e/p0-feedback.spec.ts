@@ -43,17 +43,22 @@ test("2. 첫 화면은 한 줄 소개, 환영 화면이 '살 종목을 골라 �
   await expect(page.getByText(/살 종목을 골라 주지 않아요/)).toBeVisible();
 });
 
-test("3. 다른 유형으로 바꾸면 근거 순서가 바뀌었는지 알려 준다", async ({ page }) => {
+test("3. 한눈에 보기는 먼저, 판단 근거 탭과 바로가기는 투자 성향 순서로 보인다", async ({ page }) => {
   await demoReady(page);
   await page.goto("/stocks/005930");
-  const labels: Record<string, string> = { PRESERVER: "자산 보존형", FOLLOWER: "추종형", INDEPENDENT: "독립 분석형", ACCUMULATOR: "적극 축적형" };
-  const mine = labels[(await page.locator("[data-bit-type]").getAttribute("data-bit-type"))!];
-  await page.getByText("다른 유형이라면?").click();
-  const note = page.locator("details p[aria-live=polite]");
-  await page.getByRole("button", { name: mine }).click();
-  await expect(note).toHaveText("이 종목은 유형과 관계없이 같은 순서예요.");
-  await page.getByRole("button", { name: mine === "추종형" ? "자산 보존형" : "추종형" }).click();
-  await expect(note).toHaveText("근거 순서가 바뀌었어요.");
+  const tabs = page.getByRole("tablist", { name: "종목 상세" });
+  const labels = ["한눈에 보기", "누가 사고팔았나", "시장 분위기", "모델이 본 이유", "회사 상태"];
+  await expect(tabs.getByRole("tab")).toHaveText(labels);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => tabs.evaluate((row) => row.scrollWidth - row.clientWidth)).toBe(0);
+  const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
+  const shortcuts = overview.getByRole("region", { name: "분야별 근거" }).getByRole("button");
+  for (const [index, label] of labels.slice(1).entries()) {
+    await expect(shortcuts.nth(index)).toContainText(label);
+  }
+  await overview.getByRole("button", { name: /^모델이 본 이유/ }).click();
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("모델이 본 이유");
+  await expect(tabs.getByRole("tab")).toHaveText(labels);
 });
 
 async function backStepsOneAtATime(page: Page) {

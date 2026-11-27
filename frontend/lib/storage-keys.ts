@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   stockNotes: "takealook.stock-notes.v1",
   signalHorizon: "takealook.signal-horizon.v1",
   ocrAssets: "takealook.ocr-assets.v1",
+  tipDismissedOn: "takealook.tip-dismissed-on.v1",
 } as const;
 
 // 2027-02 이후 제거: 옛 키(signallab.*) 이전. 그때쯤이면 옛 키를 가진 브라우저가 남지 않는다.

@@ -74,8 +74,11 @@ def test_raw_price_panel_roundtrip_legacy_and_checksum(monkeypatch):
         assert loaded.attrs == source.attrs
     assert len(reads) == 2  # The whole panel is verified and read once per daily invocation.
     assert store.load_raw_prices('missing', '2026-10-01') is None
-    store.save_raw_prices('005930', '2026-09-30', frame)
-    pd.testing.assert_frame_equal(store.load_raw_prices('005930', '2026-09-30'), frame)
+    legacy = frame.head(1)
+    data = io.BytesIO()
+    legacy.to_parquet(data, index=False)
+    objects['/storage/v1/object/chart-features/raw-prices-v3/2026-09-30/005930.parquet'] = data.getvalue()
+    pd.testing.assert_frame_equal(store.load_raw_prices('005930', '2026-09-30'), legacy)
     store.load_raw_prices('005930', '2026-09-30')
     assert sum(key.endswith('2026-09-30/batch.parquet') for key in reads) == 1
     store._raw_price_frames.clear()

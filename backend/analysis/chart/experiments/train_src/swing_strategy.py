@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 
 
@@ -9,7 +8,7 @@ class SwingStrategy:
         self.prob_threshold = self.strat_cfg.get("prob_threshold", 0.75)
         self.top_n = self.strat_cfg.get("top_n", 5)
 
-    def generate_signals(self, predictions: pd.DataFrame, price_df: pd.DataFrame) -> tuple:
+    def generate_signals(self, predictions: pd.DataFrame, price_df: pd.DataFrame) -> pd.DataFrame:
         """predictions: Date, Code, Prob. price_df: Date, Code, Open, Sigma, Trading_Halt."""
         print(
             f"[Strategy] 시그널 생성 중... (Threshold: {self.prob_threshold}, Top-N: {self.top_n})"
@@ -22,12 +21,6 @@ class SwingStrategy:
         market = price_df.copy()
         market["Date"] = pd.to_datetime(market["Date"]).dt.tz_localize(None)
         score = self.strat_cfg.get("score_column", "Prob")
-        if (
-            score == "prob_up"
-            and score not in predictions
-            and self.config.get("contract_version") != 3
-        ):
-            score = "Prob"
         prediction_frame = (
             predictions[["Date", "Code", score]].rename(columns={score: "Prob"}).copy()
         )
@@ -45,7 +38,7 @@ class SwingStrategy:
             else pd.DataFrame(True, index=raw_open_price.index, columns=raw_open_price.columns)
         )
         prob = prediction_frame.pivot(index="Date", columns="Code", values="Prob")
-        prob = prob.reindex(index=raw_open_price.index, columns=raw_open_price.columns).fillna(0.0)
+        prob = prob.reindex(index=raw_open_price.index, columns=raw_open_price.columns)
         prediction_dates = prediction_frame.assign(_prediction=True).pivot(
             index="Date", columns="Code", values="_prediction"
         )
@@ -64,15 +57,9 @@ class SwingStrategy:
         rankings = prob.where(valid_mask).rank(axis=1, method="first", ascending=False)
         raw_entries = rankings <= self.top_n
 
-        equal_weight = 1.0 / self.top_n
-        weights = pd.DataFrame(
-            np.where(raw_entries, equal_weight, 0.0), index=prob.index, columns=prob.columns
-        )
-
         # T일 예측은 T+lag일 시가에 진입시켜 미래 참조를 막는다.
         lag = self.config.get("backtest", {}).get("signal_lag_days", 1)
         entries = raw_entries.shift(lag).fillna(False)
-        weights = weights.shift(lag).fillna(0.0)
 
         # T+1이 embargo라면 이전 fold의 신호를 실행하지 않는다. 다음 fold 첫날도
         # prediction 날짜이지만 raw signal이 없으므로, 과거 fold 신호가 건너오지 않는다.
@@ -81,14 +68,4 @@ class SwingStrategy:
         )
         for offset in range(1, lag + 1):
             entries &= prediction_dates.shift(offset).fillna(False)
-
-        # VectorBT는 빈칸이 아니면 매일 비중을 조절하려 하므로, 매수 진입일 외에는 NaN으로 둠
-        weights = weights.where(entries, np.nan)
-
-        signal_sigma = (
-            market.pivot(index="Date", columns="Code", values="Sigma")
-            .reindex(index=entries.index, columns=entries.columns)
-            .shift(lag)
-        )
-        entries.attrs["signal_sigma"] = signal_sigma
-        return entries, weights
+        return entries

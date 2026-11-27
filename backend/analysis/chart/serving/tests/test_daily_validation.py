@@ -19,7 +19,7 @@ def test_confirmed_day_handles_delayed_schedule(monkeypatch, hour, expected):
 @pytest.mark.parametrize("replay", [False, True])
 def test_past_date_requires_archived_inputs(monkeypatch, tmp_path, replay):
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}))
+    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}, "a" * 64))
     monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
     calls = []
     def collect(*args, **kwargs):
@@ -38,7 +38,7 @@ def test_delayed_schedule_after_midnight_collects_live(monkeypatch, tmp_path):
             return cls(2026, 10, 13, 1, tzinfo=tz)
     monkeypatch.setattr(pipeline, "datetime", Clock)
     monkeypatch.setenv("CHART_SERVING_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}))
+    monkeypatch.setattr(pipeline, "active_pack", lambda *_: ({"pack_id": "test", "feature_builder_id": pipeline.BUILDER_ID}, {}, "a" * 64))
     monkeypatch.setattr(pipeline, "SupabaseStore", lambda: object())
     calls = []
     monkeypatch.setattr(pipeline, "scheduled_sessions", lambda *_: [pipeline.pd.Timestamp("2026-10-12")])

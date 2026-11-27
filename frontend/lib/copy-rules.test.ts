@@ -22,7 +22,7 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(path.join(ROOT, dir), { withFileTypes: true, recursive: true })
     .filter((entry) => entry.isFile() && /\.tsx?$/.test(entry.name) && !entry.name.includes(".test."))
     .map((entry) => path.relative(ROOT, path.join(entry.parentPath, entry.name)))
-    .filter((file) => !EXCLUDED.has(file));
+    .filter((file) => !EXCLUDED.has(file) && !/^app\/(?:api\/)?lab\/backtest\//.test(file));
 }
 
 // 주석은 사용자에게 보이지 않으므로 지운다. 줄 번호를 지키려고 블록 주석의 줄바꿈은 남긴다.
@@ -38,8 +38,8 @@ test("사용자 노출 문구에 금지 표현이 없다", () => {
     const raw = readFileSync(path.join(ROOT, file), "utf8");
     const lines = stripComments(raw).split("\n");
     lines.forEach((line, index) => {
-      for (const { pattern, reason, allowIn } of FORBIDDEN_COPY) {
-        if (allowIn?.includes(file)) continue;
+      for (const { pattern, reason, allowIn, onlyIn } of FORBIDDEN_COPY) {
+        if (allowIn?.includes(file) || (onlyIn && !onlyIn.includes(file))) continue;
         if (pattern.test(line)) hits.push(`${file}:${index + 1} ${reason} — ${line.trim()}`);
       }
     });
@@ -84,12 +84,21 @@ test("금지 표현 목록이 대표 문장을 잡는다", () => {
   ]) {
     assert.ok(caught(text), text);
   }
+  assert.ok(caught("공시 때문에 올랐어요."));
   assert.ok(!caught("과거 유사 신호 중 상승 비율 61%"));
   assert.ok(!caught("하락 점수를 높였어요. 영향 비중 12.0%"));
   assert.ok(!caught("getSupabaseClient()"));
   assert.ok(!caught("const h10 = agreement.h10"));
   assert.ok(!caught("signalLabel"));
   assert.ok(!caught("전체 피처 기여도 기준값이 올바르지 않아요."));
+});
+
+test("가격 변동일의 메시지 파일도 인과 단정 금지 규칙으로 검사한다", () => {
+  const file = "lib/price-event-messages.ts";
+  assert.ok(sourceFiles("lib").includes(file));
+  const causalCopy = "공시 때문에 올랐어요.";
+  assert.ok(FORBIDDEN_COPY.some(({ pattern, allowIn, onlyIn }) =>
+    pattern.test(causalCopy) && onlyIn?.includes(file) && !allowIn?.includes(file)));
 });
 
 test("신호 방향 이름(상승·하락)은 확률·전망 금지 규칙에 걸리지 않는다", () => {

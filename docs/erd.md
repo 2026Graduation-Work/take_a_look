@@ -164,13 +164,13 @@ erDiagram
 
 | 마이그레이션 | 테이블·함수 | 주요 열 | 공개 읽기 | 보존 |
 |---|---|---|---|---|
-| 0005 | `news_sentiment_tracks`·`news_sentiment_daily`·`news_articles`, `financial_snapshots`·`financial_metrics` | 종목·트랙(historical/live)·일별 감성, 재무 6지표·근거 | ✅ | 뉴스 원문 90일(일별 집계는 유지) |
+| 0005 | `news_sentiment_tracks`·`news_sentiment_daily`·`news_articles`, `financial_snapshots`·`financial_metrics` | 종목·트랙(historical/live)·일별 감성, 재무 6지표·근거 | ✅ | 기사 목록 기본 90일, 전환안 120일(일별 집계는 유지) |
 | 0006 | `stock_notes` | 사용자·종목·메모 | 본인만 | — |
 | 0007 | `chart_releases`·`chart_batches`·`chart_signal_snapshots`·`chart_universe`·`chart_prices`·`chart_feature_snapshots`, 뷰 `latest_chart_signal_snapshots` | 게시 배치·H5/H20 payload·종목 목록·가격·입력 파일 경로 | 게시분만 | 게시 배치 최근 5개, 입력 파일 30일 |
 | 0008 | 함수 `delete_my_account()` | — | 로그인 사용자 실행 | — |
 | 0009 | `chart_prediction_log`, 함수 `log_chart_predictions()`·`prune_chart_batches(p_keep)` | 종목·as_of·기간·클래스 확률·신호·batch_id | 서비스 롤만 | **영구** |
 | 0010 | 함수 `budget_usage()` | DB·Storage 크기, 마지막 게시 as_of | 서비스 롤만 | — |
-| 0011 | `disclosures` | 접수번호·종목·제목·유형·공시일(원문 본문 없음) | ✅ | 90일 |
+| 0011 | `disclosures` | 접수번호·종목·제목·유형·공시일(원문 본문 없음) | ✅ | 기본 90일, 전환안 120일 |
 | 0012 | `financial_snapshots.report_code` | 정기보고서 종류(1분기·반기·3분기·사업) | ✅ | — |
 | 0013 | `supply_demand` | 종목·거래일·개인·외국인(`foreign_investor`)·기관 순매수(주) | ✅ | 60영업일 |
 | 0014 | `stocks.volatility_annual`·`volatility_percentile`·`risk_as_of` | 1년 변동성·코스피 내 백분위·기준일 | ✅ | — |
