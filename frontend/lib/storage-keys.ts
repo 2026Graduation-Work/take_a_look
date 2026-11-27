@@ -9,6 +9,9 @@ export const STORAGE_KEYS = {
   stockNotes: "takealook.stock-notes.v1",
   signalHorizon: "takealook.signal-horizon.v1",
   ocrAssets: "takealook.ocr-assets.v1",
+  guestReadingHistory: "takealook.guest-reading-history.v1",
+  demoReadingHistory: "takealook.demo-reading-history.v1",
+  accountReadingHistory: "takealook.account-reading-history.v1",
   tipDismissedOn: "takealook.tip-dismissed-on.v1",
 } as const;
 

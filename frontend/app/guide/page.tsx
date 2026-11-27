@@ -4,6 +4,7 @@ import BrandHeader from "../components/brand-header";
 import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
 import { BEGINNER_TIPS } from "@/lib/beginner-tips";
+import { READING_REPLAY_HASH } from "@/lib/evidence-reading";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
 
@@ -109,6 +110,9 @@ export default function GuidePage() {
           </Section>
 
           <Section id="screens" title={SECTIONS[3][1]}>
+            <Link href={`/stocks/005930${READING_REPLAY_HASH}`} className="btn-text inline-flex min-h-11 self-start">
+              종목 상세 다시 같이 읽기
+            </Link>
             <dl className="m-0 flex flex-col gap-5">
               {SCREENS.map(([name, body]) => (
                 <div key={name} className="flex flex-col gap-1">

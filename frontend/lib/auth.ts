@@ -10,6 +10,7 @@ import {
 import { isRecord } from "./profiling-rules";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase";
 import { STORAGE_KEYS } from "./storage-keys";
+import { clearDemoReadingHistory } from "./evidence-reading-history";
 
 const DEMO_SESSION_STORAGE_KEY = STORAGE_KEYS.demoSession;
 export const AUTH_UPDATED_EVENT = "takealook:auth-updated";
@@ -199,6 +200,7 @@ export async function signOut(): Promise<void> {
     if (error) signOutError = new Error(`로그아웃 실패: ${error.message}`);
   }
 
+  if (demo) clearDemoReadingHistory();
   window.localStorage.removeItem(DEMO_SESSION_STORAGE_KEY);
   window.localStorage.removeItem(STORAGE_KEYS.holdings);
   clearSavedProfile();

@@ -5,6 +5,8 @@ import StockDetailView from "./stock-detail";
 import ChartPreviewDetail from "./chart-preview";
 import { isChartPreview } from "@/lib/chart-preview-config";
 import { useOnboarding } from "./onboarding-provider";
+import { STORAGE_KEYS } from "@/lib/storage-keys";
+import { readingHistoryKey } from "@/lib/evidence-reading-history";
 import { summaryFromProfilingOutput } from "@/lib/profiling-rules";
 import type { StockInsights } from "@/lib/providers";
 import {
@@ -86,18 +88,30 @@ export default function StockDetailBoundary({
       : fetched;
   const error = currentResult?.error ?? "";
   const loading =
-    onboardingState.mode === "supabase" && !currentResult?.data && !error;
+    onboardingState.mode === "supabase" && Boolean(onboardingState.userId) && !currentResult?.data && !error;
 
   function retry() {
     setAuthenticatedResult(null);
     setRequestVersion((version) => version + 1);
   }
 
-  if (isChartPreview(code)) return <ChartPreviewDetail data={data} insights={insights} />;
+  const ready = onboardingState.status === "ready";
+  const readingUsesDiagnosis = ready && Boolean(data.styleAxes) && (fetched.source === "supabase" || Boolean(savedProfile?.style_axes));
+  const historyKey = ready && onboardingState.userId
+    ? readingHistoryKey(onboardingState.mode, onboardingState.userId)
+    : onboardingState.status === "signed_out" ? STORAGE_KEYS.guestReadingHistory : null;
+  const viewKey = `${code}:${historyKey ?? ""}`;
+  if (isChartPreview(code)) {
+    return <ChartPreviewDetail key={viewKey} data={data} insights={insights} readingHistoryKey={loading ? null : historyKey} readingInvite={ready} readingUsesDiagnosis={readingUsesDiagnosis} />;
+  }
 
   return (
     <StockDetailView
+      key={viewKey}
       {...data}
+      readingHistoryKey={historyKey}
+      readingInvite={ready}
+      readingUsesDiagnosis={readingUsesDiagnosis}
       insights={insights}
       loading={loading}
       dataError={error}

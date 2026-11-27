@@ -38,6 +38,7 @@ import {
   type MarketSentimentView,
   todayLiveSentimentView,
   toNudgeMarket,
+  type FinancialMetric,
   type FinancialSnapshot,
   type HoldingWeight,
   type SentimentDay,
@@ -146,8 +147,8 @@ export function Checkpoints({
   );
 }
 
-function Conclusion({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-base text-ink">{children}</p>;
+function Conclusion({ children, readingTarget }: { children: ReactNode; readingTarget?: "model-summary" | "news-summary" }) {
+  return <p data-reading-target={readingTarget} className="m-0 text-base text-ink">{children}</p>;
 }
 
 export function NewsSentimentPanel({
@@ -198,7 +199,7 @@ export function NewsSentimentPanel({
   return (
     <>
       {sentimentView ? (
-        <Conclusion>
+        <Conclusion readingTarget="news-summary">
           {sentimentView.basis === "live" ? "최근 24시간" : "과거"} {contextualLive ? TERM.relatedNewsSentiment : TERM.sentiment}는{" "}
           <strong className="font-semibold" style={{ color: moodColor(sentimentView.score) }}>{moodWord(sentimentView.score)}</strong>이에요.
         </Conclusion>
@@ -212,6 +213,7 @@ export function NewsSentimentPanel({
             className="segmented self-start"
             role="tablist"
             aria-label="뉴스 분위기 기간"
+            data-reading-target="news-periods"
             onKeyDown={onSentimentTabKeyDown}
           >
             {sentimentTabs.map((period) => {
@@ -466,14 +468,18 @@ export function SupplyPanel({ supply, volume }: { supply: SupplyDemandDay[] | nu
                 />
               </div>
               <span className="text-right text-sm font-semibold tabular-nums text-ink">
-                <ChangeText value={total}>{formatShares(total)}</ChangeText>
-                {volume ? (
-                  <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                    하루 평균 거래량의 {Math.round((Math.abs(total) / volume) * 100).toLocaleString("ko-KR")}%
+                <span className="block" data-reading-target={key === "institution" ? "trading-total" : undefined}>
+                  <ChangeText value={total}>{formatShares(total)}</ChangeText>
+                </span>
+                <span className="block text-2xs font-normal text-muted" data-reading-target={key === "institution" ? "trading-latest" : undefined}>
+                  {volume ? (
+                    <span className="block whitespace-nowrap">
+                      하루 평균 거래량의 {Math.round((Math.abs(total) / volume) * 100).toLocaleString("ko-KR")}%
+                    </span>
+                  ) : null}
+                  <span className="block whitespace-nowrap">
+                    마지막 날 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                   </span>
-                ) : null}
-                <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                  마지막 날 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                 </span>
               </span>
             </li>
@@ -507,13 +513,18 @@ export const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { max
 // DB에 업종 분류가 없어 코스피 중간값과 비교한다(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
 const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
 
+export function financialComparison({ key, value, unit }: FinancialMetric): string | null {
+  const median = MEDIANS[key]?.median;
+  return value === null || median === undefined ? null : compareLine(value, median, FINANCIAL_MEDIANS.basis, unit);
+}
+
 const FINANCIAL_GROUPS = [
   { title: "매출과 이익", keys: ["revenue_growth", "operating_margin", "roe"] },
   { title: "자산과 빚", keys: ["debt_ratio"] },
   { title: "주가와 비교", keys: ["per", "pbr"] },
 ];
 
-export function FinancialPanel({ financial }: { financial: FinancialSnapshot | null }) {
+export function FinancialPanel({ financial, readingMetricKey }: { financial: FinancialSnapshot | null; readingMetricKey?: string }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
@@ -537,28 +548,25 @@ export function FinancialPanel({ financial }: { financial: FinancialSnapshot | n
         <section key={title} aria-labelledby={`financial-group-${index}`} className="flex flex-col gap-3">
           <h3 id={`financial-group-${index}`} className="text-lg font-semibold">{title}</h3>
           <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            {metrics.map((metric) => {
-              const median = MEDIANS[metric.key]?.median;
-              return (
-                <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
-                  <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
-                  <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
-                    {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
-                  </dd>
-                  <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
-                    {metric.value === null
-                      ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
-                      : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
-                  </dd>
-                </div>
-              );
-            })}
+            {metrics.map((metric) => (
+              <div key={metric.key} data-reading-target={metric.key === readingMetricKey ? "company-metric" : undefined} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+                <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
+                <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
+                  {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
+                </dd>
+                <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
+                  {metric.value === null
+                    ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
+                    : financialComparison(metric)}
+                </dd>
+              </div>
+            ))}
           </dl>
         </section>
       ))}
       <Why>가격과 별개로 회사의 기초 체력을 코스피 다른 회사들과 견줘 볼 수 있어요.</Why>
       <details className="disclosure">
-        <summary>계산 근거</summary>
+        <summary data-reading-target="company-basis">계산 근거</summary>
         <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-xs font-normal text-muted">
           {financial.metrics.map((metric) => (
             <li key={metric.key}>
@@ -577,6 +585,15 @@ export function FinancialPanel({ financial }: { financial: FinancialSnapshot | n
   );
 }
 
+export function contributionTargetWord(space: ChartSnapshot["inference"]["contribution_space"] | undefined) {
+  const classes = {
+    class_0_raw_margin: SIGNAL_WORD.down,
+    class_1_raw_margin: SIGNAL_WORD.flat,
+    class_2_raw_margin: SIGNAL_WORD.up,
+  };
+  return space ? classes[space] : null;
+}
+
 export function ContributionPanel({
   space,
   features,
@@ -588,11 +605,12 @@ export function ContributionPanel({
   total?: number;
   reasons: PredictionReason[];
 }) {
-  if (!features?.length) {
+  const target = contributionTargetWord(space);
+  if (!target || !features?.length) {
     if (!reasons.length) return <Unavailable>이 예측에 연결된 근거 데이터가 없어요.</Unavailable>;
     return (
       <>
-        <Conclusion>
+        <Conclusion readingTarget="model-summary">
           모델이 가장 크게 본 근거는 &lsquo;{reasons[0].title}&rsquo;예요.
         </Conclusion>
         <ol className="m-0 flex list-none flex-col gap-3 p-0">
@@ -612,7 +630,6 @@ export function ContributionPanel({
       </>
     );
   }
-  const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
   const shown = features.slice(0, 3);
   const hiddenCount = features.length - shown.length;
@@ -620,7 +637,7 @@ export function ContributionPanel({
 
   return (
     <>
-      <Conclusion>
+      <Conclusion readingTarget="model-summary">
         모델의{" "}
         <strong className="font-semibold" style={{ color: target === SIGNAL_WORD.down ? "var(--color-down)" : target === SIGNAL_WORD.up ? "var(--color-up)" : "var(--color-ink)" }}>
           {target}
@@ -628,7 +645,7 @@ export function ContributionPanel({
         점수에 영향을 준 주요 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
       <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요.</p>
-      <ul className="m-0 flex list-none flex-col gap-4 p-0">
+      <ul data-reading-target="model-bars" className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
           const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
