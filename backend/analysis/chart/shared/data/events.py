@@ -23,10 +23,14 @@ def _observations(raw, expected_dates):
     if not (base > 0).all():
         raise ValueError("KRX base price must be positive")
 
-    moved = (base - raw.RawClose.shift()).abs().gt(0.5)
-    paused = raw.RawVolume.shift().eq(0) | raw[["RawOpen", "RawHigh", "RawLow"]].shift().eq(0).all(axis=1)
-    share_conversion_after_pause = paused & raw.ListedShares.ne(raw.ListedShares.shift())
-    return observed, base, moved | share_conversion_after_pause
+    previous = raw[["RawClose", "RawVolume", "RawOpen", "RawHigh", "RawLow", "ListedShares"]].shift()
+    return observed, base, observation_mask(raw, base, previous)
+
+
+def observation_mask(raw, base, previous):
+    moved = (base - previous.RawClose).abs().gt(0.5)
+    paused = previous.RawVolume.eq(0) | previous[["RawOpen", "RawHigh", "RawLow"]].eq(0).all(axis=1)
+    return moved | (paused & raw.ListedShares.ne(previous.ListedShares))
 
 
 def verify_events(code, raw, expected_dates, actions):
@@ -46,41 +50,45 @@ def verify_events(code, raw, expected_dates, actions):
             if candidates.iloc[at]:
                 raise ValueError(f"{code} {day:%Y-%m-%d}: KRX observation requires official evidence")
             continue
-        previous, current = raw.iloc[at - 1], raw.iloc[at]
-        current_base = base.iloc[at]
-        shares = (previous.ListedShares, current.ListedShares)
-        converted = float(previous.RawClose / action.factor)
-        if action.kind in {"reduction", "reference_reset"}:
-            auction = action.auction
-            matches_base = (auction is not None and compatible_base(auction.evaluation, converted, action.ex_date, action.market)
-                            and auction.low <= current_base <= auction.high and current.RawOpen == current_base)
-        else:
-            matches_base = compatible_base(current_base, converted, action.ex_date, action.market)
-        if action.kind == "bonus":
-            matches_base = matches_base and action.base == current_base and shares[0] == shares[1]
-            if action.listing and pd.Timestamp(action.listing) in observed:
-                listing_at = observed.get_loc(pd.Timestamp(action.listing))
-                if listing_at <= at or observed[listing_at - 1] < day:
-                    raise ValueError(f"{code} {day:%Y-%m-%d}: invalid official bonus listing sequence")
-                before = raw.ListedShares.iloc[listing_at - 1]
-                after = raw.ListedShares.iloc[listing_at]
-                if before * action.factor != after:
-                    raise ValueError(f"{code} {day:%Y-%m-%d}: bonus shares disagree at listing")
-        if not matches_base or (action.shares is not None and shares != action.shares):
-            raise ValueError(f"{code} {day:%Y-%m-%d}: KRX prices or shares disagree with official evidence")
-        rows.append({
-            "Code": code, "ExDate": day, "PriceFactor": float(1 / action.factor),
-            "VolumeFactor": float(action.factor), "Kind": action.kind, "EventId": action.event_id,
-            "Revision": action.revision, "RatioEvidence": action.ratio_evidence.source.sha256,
-            "DatesEvidence": action.dates_evidence.source.sha256,
-            "ImplementationEvidence": action.implementation_evidence.source.sha256,
-            "AuctionEvidence": action.auction.evidence.source.sha256 if action.auction else None,
-            "PrevClose": previous.RawClose, "BasePrice": current_base,
-            "SharesBefore": shares[0], "SharesAfter": shares[1],
-        })
+        rows.append(verify_action(code, raw, observed, at, base.iloc[at], action))
     events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
     events["ExDate"] = pd.to_datetime(events.ExDate)
     return events
+
+
+def verify_action(code, raw, observed, at, current_base, action):
+    day = observed[at]
+    previous, current = raw.iloc[at - 1], raw.iloc[at]
+    shares = (previous.ListedShares, current.ListedShares)
+    converted = float(previous.RawClose / action.factor)
+    if action.kind in {"reduction", "reference_reset"}:
+        auction = action.auction
+        matches_base = (auction is not None and compatible_base(auction.evaluation, converted, action.ex_date, action.market)
+                        and auction.low <= current_base <= auction.high and current.RawOpen == current_base)
+    else:
+        matches_base = compatible_base(current_base, converted, action.ex_date, action.market)
+    if action.kind == "bonus":
+        matches_base = matches_base and action.base == current_base and shares[0] == shares[1]
+        if action.listing and pd.Timestamp(action.listing) in observed:
+            listing_at = observed.get_loc(pd.Timestamp(action.listing))
+            if listing_at <= at or observed[listing_at - 1] < day:
+                raise ValueError(f"{code} {day:%Y-%m-%d}: invalid official bonus listing sequence")
+            before = raw.ListedShares.iloc[listing_at - 1]
+            after = raw.ListedShares.iloc[listing_at]
+            if before * action.factor != after:
+                raise ValueError(f"{code} {day:%Y-%m-%d}: bonus shares disagree at listing")
+    if not matches_base or (action.shares is not None and shares != action.shares):
+        raise ValueError(f"{code} {day:%Y-%m-%d}: KRX prices or shares disagree with official evidence")
+    return {
+        "Code": code, "ExDate": day, "PriceFactor": float(1 / action.factor),
+        "VolumeFactor": float(action.factor), "Kind": action.kind, "EventId": action.event_id,
+        "Revision": action.revision, "RatioEvidence": action.ratio_evidence.source.sha256,
+        "DatesEvidence": action.dates_evidence.source.sha256,
+        "ImplementationEvidence": action.implementation_evidence.source.sha256,
+        "AuctionEvidence": action.auction.evidence.source.sha256 if action.auction else None,
+        "PrevClose": previous.RawClose, "BasePrice": current_base,
+        "SharesBefore": shares[0], "SharesAfter": shares[1],
+    }
 
 
 def apply_events(raw: pd.DataFrame, events: pd.DataFrame, as_of=None) -> pd.DataFrame:

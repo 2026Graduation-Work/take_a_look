@@ -191,26 +191,31 @@ def actions_for_window(snapshot, code, days, *, listing, delisting, isin=None, s
                 f"{code}: incomplete {source} coverage")
     actions = []
     for raw in row["actions"]:
-        fields = dict(raw)
-        for key in ("ratio_evidence", "dates_evidence", "implementation_evidence"):
-            evidence = fields[key]
-            fields[key] = FieldEvidence(evidence["accession"], Evidence(**evidence["source"]), evidence["field"])
-        if fields["shares"] is not None:
-            fields["shares"] = tuple(fields["shares"])
-        if fields.get("auction") is not None:
-            auction_fields = fields["auction"]
-            evidence = auction_fields["evidence"]
-            fields["auction"] = Auction(auction_fields["date"], auction_fields["evaluation"],
-                                        auction_fields["low"], auction_fields["high"],
-                                        FieldEvidence(evidence["accession"], Evidence(**evidence["source"]), evidence["field"]),
-                                        auction_fields["company"])
-        action = Action(**fields)
-        require(action.kind in {"split", "merge", "reduction", "bonus", "reference_reset"}
-                and action.factor > 0 and (action.factor == 1) == (action.kind == "reference_reset"),
-                f"{code}: invalid verified unit ratio")
+        action = action_from_record(raw)
         if start <= action.ex_date <= end:
             actions.append(action)
     return actions
+
+
+def action_from_record(raw):
+    fields = dict(raw)
+    for key in ("ratio_evidence", "dates_evidence", "implementation_evidence"):
+        evidence = fields[key]
+        fields[key] = FieldEvidence(evidence["accession"], Evidence(**evidence["source"]), evidence["field"])
+    if fields["shares"] is not None:
+        fields["shares"] = tuple(fields["shares"])
+    if fields.get("auction") is not None:
+        auction_fields = fields["auction"]
+        evidence = auction_fields["evidence"]
+        fields["auction"] = Auction(auction_fields["date"], auction_fields["evaluation"],
+                                    auction_fields["low"], auction_fields["high"],
+                                    FieldEvidence(evidence["accession"], Evidence(**evidence["source"]), evidence["field"]),
+                                    auction_fields["company"])
+    action = Action(**fields)
+    require(action.kind in {"split", "merge", "reduction", "bonus", "reference_reset"}
+            and action.factor > 0 and (action.factor == 1) == (action.kind == "reference_reset"),
+            "Invalid verified unit ratio")
+    return action
 
 
 def decision_kind(title):
@@ -456,12 +461,16 @@ def reconcile(security, decisions, notices, start, end, sessions, auctions=()):
     return sorted(actions, key=lambda a: a.ex_date), pending
 
 
+def tick_size(price, day, market):
+    if day >= "2023-01-25":
+        thresholds = ((2_000, 1), (5_000, 5), (20_000, 10), (50_000, 50),
+                      (200_000, 100), (500_000, 500), (math.inf, 1_000))
+    else:
+        thresholds = ((1_000, 1), (5_000, 5), (10_000, 10), (50_000, 50))
+        thresholds += ((100_000, 100), (500_000, 500), (math.inf, 1_000)) if market == "KOSPI" else ((math.inf, 100),)
+    return next(tick for ceiling, tick in thresholds if price < ceiling)
+
+
 def compatible_base(reference, converted, day, market):
     """Allow one KRX tick for official rounded prices."""
-    if day < "2023-01-25":
-        thresholds = ((1_000, 1), (5_000, 5), (10_000, 10), (50_000, 50), (100_000, 100))
-    else:
-        thresholds = ((2_000, 1), (5_000, 5), (20_000, 10), (50_000, 50), (200_000, 100))
-    thresholds += ((math.inf, 100),) if market == "KOSDAQ" else ((500_000, 500), (math.inf, 1_000))
-    tick = next(tick for ceiling, tick in thresholds if converted < ceiling)
-    return abs(reference - converted) <= tick
+    return abs(reference - converted) <= tick_size(converted, day, market)
