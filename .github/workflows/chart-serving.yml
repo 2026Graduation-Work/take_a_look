@@ -1,60 +1,115 @@
-name: KIND stock master diagnosis
+name: KRX managed stock alternative verification
 on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: chart-serving-publish
+  cancel-in-progress: false
 jobs:
-  probe:
+  verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        sample: [1, 2, 3]
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend/analysis/chart
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: 93c1ab0f6eb11f6d23ccbd01d9a067b6fe0ea15f
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: One stock master KIND request without credentials or database access
+      - name: Install existing serving dependencies
+        run: python -m pip install -q -r serving/requirements.txt
+      - name: Verify authenticated KRX management list and compare source coverage
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           python - <<'PYTHON'
+          import contextlib
           import hashlib
+          import html
+          import io
           import json
-          import platform
           import re
-          import socket
-          import ssl
+          import time
           from datetime import datetime, timezone
-          from urllib.error import HTTPError, URLError
+          from urllib.error import HTTPError
           from urllib.parse import urlencode
           from urllib.request import Request, urlopen
           
-          url = 'https://kind.krx.co.kr/investwarn/adminissue.do'
+          
+          def digest(values):
+              return hashlib.sha256('\n'.join(sorted(values)).encode()).hexdigest()
+          
+          
+          # Reuse the application's authentication entry point. Never print login output.
+          from shared.data.krx import authenticated_stock
+          from shared.data.providers import get_krx_session
+          
+          authenticated_stock()
+          session = get_krx_session()
+          if session is None or not session.is_valid():
+              raise RuntimeError('KRX authentication unavailable')
+          
+          request_data = {'bld': 'dbms/MDC/STAT/issue/MDCSTAT21401', 'locale': 'ko_KR',
+                          'mktId': 'ALL', 'share': '1', 'money': '1', 'csvxls_isNo': 'false'}
+          response = session.post('https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
+                                  data=request_data, timeout=(10, 30))
+          response.raise_for_status()
+          payload = response.json()
+          rows = payload.get('output')
+          if not isinstance(rows, list) or not rows:
+              print(json.dumps({'event': 'krx_managed_invalid', 'keys': sorted(payload)}, ensure_ascii=False))
+              raise RuntimeError('KRX managed rows missing')
+          fields = sorted(rows[0])
+          names = {str(row['ISU_NM']).strip() for row in rows}
+          if '' in names:
+              raise RuntimeError('Empty managed stock name')
+          print(json.dumps({'event': 'krx_managed', 'at': datetime.now(timezone.utc).isoformat(),
+                            'status': response.status_code, 'rows': len(rows), 'names': len(names),
+                            'fields': fields, 'name_sha256': digest(names)}, ensure_ascii=False))
+          
+          # Read the current listing to compare the service's KOSPI plus 247540 coverage.
+          time.sleep(1)
+          listing_response = session.post('https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd',
+              data={'bld': 'dbms/MDC/STAT/standard/MDCSTAT01901', 'mktId': 'ALL',
+                    'share': '1', 'csvxls_isNo': 'false'}, timeout=(10, 30))
+          listing_response.raise_for_status()
+          listing = listing_response.json()['OutBlock_1']
+          service_names = {row['ISU_ABBRV'] for row in listing
+                           if row['MKT_TP_NM'] == 'KOSPI' or row['ISU_SRT_CD'] == '247540'}
+          if len(service_names) < 500:
+              raise RuntimeError('Listing scope invalid')
+          
           body = urlencode({'method': 'searchAdminIssueSub', 'currentPageSize': 3000, 'pageIndex': 1,
                             'orderMode': 1, 'orderStat': 'D', 'marketType': '', 'forward': 'adminissue_sub'})
-          request = Request(url, data=body.encode(), headers={'User-Agent': 'Mozilla/5.0'})
-          result = {'at': datetime.now(timezone.utc).isoformat(), 'python': platform.python_version(),
-                    'tls': ssl.OPENSSL_VERSION, 'method': request.get_method(), 'url': url,
-                    'request_headers': dict(request.header_items()), 'body': body,
-                    'dns': sorted({x[4][0] for x in socket.getaddrinfo('kind.krx.co.kr', 443)})}
           try:
-              response = urlopen(request, timeout=30)
+              with urlopen(Request('https://kind.krx.co.kr/investwarn/adminissue.do', data=body.encode(),
+                                   headers={'User-Agent': 'Mozilla/5.0'}), timeout=30) as result:
+                  page = result.read().decode('utf-8')
+              cells = re.findall(r'<td class="first">(.*?)</td>', page, re.S)
+              kind_names = {html.unescape(re.sub(r'<[^>]+>', ' ', cell)).strip() for cell in cells} - {''}
+              if not kind_names:
+                  raise RuntimeError('KIND list empty')
+              print(json.dumps({'event': 'source_comparison', 'kind_status': 200, 'kind_names': len(kind_names),
+                  'krx_names': len(names), 'global_equal': names == kind_names,
+                  'global_krx_only': len(names-kind_names), 'global_kind_only': len(kind_names-names),
+                  'service_names': len(service_names), 'krx_service_managed': len(names & service_names),
+                  'kind_service_managed': len(kind_names & service_names),
+                  'service_equal': (names & service_names) == (kind_names & service_names),
+                  'service_difference_count': len((names ^ kind_names) & service_names)}, ensure_ascii=False))
+              if (names & service_names) != (kind_names & service_names):
+                  raise RuntimeError('Sources disagree in service scope')
           except HTTPError as error:
-              response = error
-          except (URLError, TimeoutError) as error:
-              result['network_error'] = str(error)
-              print(json.dumps(result, ensure_ascii=False))
-              raise SystemExit(1)
-          with response:
-              page = response.read()
-              result.update(status=response.code, final_url=response.url,
-                            response_headers={key: value for key, value in response.headers.items()
-                                              if key.lower() not in {'set-cookie'}},
-                            bytes=len(page), sha256=hashlib.sha256(page).hexdigest())
-              text = page.decode('utf-8', errors='replace')
-              result['managed_cells'] = len(re.findall(r'<td class="first">(.*?)</td>', text, re.S))
-              if response.code >= 400 or result['managed_cells'] == 0:
-                  result['error_text'] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', text))[:2000]
-          print(json.dumps(result, ensure_ascii=False))
+              text = html.unescape(error.read(3000).decode('utf-8', errors='replace'))
+              reference = re.search(r'Reference\s*#([^<\s]+)', text)
+              print(json.dumps({'event': 'source_comparison', 'kind_status': error.code,
+                  'kind_reference': reference.group(1) if reference else None,
+                  'krx_service_managed': len(names & service_names)}, ensure_ascii=False))
+              if error.code != 403:
+                  raise
           PYTHON
