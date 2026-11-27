@@ -112,7 +112,12 @@ test("hover opens the date popup and the pointer can cross into its links", asyn
 
 test("keyboard and touch open chart markers without additional reads", async ({ page }) => {
   const newsEnabled = (process.env.NEXT_PUBLIC_PRICE_EVENT_NEWS_ENABLED ?? "1") === "1";
-  const db = await mockContext(page);
+  const db = await mockContext(page, (route, url, fixture) => {
+    if (!isChart(url)) return;
+    const charts = fixture as ReturnType<typeof eventChartRows>;
+    for (const { payload } of charts) payload.prices.history[5].volume = 0;
+    return route.fulfill({ json: charts });
+  });
   await page.goto(`/stocks/${firstStock}`);
   await expect.poll(db.counts).toEqual({ market: 1, disclosures: 3 });
   await expect(page.getByRole("button", { name: /^차트에서 / })).toHaveCount(3);
@@ -148,6 +153,14 @@ test("keyboard and touch open chart markers without additional reads", async ({ 
   await expect(panel(page)).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(disclosures(page).getByRole("link").first()).toBeFocused();
+  const calculation = panel(page).locator("details").filter({ hasText: "계산 근거" });
+  const summary = calculation.locator("summary");
+  const sample = calculation.getByText("2026.06.30 ~ 2026.09.21의 일간 로그수익률 60개", { exact: false });
+  const coverage = calculation.getByText("최근 거래일 중 58일을 비교했고, 2일을 제외했어요.");
+  await expect(sample).toBeHidden();
+  await summary.press("Enter");
+  await expect(sample).toBeVisible();
+  await expect(coverage).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(panel(page)).toHaveCount(0);
   await expect(marker(page, middle)).toBeFocused();
@@ -164,6 +177,10 @@ test("keyboard and touch open chart markers without additional reads", async ({ 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     if (width === 390) await capturePanel(page, "tap-popup");
     expect(box.height).toBeLessThanOrEqual(422);
+    await summary.tap();
+    await expect(sample).toBeVisible();
+    await coverage.scrollIntoViewIfNeeded();
+    await expect(coverage).toBeInViewport();
     await page.touchscreen.tap(8, Math.round(box.y + box.height / 2));
     await expect(panel(page)).toHaveCount(0);
   }
