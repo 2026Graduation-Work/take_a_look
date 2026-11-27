@@ -9,7 +9,7 @@ import {
   contributionTargetWord,
   DisclosureList,
   FinancialPanel,
-  financialComparison,
+  FINANCIAL_GROUPS,
   NewsSentimentPanel,
   PricePsychology,
   SourceList,
@@ -232,9 +232,10 @@ export default function StockDetailView({
     if (moveFocus) tabRefs.current[tab]?.focus();
   }
 
-  const mainFeature = chart?.inference.features?.[0];
+  const hasHistogram = hasBand && realizedReturns.length > 0;
+  const readingMetric = metric && metric.key in TERM_INFO ? metric : null;
   const targetWord = contributionTargetWord(chart?.inference.contribution_space);
-  const reason = preview ? null : detail.reasons.find(({ source }) => source === "chart");
+  const chartReasons = detail.reasons.filter(({ source }) => source === "chart");
   const readingRoot = useRef<HTMLDivElement>(null);
   const readingReplay = useRef<HTMLButtonElement>(null);
   const reading = useEvidenceReading({
@@ -245,47 +246,27 @@ export default function StockDetailView({
     root: readingRoot,
     replayButton: readingReplay,
     steps: readingSteps(tabs, {
-      readerTypeLabel: readingUsesDiagnosis && bit ? BIT_LABEL[bit.type] : null,
+      readerType: readingUsesDiagnosis && bit ? { type: bit.type, label: BIT_LABEL[bit.type] } : null,
       overview: {
-        signal: (preview ? direction != null : Boolean(detail.asOf)) ? signal.label : null,
-        periodLabel: HORIZON_LABEL[horizon],
-        history: hasBand && detail.similarCaseCount > 0 ? {
-          low: rangeLow,
-          high: rangeHigh,
-          ciPercent,
-          cohort: chart && similar ? {
-            cases: similar.sample_count,
-            stocks: similar.stock_count,
-            tradingDays: chart.horizon,
-            signalDates: similar.period_start && similar.period_end
-              ? `${formatKstDateTime(similar.period_start)}~${formatKstDateTime(similar.period_end)}`
-              : null,
-          } : null,
-        } : null,
+        hasSignal: preview ? direction != null : Boolean(detail.asOf),
+        history: hasBand && detail.similarCaseCount > 0 ? (similar ? "similar" : "legacy") : null,
       },
-      model: mainFeature && targetWord ? {
-        target: targetWord,
-        feature: mainFeature.label_ko,
-      } : reason ? { reason: reason.title } : null,
-      trading: supply?.length ? {
-        days: supply.length,
-        hasVolume: (insights.supplyVolume ?? 0) > 0,
-      } : null,
-      news: sentimentView && sentimentView.articleCount > 0 ? {
-        period: formatKstDateTime(sentimentView.basis === "historical"
-          ? insights.sentiment?.days.at(-1)?.date ?? sentimentView.asOf
-          : sentimentView.asOf),
-        count: sentimentView.articleCount,
-        mood: moodWord(sentimentView.score),
+      model: {
+        hasHistogram,
+        hasBars: Boolean(preview && targetWord && chart?.inference.features?.length),
+        hasReason: chartReasons.length > 0,
+        hasPriceMood: Boolean(psychology),
+      },
+      trading: supply?.length ? { days: supply.length } : null,
+      news: {
+        hasSummary: Boolean(sentimentView),
         hasTimeline: Boolean(insights.sentiment?.days.length || todayLiveSentimentView(insights)),
-      } : null,
-      company: financial?.period && metric?.value != null ? {
-        metricKey: metric.key,
-        comparison: financialComparison(metric),
-        metric: TERM_INFO[metric.key as keyof typeof TERM_INFO]?.label ?? metric.label,
-        value: `${oneDecimal(metric.value)}${metric.unit}`,
-        period: financial.period,
-      } : null,
+      },
+      company: {
+        hasRepresentative: Boolean(readingMetric),
+        groups: FINANCIAL_GROUPS.filter(({ keys }) => financial?.metrics.some(({ key }) => keys.includes(key)))
+          .map(({ readingTarget }) => readingTarget),
+      },
     }),
   });
 
@@ -562,9 +543,11 @@ export default function StockDetailView({
                           {hasBand && currentPrice !== null && showLocalAsOf(priceDate, currentMarketStatus.date) && ` 원은 ${formatKstDateTime(priceDate)} 종가 기준이에요.`}
                         </p>
                       ) : null}
-                      {hasBand && realizedReturns.length > 0 ? (
+                      {hasHistogram ? (
                         <>
-                          <ReturnHistogram bins={realizedReturns} band={detail.returnBand} caseCount={detail.similarCaseCount} signal={signal} horizonLabel={HORIZON_LABEL[horizon]} />
+                          <div data-reading-target="model-histogram" className="[&.driver-active-element]:max-w-[85dvh]">
+                            <ReturnHistogram bins={realizedReturns} band={detail.returnBand} caseCount={detail.similarCaseCount} signal={signal} horizonLabel={HORIZON_LABEL[horizon]} />
+                          </div>
                           <p className="m-0 text-xs text-muted">
                             위 범위는 이 분포의 가운데 {ciPercent}%예요. 미래 가격 경로가 아니라 {HORIZON_LABEL[horizon]} 시점의 분포예요.
                           </p>
@@ -578,7 +561,7 @@ export default function StockDetailView({
                         space={chart?.inference.contribution_space}
                         total={chart?.inference.contribution_abs_sum}
                         features={preview ? chart?.inference.features ?? [] : undefined}
-                        reasons={detail.reasons.filter((reason) => reason.source === "chart")}
+                        reasons={chartReasons}
                       />
                     </section>
 
@@ -604,7 +587,7 @@ export default function StockDetailView({
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
                       <h2 id="company-financials" data-reading-target="company-heading" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
-                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} readingMetricKey={metric?.key} />
+                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} readingMetricKey={readingMetric?.key} />
                     </section>
                     <DisclosureList disclosures={disclosures} />
                   </>}

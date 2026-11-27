@@ -111,9 +111,10 @@ test("feature shares use the whole-model denominator and raw values are collapse
     await expect(model.locator(`[data-model-feature="${feature.name}"]`)).toContainText(contributionWord(feature.contribution, "상승", 1));
   }
   await expect(model).not.toContainText("기여도");
-  if (features.length > visible.length) await expect(model).toContainText(`제공된 다른 ${features.length - visible.length}개 항목`);
+  await expect(model).not.toContainText("제공된 다른");
   await expect(model.locator("details.disclosure")).not.toHaveAttribute("open", "");
   await model.locator("summary", { hasText: "계산 근거" }).click();
+  await expect(model.locator("dd")).toHaveCount(features.length);
   await expect(model.locator("dd").first()).toContainText(contributionPercent(features[0].contribution, 1));
   await expect(model).toContainText("전체 항목의 절댓값을 더하면 100%");
   await expect(model.locator("[data-model-feature]")).not.toContainText(["영향 비중", "관측값", "관측값"]);
@@ -335,8 +336,9 @@ test("mobile feature names stay on one line and detailed copy explains size word
     expect(dimensions.height).toBeLessThanOrEqual(dimensions.lineHeight + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   }
-  await expect(panel.getByText("하락 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.", { exact: true })).toBeVisible();
+  await expect(panel.getByText("하락 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.", { exact: true })).toHaveCount(0);
   await panel.getByText("계산 근거", { exact: true }).click();
+  await expect(panel).not.toContainText("이번 하락 점수에 대한 영향 비중이에요.");
   await expect(panel).toContainText("10% 이상이면 ‘크게’, 그보다 작으면 ‘조금’");
   await expect(panel).toContainText("전체 항목의 절댓값을 더하면 100%");
   await expect(panel.locator("p").filter({ hasText: "전체 항목의 절댓값" })).toHaveCSS("white-space", "pre-line");

@@ -1,3 +1,4 @@
+import type { BitType } from "./profiling/bit.ts";
 import { TERM } from "./copy-glossary.ts";
 
 export const READING_START_EVENT = "takealook:reading-start";
@@ -21,10 +22,12 @@ export type ReadingTab = keyof typeof READING_TAB_LABELS;
 export type ReadingTarget =
   | "tab-button" | "tab-list"
   | "overview-summary" | "overview-cohort" | "overview-range"
-  | "model-heading" | "model-summary" | "model-bars"
+  | "model-heading" | "model-histogram" | "model-bars" | "model-price-mood"
   | "trading-heading" | "trading-total" | "trading-latest"
-  | "news-heading" | "news-summary" | "news-periods"
-  | "company-heading" | "company-metric" | "company-basis";
+  | "news-heading" | "news-summary" | "news-chart" | "news-periods"
+  | "company-heading" | "company-metric" | CompanyReadingGroup;
+
+export type CompanyReadingGroup = "company-earnings" | "company-debt" | "company-valuation";
 
 type ReadingStep = {
   id: string;
@@ -37,21 +40,12 @@ type ReadingStep = {
 };
 
 type ReadingFacts = {
-  readerTypeLabel: string | null;
-  overview: {
-    signal: string | null;
-    periodLabel: string;
-    history: {
-      low: string;
-      high: string;
-      ciPercent: number;
-      cohort: { cases: number; stocks: number; tradingDays: 5 | 20; signalDates: string | null } | null;
-    } | null;
-  };
-  model: { target: string; feature: string } | { reason: string } | null;
-  trading: { days: number; hasVolume: boolean } | null;
-  news: { period: string; mood: string; count: number; hasTimeline: boolean } | null;
-  company: { metricKey: string; metric: string; value: string; period: string; comparison: string | null } | null;
+  readerType: { type: BitType; label: string } | null;
+  overview: { hasSignal: boolean; history: "similar" | "legacy" | null };
+  model: { hasHistogram: boolean; hasBars: boolean; hasReason: boolean; hasPriceMood: boolean };
+  trading: { days: number } | null;
+  news: { hasSummary: boolean; hasTimeline: boolean };
+  company: { hasRepresentative: boolean; groups: readonly CompanyReadingGroup[] };
 };
 
 function readingStep(
@@ -67,127 +61,108 @@ function readingStep(
 }
 
 const TAB_FEATURES: Record<ReadingTab, string> = {
-  overview: "종목을 처음 살펴볼 때 여기서 시작해요. 최근 주가와 각 탭의 요약을 훑고, 더 알아보고 싶은 정보를 골라요.",
-  model: "모델 신호가 왜 나왔는지 궁금할 때 봐요. 항목별 자료가 있으면 어떤 항목의 영향이 컸는지 비교하고, 다른 탭의 정보와도 함께 살펴봐요.",
-  trading: "최근 어떤 투자자들이 더 샀고 더 팔았는지 궁금할 때 봐요. 주가만으로는 알기 어려운 거래 흐름을 개인, 외국인, 기관으로 나눠 살펴봐요.",
-  news: "최근 이 회사에 무슨 일이 있었는지 궁금할 때 봐요. 뉴스 분위기와 기사 수를 함께 보고, 대표 기사가 있으면 내용을 살펴봐요.",
-  company: "주가와 함께 회사의 사업 상태를 알아보고 싶을 때 봐요. 매출과 이익, 빚 부담을 함께 살펴봐요.",
+  overview: "처음 보는 종목이라면 최근 주가부터 보고, 더 궁금한 내용은 다른 탭에서 찾아봐요.",
+  model: "모델 점수에 영향을 준 신호를 확인할 수 있어요. 거래나 뉴스에서도 비슷한 흐름이 보이는지 살펴볼 때 참고해요.",
+  trading: "주가가 움직인 배경을 살필 때, 어느 투자자가 주로 사고팔았는지도 단서가 돼요.",
+  news: "뉴스와 공시는 투자자의 기대와 주가에 영향을 줄 수 있어요. 회사 소식이 어떻게 다뤄졌는지 살펴봐요.",
+  company: "꾸준히 이익을 내고 빚을 감당하는지는 회사의 장기적인 가치에 영향을 줘요. 재무 지표에서 그 단서를 살펴봐요.",
 };
 
-const FINANCIAL_READING = new Map([
-  ["debt_ratio", {
-    purpose: "빚 부담을 비교할 때는 빚이 자본에 비해 얼마나 큰지 봐요. 빚의 액수만 보면 회사 규모에 따른 차이를 놓칠 수 있어요.",
-    change: "부채비율이 높아졌다면 빚이 늘었는지, 자본이 줄었는지 봐요.",
-  }],
-  ["roe", {
-    purpose: "회사가 이익을 내는 힘을 살펴볼 때 봐요. 이익의 액수뿐 아니라 자본에 비해 얼마나 남겼는지 비교해요.",
-    change: "ROE가 높아졌다면 순이익이 늘었는지, 자본이 줄었는지 봐요.",
-  }],
-  ["operating_margin", {
-    purpose: "매출이 늘었을 때 본업의 이익도 함께 남는지 살펴봐요. 매출만 늘고 이익은 줄었을 수도 있어요.",
-    change: "영업이익률이 달라졌다면 매출과 본업 이익 중 무엇이 바뀌었는지 봐요.",
-  }],
-  ["revenue_growth", {
-    purpose: "회사가 제품이나 서비스를 판 금액이 늘었는지 살펴볼 때 봐요. 보고서에 적힌 매출을 1년 전 같은 기간과 비교해요.",
-    change: "증가율이 달라졌다면 비교한 두 기간의 매출을 봐요. 증가율이 낮아져도 0%보다 높으면 매출은 1년 전보다 늘었어요.",
-  }],
-  ["per", {
-    purpose: "주가를 회사가 낸 이익과 함께 살펴볼 때 봐요. 값이 낮다는 이유만으로 좋은 투자라고 판단하지는 않아요.",
-    change: "PER이 낮아졌다면 한 주 가격이 내렸는지, 한 주당 이익이 늘었는지 봐요.",
-  }],
-  ["pbr", {
-    purpose: "주가를 회사에 남은 순자산과 함께 살펴볼 때 봐요. 값이 낮다는 이유만으로 좋은 투자라고 판단하지는 않아요.",
-    change: "PBR이 낮아졌다면 한 주 가격이 내렸는지, 한 주당 순자산이 늘었는지 봐요.",
-  }],
-]);
+const ORDER_REASONS: Record<BitType, string> = {
+  PRESERVER: "주가를 훑은 뒤 시장 분위기와 회사 상태를 먼저 봐요. 기사 분위기와 회사의 이익, 빚을 나눠 살펴볼 수 있어요.",
+  FOLLOWER: "주가를 훑은 뒤 수급과 뉴스를 먼저 봐요. 실제 거래와 기사 분위기를 구분해 볼 수 있어요.",
+  INDEPENDENT: "주가를 훑은 뒤 모델 근거와 재무를 먼저 봐요. 서로 다른 자료로 한쪽 판단에 치우치지 않게 살펴봐요.",
+  ACCUMULATOR: "주가를 훑은 뒤 모델 근거와 뉴스를 먼저 봐요. 신호와 관련 소식을 함께 보면 판단할 근거가 늘어요.",
+};
+
+const FINANCIAL_GUIDANCE: Record<CompanyReadingGroup, { title: string; text: string }> = {
+  "company-earnings": {
+    title: "매출과 이익",
+    text: "매출이 늘었다면 본업에서 남긴 이익도 함께 봐요. 비용이 더 늘면 매출이 늘어도 이익은 줄 수 있어요.",
+  },
+  "company-debt": {
+    title: "자산과 빚",
+    text: "빚의 크기는 회사 규모와 함께 봐요. 부채비율은 회사 자본에 비해 빚 부담이 얼마나 큰지 가늠하는 데 도움이 돼요.",
+  },
+  "company-valuation": {
+    title: "주가와 비교",
+    text: "주가를 이익이나 순자산과 견줘 얼마나 높게 평가받는지 봐요. 비슷한 업종의 회사끼리 비교하면 해석하기 쉬워요.",
+  },
+};
 
 const CHAPTERS: Record<ReadingTab, (facts: ReadingFacts) => ReadingStep[]> = {
   overview: ({ overview }) => {
-    const missing = "지금은 표시할 모델 신호가 없어요. 최근 주가나 다른 탭의 요약부터 살펴봐요.";
-    const signalText = overview.signal
-      ? `${overview.periodLabel} 기준 신호는 ${overview.signal}이에요. 신호를 다른 정보와 함께 볼 때는 먼저 기간을 맞춰요. 기간이 다르면 서로 다른 흐름을 보고 있을 수 있어요.`
-      : missing;
-    const signal = readingStep("overview", "overview", "overview-summary", "모델 신호의 기간을 확인해요",
+    const missing = "지금은 표시할 모델 신호가 없어요. 최근 주가부터 살펴볼 수 있어요.";
+    const signalText = overview.history
+      ? "과거 사례도 모델 신호와 같은 기간이 지난 뒤의 수익률로 비교해요."
+      : overview.hasSignal ? "신호가 어느 시점의 흐름을 보는지 기간부터 확인해요." : missing;
+    const signal = readingStep("overview", "overview", "overview-summary", "모델 신호의 기간",
       signalText, "overview-summary", missing);
-    const { history, periodLabel } = overview;
-    if (!history) return [signal];
-    const { cohort } = history;
-    const stocks = cohort && cohort.stocks > 0 ? `${cohort.stocks.toLocaleString("ko-KR")}개 종목에서 ` : "";
-    const dates = cohort?.signalDates ? `${cohort.signalDates}에 나온 신호예요. ` : "";
-    const source = cohort
-      ? `${stocks}모델의 상승 점수와 평소 가격 흔들림이 지금과 비슷했던 과거 사례 ${cohort.cases.toLocaleString("ko-KR")}건을 모았어요. ${dates}수익률은 신호 당일과 ${cohort.tradingDays}거래일 뒤의 종가를 비교해 구했어요.`
-      : `과거 신호가 나온 날을 기준으로 ${periodLabel}의 실제 수익률을 모은 범위예요.`;
+    if (!overview.history) return [signal];
     return [
       signal,
-      readingStep("overview-cohort", "overview", "overview-cohort", "비교에 쓰인 과거 사례를 확인해요",
-        `과거 사례를 참고할 때는 어느 기간의 실제 수익률인지 먼저 확인해요. ${source}`, "overview-summary", signalText),
-      readingStep("overview-range", "overview", "overview-range", "과거 수익률이 얼마나 달랐는지 봐요",
-        `과거 사례들의 결과가 얼마나 달랐는지 보려면 범위의 폭을 살펴봐요. ${history.low}에서 ${history.high} 사이는 과거 수익률의 가운데 ${history.ciPercent}%에 해당해요. 넓을수록 과거 수익률 차이가 컸어요.`,
+      readingStep("overview-cohort", "overview", "overview-cohort", "비교에 쓰인 과거 사례",
+        overview.history === "similar"
+          ? "모델이 상승 쪽으로 본 정도와 평소 주가의 흔들림이 비슷했던 과거 사례를 모았어요."
+          : "과거 신호가 나온 뒤 실제 수익률을 모았어요. 신호가 본 기간을 기준으로 결과를 읽어요.",
         "overview-summary", signalText),
+      readingStep("overview-range", "overview", "overview-range", "과거 수익률 범위",
+        "폭이 넓으면 같은 기간이 지난 뒤의 수익률이 과거 사례마다 많이 달랐다는 뜻이에요.", "overview-summary", signalText),
     ];
   },
   model: ({ model }) => {
-    const fallback = "지금은 어떤 항목이 모델 점수를 높이거나 낮췄는지 보여 줄 자료가 없어요. 거래 기록이나 뉴스는 다른 탭에서 살펴봐요.";
-    const heading = readingStep("model-target", "model", model ? "model-summary" : "model-heading", "모델이 본 항목을 확인해요",
-      model && "target" in model
-        ? `어떤 항목의 영향이 컸는지 보려면 설명 대상부터 확인해요. 여기서는 ${model.target} 점수를 설명하고, 첫 항목은 ‘${model.feature}’이에요. 현재 신호와 여기서 설명하는 점수의 방향은 다를 수 있어요.`
-        : model ? `화면에 표시된 이유는 ‘${model.reason}’이에요. 다른 탭에서 거래 기록과 기사 내용도 살펴봐요.`
-          : fallback,
-      "model-heading", fallback);
-    if (!model || !("target" in model)) return [heading];
-    return [heading, readingStep("model-bars", "model", "model-bars", "같은 화면 안에서 막대를 비교해요",
-      `오른쪽 막대는 ${model.target} 점수를 높인 정도, 왼쪽은 낮춘 정도예요. 영향이 큰 항목을 찾으려면 가장 긴 막대를 기준으로 이 화면 안에서만 길이를 비교해요. 날짜나 기간이 다른 막대는 길이를 비교할 수 없어요. 막대로 예측 확률이나 수익률은 알 수 없어요.`,
-      "model-heading", fallback)];
+    const fallback = "관련 자료를 확인하기 어려워요. 최근 주가나 뉴스는 다른 탭에서 볼 수 있어요.";
+    const steps: ReadingStep[] = [];
+    if (model.hasHistogram) steps.push(readingStep("model-histogram", "model", "model-histogram", "과거 수익률이 모인 구간",
+      "과거에 비슷한 신호가 나왔을 때 실제 수익률은 어땠는지 살펴봐요. 이익과 손실 중 어느 쪽 사례가 많았는지도 볼 수 있어요.", "model-heading", fallback));
+    if (model.hasBars) steps.push(readingStep("model-bars", "model", "model-bars", "모델에 영향을 준 주요 항목",
+      "영향이 큰 항목을 최대 세 개 보여줘요. 항목별 영향 비중은 ‘계산 근거’에서 볼 수 있어요.", "model-heading", fallback));
+    if (model.hasPriceMood) steps.push(readingStep("model-price-mood", "model", "model-price-mood", "가격 흐름 분위기",
+      "최근 주가 움직임의 강도를 가늠할 때 참고해요. 수익률과 흔들림, 평균 거래 가격 대비 위치를 반영해요.", "model-heading", fallback));
+    if (steps.length) return steps;
+    return [readingStep("model-reason", "model", "model-heading", "모델이 본 근거",
+      model.hasReason ? "여기에 나온 이유를 읽고, 관련된 거래나 뉴스가 있는지도 살펴봐요." : fallback, "model-heading", fallback)];
   },
   trading: ({ trading }) => {
-    const fallback = "지금은 표시할 거래 기록이 없어요. 최근 주가나 뉴스는 다른 탭에서 살펴봐요.";
+    const fallback = "지금은 투자자별 거래 자료가 없어요. 최근 주가나 뉴스는 다른 탭에서 볼 수 있어요.";
     const heading = readingStep("trading-total", "trading", trading ? "trading-total" : "trading-heading",
-      "투자자별로 더 샀는지, 더 팔았는지 봐요",
-      trading ? `최근 ${trading.days}영업일 동안 개인, 외국인, 기관이 더 샀는지, 더 팔았는지 큰 숫자를 나란히 봐요. 같은 기간의 순매수 합계라 서로 비교할 수 있어요. +는 판 것보다 더 샀다는 뜻이고, −는 산 것보다 더 팔았다는 뜻이에요.` : fallback,
+      "투자자별 순매수", trading ? "같은 기간의 순매수를 나란히 보면, 매수나 매도가 한쪽에 몰렸는지 알 수 있어요." : fallback,
       "trading-heading", fallback);
-    if (!trading) return [heading];
-    return [heading, readingStep("trading-latest", "trading", "trading-latest", "기간 전체와 마지막 하루를 비교해요",
-      `‘마지막 날’은 합계에 포함된 가장 최근 하루의 순매수예요. ${trading.days === 1
-        ? "자료가 1영업일뿐이라 기간 합계와 같아요."
-        : "최근 하루도 같은 흐름인지 보려면 기간 전체와 마지막 날에 더 샀는지, 더 팔았는지 비교해요."} ${trading.hasVolume
-        ? "거래 규모에 비해 어느 정도인지 보려면 비율도 봐요. 합계의 크기를 같은 기간 하루 평균 거래량과 비교한 값이에요."
-        : "거래량 자료가 없어 이 비율은 표시하지 않아요."}`,
-      "trading-heading", fallback)];
+    if (!trading || trading.days === 1) return [heading];
+    return [heading, readingStep("trading-latest", "trading", "trading-latest", "마지막 날의 거래",
+      "기간 합계와 방향이 다르다면, 최근 하루는 전체 흐름과 다르게 움직인 거예요.", "trading-heading", fallback)];
   },
   news: ({ news }) => {
-    const fallback = "지금은 표시할 뉴스 분위기 자료가 없어요. 다른 탭에서 회사 정보나 거래 기록을 살펴볼 수 있어요.";
-    const heading = readingStep("news-summary", "news", news ? "news-summary" : "news-heading", "기사 수와 집계 기준을 확인해요",
-      news ? `${news.period} 기준 기사 ${news.count.toLocaleString("ko-KR")}건의 분위기는 ‘${news.mood}’이에요. 분위기가 달라졌다면 기간과 기사 수를 함께 비교해요. 기사가 적으면 한 기사가 전체 분위기에 미치는 영향이 커요.` : fallback,
-      "news-heading", fallback);
-    if (!news?.hasTimeline) return [heading];
-    return [heading, readingStep("news-periods", "news", "news-periods", "기간을 맞춰 뉴스 분위기를 비교해요",
-      "며칠 사이 변화는 일별로, 더 긴 변화는 월별이나 연별로 봐요. 안내가 끝나면 그래프의 점을 눌러 그때의 분위기를 확인해요. 기사가 적다는 표시가 있으면 참고로만 봐요. 대표 기사가 있으면 내용도 살펴봐요.",
-      "news-heading", fallback)];
+    const fallback = "뉴스가 모이면 이곳에서 기사 분위기의 흐름을 볼 수 있어요.";
+    const summary = "분위기가 달라졌다면 기사 수도 함께 봐요. 기사가 적으면 한 건의 영향이 커요.";
+    const heading = readingStep("news-summary", "news", news.hasSummary ? "news-summary" : "news-heading",
+      "뉴스 분위기와 기사 수", news.hasSummary ? summary : fallback, "news-heading", fallback);
+    if (!news.hasTimeline) return [heading];
+    return [
+      readingStep("news-chart", "news", "news-chart", "뉴스 분위기 그래프",
+        "점이 위로 갈수록 기사 표현이 긍정적이었어요. 기사가 적은 구간은 한 건의 영향이 커요.", "news-heading", fallback),
+      readingStep("news-periods", "news", "news-periods", "기간별 뉴스 분위기",
+        "며칠 사이 변화는 일별로, 더 긴 흐름은 월별이나 연별로 살펴봐요.", "news-heading", fallback),
+    ];
   },
   company: ({ company }) => {
-    const fallback = "지금은 표시할 재무 지표가 없어요. 회사가 공개한 자료가 있는지 ‘최근 공시’에서 살펴봐요.";
-    const guidance = company && FINANCIAL_READING.get(company.metricKey);
-    const purpose = guidance?.purpose ?? "이 지표에서 회사의 재무 상태를 확인해요.";
-    const comparison = company?.comparison
-      ? `${company.comparison} 이 비교로 대략적인 위치를 살펴봐요. 여러 업종의 코스피 회사 자료를 모은 기준이라 높고 낮음만으로 회사 상태를 판단하지는 않아요.`
-      : "지금은 표시할 비교 기준이 없어요.";
-    const heading = readingStep("company-metric", "company", company ? "company-metric" : "company-heading", "재무 지표와 비교 기준을 함께 봐요",
-      company ? `${purpose} 현재 ${company.metric} 값은 ${company.value}예요. ${comparison}` : fallback,
-      "company-heading", fallback);
-    if (!company) return [heading];
-    const change = guidance ? ` ${guidance.change}` : "";
-    return [heading, readingStep("company-basis", "company", "company-basis", "보고서가 다루는 기간을 확인해요",
-      `${company.period} 자료예요. ‘계산 근거’에서 회사와 비교 기준의 보고서 기간을 볼 수 있어요. 변화는 기간 길이가 같은 이전 보고서의 같은 지표와 비교해요.${change}`,
-      "company-heading", fallback)];
+    const fallback = "지금은 재무 지표를 확인하기 어려워요. 회사가 공개한 자료는 최근 공시에서 찾아볼 수 있어요.";
+    const steps: ReadingStep[] = [];
+    if (company.hasRepresentative) steps.push(readingStep("company-metric", "company", "company-metric", "재무 지표 읽는 법",
+      "지표 이름 옆 ⓘ에서 뜻을 확인할 수 있어요. 화면의 코스피 중간값은 여러 업종을 포함한 기준이에요.", "company-heading", fallback));
+    for (const group of company.groups) {
+      const { title, text } = FINANCIAL_GUIDANCE[group];
+      steps.push(readingStep(group, "company", group, title, text, "company-heading", fallback));
+    }
+    return steps.length ? steps : [readingStep("company-metric", "company", "company-heading", "재무 지표",
+      fallback, "company-heading", fallback)];
   },
 };
 
 export function readingSteps(tabs: readonly ReadingTab[], facts: ReadingFacts): ReadingStep[] {
-  const order = tabs.map((tab) => READING_TAB_LABELS[tab]).join(" → ");
-  const purpose = "각 정보를 언제, 왜 보고 어떻게 비교하면 좋을지 살펴봐요.";
-  const orderText = facts.readerTypeLabel
-    ? `${purpose} 성향 진단에서 나온 ‘${facts.readerTypeLabel}’에 맞춰 ${order} 순으로 봐요.`
-    : `${purpose} 기본 순서는 ${order}예요. 성향 진단 후에는 투자 유형에 따라 순서가 달라질 수 있어요.`;
+  const orderText = facts.readerType
+    ? `‘${facts.readerType.label}’의 읽는 순서예요. ${ORDER_REASONS[facts.readerType.type]}`
+    : "주가로 최근 흐름을 살펴본 뒤, 모델 신호를 거래와 뉴스, 회사 상태에 비춰 볼 수 있어요. 성향에 따라 순서가 달라져요.";
   return [
     {
       id: "reading-order",

@@ -86,16 +86,14 @@ for (const { turnover, typeLabel, order } of [
     await expect(page.getByRole("region", { name: "모델 신호 설명" })).toBeVisible();
     await invite(page).click();
     await orderStop(page);
-    await expect(message(page)).toContainText(names.join(" → "));
     await expect(message(page)).toContainText(typeLabel);
-    await expect(message(page)).toContainText("각 정보를 언제, 왜 보고 어떻게 비교하면 좋을지");
     await expect(message(page)).not.toContainText("정보의 정확성");
     const targets: Record<string, string[]> = {
       overview: ["overview-summary", "overview-cohort", "overview-range"],
-      model: ["model-summary", "model-bars"],
-      trading: ["trading-total", "trading-latest"],
-      news: ["news-heading"],
-      company: ["company-metric", "company-basis"],
+      model: ["model-histogram", "model-bars", "model-price-mood"],
+      trading: ["trading-total"],
+      news: ["news-chart", "news-periods"],
+      company: ["company-metric", "company-earnings", "company-debt", "company-valuation"],
     };
     for (const [chapterIndex, chapter] of order.entries()) {
       const steps = targets[chapter];
@@ -115,18 +113,23 @@ for (const { turnover, typeLabel, order } of [
         await stop(page, chapter, target);
         await expect(message(page).getByText(`${names[chapterIndex]} ${index + 2}/${steps.length + 1}`, { exact: true })).toBeVisible();
         if (target === "overview-summary") await expect(page.getByRole("region", { name: "모델 신호 설명" })).toHaveCount(0);
-        if (target === "overview-cohort") await expect(message(page)).toContainText(/상승 점수와 평소 가격 흔들림.*신호 당일과 20거래일 뒤의 종가/);
-        if (target === "overview-range") await expect(message(page)).toContainText("가운데 68%");
-        if (target === "trading-total") await expect(message(page)).toContainText(/최근 1영업일 동안.*개인, 외국인, 기관.*같은 기간의 순매수 합계/);
-        if (target === "trading-latest") await expect(message(page)).toContainText("1영업일뿐이라 기간 합계와 같아요");
+        if (target === "overview-cohort") await expect(message(page)).toContainText("모델이 상승 쪽으로 본 정도와 평소 주가의 흔들림");
+        if (target === "overview-range") await expect(message(page)).toContainText("수익률이 과거 사례마다 많이 달랐다는 뜻");
+        if (target === "trading-total") await expect(message(page)).toContainText("매수나 매도가 한쪽에 몰렸는지");
+        if (target === "model-histogram") await expect(message(page)).toContainText("이익과 손실 중 어느 쪽 사례가 많았는지");
+        if (target === "model-price-mood") await expect(message(page)).toContainText("평균 거래 가격 대비 위치");
+        if (target === "news-chart") await expect(message(page)).toContainText("점이 위로 갈수록 기사 표현이 긍정적이었어요.");
         if (target === "company-metric") {
-          await expect(message(page)).toContainText("104.8%");
-          await expect(message(page)).toContainText("코스피 중간값 96.3%와 비슷해요.");
+          await expect(message(page)).toContainText("코스피 중간값은 여러 업종을 포함한 기준");
+          await expect(message(page)).not.toContainText(/104\.8%|96\.3%/);
         }
       }
     }
     await previous(page).click();
-    await stop(page, order.at(-1)!, targets[order.at(-1)!][0]);
+    const lastChapter = order.at(-1)!;
+    const previousTarget = targets[lastChapter].at(-2);
+    if (previousTarget) await stop(page, lastChapter, previousTarget);
+    else await introStop(page, lastChapter);
     await close(page).click();
     await expect(message(page)).toHaveCount(0);
     await expect(replay(page)).toBeFocused();
@@ -206,7 +209,7 @@ test("로그아웃 상태에서도 이용 안내의 종목 상세 안내를 시�
   await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
   await orderStop(page);
   await expect(message(page)).not.toContainText(/진단 결과|추종형|독립 분석형|적극 축적형|자산 보존형/);
-  await expect(message(page)).toContainText("투자 유형에 따라 순서가 달라질 수 있어요.");
+  await expect(message(page)).toContainText("성향에 따라 순서가 달라져요.");
   await close(page).click();
   await expect(invite(page)).toHaveCount(0);
   await expect(replay(page)).toBeFocused();
@@ -268,7 +271,7 @@ test("로그인 계정은 데모 기록과 분리되고 예전 프로필에 진�
   await expect(invite(page)).toBeVisible();
   await invite(page).click();
   await orderStop(page);
-  await expect(message(page)).toContainText("기본 순서");
+  await expect(message(page)).toContainText("성향에 따라 순서가 달라져요.");
 });
 
 test("자료가 없는 종목은 미제공 상태가 있는 패널을 가리켜요", async ({ page }) => {
@@ -280,7 +283,7 @@ test("자료가 없는 종목은 미제공 상태가 있는 패널을 가리켜�
   const chapters = [
     { tab: "overview", label: "한눈에 보기", target: "overview-summary", text: "지금은 표시할 모델 신호가 없어요." },
     { tab: "trading", label: "누가 사고팔았나", target: "trading-heading" },
-    { tab: "news", label: "시장 분위기", target: "news-heading", text: "지금은 표시할 뉴스 분위기 자료가 없어요." },
+    { tab: "news", label: "시장 분위기", target: "news-heading", text: "뉴스가 모이면 이곳에서 기사 분위기의 흐름을 볼 수 있어요." },
     { tab: "model", label: "모델이 본 이유", target: "model-heading" },
     { tab: "company", label: "회사 상태", target: "company-heading" },
   ];
@@ -362,10 +365,15 @@ for (const width of [320, 390, 1280]) {
         ["overview", "overview-range", "overview-3"],
         ["trading", "tab-button", "trading-intro"],
         ["trading", "trading-total", "trading"],
-        ["trading", "trading-latest", "trading-latest"],
+        ["news", "news-chart", "news-chart"],
+        ["news", "news-periods", "news-periods"],
+        ["model", "model-histogram", "model-histogram"],
         ["model", "model-bars", "model-bars"],
+        ["model", "model-price-mood", "model-price-mood"],
         ["company", "company-metric", "company"],
-        ["company", "company-basis", "company-basis"],
+        ["company", "company-earnings", "company-earnings"],
+        ["company", "company-debt", "company-debt"],
+        ["company", "company-valuation", "company-valuation"],
       ]) {
         const highlight = target === "tab-button"
           ? page.locator(`#stock-tab-${chapter}.driver-active-element`)
