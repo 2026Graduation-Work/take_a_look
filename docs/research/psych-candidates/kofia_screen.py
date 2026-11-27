@@ -3,7 +3,8 @@
 시장 값은 같은 날 모든 종목에 같으므로 그대로는 날짜별 순위를 바꾸지 못한다. 그래서 날짜별 "종목 특성의 IC"가
 시장 심리 z에 따라 달라지는지(기울기)와, z의 부호로 특성 방향을 뒤집은 상호작용 IC를 본다(screen.py P2와 같은 방식).
 
-입력: <kofia>/raw/*.json(공공데이터포털 GetKofiaStatisticsInfoService 원본 items), <plan> 폴더의 prices.parquet,
+입력: <kofia>/raw/*.json(공공데이터포털 GetKofiaStatisticsInfoService 원본 items, 2021-11~) 또는
+<kofia>/freesis/STATSCU01000000{60,70}BO_<연도>.json(FreeSIS 공개 화면 요청 원본, 2016~, 있으면 이쪽), <plan> 폴더의 prices.parquet,
 names.parquet, oos/h{5,20}_A.parquet, KOSPI 지수 종가 parquet(Date, Close).
 
     PYTHONPATH=backend/analysis/chart python docs/research/psych-candidates/kofia_screen.py <kofia> <plan> <KS11.parquet> <out>
@@ -24,9 +25,19 @@ DISC_END = pd.Timestamp("2023-12-31")
 LAG = 2  # 금투협 통계는 기준일 하루 이틀 뒤 공개된다. 2거래일 전 값만 쓴다
 
 
+def freesis(obj, column):
+    """FreeSIS 원본(연도별 JSON, 백만원)에서 한 열을 꺼내 API와 같은 이름으로 둔다. z는 단위와 무관하다."""
+    rows = [r for p in sorted((KOFIA / "freesis").glob(f"{obj}_*.json")) for r in json.load(open(p))["ds1"]]
+    return pd.DataFrame(rows).rename(columns={"TMPV1": "basDt", column[1]: column[0]})
+
+
 def kofia_signals(kospi):
-    credit = pd.DataFrame(json.load(open(KOFIA / "raw/getGrantingOfCreditBalanceInfo.json")))
-    capital = pd.DataFrame(json.load(open(KOFIA / "raw/getSecuritiesMarketTotalCapitalInfo.json")))
+    if (KOFIA / "freesis").exists():  # 2016~ 장기 자료. 060 TMPV2 = 투자자예탁금, 070 TMPV3 = 유가증권 신용융자
+        capital = freesis("STATSCU0100000060BO", ("invrDpsgAmt", "TMPV2"))
+        credit = freesis("STATSCU0100000070BO", ("crdTrFingScrs", "TMPV3"))
+    else:
+        credit = pd.DataFrame(json.load(open(KOFIA / "raw/getGrantingOfCreditBalanceInfo.json")))
+        capital = pd.DataFrame(json.load(open(KOFIA / "raw/getSecuritiesMarketTotalCapitalInfo.json")))
     frame = (credit[["basDt", "crdTrFingScrs"]].merge(capital[["basDt", "invrDpsgAmt"]], on="basDt", how="outer")
              .assign(Date=lambda f: pd.to_datetime(f.basDt)).set_index("Date").sort_index().drop(columns="basDt")
              .astype(float))
