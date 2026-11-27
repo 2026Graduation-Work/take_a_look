@@ -144,26 +144,13 @@ test("new user: 환영 -> 16문항 -> 결과 -> 보유 종목 1개 -> 대시보�
 
   await page.locator("[data-stock-row]").first().click();
   await expect(page).toHaveURL(/\/stocks\/(005930|005380|068270)$/);
-  await expect(page.getByText(/과거 비슷한 경우, (2주|4주) 뒤 수익률은 10번 중 \d번 이 범위였어요/)).toBeVisible();
-  await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "판단 근거" })).toHaveAttribute(
-    "data-card-order",
-    "nudge,contribution,sentiment,supply,risk,financial",
-  );
-  await expect(
-    page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab", { selected: true }),
-  ).toHaveText("모델이 본 이유");
+  const stockTabs = page.getByRole("tablist", { name: "종목 상세" });
+  await expect(stockTabs.getByRole("tab", { selected: true })).toHaveText("한눈에 보기");
   await expect(page.getByText("데모 계정")).toBeVisible();
-
-  await page.getByText("다른 유형이라면?").click();
-  await page.getByRole("button", { name: "자산 보존형" }).click();
-  await expect(page.locator('[data-bit-type="PRESERVER"]')).toBeVisible();
-  await expect(page.getByText("시선으로 보는 중", { exact: false })).toBeVisible();
-  await expect(
-    page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab", { selected: true }),
-  ).toHaveText("시장 분위기");
-  await page.getByRole("button", { name: "내 성향" }).click();
-  await expect(page.locator('[data-bit-type="ACCUMULATOR"]')).toBeVisible();
+  const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
+  await expect(overview.getByRole("heading", { name: "최근 주가" })).toBeVisible();
+  await overview.getByRole("button", { name: /^모델이 본 이유/ }).click();
+  await expect(page.getByRole("tabpanel", { name: "모델이 본 이유" }).getByRole("heading", { name: /^모델 신호/ })).toBeVisible();
 
   await page.locator("footer").getByRole("link", { name: "모델 성적표" }).click();
   await expect(page).toHaveURL(/\/performance$/);

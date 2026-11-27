@@ -76,7 +76,7 @@ def test_flow_activation_refuses_incomplete_preview_before_config_write(tmp_path
     monkeypatch.setattr(refresh_pack, "verify_runs", lambda *args, **kwargs: ({}, {}, source, dataset))
     monkeypatch.setattr(refresh_pack, "verify_inputs", lambda *args: {"processed_manifest_sha256": "synthetic"})
     monkeypatch.setattr(refresh_pack, "build_pack", lambda **kwargs: (tmp_path, tmp_path / "pack.tar.gz", {}))
-    monkeypatch.setattr(refresh_pack, "load_pack", lambda *args: ({}, {}))
+    monkeypatch.setattr(refresh_pack, "load_pack", lambda *args: ({}, {}, "a" * 64))
     monkeypatch.setattr(refresh_pack.pd, "read_parquet", lambda *args: pd.DataFrame())
     missing = pd.DataFrame({name: [0.] for name in FLOW_FEATURES})
     missing.loc[0, "flow_foreign_20"] = float("nan")

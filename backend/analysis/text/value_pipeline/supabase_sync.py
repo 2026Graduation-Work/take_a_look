@@ -4,7 +4,7 @@ import argparse
 import json
 import logging
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -219,7 +219,12 @@ def build_parser() -> argparse.ArgumentParser:
     live = subparsers.add_parser("live", help="6종목 최근 24시간 뉴스를 수집·적재")
     live.add_argument("--target", type=_parse_target, action="append")
     live.add_argument("--dynamic", action="store_true", help="기본 6 + 보유·관심 종목(하루 20회 상한)")
-    subparsers.add_parser("disclosures", help="DART 하루 전체 공시를 받아 종목에 맞춰 적재")
+    filing = subparsers.add_parser("disclosures", help="DART 하루 전체 공시를 받아 종목에 맞춰 적재")
+    filing.add_argument("--start", help="시작 접수일 (KST, YYYY-MM-DD)")
+    filing.add_argument("--end", help="종료 접수일 (KST, YYYY-MM-DD)")
+    filing.add_argument("--dry-run", action="store_true", help="DART와 DB 요청 없이 실행 계획만 표시")
+    filing.add_argument("--max-http-attempts", type=int, default=disclosures.MAX_HTTP_ATTEMPTS,
+                        help="재시도를 포함한 실행별 DART HTTP 시도 상한")
     subparsers.add_parser("financial-latest", help="기본 6 + 보유·관심 종목의 최신 정기보고서 재무(바뀐 종목만)")
     reset_live = subparsers.add_parser(
         "reset-live", help="지정 종목의 live 행만 지운 뒤 최근 24시간 뉴스를 다시 적재"
@@ -254,11 +259,33 @@ def _print_result(result: SyncResult) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    args = build_parser().parse_args(argv)
-    client = supabase_store.SupabaseRestClient.from_env()
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if args.command == "disclosures":
-        disclosures.sync(client)
-        return 0
+        try:
+            days = disclosures.filing_days(args.start, args.end)
+            budget = disclosures.RequestBudget(args.max_http_attempts)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if args.dry_run:
+            print(json.dumps({"event": "disclosures_plan", "dates": [day.isoformat() for day in days],
+                              "max_http_attempts": budget.limit}))
+            return 0
+        try:
+            client = supabase_store.SupabaseRestClient.from_env()
+            results = disclosures.sync(client, days=days, budget=budget)
+        except (RuntimeError, ValueError):
+            print(json.dumps({"event": "disclosures", "status": "not_started",
+                              "reason": "missing_configuration_or_stock_master"}))
+            return 1
+        for result in results:
+            print(json.dumps({"event": "disclosures_day", **asdict(result), "day": result.day.isoformat()}))
+        failed = sum(result.status != "complete" for result in results)
+        print(json.dumps({"event": "disclosures", "fetched": sum(result.fetched for result in results),
+                          "matched": sum(result.matched for result in results),
+                          "http_attempts": budget.used, "incomplete_days": failed}))
+        return int(failed > 0)
+    client = supabase_store.SupabaseRestClient.from_env()
     if args.command == "financial-latest":
         results = latest_financials.sync(client, dynamic_targets(client))
         return 1 if any(value.startswith("failed") for value in results.values()) else 0
