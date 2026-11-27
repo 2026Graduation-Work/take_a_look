@@ -38,7 +38,7 @@ test("모든 화면의 누르는 것이 44px 이상이다(390 폭)", async ({ pa
   await page.getByRole("button", { name: "저장하고 시작" }).click();
   await expect(page).toHaveURL("/");
   await check("dashboard");
-  for (const path of ["/portfolio", "/profile", "/performance", "/stocks/005930", "/guide"]) {
+  for (const path of ["/portfolio", "/profile", "/performance", "/stocks/005930", "/guide", "/glossary", "/tips"]) {
     await page.goto(path);
     await check(path);
   }

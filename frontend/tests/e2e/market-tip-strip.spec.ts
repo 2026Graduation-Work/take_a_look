@@ -99,20 +99,14 @@ test("문장 바로 뒤의 밑줄 링크를 누르면 해당 팁의 설명과 �
   await sentence.click({ position: { x: 8, y: 8 } });
   await expect(page).toHaveURL("/");
   await link.click();
-  await expect(page).toHaveURL(`/guide#tip-${first.id}`);
-  const section = page.getByRole("region", { name: "알고 계셨나요?" });
-  await expect(page.locator(`#tip-${first.id}`)).toBeInViewport();
-  await expect(section.locator("dt")).toHaveText(BEGINNER_TIPS.map(tip => tip.title));
-  for (const tip of BEGINNER_TIPS) {
-    const item = section.locator(`#tip-${tip.id}`);
-    await expect(item).toContainText(tip.summary);
-    for (const line of tip.detail) await expect(item).toContainText(line);
-    if (tip.formula) await expect(item).toContainText(tip.formula);
-    for (const source of tip.sources) {
-      await expect(item).toContainText(source.label);
-      if (source.url) await expect(item.getByRole("link", { name: source.label, exact: true })).toHaveAttribute("href", source.url);
-    }
-  }
+  await expect(page).toHaveURL(url => url.pathname === `/tips/${first.id}` && url.searchParams.get("returnTo") === "/");
+  const article = page.getByRole("article");
+  await expect(article.getByRole("heading", { level: 1 })).toHaveText(first.title);
+  await expect(article).toContainText(first.summary);
+  for (const line of first.detail) await expect(article).toContainText(line);
+  if (first.formula) await expect(article).toContainText(first.formula);
+  for (const source of first.sources) await expect(article).toContainText(source.label);
+  await expect(page.getByRole("region", { name: "알고 계셨나요?" })).toHaveCount(0);
 });
 
 test("그만 보면 시장 바를 남기고 본문이 올라오며 서울 자정까지 다른 탭과 이동에도 적용된다", async ({ page, context }) => {
@@ -276,7 +270,10 @@ test("정본의 모든 팁을 순서대로 보여 준 뒤 첫 팁으로 돌아�
   const strip = tipStrip(page);
   for (const tip of BEGINNER_TIPS) {
     await expect(strip).toContainText(tip.title);
-    await expect(strip.getByRole("link", { name: "자세히 보기" })).toHaveAttribute("href", `/guide#tip-${tip.id}`);
+    const href = await strip.getByRole("link", { name: "자세히 보기" }).getAttribute("href");
+    const target = new URL(href!, page.url());
+    expect(target.pathname).toBe(`/tips/${tip.id}`);
+    expect(target.searchParams.get("returnTo")).toBe("/");
     await page.clock.fastForward(5_100);
   }
   await expect(strip).toContainText(first.title);

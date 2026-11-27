@@ -142,7 +142,7 @@ function onboardingDestination(
 ): string | null {
   if (status === "loading" || status === "error") return null;
   if (pathname.startsWith("/stocks/") && isChartPreview(pathname.slice("/stocks/".length))) return null;
-  if (pathname === "/guide" || pathname === "/privacy") return null;
+  if (pathname === "/guide" || pathname === "/glossary" || pathname === "/privacy" || pathname === "/tips" || pathname.startsWith("/tips/")) return null;
   if (status === "signed_out") return pathname === "/login" ? null : "/login";
   if (status === "needs_survey") {
     return pathname === "/survey" ? null : "/survey";
