@@ -19,8 +19,7 @@ for (const scenario of [
     } }));
     await page.goto("/stocks/000660");
     const market = page.getByRole("region", { name: "시장 브리핑", exact: true });
-    await expect(market).toContainText(`시세 ${scenario.marketDate.replaceAll("-", ".")} 종가 기준`);
-    await expect(market).toContainText("실시간 아님");
+    await expect(market).not.toContainText("종가 기준");
     if (scenario.stale) await expect(market).toContainText("3일 전 데이터예요");
     else await expect(market).not.toContainText("일 전 데이터예요");
     const header = page.getByRole("region", { name: "SK하이닉스", exact: true });
@@ -46,11 +45,11 @@ for (const scenario of [
     await expect(financial.getByText(/PER\/PBR 주가 2026\.09\.21 종가 기준/)).toHaveCount(scenario.showLocal ? 1 : 0);
     await expect(page.getByRole("link", { name: "가상 공시 테스트" })).toBeVisible();
     await market.getByRole("button", { name: /시장 흔들림/ }).click();
-    await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).not.toContainText(scenario.marketDate.replaceAll("-", "."));
+    await expect(page.getByRole("region", { name: "시장 흔들림 설명" })).toContainText(`시세 ${scenario.marketDate.replaceAll("-", ".")} 종가 기준, 실시간 아님`);
     await page.keyboard.press("Escape");
     for (const width of [1280, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
-      await expect(market.getByText("실시간 아님", { exact: true })).toBeVisible();
+      await expect(market.getByText("KOSPI", { exact: true })).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
   });
