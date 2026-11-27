@@ -34,9 +34,12 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { getSavedHoldingsSnapshot, getServerHoldingsSnapshot, subscribeToSavedHoldings } from "@/lib/save-holdings";
 import PriceHistoryChart from "./price-history-chart";
 import PriceEventPanel from "./price-event-panel";
+import { priceMoveMessages } from "@/lib/price-event-messages";
 import { usePriceEvents } from "@/lib/use-price-events";
 import ReturnHistogram from "./return-histogram";
 import SiteHeader from "./site-header";
+import { useMarketStatus } from "./market-status-bar";
+import { showLocalAsOf } from "@/lib/market-status";
 import {
   barrierRule,
   bandSentence,
@@ -49,7 +52,7 @@ import {
   SIGNAL_WORD,
   topPercentLabel,
 } from "@/lib/copy-glossary";
-import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
+import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, formatWonChange, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import { marketSentimentView, riskSnapshot, todayLiveSentimentView, type HoldingWeight, type StockInsights } from "@/lib/providers";
@@ -123,6 +126,7 @@ export default function StockDetailView({
   signalHorizon = 20,
   onHorizonChange,
 }: StockDetailViewProps) {
+  const currentMarketStatus = useMarketStatus(marketStatus);
   const bit = styleAxes ? classifyBit(styleAxes) : null;
   const [activeTab, setActiveTab] = useState<StockTab>("overview");
   const tabRefs = useRef<Partial<Record<StockTab, HTMLButtonElement | null>>>({});
@@ -152,6 +156,13 @@ export default function StockDetailView({
   const preview = chartSnapshots !== undefined;
   const chart = chartSnapshots?.get(signalHorizon);
   const events = usePriceEvents(chartSnapshots?.get(20), chartRevision);
+  const eventMessages = priceMoveMessages(events.result);
+  const eventStatus = chart && (
+    <p role="status" aria-label="변동일 조회 상태" className="m-0 text-xs text-muted">
+      {eventMessages.message ?? priceMoveMessages({ status: "unavailable", reason: "incomplete_sessions" }).message}
+      {eventMessages.coverageNote && ` ${eventMessages.coverageNote}`}
+    </p>
+  );
   const direction = chartDirection(chart);
   const { close, sigma, barriers } = chart?.inference ?? {};
   const modelBasis = chart?.inference.status === "available" && close && sigma && barriers && [close, sigma, barriers.up, barriers.down].every((value) => Number.isFinite(value) && value > 0)
@@ -296,7 +307,7 @@ export default function StockDetailView({
   return (
     <>
     <div ref={readingRoot} inert={reading.state === "reading"} className="w-full">
-      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={marketStatus} rotateQuotesOnMobile />
+      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} rotateQuotesOnMobile />
 
       <main className="page pb-12 pt-6">
       <div className="flex flex-col gap-6">
@@ -344,12 +355,12 @@ export default function StockDetailView({
                         <span className="sr-only">전일 대비 {changeWord} </span>
                         {changeArrow && <span aria-hidden="true">{changeArrow} </span>}
                         {changeWon === null
-                          ? `${Math.abs(changePercent).toFixed(1)}%`
-                          : `${Math.round(Math.abs(changeWon)).toLocaleString("ko-KR")}원 (${Math.abs(changePercent).toFixed(1)}%)`}
+                          ? formatSignedPercent(changePercent)
+                          : formatWonChange(changeWon, changePercent)}
                       </span>
                     )}
                   </div>
-                  {priceDate && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
+                  {showLocalAsOf(priceDate, currentMarketStatus.date) && <span className="text-xs text-muted">{formatKstDateTime(priceDate)} 종가 기준</span>}
                 </>
               ) : (
                 <span className="text-sm text-muted">시세 데이터가 아직 없어요.</span>
@@ -446,24 +457,34 @@ export default function StockDetailView({
                     </p>}
                     {priceHistory.length >= 2 ? (
                       <PriceHistoryChart
+                        key={detail.code}
                         prices={priceHistory}
                         band={hasBand ? detail.returnBand : undefined}
                         signal={signal}
                         horizonLabel={HORIZON_LABEL[horizon]}
                         asOfLabel={priceDate ? formatKstDateTime(priceDate).slice(5, 10) : ""}
                         avgBuyPrice={own?.rawAvgBuyPrice ?? undefined}
-                        priceEvents={{ dates: detail.priceDates ?? [], moves: events.moves, selectedDate: events.move?.date, select: events.select }}
+                        priceEvents={{
+                          dates: detail.priceDates ?? [],
+                          moves: events.moves,
+                          selectedDate: events.move?.date,
+                          select: events.select,
+                          content: <PriceEventPanel events={events} />,
+                          emptyStatus: eventStatus,
+                        }}
                       />
                     ) : (
-                      <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
+                      <>
+                        <p className="m-0 text-xs text-muted">최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.</p>
+                        {eventStatus}
+                      </>
                     )}
-                    {chart && <PriceEventPanel events={events} />}
                     {volatility && (
                       <>
                         <div className="text-sm text-body">
                           최근 1년 <TermLabel term="volatility" /> <strong>{volatility}</strong>
                           {volatilityRank !== null && <span className="block text-xs text-muted">코스피 전 종목 중 큰 쪽 상위 {volatilityRank}%</span>}
-                          {risk?.asOf && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
+                          {risk?.asOf && showLocalAsOf(risk.asOf, currentMarketStatus.date) && <span className="block text-xs text-muted">{risk.asOf.replaceAll("-", ".")} 종가 기준</span>}
                         </div>
                         {risk && <dl className="m-0 grid grid-cols-2 gap-3 text-xs text-muted">
                           <div><dt>3개월 최고가 대비</dt><dd className="m-0"><ChangeText value={risk.drawdownFrom3mHigh * 100}>{signedPercent(risk.drawdownFrom3mHigh)}</ChangeText></dd></div>
@@ -534,11 +555,11 @@ export default function StockDetailView({
                       </h2>
                       {!preview || similar ? (
                         <p className="m-0 text-xs text-muted" data-testid={preview ? "preview-provenance" : undefined}>
-                          {detail.asOf && `${formatKstDateTime(detail.asOf)} 기준. `}
+                          {showLocalAsOf(detail.asOf, currentMarketStatus.date) && `${formatKstDateTime(detail.asOf)} 기준. `}
                           {similar?.period_start && similar.period_end
                             ? similarCasesLine(similar.period_start, similar.period_end, similar.sample_count, similar.stock_count)
                             : !preview && `과거에 오늘과 비슷했던 경우, ${HORIZON_LABEL[horizon]} 수익률은 대부분 이 범위 안이었어요.`}
-                          {hasBand && currentPrice !== null && " 원은 오늘 종가 기준이에요."}
+                          {hasBand && currentPrice !== null && showLocalAsOf(priceDate, currentMarketStatus.date) && ` 원은 ${formatKstDateTime(priceDate)} 종가 기준이에요.`}
                         </p>
                       ) : null}
                       {hasBand && realizedReturns.length > 0 ? (
@@ -583,7 +604,7 @@ export default function StockDetailView({
                   {id === "company" && <>
                     <section aria-labelledby="company-financials" className="flex flex-col gap-4">
                       <h2 id="company-financials" data-reading-target="company-heading" className="text-xl font-semibold">{TAB_LABELS.company}</h2>
-                      <FinancialPanel financial={financial} readingMetricKey={metric?.key} />
+                      <FinancialPanel financial={financial} marketAsOf={currentMarketStatus.date} readingMetricKey={metric?.key} />
                     </section>
                     <DisclosureList disclosures={disclosures} />
                   </>}

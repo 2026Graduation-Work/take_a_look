@@ -58,6 +58,8 @@
 | [research/psych-candidates/README.md](research/psych-candidates/README.md) | 심리지표 후보 P1~P5 1차 선별, 2단계 사전 등록, 가격 밖 데이터 조사 |
 | [research/psych-candidates/stage2-plan.md](research/psych-candidates/stage2-plan.md) | 심리 후보 2단계 실험 사전 등록(목록, 설정, 판정 기준) |
 | [research/flow-161-vs-170-2019-2026/README.md](research/flow-161-vs-170-2019-2026/README.md) | 기본 모델과 수급 모델 비교 |
+| [research/model-improvement-plan.md](research/model-improvement-plan.md) | 모델 개선 실험의 목표와 채택 기준(순위, 신뢰도, 쓸모), 기준선 값 |
+| [research/e0-baseline/README.md](research/e0-baseline/README.md) | 코딥 E0 기준선 재현, 수익률 기준 순위 지표, 피처 A와 B 비교 검정 |
 | [research/horizon-selection.md](research/horizon-selection.md) | 1주, 4주를 남기고 H10을 뺀 근거 |
 | [research/2026-06-selection-report.md](research/2026-06-selection-report.md) | H5, H10, H20 라벨 배수 후보 비교와 최종 후보 선정(2026-06-29) |
 | [research/2026-06-progress-roadmap.md](research/2026-06-progress-roadmap.md) | 6월 실험 기록. Multiplier Screener, 기간 확장, Factor Attribution, Factor-Neutral Backtest |

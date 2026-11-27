@@ -55,6 +55,7 @@ import { SourceTable } from "./source-line";
 import MoreList from "./more-list";
 import DotLegend from "./dot-legend";
 import TermLabel from "./term-tip";
+import { showLocalAsOf } from "@/lib/market-status";
 import FINANCIAL_MEDIANS from "@/lib/financial-medians.json";
 
 const SUPPLY_SERIES = [
@@ -524,7 +525,7 @@ const FINANCIAL_GROUPS = [
   { title: "주가와 비교", keys: ["per", "pbr"] },
 ];
 
-export function FinancialPanel({ financial, readingMetricKey }: { financial: FinancialSnapshot | null; readingMetricKey?: string }) {
+export function FinancialPanel({ financial, marketAsOf, readingMetricKey }: { financial: FinancialSnapshot | null; marketAsOf: string; readingMetricKey?: string }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
@@ -575,7 +576,7 @@ export function FinancialPanel({ financial, readingMetricKey }: { financial: Fin
           ))}
         </ul>
         <p className="m-0 mt-3 text-2xs text-muted">
-          재무 {financial.period}{financial.valuationPriceAsOf && `, PER/PBR 주가 ${financial.valuationPriceAsOf.replaceAll("-", ".")} 종가 기준`}
+          재무 {financial.period}{financial.valuationPriceAsOf && showLocalAsOf(financial.valuationPriceAsOf, marketAsOf) && `, PER/PBR 주가 ${financial.valuationPriceAsOf.replaceAll("-", ".")} 종가 기준`}
         </p>
         <p className="m-0 mt-2 text-2xs text-muted tabular-nums">
           비교 기준은 {FINANCIAL_MEDIANS.basis} {FINANCIAL_MEDIANS.companies}개사의 {FINANCIAL_MEDIANS.fiscal_year}년 사업보고서로 계산한 중간값이에요({FINANCIAL_MEDIANS.as_of.replaceAll("-", ".")} 시가총액 기준). 업종 분류가 없어 업종 대신 코스피 전체와 견줘요.
