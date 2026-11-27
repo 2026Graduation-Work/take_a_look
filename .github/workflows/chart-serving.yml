@@ -1,215 +1,57 @@
-name: Daily chart serving
-
+name: KIND stock master diagnosis
 on:
-  schedule:
-    # GitHub cron uses UTC: weekdays 18:47 Asia/Seoul. :00/:30 are avoided (queue delays, 10/08 started 7h late).
-    - cron: "47 9 * * 1-5"
-    # Backup: next morning 06:17 KST (Tue-Sat). Scheduled runs have started 5-7h late; if the evening run
-    # already published that trading day, the guard job ends this run without touching anything.
-    - cron: "17 21 * * 1-5"
   workflow_dispatch:
-    inputs:
-      as_of:
-        description: "Confirmed KRX date (YYYY-MM-DD); leave empty for latest"
-        required: false
-        type: string
-      diagnose:
-        description: "Check KRX login and reads only (no database writes)"
-        type: boolean
-        default: false
-      publish_preview:
-        description: "Publish the recorded 2026-09-21 display-test batch only"
-        type: boolean
-        default: false
-      replay:
-        description: "Use archived inputs; requires as_of"
-        type: boolean
-        default: false
-      dry_run:
-        description: "Store price/feature inputs and validate results without publishing a new batch"
-        type: boolean
-        default: false
-      model_check:
-        description: "Verify active H5/H20 inference on fresh confirmed data without database writes"
-        type: boolean
-        default: false
-      supply_only:
-        description: "Collect investor net purchases only (skip serving)"
-        type: boolean
-        default: false
-      backup_check:
-        description: "Run the backup guard as the 06:17 KST schedule does (skip if already published)"
-        type: boolean
-        default: false
-
 permissions:
   contents: read
-
-# A manual replay and the scheduled run must never publish concurrently.
-concurrency:
-  group: chart-serving-publish
-  cancel-in-progress: false
-
 jobs:
-  # The backup schedule runs only when the previous KST weekday is not yet published.
-  # Holidays are not known here; a holiday target behaves like the evening run on that holiday.
-  guard:
+  probe:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      run: ${{ steps.check.outputs.run }}
+    timeout-minutes: 3
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        sample: [1, 2, 3]
     steps:
-      - id: check
-        env:
-          BACKUP: ${{ github.event.schedule == '17 21 * * 1-5' || inputs.backup_check == true }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      - name: One stock master KIND request without credentials or database access
         run: |
-          if [ "$BACKUP" != "true" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           python3 - <<'PYTHON'
-          import json, os
-          from datetime import datetime, timedelta, timezone
-          from urllib.request import Request, urlopen
-          key = os.environ["SUPABASE_SECRET_KEY"]
-          request = Request(os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/budget_usage", data=b"{}",
-                            headers={"apikey": key, "Authorization": "Bearer " + key, "Content-Type": "application/json"})
-          published = json.loads(urlopen(request, timeout=30).read())["last_published_as_of"]
-          target = datetime.now(timezone(timedelta(hours=9))).date() - timedelta(days=1)
-          while target.weekday() >= 5:
-              target -= timedelta(days=1)
-          done = published is not None and published >= target.isoformat()
-          print(f"::notice::backup guard: last published {published}, target {target}, {'skip' if done else 'run'}")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"run={'false' if done else 'true'}\n")
-          PYTHON
-
-  publish:
-    needs: guard
-    if: ${{ needs.guard.outputs.run == 'true' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 240
-    defaults:
-      run:
-        working-directory: backend/analysis/chart
-    env:
-      PYTHONUNBUFFERED: "1"
-      GH_TOKEN: ${{ github.token }}
-      CHART_SERVING_DATA_DIR: ${{ github.workspace }}/backend/analysis/chart/workspace/serving
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      KRX_ID: ${{ secrets.KRX_ID }}
-      KRX_PW: ${{ secrets.KRX_PW }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            backend/analysis/chart/shared/requirements.txt
-            backend/analysis/chart/serving/requirements.txt
-
-      - name: Install serving dependencies
-        run: python -m pip install -r serving/requirements.txt
-
-      - name: Validate execution mode
-        env:
-          DIAGNOSE: ${{ inputs.diagnose }}
-          PREVIEW: ${{ inputs.publish_preview }}
-          REPLAY: ${{ inputs.replay }}
-          AS_OF: ${{ inputs.as_of }}
-          DRY_RUN: ${{ inputs.dry_run }}
-          MODEL_CHECK: ${{ inputs.model_check }}
-          SUPPLY_ONLY: ${{ inputs.supply_only }}
-        run: |
-          if [ "$PREVIEW" = "true" ] && { [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ -n "$AS_OF" ]; }; then
-            echo "Preview cannot combine with diagnose, replay, dry_run or as_of"; exit 1
-          fi
-          if [ "$MODEL_CHECK" = "true" ] && { [ "$PREVIEW" = "true" ] || [ "$DIAGNOSE" = "true" ] || [ "$REPLAY" = "true" ] || [ "$DRY_RUN" = "true" ] || [ "$SUPPLY_ONLY" = "true" ] || [ -n "$AS_OF" ]; }; then
-            echo "Model check cannot combine with other execution modes"; exit 1
-          fi
-
-      - name: Check required secrets
-        run: |
-          test -n "$KRX_ID" || { echo "KRX_ID secret is missing"; exit 1; }
-          test -n "$KRX_PW" || { echo "KRX_PW secret is missing"; exit 1; }
-          test -n "$SUPABASE_URL" || { echo "SUPABASE_URL secret is missing"; exit 1; }
-          test -n "$SUPABASE_SECRET_KEY" || { echo "SUPABASE_SECRET_KEY secret is missing"; exit 1; }
-
-      - name: Diagnose KRX authentication and reads
-        if: ${{ inputs.diagnose == true }}
-        run: python -m serving.run_daily --diagnose
-
-      - name: Download and verify configured model pack
-        if: ${{ inputs.diagnose != true && inputs.supply_only != true }}
-        run: python -m serving.pack download --config serving/config.yaml
-
-      - name: Verify active models on fresh confirmed data
-        if: ${{ inputs.model_check == true }}
-        run: python -m serving.model_check
-
-      - name: Publish recorded display-test batch
-        if: ${{ inputs.publish_preview == true }}
-        run: python -m serving.publish_preview --publish
-
-      - name: Collect, archive and publish confirmed daily results
-        if: ${{ inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.supply_only != true }}
-        env:
-          REPLAY: ${{ inputs.replay }}
-          REQUESTED_AS_OF: ${{ inputs.as_of }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          args=(--publish)
-          if [ "$DRY_RUN" = "true" ]; then args=(--dry-run); fi
-          if [ "$REPLAY" = "true" ]; then args+=(--replay); fi
-          if [ -n "$REQUESTED_AS_OF" ]; then
-            args+=(--as-of "$REQUESTED_AS_OF")
-          fi
-          python -m serving.run_daily "${args[@]}"
-
-      # 무료 한도 보존 정리(요약 로그 적재, 게시 배치 5개, 입력 파일 30일, 뉴스 원문 90일). 실패해도 게시는 그대로다.
-      - name: Retention (prediction log, batches, inputs, articles)
-        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
-        continue-on-error: true
-        run: python -m serving.retention
-
-      # Measure after retention so the Storage target uses actual retained bytes, not an estimate.
-      - name: Measure retained chart storage budget
-        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
-        run: |
-          python - <<'PYTHON'
+          import hashlib
           import json
-          from serving.internal.storage import SupabaseStore
-          store = SupabaseStore()
-          usage = store._request("POST", "/rest/v1/rpc/budget_usage", {})
-          batches = store._request("GET", "/rest/v1/chart_batches?select=as_of&status=eq.published&order=as_of.asc&limit=1000")
-          print(json.dumps({"event": "chart_storage_budget", "db_bytes": usage["db_bytes"],
-                            "storage_bytes": usage["storage_bytes"], "retained_batches": len(batches),
-                            "oldest_as_of": batches[0]["as_of"] if batches else None,
-                            "last_published_as_of": usage["last_published_as_of"]}))
-          if usage["storage_bytes"] > 600 * 2**20:
-              print("::warning::Storage exceeds the 600 MiB operating target; see #286")
+          import platform
+          import re
+          import socket
+          import ssl
+          from datetime import datetime, timezone
+          from urllib.error import HTTPError, URLError
+          from urllib.parse import urlencode
+          from urllib.request import Request, urlopen
+          
+          url = 'https://kind.krx.co.kr/investwarn/adminissue.do'
+          body = urlencode({'method': 'searchAdminIssueSub', 'currentPageSize': 3000, 'pageIndex': 1,
+                            'orderMode': 1, 'orderStat': 'D', 'marketType': '', 'forward': 'adminissue_sub'})
+          request = Request(url, data=body.encode(), headers={'User-Agent': 'Mozilla/5.0'})
+          result = {'at': datetime.now(timezone.utc).isoformat(), 'python': platform.python_version(),
+                    'tls': ssl.OPENSSL_VERSION, 'method': request.get_method(), 'url': url,
+                    'request_headers': dict(request.header_items()), 'body': body,
+                    'dns': sorted({x[4][0] for x in socket.getaddrinfo('kind.krx.co.kr', 443)})}
+          try:
+              response = urlopen(request, timeout=30)
+          except HTTPError as error:
+              response = error
+          except (URLError, TimeoutError) as error:
+              result['network_error'] = str(error)
+              print(json.dumps(result, ensure_ascii=False))
+              raise SystemExit(1)
+          with response:
+              page = response.read()
+              result.update(status=response.code, final_url=response.url,
+                            response_headers={key: value for key, value in response.headers.items()
+                                              if key.lower() not in {'set-cookie'}},
+                            bytes=len(page), sha256=hashlib.sha256(page).hexdigest())
+              text = page.decode('utf-8', errors='replace')
+              result['managed_cells'] = len(re.findall(r'<td class="first">(.*?)</td>', text, re.S))
+              if response.code >= 400 or result['managed_cells'] == 0:
+                  result['error_text'] = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', text))[:2000]
+          print(json.dumps(result, ensure_ascii=False))
           PYTHON
-
-      # 투자자별 순매수(시장 전체, 하루 3회 호출). 실패해도 게시는 그대로다.
-      - name: Investor net purchases
-        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true }}
-        continue-on-error: true
-        run: python -m serving.supply
-
-      - name: Save validation outputs
-        if: ${{ always() && inputs.diagnose != true && inputs.supply_only != true }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: chart-validation-${{ github.run_id }}
-          path: backend/analysis/chart/workspace/serving/batches/
-          retention-days: 14
-          if-no-files-found: ignore
-
-      # 종목 마스터(stocks)를 오늘 universe로 넣고 고친다(지우지 않음). 서빙 결과와 별개 step이라 실패해도 게시는 그대로다.
-      - name: Sync stock master from universe
-        if: ${{ success() && inputs.diagnose != true && inputs.model_check != true && inputs.publish_preview != true && inputs.dry_run != true && inputs.supply_only != true }}
-        run: |
-          python -m pip install -q "finance-datareader>=0.9.202"  # 시가총액(대형주 완화), chart/requirements.txt와 같은 버전
-          python -m serving.stock_master
