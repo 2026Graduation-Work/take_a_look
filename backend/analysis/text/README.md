@@ -122,8 +122,32 @@ Repository secret을 직접 등록한다. 값은 채팅·이슈·커밋에 남�
 workflow 이름은 `News Supabase Sync`다.
 
 - 평일 09:13 KST: `live --dynamic`으로 **기본 6종목 + 전체 사용자의 보유 ∪ 활성 관심 종목**의 직전 24시간 뉴스를 적재한다. 하루 호출 상한 20회(`NEWSAPI_DAILY_CALLS`). 첫 페이지(최신 100건)가 꽉 차고 잘린 종목은 상한 안에서 2페이지(그다음 100건)를 더 받는다. 넘으면 절반은 최근 등록 순, 나머지는 날마다 순환. 실행 전후 NewsAPI.ai 남은 횟수를 로그(`newsapi_targets`·`newsapi_usage`)에 남긴다.
-- 같은 실행에서 `disclosures`: DART 하루 전체 공시(최근 3일)를 종목 마스터에 맞춰 적재(제목·날짜·유형만, 유형표 `docs/disclosure-kinds.md`).
+- 같은 실행의 `disclosures`는 최근 7일(KST D-6~D)의 DART 공시에서 종목 마스터와 일치한 제목·날짜·유형을 적재한다. 날짜별 모든 페이지를 받아 검증한 뒤 접수번호로 upsert하며, 쓰기까지 끝난 날짜만 성공으로 기록한다. [유형표](../../../docs/disclosure-kinds.md) · [DART 공시검색 문서](https://opendart.fss.or.kr/guide/detail.do?apiGrpCd=DS001&apiId=2019001)
 - 매주 월 07:30 KST: `financial-latest`로 같은 대상의 **최신 정기보고서**(분기·반기·사업) 재무를 접수번호가 바뀐 종목만 갱신.
+
+공시 장기 공백은 날짜를 양 끝 포함으로 지정해 작은 구간씩 적재한다. 7일 정기 조회는 영속 커서를 두지 않는다.
+`--dry-run`은 날짜와 HTTP 시도 상한을 출력하고 외부 요청을 보내지 않는다.
+
+```bash
+python -m value_pipeline.supabase_sync disclosures --start 2026-11-20 --end 2026-11-23 --max-http-attempts 50 --dry-run
+```
+
+적재 전에 담당자와 대상 기간, DART의 잔여 예산을 확인하고 `--max-http-attempts`로 잔여 예산 이하를 지정한다.
+한 날짜에 최대 100페이지, 한 실행에 최대 2,000번, 한 페이지에 최대 3번 시도한다. 일부 날짜가 완료되지
+않으면 CLI는 종료 코드 1을 반환한다. 워크플로의 전체 성공 여부와 함께 `disclosures_day` 로그를 확인한다.
+중간 쓰기 실패 이후 같은 기간을 다시 실행하면 접수번호를 기준으로 빠진 행을 채운다.
+
+공개 자료 점검은 공개용 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`로 실행한다.
+종목 네 개의 공시·뉴스 최초/최신일과 건수, 선택일 주변 일별 건수, 뉴스 시각 누락과 중복,
+선택일 코스피 값을 JSON으로 표시한다. 코스피 결측과 0%는 구분하고, 조회 실패는 빈 결과로 계산하지 않는다.
+뉴스 중복 수는 종목별 동일 기사 ID와 동일 URL 각각에서 첫 행을 제외한 수다.
+뉴스의 일별 건수는 발행 시각을 KST로 변환하며, 시각이 없으면 저장 날짜를 사용한다.
+감사 결과는 저장된 공개 행의 통계이며 수집 범위나 뉴스 공개 권한을 확인해 주지 않는다.
+
+```bash
+python -m value_pipeline.price_context_audit --date 2026-11-23 --date 2026-11-24
+```
+
 
 Actions 화면의 **Run workflow**에서는 다음 모드를 선택한다.
 

@@ -12,6 +12,7 @@ import pandas as pd
 from ..contracts import validate_snapshot
 from .distribution import POLICY_ID
 from .hashing import canonical_hash
+from .prices import archive_basis_record, restore_archive_basis
 from .progress import report
 
 
@@ -240,7 +241,7 @@ class SupabaseStore:
                     raise ValueError("Stored price panel/input identities mismatch")
                 self._raw_price_frames[as_of] = (frame, manifest)
         if self._raw_price_frames[as_of] is None:
-            return self._load_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet")
+            return self._load_individual_raw_prices(code, as_of)
         panel, manifest = self._raw_price_frames[as_of]
         frame = panel.loc[panel.stock_code.eq(code)].drop(columns="stock_code").reset_index(drop=True)
         if frame.empty:
@@ -248,17 +249,23 @@ class SupabaseStore:
         if pd.to_datetime(frame.Date).max() != pd.Timestamp(as_of):
             raise ValueError("Stored price panel stock/date mismatch")
         frame.attrs["input_sha256"] = manifest["input_sha256"][code]
+        records = manifest.get("event_bases")
+        if isinstance(records, dict):
+            restore_archive_basis(frame, code, as_of, records.get(code))
         return frame
 
     def save_raw_price_panel(self, as_of, frames):
         if not frames:
             raise ValueError("Empty raw price panel")
-        hashes, parts = {}, []
+        hashes, records, parts = {}, {}, []
         for code, source in sorted(frames.items()):
             digest = source.attrs.get("input_sha256", "")
             if len(digest) != 64 or source.empty or source.Date.duplicated().any() or source.Date.max() != pd.Timestamp(as_of):
                 raise ValueError("Invalid raw price panel stock/date/hash")
             hashes[code] = digest
+            basis = source.attrs.get("event_basis")
+            if basis is not None:
+                records[code] = archive_basis_record(source, code, as_of, basis)
             part = source.copy()
             part.attrs = {}
             parts.append(part.assign(stock_code=code))
@@ -270,12 +277,43 @@ class SupabaseStore:
                       content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
         self._request("POST", prefix + "batch.manifest.json",
                       json.dumps({"as_of": as_of, "sha256": hashlib.sha256(data.getvalue()).hexdigest(),
-                                  "input_sha256": hashes}).encode(), content_type="application/octet-stream",
-                      extra_headers={"x-upsert": "true"})
+                                  "input_sha256": hashes, "event_bases": records}).encode(),
+                      content_type="application/octet-stream", extra_headers={"x-upsert": "true"})
         self._raw_price_frames.pop(as_of, None)
 
+    def _load_individual_raw_prices(self, code, as_of):
+        prefix = f"/storage/v1/object/authenticated/chart-features/raw-prices-v3/{quote(as_of)}/{quote(code)}"
+        try:
+            data = self._request("GET", prefix + ".parquet")
+        except FileNotFoundError:
+            return None
+        frame = pd.read_parquet(io.BytesIO(data))
+        frame.attrs.pop("event_basis", None)
+        if frame.empty or pd.to_datetime(frame.Date).max() != pd.Timestamp(as_of):
+            raise ValueError("Stored price stock/date mismatch")
+        try:
+            manifest = json.loads(self._request("GET", prefix + ".manifest.json"))
+        except (FileNotFoundError, ValueError):
+            return frame
+        if isinstance(manifest, dict) and isinstance(manifest.get("sha256"), str):
+            if hashlib.sha256(data).hexdigest() != manifest["sha256"]:
+                raise ValueError("Stored price checksum mismatch")
+            restore_archive_basis(frame, code, as_of, manifest.get("event_basis"))
+        return frame
+
     def save_raw_prices(self, code, as_of, frame):
-        self._save_private_frame(f"raw-prices-v3/{as_of}/{code}.parquet", frame)
+        path = f"/storage/v1/object/chart-features/raw-prices-v3/{quote(as_of)}/{quote(code)}"
+        basis = frame.attrs.get("event_basis")
+        archive = frame.copy()
+        archive.attrs.pop("event_basis", None)
+        data = io.BytesIO()
+        archive.to_parquet(data, index=False)
+        blob = data.getvalue()
+        manifest = {"sha256": hashlib.sha256(blob).hexdigest(),
+                    "event_basis": archive_basis_record(frame, code, as_of, basis) if basis is not None else None}
+        for suffix, payload in ((".parquet", blob), (".manifest.json", json.dumps(manifest).encode())):
+            self._request("POST", path + suffix, payload, content_type="application/octet-stream",
+                          extra_headers={"x-upsert": "true"})
 
     def upload_features(self, code, as_of, builder_id, input_hash, frame):
         if not code or not builder_id or len(input_hash) != 64:

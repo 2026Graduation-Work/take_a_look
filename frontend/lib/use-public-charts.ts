@@ -7,8 +7,8 @@ type Charts = Map<string, Map<ChartHorizon, ChartSnapshot>>;
 
 export function usePublicCharts(codes: string[]) {
   const key = [...new Set(codes)].sort().join(",");
-  const [state, setState] = useState<{ key: string; charts: Charts | null; error: string; loading: boolean }>({
-    key: "", charts: null, error: "", loading: true,
+  const [state, setState] = useState<{ key: string; charts: Charts | null; error: string; loading: boolean; revision: number }>({
+    key: "", charts: null, error: "", loading: true, revision: 0,
   });
   const [version, setVersion] = useState(0);
 
@@ -31,18 +31,19 @@ export function usePublicCharts(codes: string[]) {
     let active = true;
     loadPublicCharts(key ? key.split(",") : [])
       .then((charts) => {
-        if (active) setState({ key, charts, error: "", loading: false });
+        if (active) setState({ key, charts, error: "", loading: false, revision: version });
       })
       .catch((error: unknown) => {
         if (active) setState((previous) => ({
           key, charts: previous.key === key ? previous.charts : null,
-          error: error instanceof Error ? error.message : "공개 차트 조회에 실패했어요.", loading: false,
+          error: error instanceof Error ? error.message : "공개 차트 조회에 실패했어요.", loading: false, revision: version,
         }));
       });
     return () => { active = false; };
   }, [key, version]);
 
   return {
+    revision: state.revision,
     charts: state.key === key ? state.charts : null,
     error: state.key === key ? state.error : "",
     loading: state.key !== key || state.loading,

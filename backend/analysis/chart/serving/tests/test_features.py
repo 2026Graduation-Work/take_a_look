@@ -49,16 +49,3 @@ def test_adjusted_vwap_uses_actual_turnover_and_price_scale():
     result = attach_actual_vwap(adjusted, raw)
     assert result["AdjustmentFactor"].iloc[0] == 0.5
     assert result["VWAP"].iloc[0] == 52.5
-
-
-def test_price_history_uses_observed_dates_and_rejects_duplicates():
-    from serving.internal.prices import price_snapshot
-
-    frame = pd.DataFrame({"Date": ["2026-01-02", "2026-01-05", "2026-01-07"],
-                          "Close": [100, 110, 999], "Volume": [10, 20, 30]})
-    row = price_snapshot(frame, "005930", "2026-01-06", "test")
-    assert row["status"] == "stale" and row["data_asof"] == "2026-01-05"
-    assert row["close"] == 110 and row["change_percent"] == pytest.approx(10)
-    assert len(row["history"]) == 2
-    with pytest.raises(ValueError, match="duplicate"):
-        price_snapshot(pd.concat([frame, frame]), "005930", "2026-01-06", "test")

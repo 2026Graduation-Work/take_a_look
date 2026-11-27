@@ -8,7 +8,25 @@ const rows = snapshots.map((payload: { batch_id: string; stock_code: string; hor
   batch_id: payload.batch_id, stock_code: payload.stock_code, horizon: payload.horizon, payload,
 }));
 
-test("public predictions retain the original detail UI and both model directions", async ({ page }) => {
+test("stock header uses one down arrow and leaves flat changes unsigned", async ({ page }) => {
+  for (const [difference, expected] of [
+    [-15_000, "전일 대비 하락 ▼ -15,000원 (-5.8%)"],
+    [0, "전일 대비 보합 0원 (0.0%)"],
+  ] as const) {
+    const selected = structuredClone(rows);
+    for (const row of selected) {
+      const prices = row.payload.prices.history;
+      prices.at(-2).close = 260_000;
+      prices.at(-1).close = 260_000 + difference;
+    }
+    await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
+    await page.goto("/stocks/005930");
+    await expect(page.getByRole("region", { name: "삼성전자", exact: true }).getByText(expected, { exact: true })).toBeVisible();
+    await page.unroute("**/rest/v1/latest_chart_signal_snapshots?**");
+  }
+});
+
+test("model tab retains both periods, source and historical returns", async ({ page }) => {
   const archivedRows = structuredClone(rows);
   for (const row of archivedRows) delete row.payload.inference.contribution_abs_sum;
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => {
@@ -16,16 +34,25 @@ test("public predictions retain the original detail UI and both model directions
     return route.fulfill({ json: archivedRows });
   });
   await page.goto("/stocks/005930");
-  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 오늘 종가 기준이에요\.$/);
-  await expect(page.locator('section[aria-labelledby="glance-title"]')).toContainText(/%\s*\(약 [\d,]+원\)/);
+  const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
+  const history = overview.getByRole("img", { name: "최근 주가 흐름" });
+  await expect(overview.getByRole("heading", { name: "모델 신호 하락", exact: true })).toBeVisible();
+  await expect(history).toHaveAccessibleDescription(/과거 비슷한 경우, 4주 뒤 수익률은 10번 중 7번 이 범위였어요/);
+  await expect(history.getByText("+10.6%", { exact: true })).toBeVisible();
+  await expect(history.getByText("-9.5%", { exact: true })).toBeVisible();
+  await overview.getByRole("tab", { name: "1주", exact: true }).click();
+  await expect(history).toHaveAccessibleDescription(/과거 비슷한 경우, 1주 뒤 수익률은 10번 중 7번 이 범위였어요/);
+  await expect(history.getByText("1주 뒤", { exact: true })).toBeVisible();
+  await overview.getByRole("tab", { name: "4주", exact: true }).click();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  await expect(page.getByTestId("preview-provenance")).toHaveText(/^2026.09.21 기준\. \d{4}년 \d+월~\d{4}년 \d+월 중 오늘과 점수가 비슷했던 [\d,]+번\([\d,]+개 종목\)의 결과예요\. 원은 2026.09.21 종가 기준이에요\.$/);
   await page.getByRole("button", { name: "모델 신호 설명 보기" }).click();
   await expect(page.getByText(/세 점수를 내고 가장 큰 쪽/)).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("heading", { name: /^모델 신호 하락\s*앞으로 4주$/ })).toBeVisible();
-  await expect(page.locator('section[aria-labelledby="checkpoint-title"]')).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "판단 근거" }).getByRole("tab")).toHaveCount(4);
-  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-  const model = page.getByRole("tabpanel");
+  await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "4주", selected: true })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "종목 상세" }).getByRole("tab")).toHaveCount(5);
+  const model = page.getByRole("region", { name: "모델이 본 이유", exact: true });
   const expected = snapshots.find((s: { horizon: number }) => s.horizon === 20).inference.features;
   await expect(model.getByText("계산 근거", { exact: true })).toBeVisible();
   await expect(model.getByText(expected[0].contribution.toFixed(4), { exact: true })).not.toBeVisible();
@@ -40,15 +67,17 @@ test("public predictions retain the original detail UI and both model directions
     await expect(model.locator("dd").nth(index)).toContainText("미제공");
   }
   await expect(model).not.toContainText(/비율 합 100%|뉴스 분위기|회사 체력|사고판 주체/);
-  await page.locator("summary", { hasText: "더 알아보기" }).click();
   await expect(page.locator("[data-zero-line]")).toHaveCount(1);
   await expect(page.locator('section[aria-labelledby="more-distribution"]')).not.toContainText(/이하|이상/);
-  await expect(page.locator('section[aria-labelledby="more-basis"]')).toContainText(/모델 신호 기준선: 위 [\d,]+원, 아래 [\d,]+원/);
-  const horizons = page.locator('section[aria-labelledby="more-horizons"]');
-  await expect(horizons.getByRole("listitem")).toHaveCount(2);
-  await expect(horizons.getByRole("listitem").filter({ hasText: "5거래일" })).toContainText("↓ 하락");
-  await expect(horizons.getByRole("listitem").filter({ hasText: "20거래일" })).toContainText("↓ 하락");
-  await expect(page.getByText(/상위 \d+%/)).toHaveCount(0);
+  const modelSignal = page.getByRole("region", { name: "모델 신호 하락" });
+  await modelSignal.getByText("계산 근거", { exact: true }).click();
+  await expect(modelSignal).toContainText(/모델 신호 기준선: 위 [\d,]+원, 아래 [\d,]+원/);
+  await page.getByRole("tab", { name: "1주", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "모델 신호 하락" })).toBeVisible();
+  await page.getByRole("tab", { name: "한눈에 보기", exact: true }).click();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "1주", selected: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
@@ -60,7 +89,8 @@ test("failed public reads show retry, without restoring demo predictions", async
   await page.goto("/stocks/005930");
   // PostgREST retries transient 503 responses before exposing the error.
   await expect(page.getByText("차트를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.", { exact: true })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: /^모델 신호 미제공$/ })).toBeVisible();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "모델 신호 미제공" })).toBeVisible();
   await expect(page.getByText(/상위 \d+%/)).toHaveCount(0);
   fail = false;
   await page.getByRole("button", { name: "다시 시도" }).click();
@@ -72,8 +102,8 @@ test("feature shares use the whole-model denominator and raw values are collapse
   for (const row of wholeModel) row.payload.inference.contribution_abs_sum = 1;
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: wholeModel }));
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-  const model = page.getByRole("tabpanel");
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  const model = page.getByRole("region", { name: "모델이 본 이유", exact: true });
   const features = wholeModel.find((row: { horizon: number }) => row.horizon === 20).payload.inference.features;
   const visible = features.slice(0, 3);
   await expect(model.locator("[data-model-feature]")).toHaveCount(visible.length);
@@ -99,7 +129,8 @@ test("observed prices remain visible when no historical distribution is availabl
   };
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: withoutCases }));
   await page.goto("/stocks/005930");
-  await expect(page.getByRole("img", { name: "최근 60거래일 주가 흐름. 수익률 범위 미제공" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "최근 주가 흐름" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "최근 주가 흐름" })).not.toHaveAttribute("aria-describedby");
   await expect(page.getByText("최근 주가 기록이 아직 없어 흐름을 그리지 않았어요.")).toHaveCount(0);
 });
 
@@ -110,8 +141,8 @@ test("dense 2%p distributions keep positive-width bars", async ({ page }) => {
   }));
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: denseRows }));
   await page.goto("/stocks/005930");
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
-  await page.locator("summary", { hasText: "더 알아보기" }).click();
   const histogram = page.getByRole("img", { name: /과거 유사 신호 .*건의 실현 수익률 분포/ });
   await expect(histogram.locator("path")).toHaveCount(1);
   expect(await histogram.locator("path").evaluateAll(paths => paths.every(path => {
@@ -135,6 +166,7 @@ test("another stock reads the latest batch and refreshes after returning to the 
     return route.fulfill({ json: latest });
   });
   await page.goto("/stocks/005380");
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.21");
   latest = structuredClone(latest);
   for (const row of latest) {
@@ -145,9 +177,8 @@ test("another stock reads the latest batch and refreshes after returning to the 
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(page.getByTestId("preview-provenance")).toContainText("2026.09.22");
   await expect(page.getByRole("heading", { name: /모델 신호 상승/ })).toBeVisible();
-  await page.locator("summary", { hasText: "더 알아보기" }).click();
-  for (const h of [5, 20]) await expect(page.locator('section[aria-labelledby="more-horizons"]')
-    .getByRole("listitem").filter({ hasText: `${h}거래일` })).toContainText("↑ 상승");
+  await page.getByRole("tab", { name: "1주", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /모델 신호 상승/ })).toBeVisible();
 });
 
 for (const [space, target, scores, color] of [
@@ -166,9 +197,9 @@ for (const [space, target, scores, color] of [
     }
     await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
     await page.goto("/stocks/005930");
+    await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
     await expect(page.getByRole("heading", { name: new RegExp(`모델 신호 ${target}`) })).toBeVisible();
-    await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-    const panel = page.getByRole("tabpanel");
+    const panel = page.getByRole("region", { name: "모델이 본 이유", exact: true });
     await expect(panel).toContainText(`모델의 ${target} 점수`);
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature]").nth(0)).toContainText(`${target} 점수를 크게 높였어요.`);
@@ -189,8 +220,8 @@ for (const total of [undefined, 0]) {
     }
     await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
     await page.goto("/stocks/005930");
-    await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-    const panel = page.getByRole("tabpanel");
+    await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+    const panel = page.getByRole("region", { name: "모델이 본 이유", exact: true });
     await expect(panel.locator("[data-model-feature]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature] div[aria-hidden]")).toHaveCount(3);
     await expect(panel.locator("[data-model-feature]").first()).not.toContainText("영향 비중");
@@ -209,8 +240,8 @@ test("shares use the entire denominator while bars retain relative scaling and c
   }
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-  const panel = page.getByRole("tabpanel");
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  const panel = page.getByRole("region", { name: "모델이 본 이유", exact: true });
   const items = panel.locator("[data-model-feature]");
   for (const index of [0, 1]) {
     await expect(items.nth(index)).toContainText(index === 0 ? "크게 높였어요" : "크게 낮췄어요");
@@ -224,7 +255,7 @@ test("shares use the entire denominator while bars retain relative scaling and c
   await expect(panel.locator("dd").nth(2)).toHaveText("−(0.1% 미만)");
   await expect(panel).not.toContainText("+0.1200");
   await expect(panel).not.toContainText("모델에 넣은 값:");
-  await expect(panel.locator("dd")).toHaveCount(5);
+  await expect(panel.locator("details dd")).toHaveCount(5);
   await expect(panel).not.toContainText("계산 방법:");
   const headingRow = items.first().locator("div").first();
   const rightText = headingRow.locator("span").last();
@@ -240,8 +271,8 @@ test("shares use the entire denominator while bars retain relative scaling and c
 test("feature explanations use the common info icon, hover remains open over the popup and Escape restores focus", async ({ page }) => {
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: rows }));
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-  const first = page.getByRole("tabpanel").locator("[data-model-feature]").first();
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  const first = page.getByRole("region", { name: "모델이 본 이유", exact: true }).locator("[data-model-feature]").first();
   const trigger = first.getByRole("button", { name: /설명 보기$/ });
   await expect(trigger).toContainText("ⓘ");
   const description = page.getByRole("region", { name: /설명$/ });
@@ -272,14 +303,14 @@ test.describe("feature explanation touch", () => {
   test("tap opens the same info popup and outside tap dismisses it", async ({ page }) => {
     await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: rows }));
     await page.goto("/stocks/005930");
-    await page.getByRole("tab", { name: "모델이 본 이유" }).tap();
-    await page.getByRole("tabpanel").locator("[data-model-feature]").first().getByRole("button", { name: /설명 보기$/ }).tap();
+    await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).tap();
+    await page.getByRole("region", { name: "모델이 본 이유", exact: true }).locator("[data-model-feature]").first().getByRole("button", { name: /설명 보기$/ }).tap();
     const popup = page.getByRole("region", { name: /설명$/ });
     await expect(popup).toBeVisible();
     const bounds = (await popup.boundingBox())!;
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
-    await page.getByRole("tab", { name: "모델이 본 이유" }).tap();
+    await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).tap();
     await expect(popup).toHaveCount(0);
   });
 });
@@ -294,8 +325,8 @@ test("mobile feature names stay on one line and detailed copy explains size word
   }
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", route => route.fulfill({ json: selected }));
   await page.goto("/stocks/005930");
-  await page.getByRole("tab", { name: "모델이 본 이유" }).click();
-  const panel = page.getByRole("tabpanel");
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  const panel = page.getByRole("region", { name: "모델이 본 이유", exact: true });
   const item = panel.locator('[data-model-feature="cord_20"]');
   const label = item.getByRole("button", { name: "20일 등락과 거래량 동행 설명 보기" }).locator("span").first();
   for (const width of [320, 390, 430]) {

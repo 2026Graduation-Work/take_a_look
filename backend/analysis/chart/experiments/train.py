@@ -85,7 +85,7 @@ def _evaluate_validation(
     val_df: pd.DataFrame,
     feature_cols: list[str],
 ) -> dict:
-    prob_threshold = config.get("strategy", {}).get("prob_threshold", 0.65)
+    prob_threshold = 0.65
     top_n = config.get("strategy", {}).get("top_n", 5)
     fold_id = split_info.get("fold_id", fold_idx)
     fold_name = split_info.get("name", f"Fold {fold_id}")

@@ -1,0 +1,13 @@
+horizon,trait,signal,slope_conf,slope_disc,slope_t_conf,slope_t_disc,verdict
+5,psych_herding,credit_chg20,-0.0024,0.0047,-0.2432,1.2414,탈락
+5,psych_herding,credit_to_mcap,-0.0012,-0.0031,-0.1409,-1.0607,약함
+5,psych_herding,deposit_chg20,0.0012,0.0035,0.1336,1.0216,약함
+5,vol60,credit_chg20,-0.0159,-0.0131,-1.1739,-1.3782,약함
+5,vol60,credit_to_mcap,0.0143,-0.0058,0.9275,-1.0208,탈락
+5,vol60,deposit_chg20,0.0073,0.019,0.5475,2.1151,유망
+20,psych_herding,credit_chg20,0.0018,0.0133,0.1403,2.1316,유망
+20,psych_herding,credit_to_mcap,0.0074,-0.0075,0.8496,-1.3788,탈락
+20,psych_herding,deposit_chg20,0.0009,0.01,0.1166,2.2328,유망
+20,vol60,credit_chg20,-0.0446,-0.0311,-1.7624,-2.3942,유망
+20,vol60,credit_to_mcap,0.0123,-0.0106,0.4604,-0.9906,탈락
+20,vol60,deposit_chg20,0.0053,0.0182,0.4368,1.0529,약함

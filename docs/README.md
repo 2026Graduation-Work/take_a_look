@@ -16,6 +16,7 @@
 | [../README.md](../README.md) | 서비스 소개, 빠른 시작, 구조 |
 | [../AGENTS.md](../AGENTS.md) | 공통 지침·제품 원칙·운영과 안전·작업별 정본 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 블록 구분·브랜치·커밋·PR·머지·훅 변경 절차 |
+| [issue-writing.md](issue-writing.md) | 버그·기능 이슈의 사용자 문제·선택 이유·완료 조건·검증·결정 이력 작성 |
 | [../CHANGELOG.md](../CHANGELOG.md) | 버전별 변경과 초기 기록(서비스명, 레포 이름) |
 
 ## 운영
@@ -39,6 +40,7 @@
 | [data-inventory.md](data-inventory.md) | 화면 수치의 출처와 실데이터 여부(2026-09-24 기준, 갱신 필요) |
 | [../backend/analysis/chart/serving/README.md](../backend/analysis/chart/serving/README.md) | H5, H20 serving 구조, 공개 계약, 검증 상태 |
 | [../backend/analysis/chart/serving/OPERATIONS.md](../backend/analysis/chart/serving/OPERATIONS.md) | H5, H20 실행과 DB 발행 절차 |
+| [../backend/analysis/chart/experiments/backtest/EXECUTION_SPEC.md](../backend/analysis/chart/experiments/backtest/EXECUTION_SPEC.md) | 백테스트 체결 순서, 장벽 기준, 비용, 회귀 방지 테스트 |
 | [../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md](../backend/analysis/text/VALUE_PIPELINE_VALIDATION.md) | 가치투자 파이프라인 출력 검증 절차 |
 
 ## 화면과 브랜드
@@ -53,7 +55,11 @@
 | 문서 | 내용 |
 |---|---|
 | [research/psychology-ab-2019-2025/README.md](research/psychology-ab-2019-2025/README.md) | 심리 피처 A/B, 2019~2025 표본 밖 평가 |
+| [research/psych-candidates/README.md](research/psych-candidates/README.md) | 심리지표 후보 P1~P5 1차 선별, 2단계 사전 등록, 가격 밖 데이터 조사 |
+| [research/psych-candidates/stage2-plan.md](research/psych-candidates/stage2-plan.md) | 심리 후보 2단계 실험 사전 등록(목록, 설정, 판정 기준) |
 | [research/flow-161-vs-170-2019-2026/README.md](research/flow-161-vs-170-2019-2026/README.md) | 기본 모델과 수급 모델 비교 |
+| [research/model-improvement-plan.md](research/model-improvement-plan.md) | 모델 개선 실험의 목표와 채택 기준(순위, 신뢰도, 쓸모), 기준선 값 |
+| [research/e0-baseline/README.md](research/e0-baseline/README.md) | 코딥 E0 기준선 재현, 수익률 기준 순위 지표, 피처 A와 B 비교 검정 |
 | [research/horizon-selection.md](research/horizon-selection.md) | 1주, 4주를 남기고 H10을 뺀 근거 |
 | [research/2026-06-selection-report.md](research/2026-06-selection-report.md) | H5, H10, H20 라벨 배수 후보 비교와 최종 후보 선정(2026-06-29) |
 | [research/2026-06-progress-roadmap.md](research/2026-06-progress-roadmap.md) | 6월 실험 기록. Multiplier Screener, 기간 확장, Factor Attribution, Factor-Neutral Backtest |
@@ -61,6 +67,7 @@
 | [research/usability-test-plan.md](research/usability-test-plan.md) | 사용성 평가 계획 |
 | [research/persona-walkthrough-2026-10.md](research/persona-walkthrough-2026-10.md) | 페르소나 시나리오 점검 |
 | [research/source-display.md](research/source-display.md) | 기준 시점과 출처 표시 조사 |
+| [research/beginner-tips-sources.md](research/beginner-tips-sources.md) | "알고 계셨나요" 팁 42개의 선정 기준, 레퍼런스, 원문 대조 결과 |
 | [research/oss-scan.md](research/oss-scan.md) | 오픈소스와 무료 공급원 조사, 채택 결정 |
 | [product/beginner-gap.md](product/beginner-gap.md) | 초보 투자자가 어려워하는 점 |
 | [decisions/bigkinds-acquisition.md](decisions/bigkinds-acquisition.md) | BigKinds 뉴스 수집 방식 |
