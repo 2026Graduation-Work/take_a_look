@@ -8,6 +8,7 @@ from serving.internal.pack import FORMAT_VERSION, load_pack
 from shared.io import sha256_file
 from shared.settings import BUILDER_ID, CHART_ROOT, processing_contract
 
+from .golden import DEFAULT_INPUTS, generate
 from .samples import build_samples
 
 LOCAL_BUILDER_ID = BUILDER_ID
@@ -61,12 +62,15 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
             raise ValueError(f"Export model feature order mismatch: {models[horizon]}")
         verified_inputs[horizon] = feature_names, model_meta, prediction_meta
 
+    names = {name for features, _, _ in verified_inputs.values() for name in features}
+    golden = root / "golden" / f"{pack_id}.json"
     root.mkdir(parents=True)
+    generate(pack_id, CHART_ROOT / DEFAULT_INPUTS, golden, model_features=names)
     official = json.loads(Path(calendar_file).read_text())["trading_days"]
     manifest_settings = research_manifest["processing_contract"]["preprocessing"]
     manifest = {"format_version": FORMAT_VERSION, "pack_id": pack_id,
                 "feature_builder_id": BUILDER_ID,
-                "processing_contract": expected_contract,
+                "processing_contract": expected_contract, "golden_sha256": sha256_file(golden),
                 "feature_barriers": {"up_mult": manifest_settings["barrier_feature_up_mult"], "down_mult": manifest_settings["barrier_feature_down_mult"]},
                 "comparison": {"score_absolute": .01, "sigma_relative": .05},
                 "return_rule": "100 * (adjusted_close_after_H_traded_rows / adjusted_close_on_prediction_date - 1)",

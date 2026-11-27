@@ -23,6 +23,11 @@ def processing_contract(settings=None):
     return {**payload, "sha256": canonical_hash(payload)}
 
 
+def serving_contract():
+    return {"contract_version": CONTRACT_VERSION, "builder_id": BUILDER_ID,
+            "price_basis": PRICE_BASIS, "preprocessing": dict(PREPROCESSING)}
+
+
 def serving_root():
     import os
     return Path(os.environ.get("CHART_SERVING_DATA_DIR", CHART_ROOT / "workspace/serving"))

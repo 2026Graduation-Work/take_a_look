@@ -45,7 +45,7 @@ def test_historical_test_fetches_selected_stock_instead_of_replaying(monkeypatch
         def upload_features(self, *_):
             pass
 
-    universe, frames, unavailable, _, _ = pipeline.collect(as_of, Store(), code="005930", historical_test=True)
+    universe, frames, unavailable, _, _ = pipeline.collect(as_of, Store(), pack={}, golden_sha256="a" * 64, code="005930", historical_test=True)
     assert universe.Code.tolist() == ["005930"]
     assert list(frames) == ["005930"]
     assert not unavailable

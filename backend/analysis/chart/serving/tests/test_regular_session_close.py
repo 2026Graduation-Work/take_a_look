@@ -112,14 +112,3 @@ def test_several_real_steps_in_a_window_are_allowed(fetch):
     steps = [0.5] * 3 + [0.8] * 3 + [1.0] * 4  # two corporate actions inside ten sessions
     prices, _ = fetch(SAMSUNG, (SAMSUNG.RawClose * steps).tolist(), None)
     assert set(prices.PriceProvider) == {"fdr"} and prices.AdjustmentFactor.round(6).tolist() == steps
-
-
-def test_shared_builder_still_matches_the_active_pack():
-    # Editing shared/ (prices, features...) breaks the daily run with a pack checksum error;
-    # such fixes belong in serving/ until a new pack is built.
-    from pathlib import Path
-
-    import yaml
-    from shared.settings import processing_contract
-    config = yaml.safe_load((Path(__file__).parents[1] / "config.yaml").read_text())
-    assert config["active_pack"]["builder_sha256"] == processing_contract()["sha256"]
