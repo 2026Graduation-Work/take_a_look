@@ -38,6 +38,7 @@ import {
   type MarketSentimentView,
   todayLiveSentimentView,
   toNudgeMarket,
+  type FinancialMetric,
   type FinancialSnapshot,
   type HoldingWeight,
   type SentimentDay,
@@ -147,8 +148,8 @@ export function Checkpoints({
   );
 }
 
-function Conclusion({ children }: { children: ReactNode }) {
-  return <p className="m-0 text-base text-ink">{children}</p>;
+function Conclusion({ children, readingTarget }: { children: ReactNode; readingTarget?: "news-summary" }) {
+  return <p data-reading-target={readingTarget} className="m-0 text-base text-ink">{children}</p>;
 }
 
 export function NewsSentimentPanel({
@@ -199,7 +200,7 @@ export function NewsSentimentPanel({
   return (
     <>
       {sentimentView ? (
-        <Conclusion>
+        <Conclusion readingTarget="news-summary">
           {sentimentView.basis === "live" ? "최근 24시간" : "과거"} {contextualLive ? TERM.relatedNewsSentiment : TERM.sentiment}는{" "}
           <strong className="font-semibold" style={{ color: moodColor(sentimentView.score) }}>{moodWord(sentimentView.score)}</strong>이에요.
         </Conclusion>
@@ -213,6 +214,7 @@ export function NewsSentimentPanel({
             className="segmented self-start"
             role="tablist"
             aria-label="뉴스 분위기 기간"
+            data-reading-target="news-periods"
             onKeyDown={onSentimentTabKeyDown}
           >
             {sentimentTabs.map((period) => {
@@ -241,6 +243,7 @@ export function NewsSentimentPanel({
           <div
             role="tabpanel"
             id="sentiment-panel"
+            data-reading-target="news-chart"
             ref={setTooltipHost}
             className="relative min-w-0"
             aria-labelledby={`sentiment-tab-${selectedSentimentPeriod}`}
@@ -467,14 +470,18 @@ export function SupplyPanel({ supply, volume }: { supply: SupplyDemandDay[] | nu
                 />
               </div>
               <span className="text-right text-sm font-semibold tabular-nums text-ink">
-                <ChangeText value={total}>{formatShares(total)}</ChangeText>
-                {volume ? (
-                  <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                    하루 평균 거래량의 {Math.round((Math.abs(total) / volume) * 100).toLocaleString("ko-KR")}%
+                <span className="block" data-reading-target={key === "institution" ? "trading-total" : undefined}>
+                  <ChangeText value={total}>{formatShares(total)}</ChangeText>
+                </span>
+                <span className="block text-2xs font-normal text-muted" data-reading-target={key === "institution" ? "trading-latest" : undefined}>
+                  {volume ? (
+                    <span className="block whitespace-nowrap">
+                      하루 평균 거래량의 {Math.round((Math.abs(total) / volume) * 100).toLocaleString("ko-KR")}%
+                    </span>
+                  ) : null}
+                  <span className="block whitespace-nowrap">
+                    마지막 날 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                   </span>
-                ) : null}
-                <span className="block whitespace-nowrap text-2xs font-normal text-muted">
-                  마지막 날 <ChangeText value={latest}>{formatShares(latest)}</ChangeText>
                 </span>
               </span>
             </li>
@@ -508,23 +515,29 @@ export const oneDecimal = (value: number) => value.toLocaleString("ko-KR", { max
 // DB에 업종 분류가 없어 코스피 중간값과 비교한다(backend value_pipeline/kospi_medians.py가 미리 계산한 JSON).
 const MEDIANS: Partial<Record<string, { median: number; count: number }>> = FINANCIAL_MEDIANS.metrics;
 
-const FINANCIAL_GROUPS = [
-  { title: "매출과 이익", keys: ["revenue_growth", "operating_margin", "roe"] },
-  { title: "자산과 빚", keys: ["debt_ratio"] },
-  { title: "주가와 비교", keys: ["per", "pbr"] },
+export function financialComparison({ key, value, unit }: FinancialMetric): string | null {
+  const median = MEDIANS[key]?.median;
+  return value === null || median === undefined ? null : compareLine(value, median, FINANCIAL_MEDIANS.basis, unit);
+}
+
+export const FINANCIAL_GROUPS = [
+  { title: "매출과 이익", readingTarget: "company-earnings" as const, keys: ["revenue_growth", "operating_margin", "roe"] },
+  { title: "자산과 빚", readingTarget: "company-debt" as const, keys: ["debt_ratio"] },
+  { title: "주가와 비교", readingTarget: "company-valuation" as const, keys: ["per", "pbr"] },
 ];
 
-export function FinancialPanel({ financial, marketAsOf }: { financial: FinancialSnapshot | null; marketAsOf: string }) {
+export function FinancialPanel({ financial, marketAsOf, readingMetricKey }: { financial: FinancialSnapshot | null; marketAsOf: string; readingMetricKey?: string }) {
   if (!financial) return <Unavailable>이 종목은 아직 재무를 모으지 않아요. 로그인한 계정의 보유 종목이나 관심 종목에 넣으면 매주 월요일 오전에 최신 정기보고서로 채워요.</Unavailable>;
   const value = (key: string) => financial.metrics.find((metric) => metric.key === key)?.value;
   const roe = value("roe");
   const debt = value("debt_ratio");
-  const groups = FINANCIAL_GROUPS.map(({ title, keys }) => ({
+  const groups = FINANCIAL_GROUPS.map(({ title, readingTarget, keys }) => ({
     title,
+    readingTarget,
     metrics: financial.metrics.filter(({ key }) => keys.includes(key)),
   }));
   const otherMetrics = financial.metrics.filter(({ key }) => !FINANCIAL_GROUPS.some(({ keys }) => keys.includes(key)));
-  if (otherMetrics.length) groups.push({ title: "기타 재무 지표", metrics: otherMetrics });
+  const visibleGroups = otherMetrics.length ? [...groups, { title: "기타 재무 지표", readingTarget: undefined, metrics: otherMetrics }] : groups;
   return (
     <>
       {roe != null && debt != null && (
@@ -534,26 +547,23 @@ export function FinancialPanel({ financial, marketAsOf }: { financial: Financial
           <strong className="font-semibold">{oneDecimal(debt)}%</strong> 수준이에요.
         </Conclusion>
       )}
-      {groups.filter(({ metrics }) => metrics.length > 0).map(({ title, metrics }, index) => (
+      {visibleGroups.filter(({ metrics }) => metrics.length > 0).map(({ title, readingTarget, metrics }, index) => (
         <section key={title} aria-labelledby={`financial-group-${index}`} className="flex flex-col gap-3">
-          <h3 id={`financial-group-${index}`} className="text-lg font-semibold">{title}</h3>
+          <h3 id={`financial-group-${index}`} data-reading-target={readingTarget} className="text-lg font-semibold">{title}</h3>
           <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-            {metrics.map((metric) => {
-              const median = MEDIANS[metric.key]?.median;
-              return (
-                <div key={metric.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
-                  <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
-                  <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
-                    {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
-                  </dd>
-                  <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
-                    {metric.value === null
-                      ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
-                      : median !== undefined && compareLine(metric.value, median, FINANCIAL_MEDIANS.basis, metric.unit)}
-                  </dd>
-                </div>
-              );
-            })}
+            {metrics.map((metric) => (
+              <div key={metric.key} data-reading-target={metric.key === readingMetricKey ? "company-metric" : undefined} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1">
+                <dt className="text-sm text-body">{metric.key in TERM_INFO ? <TermLabel term={metric.key as keyof typeof TERM_INFO} /> : metric.label}</dt>
+                <dd className="m-0 text-right text-sm font-semibold tabular-nums text-ink">
+                  {metric.value === null ? "확인 불가" : <>{oneDecimal(metric.value)}{metric.unit}</>}
+                </dd>
+                <dd className="col-span-2 m-0 text-2xs text-muted tabular-nums">
+                  {metric.value === null
+                    ? metric.note === "negative_earnings" ? "적자라 계산하지 않아요." : "계산할 자료가 모자라요."
+                    : financialComparison(metric)}
+                </dd>
+              </div>
+            ))}
           </dl>
         </section>
       ))}
@@ -578,6 +588,15 @@ export function FinancialPanel({ financial, marketAsOf }: { financial: Financial
   );
 }
 
+export function contributionTargetWord(space: ChartSnapshot["inference"]["contribution_space"] | undefined) {
+  const classes = {
+    class_0_raw_margin: SIGNAL_WORD.down,
+    class_1_raw_margin: SIGNAL_WORD.flat,
+    class_2_raw_margin: SIGNAL_WORD.up,
+  };
+  return space ? classes[space] : null;
+}
+
 export function ContributionPanel({
   space,
   features,
@@ -589,7 +608,8 @@ export function ContributionPanel({
   total?: number;
   reasons: PredictionReason[];
 }) {
-  if (!features?.length) {
+  const target = contributionTargetWord(space);
+  if (!target || !features?.length) {
     if (!reasons.length) return <Unavailable>이 예측에 연결된 근거 데이터가 없어요.</Unavailable>;
     return (
       <>
@@ -613,10 +633,8 @@ export function ContributionPanel({
       </>
     );
   }
-  const target = SIGNAL_WORD[space === "class_0_raw_margin" ? "down" : space === "class_1_raw_margin" ? "flat" : "up"];
   const top = features[0];
   const shown = features.slice(0, 3);
-  const hiddenCount = features.length - shown.length;
   const max = Math.max(...shown.map(feature => Math.abs(feature.contribution))) || 1;
 
   return (
@@ -629,7 +647,7 @@ export function ContributionPanel({
         점수에 영향을 준 주요 항목은 &lsquo;{top.label_ko}&rsquo;{copula(top.label_ko)}.
       </Conclusion>
       <p className="m-0 text-xs text-muted">영향이 큰 항목 중 {shown.length}개를 보여줘요.</p>
-      <ul className="m-0 flex list-none flex-col gap-4 p-0">
+      <ul data-reading-target="model-bars" className="m-0 flex list-none flex-col gap-4 p-0">
         {shown.map((feature) => {
           const up = feature.contribution > 0;
           const color = !up || target === SIGNAL_WORD.flat ? "var(--color-muted)" : target === SIGNAL_WORD.down ? "var(--color-down)" : "var(--color-up)";
@@ -661,15 +679,11 @@ export function ContributionPanel({
           );
         })}
       </ul>
-      {hiddenCount > 0 && (
-        <p className="m-0 text-xs text-muted">제공된 다른 {hiddenCount}개 항목은 계산 근거에서 볼 수 있어요.</p>
-      )}
-      <p className="m-0 text-xs text-muted">{target} 점수를 높이고 낮춘 정도예요. 예측 확률이나 수익률이 아니에요.</p>
       <Why>신호가 한 가지 근거에 쏠렸는지 보고, 그 근거가 내 판단과 맞는지 견줘 볼 수 있어요.</Why>
       <details className="disclosure">
         <summary>계산 근거</summary>
         <div className="flex flex-col gap-2">
-        <p className="m-0 text-xs text-muted">이번 {target} 점수에 대한 영향 비중이에요.{!total && " 전체 항목의 영향 크기 합이 없거나 0이라 비중은 미제공이에요."}</p>
+        {!total && <p className="m-0 text-xs text-muted">전체 항목의 영향 크기 합이 없거나 0이라 비중은 미제공이에요.</p>}
         <dl className="m-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 text-sm">
           {features.map(feature => (
             <div key={feature.name} className="contents">
@@ -691,7 +705,7 @@ export function PricePsychology({ psychology }: { psychology: NonNullable<StockI
   return (
     <section aria-labelledby="price-psychology" className="flex flex-col gap-3">
       <h2 id="price-psychology" className="text-xl font-semibold">{PSYCHOLOGY_SCALE.name}</h2>
-      <div className="max-w-sm">
+      <div data-reading-target="model-price-mood" className="max-w-sm">
         <StageBar axis={PSYCHOLOGY_SCALE} value={psychology.axis} title="최근 가격 흐름" />
       </div>
       <p className="m-0 text-xs text-muted">{PSYCHOLOGY_NOTE}</p>

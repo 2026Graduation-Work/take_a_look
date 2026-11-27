@@ -7,6 +7,7 @@ import ReadingNavigation from "../components/reading-navigation";
 import LegacyTipLink from "./legacy-tip-link";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { HORIZON_GUIDE } from "@/lib/copy-glossary";
+import { READING_REPLAY_HASH } from "@/lib/evidence-reading";
 
 export const metadata: Metadata = {
   title: "이용 안내",
@@ -115,6 +116,9 @@ export default function GuidePage() {
           </Section>
 
           <Section id="screens" title={SECTIONS[4][1]}>
+            <Link href={`/stocks/005930${READING_REPLAY_HASH}`} className="btn-text inline-flex min-h-11 self-start">
+              종목 상세 읽는 법
+            </Link>
             <dl className="m-0 flex flex-col gap-5">
               {SCREENS.map(([name, body]) => (
                 <div key={name} className="flex flex-col gap-1">

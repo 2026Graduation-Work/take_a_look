@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import { READING_START_EVENT } from "@/lib/evidence-reading";
 
 // 시장 막대가 가로 스크롤(overflow)이라 absolute는 잘린다 → 열 때 트리거 위치로 fixed 좌표를 계산한다.
 // 헤더의 backdrop-filter가 fixed의 기준 상자가 되므로 설명은 body로 portal한다.
@@ -60,6 +61,8 @@ export default function MarketDetail({
       setOpen(false);
       trigger.current?.focus();
     };
+    const readingStart = () => { cancelClose(); setOpen(false); };
+    document.addEventListener(READING_START_EVENT, readingStart);
     place();
     window.addEventListener("resize", place);
     window.addEventListener("scroll", place, true);
@@ -68,6 +71,7 @@ export default function MarketDetail({
     return () => {
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
+      document.removeEventListener(READING_START_EVENT, readingStart);
       document.removeEventListener("pointerdown", outside);
       document.removeEventListener("keydown", escape);
     };
