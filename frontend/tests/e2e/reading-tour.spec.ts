@@ -76,7 +76,7 @@ for (const { turnover, typeLabel, order } of [
       localStorage.setItem(key, JSON.stringify(profile));
     }, turnover);
     await open(page);
-    await expect(invite(page)).toBeVisible();
+    await expect(invite(page)).toHaveCount(0);
     await expect(message(page)).toHaveCount(0);
     const tabs = page.getByRole("tablist", { name: "종목 상세" }).getByRole("tab");
     const names = (await tabs.allTextContents()).map((name) => name.trim());
@@ -84,7 +84,7 @@ for (const { turnover, typeLabel, order } of [
 
     await page.getByRole("button", { name: "모델 신호 설명 보기" }).click();
     await expect(page.getByRole("region", { name: "모델 신호 설명" })).toBeVisible();
-    await invite(page).click();
+    await replay(page).click();
     await orderStop(page);
     await expect(message(page)).toContainText(typeLabel);
     await expect(message(page)).not.toContainText("정보의 정확성");
@@ -136,10 +136,9 @@ for (const { turnover, typeLabel, order } of [
   });
 }
 
-test("직접 둘러본 뒤 초대는 사라지고 안내는 언제든 다시 시작해요", async ({ page }) => {
+test("첫 방문 안내 줄 없이 읽는 법으로 언제든 다시 시작해요", async ({ page }) => {
   await finishDemo(page);
   await open(page);
-  await page.getByRole("button", { name: "직접 둘러보기" }).click();
   await expect(invite(page)).toHaveCount(0);
   await open(page, "/stocks/005930");
   await expect(invite(page)).toHaveCount(0);
@@ -169,31 +168,9 @@ test("직접 둘러본 뒤 초대는 사라지고 안내는 언제든 다시 시
   await expect(page.getByRole("tabpanel", { name: "회사 상태" })).toBeVisible();
 });
 
-test("완료한 뒤 처음 방문한 다른 두 종목에서 힌트가 한 번씩 보여요", async ({ page }) => {
-  await finishDemo(page);
-  await open(page);
-  await invite(page).click();
-  await finish(page);
-  await expect(page.getByText(hint)).toHaveCount(0);
-  await open(page, "/stocks/005930");
-  await expect(page.getByText(hint)).toBeVisible();
-  await replay(page).click();
-  await orderStop(page);
-  await close(page).click();
-  await open(page, "/stocks/005930");
-  await expect(page.getByText(hint)).toHaveCount(0);
-  await open(page);
-  await expect(page.getByText(hint)).toHaveCount(0);
-  await open(page, "/stocks/005380");
-  await expect(page.getByText(hint)).toBeVisible();
-  await open(page, "/stocks/035720");
-  await expect(page.getByText(hint)).toHaveCount(0);
-});
-
 test("안내 페이지에서 다시 시작하고 뒤로 이동하면 강조와 잠금이 사라져요", async ({ page }) => {
   await finishDemo(page);
   await open(page);
-  await page.getByRole("button", { name: "직접 둘러보기" }).click();
   await page.goto("/guide");
   await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
   await orderStop(page);
@@ -219,7 +196,7 @@ test("기록이 깨졌거나 저장을 거부해도 종목 상세와 안내를 �
   await finishDemo(page);
   await page.evaluate((key) => localStorage.setItem(key, "{"), demoKey);
   await open(page);
-  await expect(invite(page)).toBeVisible();
+  await expect(invite(page)).toHaveCount(0);
   await page.addInitScript((key) => {
     const read = Storage.prototype.getItem;
     const write = Storage.prototype.setItem;
@@ -233,7 +210,7 @@ test("기록이 깨졌거나 저장을 거부해도 종목 상세와 안내를 �
     };
   }, demoKey);
   await open(page);
-  await invite(page).click();
+  await replay(page).click();
   await orderStop(page);
   await close(page).click();
   await expect(replay(page)).toBeFocused();
@@ -245,7 +222,6 @@ test("기록이 깨졌거나 저장을 거부해도 종목 상세와 안내를 �
 test("로그인 계정은 데모 기록과 분리되고 예전 프로필에 진단 유형을 지어내지 않아요", async ({ page }) => {
   await finishDemo(page);
   await open(page);
-  await page.getByRole("button", { name: "직접 둘러보기" }).click();
   await expect(invite(page)).toHaveCount(0);
   await page.locator("header summary", { hasText: "김민지" }).click();
   await page.getByRole("button", { name: "로그아웃" }).click();
@@ -268,8 +244,8 @@ test("로그인 계정은 데모 기록과 분리되고 예전 프로필에 진�
     return route.fulfill({ status: 400, json: { message: "개인화 상세 조회 실패" } });
   });
   await open(page, "/stocks/005930");
-  await expect(invite(page)).toBeVisible();
-  await invite(page).click();
+  await expect(invite(page)).toHaveCount(0);
+  await replay(page).click();
   await orderStop(page);
   await expect(message(page)).toContainText("성향에 따라 순서가 달라져요.");
 });
@@ -278,7 +254,7 @@ test("자료가 없는 종목은 미제공 상태가 있는 패널을 가리켜�
   await finishDemo(page);
   await page.route("**/rest/v1/latest_chart_signal_snapshots?**", (route) => route.fulfill({ json: [] }));
   await open(page, "/stocks/035420");
-  await invite(page).click();
+  await replay(page).click();
   await orderStop(page);
   const chapters = [
     { tab: "overview", label: "한눈에 보기", target: "overview-summary", text: "지금은 표시할 모델 신호가 없어요." },
@@ -304,7 +280,7 @@ for (const width of [320, 390, 1280]) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await finishDemo(page);
     await open(page);
-    await invite(page).click();
+    await replay(page).click();
     await orderStop(page);
     await expect(page.locator("body")).toHaveClass(/driver-simple/);
 

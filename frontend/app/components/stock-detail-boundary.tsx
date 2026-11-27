@@ -102,7 +102,7 @@ export default function StockDetailBoundary({
     : onboardingState.status === "signed_out" ? STORAGE_KEYS.guestReadingHistory : null;
   const viewKey = `${code}:${historyKey ?? ""}`;
   if (isChartPreview(code)) {
-    return <ChartPreviewDetail key={viewKey} data={data} insights={insights} readingHistoryKey={loading ? null : historyKey} readingInvite={ready} readingUsesDiagnosis={readingUsesDiagnosis} />;
+    return <ChartPreviewDetail key={viewKey} data={data} insights={insights} readingHistoryKey={loading ? null : historyKey} readingUsesDiagnosis={readingUsesDiagnosis} />;
   }
 
   return (
@@ -110,7 +110,6 @@ export default function StockDetailBoundary({
       key={viewKey}
       {...data}
       readingHistoryKey={historyKey}
-      readingInvite={ready}
       readingUsesDiagnosis={readingUsesDiagnosis}
       insights={insights}
       loading={loading}

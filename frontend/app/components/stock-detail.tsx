@@ -19,7 +19,7 @@ import StockMarks from "./stock-marks";
 import Segmented from "./segmented";
 import MarketDetail from "./market-detail";
 import { useEvidenceReading } from "./reading-controls";
-import { READING_HINT, READING_INVITATION, READING_TAB_LABELS as TAB_LABELS, readingSteps, type ReadingTab } from "@/lib/evidence-reading";
+import { READING_TAB_LABELS as TAB_LABELS, readingSteps, type ReadingTab } from "@/lib/evidence-reading";
 import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale";
 import { BIT_LABEL, classifyBit, type CardId } from "@/lib/profiling/bit";
 import GainText from "./gain-text";
@@ -117,7 +117,6 @@ interface StockDetailViewProps {
   chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
   chartRevision?: number;
   readingHistoryKey?: string | null;
-  readingInvite?: boolean;
   readingUsesDiagnosis?: boolean;
 }
 
@@ -135,7 +134,6 @@ export default function StockDetailView({
   chartSnapshots,
   chartRevision = 0,
   readingHistoryKey = null,
-  readingInvite = false,
   readingUsesDiagnosis = false,
   signalHorizon = 20,
   onHorizonChange,
@@ -251,7 +249,6 @@ export default function StockDetailView({
   const readingReplay = useRef<HTMLButtonElement>(null);
   const reading = useEvidenceReading({
     historyKey: loading ? null : readingHistoryKey,
-    invite: readingInvite,
     code: detail.code,
     selectTab,
     root: readingRoot,
@@ -373,21 +370,7 @@ export default function StockDetailView({
           <Checkpoints bit={bit} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
         </div>
 
-        {readingHistoryKey && !loading && (reading.entry === "invitation" || reading.entry === "hint" || reading.error) && (
-          <div className="flex flex-col gap-2">
-            {reading.entry === "invitation" && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <p className="m-0 text-sm text-body">{READING_INVITATION}</p>
-                <button type="button" className="btn-secondary" disabled={reading.state === "loading"}
-                  onClick={(event) => reading.start(event.currentTarget)}>같이 읽기</button>
-                <button type="button" className="btn-text min-h-11"
-                  onClick={(event) => reading.dismiss(event.currentTarget)}>직접 둘러보기</button>
-              </div>
-            )}
-            {reading.entry === "hint" && <p role="note" className="m-0 text-sm text-body">{READING_HINT}</p>}
-            {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
-          </div>
-        )}
+        {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
 
         {/* 읽는 법은 넓은 화면에서 탭 줄 오른쪽 끝, 좁은 화면에서는 탭 위 오른쪽(탭이 넘치지 않게) */}
         <div className="flex min-w-0 flex-wrap items-end gap-x-2 border-b border-line">

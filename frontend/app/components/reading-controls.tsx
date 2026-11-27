@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { ReadingTab, readingSteps } from "@/lib/evidence-reading";
 import { READING_ERROR, READING_REPLAY_HASH, READING_START_EVENT, readingProgress } from "@/lib/evidence-reading";
-import { claimReadingHint, readReadingHistory, recordReadingOutcome } from "@/lib/evidence-reading-history";
+import { recordReadingOutcome } from "@/lib/evidence-reading-history";
 
 type Step = ReturnType<typeof readingSteps>[number];
 type Spotlight = typeof import("./reading-spotlight").default;
@@ -14,10 +14,9 @@ type ReadingState =
   | { kind: "reading"; steps: Step[]; index: number; Spotlight: Spotlight };
 
 export function useEvidenceReading({
-  historyKey, invite, code, steps, selectTab, root, replayButton,
+  historyKey, code, steps, selectTab, root, replayButton,
 }: {
   historyKey: string | null;
-  invite: boolean;
   code: string;
   steps: Step[];
   selectTab: (tab: ReadingTab) => void;
@@ -25,21 +24,9 @@ export function useEvidenceReading({
   replayButton: RefObject<HTMLButtonElement | null>;
 }) {
   const [state, setState] = useState<ReadingState>({ kind: "idle" });
-  const [entry, setEntry] = useState<"invitation" | "hint" | null>(null);
   const [error, setError] = useState("");
   const startButton = useRef<HTMLButtonElement | null>(null);
   const restoreFocus = useRef(false);
-
-  useEffect(() => {
-    if (!historyKey || !invite) return;
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      if (readReadingHistory(historyKey).status === "new") setEntry("invitation");
-      else if (claimReadingHint(historyKey, code)) setEntry("hint");
-    });
-    return () => { active = false; };
-  }, [historyKey, code, invite]);
 
   useEffect(() => {
     if (state.kind !== "loading") return;
@@ -98,16 +85,10 @@ export function useEvidenceReading({
   function close(outcome: "completed" | "dismissed" | "error") {
     if (historyKey && outcome !== "error") {
       recordReadingOutcome(historyKey, code, outcome);
-      setEntry(null);
     }
     if (outcome === "error") setError(READING_ERROR);
     restoreFocus.current = true;
     setState({ kind: "idle" });
-  }
-
-  function dismiss(invoker: HTMLButtonElement) {
-    startButton.current = invoker;
-    close("dismissed");
   }
 
   function move(delta: -1 | 1) {
@@ -140,5 +121,5 @@ export function useEvidenceReading({
     />
   );
 
-  return { start, dismiss, state: state.kind, phase: current?.phase, entry, error, spotlight };
+  return { start, state: state.kind, phase: current?.phase, error, spotlight };
 }
