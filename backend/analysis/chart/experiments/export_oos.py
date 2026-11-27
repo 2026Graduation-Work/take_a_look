@@ -7,24 +7,40 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from experiments.experiment_utils import resolve_splits
+from experiments.experiment_utils import load_universe_intervals, resolve_splits
 from experiments.export_performance import checked_manifest, paired_frames, validate_pair_contract
 from experiments.train_src.labels import barrier_labels
-from shared.data.actions import require_price_provenance
+from experiments.train_src.loaders import eligible_samples, universe_eligibility
+from shared.data.resolution_snapshot import require_price_provenance
+from shared.data.segmented_prices import validate_segments
 from shared.io import sha256
 
 
-def outcomes(prices, labels):
+def outcomes(prices, labels, *, universe_intervals=None):
     """Use the label's non-halted sessions and bounded observation window for close returns."""
     prices = prices.sort_values("Date").reset_index(drop=True)
     if prices.Date.isna().any() or prices.Date.duplicated().any():
         raise ValueError("Invalid or duplicate price dates")
     if labels["type"] != "dynamic_sigma":
         raise ValueError("Only dynamic_sigma labels are supported")
+    validate_segments(prices)
+    segments = prices.groupby("SegmentId", sort=False).indices.values() if "SegmentId" in prices else [prices.index]
+    output = [_segment_outcomes(prices.iloc[positions].reset_index(drop=True), labels, universe_intervals)
+              for positions in segments]
+    return pd.concat(output, ignore_index=True) if output else pd.DataFrame(
+        columns=["Date", "Trading_Halt", "Y_Label", "return_date", "forward_return"]
+    )
+
+
+def _segment_outcomes(prices, labels, universe_intervals):
     horizon = labels["horizon"]
     actual = barrier_labels(prices, horizon, up_mult=labels["up_mult"], down_mult=labels["down_mult"])
     active_count = prices.Trading_Halt.ne(1).to_numpy().cumsum()
     endpoint = np.searchsorted(active_count, active_count + horizon)
+    eligible = eligible_samples(prices)
+    if universe_intervals is not None:
+        eligible &= universe_eligibility(prices, universe_intervals, prices.Code.iloc[0])
+    actual = actual.where(eligible)
     valid = actual.notna().to_numpy() & (endpoint < len(prices))
     valid &= endpoint <= np.arange(len(prices)) + int(horizon * 2.5)
     selected = np.flatnonzero(valid)
@@ -32,7 +48,10 @@ def outcomes(prices, labels):
     if (not np.isfinite(close[selected]).all() or (close[selected] <= 0).any()
             or (close[endpoint[selected]] <= 0).any()):
         raise ValueError("Return prices must be positive")
-    result = prices[["Date", "Trading_Halt"]].copy()
+    keys = ["Date", "Trading_Halt"]
+    if "SegmentId" in prices:
+        keys.append("SegmentId")
+    result = prices[keys].copy()
     result["Y_Label"] = actual.map({-1: 0, 0: 1, 1: 2})
     result["return_date"] = pd.NaT
     result["forward_return"] = np.nan
@@ -41,8 +60,9 @@ def outcomes(prices, labels):
     return result
 
 
-def attach_outcomes(predictions, prices, labels):
-    result = predictions.merge(outcomes(prices, labels), on="Date", how="left",
+def attach_outcomes(predictions, prices, labels, *, universe_intervals=None):
+    recomputed = outcomes(prices, labels, universe_intervals=universe_intervals)
+    result = predictions.merge(recomputed, on="Date", how="left",
                                validate="one_to_one", suffixes=("", "_recomputed"), indicator=True)
     if not result._merge.eq("both").all():
         raise ValueError("OOS price dates are missing")
@@ -104,17 +124,19 @@ def export(suite, output, input_evidence):
         raise ValueError("Price input feature contract differs")
     groups = {h: {code: part for code, part in frames[f"h{h}_A"].groupby("Code", sort=False)} for h in (5, 20)}
     parts = {5: [], 20: []}
+    intervals = {h: load_universe_intervals(manifests[f"h{h}_A"]["config"]) for h in (5, 20)}
     for filename, digest in sorted(feature_manifest["file_hashes"].items()):
         source = root / filename
         if sha256(source) != digest:
             raise ValueError(f"Feature input changed: {filename}")
-        prices = pd.read_parquet(source, columns=["Date", "Code", "High", "Close", "Sigma", "Trading_Halt"])
+        prices = pd.read_parquet(source, columns=["Date", "Code", "High", "Close", "Sigma", "Trading_Halt", "SegmentId", "SampleEligible"])
         if not prices.Code.eq(source.stem).all():
             raise ValueError("Price file/code mismatch")
         for h in (5, 20):
             predictions = groups[h].pop(source.stem, None)
             if predictions is not None:
-                parts[h].append(attach_outcomes(predictions, prices, manifests[f"h{h}_A"]["config"]["labels"]))
+                parts[h].append(attach_outcomes(predictions, prices, manifests[f"h{h}_A"]["config"]["labels"],
+                                                universe_intervals=intervals[h]))
     if any(groups.values()):
         raise ValueError("OOS stock price files are missing")
     report = {"run_id": status["run_id"], "input_evidence_sha256": sha256(input_evidence),

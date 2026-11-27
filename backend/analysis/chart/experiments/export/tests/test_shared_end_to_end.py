@@ -14,19 +14,20 @@ from serving.internal import calendar, pipeline, prices
 from serving.internal.inference import infer_batch
 from serving.internal.pack import feature_cache_key, load_pack
 from shared.data import providers
+from shared.data.calendar import scheduled_sessions
 from shared.data.prices import fetch_price_window
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256, sha256_file
 from shared.settings import BUILDER_ID, TRAINING_PRICE_BASIS, processing_contract
-from shared.tests.official_fixtures import price_provenance
+from shared.tests.official_fixtures import listing_segment, price_provenance
 
 
 @pytest.mark.parametrize("with_flows", [False, True])
 def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, capsys, with_flows):
     from pykrx.website.krx.market import wrap
 
-    days = pd.bdate_range("2019-01-07", periods=230)
+    days = scheduled_sessions(pd.Timestamp("2019-01-07"), pd.Timestamp("2020-12-31"))[:230]
     close = 100 + np.sin(np.arange(len(days)) / 4) * 8
     raw = pd.DataFrame({"RawOpen": close - .2, "RawHigh": close + .8, "RawLow": close - .8,
                         "RawClose": close, "RawVolume": 1000., "Amount": close * 1000.}, index=days)
@@ -58,7 +59,7 @@ def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, cap
     assert legacy.PriceProvider.eq("fdr").all()
     assert operational.PriceProvider.eq("pykrx").all()
     pd.testing.assert_frame_equal(legacy.drop(columns="PriceProvider"), operational.drop(columns="PriceProvider"))
-    inputs = legacy.assign(Code="005930")
+    inputs = legacy.assign(Code="005930", SegmentId=listing_segment("005930", str(days[0].date())))
     for investor in ("Individual", "Institution", "Foreign"):
         inputs[f"{investor}_BuyAmount"] = inputs.Amount * .2
         inputs[f"{investor}_SellAmount"] = inputs.Amount * .1
@@ -94,7 +95,7 @@ def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, cap
     atomic_json(dataset_manifest, {**proof, "price_basis": TRAINING_PRICE_BASIS,
                                   "prices_complete": True, "raw_files": raw_files})
     processed_manifest = tmp_path / "processed_manifest.json"
-    atomic_json(processed_manifest, {**proof, "files": raw_files, "raw_files": raw_files,
+    atomic_json(processed_manifest, {**proof, "files": raw_files, "raw_files": raw_files, "spac_excluded_rows": {},
                                     "dataset_manifest_sha256": sha256(dataset_manifest)})
     provenance = {**proof, "processed_manifest_sha256": sha256(processed_manifest), "feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
                   "models": {f"h{h}": {"labels": {"up_mult": 1.75 if h == 5 else 3.75, "down_mult": 1.5 if h == 5 else 3.0}} for h in (5, 20)},

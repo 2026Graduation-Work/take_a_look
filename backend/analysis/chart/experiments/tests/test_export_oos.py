@@ -14,7 +14,8 @@ from shared.tests.official_fixtures import NEW_POLICY
 def prices(count=60):
     return pd.DataFrame({"Date": pd.bdate_range("2019-01-07", periods=count),
                          "Code": "00088K", "High": np.arange(count) + 101.,
-                         "Close": np.arange(count) + 100., "Sigma": .02, "Trading_Halt": 0})
+                         "Close": np.arange(count) + 100., "Sigma": .02, "Trading_Halt": 0,
+                         "SegmentId": "synthetic", "SampleEligible": True})
 
 
 def labels(horizon):

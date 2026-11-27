@@ -9,7 +9,7 @@ import pandas as pd
 from experiments.comparison.metrics import expected_calibration_error, select_volatile_dates
 from experiments.evaluation.metrics import calculate_classification_metrics
 from experiments.features.psychology.market_psychology import RAW_FEATURES
-from shared.data.actions import require_price_provenance
+from shared.data.resolution_snapshot import require_price_provenance
 from shared.io import sha256
 from shared.settings import BASE_FEATURES, FLOW_FEATURES
 

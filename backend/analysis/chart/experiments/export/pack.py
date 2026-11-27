@@ -6,7 +6,7 @@ from pathlib import Path
 import lightgbm as lgb
 from experiments.dataset.pipeline import _require_current_training_prices
 from serving.internal.pack import FORMAT_VERSION, load_pack
-from shared.data.actions import require_price_provenance
+from shared.data.resolution_snapshot import require_price_provenance
 from shared.io import sha256_file
 from shared.settings import BUILDER_ID, CHART_ROOT, processing_contract
 
@@ -55,12 +55,13 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
     processed = json.loads(processed_manifest.read_text())
     evidence = require_price_provenance(research_manifest)
     if (not dataset.get("prices_complete")
-            or evidence != _require_current_training_prices(dataset, dataset_root)
+            or evidence != _require_current_training_prices(dataset, dataset_root).provenance
             or evidence != require_price_provenance(processed)
             or sha256_file(dataset_manifest) != processed.get("dataset_manifest_sha256")
             or sha256_file(processed_manifest) != research_manifest.get("processed_manifest_sha256")
             or processed["raw_files"] != dataset["raw_files"]
-            or set(processed["files"]) != set(dataset["raw_files"])):
+            or processed.get("allow_partial")
+            or set(processed["files"]) | set(processed["spac_excluded_rows"]) != set(dataset["raw_files"])):
         raise ValueError("Export training price provenance differs from processed inputs")
     root = Path(output) / pack_id
     if root.exists():
@@ -114,7 +115,8 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
         model_sha = sha256_file(model_path)
         if model_meta is not None and model_sha != model_meta["sha256"]:
             raise ValueError(f"Model changed during pack export: {models[horizon]}")
-        samples, report = build_samples(predictions[horizon], processed_dir, horizon, calendar_days=official, price_files=processed["files"])
+        samples, report = build_samples(predictions[horizon], processed_dir, horizon, calendar_days=official,
+                                        price_files=processed["files"], segmented=True)
         source_sha = sha256_file(predictions[horizon])
         if prediction_meta is not None and source_sha != prediction_meta["sha256"]:
             raise ValueError(f"Prediction changed during pack export: {predictions[horizon]}")

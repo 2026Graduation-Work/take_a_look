@@ -3,10 +3,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
+from shared.data.segmented_prices import validate_segments
 from shared.io import sha256_file
 
 
-def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None, price_files=None):
+def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None, price_files=None, segmented=False):
     if horizon not in (5, 20):
         raise ValueError("Only H5/H20 supported")
     predictions = pd.read_parquet(prediction_file)
@@ -33,11 +35,15 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
             continue
         if price_files is not None and sha256_file(path) != price_files[path.name]:
             raise ValueError(f"Export processed input changed: {code}")
-        prices = pd.read_parquet(path, columns=["Date", "Close", "Trading_Halt", "Sigma"])
+        columns = ["Date", "Close", "Trading_Halt", "Sigma"]
+        if segmented or "SegmentId" in pq.read_schema(path).names:
+            columns.append("SegmentId")
+        prices = pd.read_parquet(path, columns=columns)
         prices.Date = pd.to_datetime(prices.Date)
         prices = prices.sort_values("Date").reset_index(drop=True)
         if prices.Date.duplicated().any():
             raise ValueError(f"Duplicate price date: {code}")
+        validate_segments(prices, required=segmented)
         indexed = prices.set_index("Date")
         joined = group.join(indexed, on="Date", how="left")
         valid = pd.Series(True, index=joined.index)
@@ -57,34 +63,36 @@ def build_samples(prediction_file, processed_dir, horizon, *, calendar_days=None
         group = joined.loc[valid].copy()
         if group.empty:
             continue
-        # Outcomes use observed executable rows after normalization, skipping unavailable sessions.
-        traded = prices.loc[prices.Trading_Halt.ne(1)].copy()
-        dates = traded.Date.to_numpy()
-        positions = np.searchsorted(dates, group.Date.to_numpy())
-        target = positions + horizon
-        complete = target < len(traded)
-        excluded["observation_incomplete"] += int((~complete).sum())
-        group = group.iloc[np.flatnonzero(complete)].copy()
-        if group.empty:
-            continue
-        future = traded.iloc[target[complete]].reset_index(drop=True)
-        good_future = np.isfinite(future.Close.to_numpy(dtype=float)) & future.Close.gt(0).to_numpy()
-        excluded["invalid_future_price"] += int((~good_future).sum())
-        group = group.iloc[np.flatnonzero(good_future)].reset_index(drop=True)
-        future = future.iloc[np.flatnonzero(good_future)].reset_index(drop=True)
-        if group.empty:
-            continue
-        years = group.Date.dt.year
-        result = pd.DataFrame({
-            "code": str(code), "prediction_date": group.Date,
-            "horizon": horizon, "fold": years - 2019,
-            "training_end": pd.to_datetime((years - 1).astype(str) + "-12-31"),
-            "score": group.Prob.to_numpy(dtype=float),
-            "sigma": group.Sigma.to_numpy(dtype=float),
-            "outcome_date": future.Date,
-            "return_pct": (future.Close.to_numpy(dtype=float) / group.Close.to_numpy(dtype=float) - 1) * 100,
-        })
-        output.append(result)
+        segments = group.groupby("SegmentId", sort=False) if "SegmentId" in group else [(None, group)]
+        for key, group in segments:
+            path_prices = prices if key is None else prices.loc[prices.SegmentId.eq(key)]
+            traded = path_prices.loc[path_prices.Trading_Halt.ne(1)].copy()
+            dates = traded.Date.to_numpy()
+            positions = np.searchsorted(dates, group.Date.to_numpy())
+            target = positions + horizon
+            complete = target < len(traded)
+            excluded["observation_incomplete"] += int((~complete).sum())
+            group = group.iloc[np.flatnonzero(complete)].copy()
+            if group.empty:
+                continue
+            future = traded.iloc[target[complete]].reset_index(drop=True)
+            good_future = np.isfinite(future.Close.to_numpy(dtype=float)) & future.Close.gt(0).to_numpy()
+            excluded["invalid_future_price"] += int((~good_future).sum())
+            group = group.iloc[np.flatnonzero(good_future)].reset_index(drop=True)
+            future = future.iloc[np.flatnonzero(good_future)].reset_index(drop=True)
+            if group.empty:
+                continue
+            years = group.Date.dt.year
+            result = pd.DataFrame({
+                "code": str(code), "prediction_date": group.Date,
+                "horizon": horizon, "fold": years - 2019,
+                "training_end": pd.to_datetime((years - 1).astype(str) + "-12-31"),
+                "score": group.Prob.to_numpy(dtype=float),
+                "sigma": group.Sigma.to_numpy(dtype=float),
+                "outcome_date": future.Date,
+                "return_pct": (future.Close.to_numpy(dtype=float) / group.Close.to_numpy(dtype=float) - 1) * 100,
+            })
+            output.append(result)
     if not output:
         raise ValueError("No completed historical samples")
     samples = pd.concat(output, ignore_index=True).sort_values(["score", "prediction_date", "code"])

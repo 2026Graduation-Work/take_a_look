@@ -17,20 +17,28 @@ from experiments.train_src.labels import (
     apply_fixed_barrier_labeling,
 )
 from experiments.train_src.loaders import load_parquet_data
+from shared.data.calendar import scheduled_sessions
 from shared.features.builder import build_feature_frame, normalize_trading_halts
 from shared.settings import TRAINING_PRICE_BASIS
-from shared.tests.official_fixtures import fake_isin, fake_split, fixture_snapshot, price_provenance
+from shared.tests.official_fixtures import (
+    fake_isin,
+    fake_split,
+    fixture_snapshot,
+    listing_segment,
+    price_provenance,
+)
 
 
 @pytest.fixture
 def local_dataset(tmp_path):
-    days = pd.bdate_range("2023-01-02", periods=340)
+    days = scheduled_sessions(pd.Timestamp("2023-01-02"), pd.Timestamp("2024-12-31"))[:340]
     close = 100 + 8 * np.sin(np.arange(len(days)) / 6) + np.arange(len(days)) * 0.02
     frame = pd.DataFrame(
         {
             "Date": days,
             "Code": "005930",
             "Name": "Synthetic",
+            "SegmentId": listing_segment("005930", str(days[0].date())),
             "IsDelisted": False,
             "Open": close,
             "High": close * 1.02,
@@ -84,9 +92,12 @@ def local_dataset(tmp_path):
         root / "calendar.json",
         {"validation_version": 3, "trading_days": [str(day.date()) for day in days]},
     )
-    pd.DataFrame({"Code": ["005930"], "ListingDate": [days[0]], "DelistingDate": [pd.NaT]}).to_csv(
-        root / "ticker_metadata.csv", index=False
-    )
+    from experiments.dataset.pipeline import _require_current_training_prices, training_metadata
+
+    manifest = json.loads((root / "dataset_manifest.json").read_text())
+    snapshot = _require_current_training_prices(manifest, root)
+    calendar = json.loads((root / "calendar.json").read_text())
+    training_metadata(snapshot, settings["collection"], calendar).to_csv(root / "ticker_metadata.csv", index=False)
     atomic_parquet(root / "benchmarks" / "KOSPI.parquet", frame[["Date", "Close"]])
     preprocess_dataset(dataset_config)
     config = yaml.safe_load((CHART_ROOT / "experiments/configs/local_h5.yaml").read_text())
@@ -499,13 +510,6 @@ def test_calendar_disagreement_and_unobserved_holiday_tail(tmp_path, monkeypatch
         build_calendar(tmp_path, collection)
 
 
-def _test_source_snapshot(module, monkeypatch, tmp_path, codes, dates, actions=()):
-    read = module.read_snapshot
-    monkeypatch.setattr(module, "read_snapshot", lambda path, **kwargs: read(path))
-    monkeypatch.setattr(module, "resolve_krx_isin", lambda code, **kwargs: fake_isin(code))
-    return fixture_snapshot(tmp_path / "remote", codes, pd.DatetimeIndex(dates), actions)
-
-
 def _synthetic_krx_raw(frame):
     raw = frame[["Date", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]].copy()
     fields = ["RawOpen", "RawHigh", "RawLow", "RawClose"]
@@ -546,23 +550,9 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
 
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
-    monkeypatch.setattr(
-        module,
-        "load_metadata",
-        lambda *_: pd.DataFrame(
-            {
-                "Code": ["005930"],
-                "Name": ["Synthetic"],
-                "Market": ["KOSPI"],
-                "ListingDate": [raw.Date.iloc[0]],
-                "DelistingDate": [pd.NaT],
-                "IsDelisted": [False],
-            }
-        ),
-    )
     monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw.iloc[1:])
-    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["005930"], raw.Date,
-                                    [fake_split(raw.Date.iloc[2].date(), 1, 2, (100_000, 200_000))])
+    snapshot = fixture_snapshot(tmp_path / "remote", ["005930"], pd.DatetimeIndex(raw.Date),
+                                [fake_split(raw.Date.iloc[2].date(), 1, 2, (100_000, 200_000))], raw=raw)
     with pytest.raises(RuntimeError, match="incomplete"):
         module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
     root = Path(settings["root"])
@@ -589,7 +579,7 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
     assert pd.read_parquet(events_path).PriceFactor.tolist() == [0.5]
     from experiments.dataset.verify_training_prices import verify
 
-    assert verify(root) == [{"code": "005930", "raw_rows": 3, "applied_events": 1}]
+    assert verify(root) == [{"code": "005930", "raw_rows": 3, "applied_events": 1, "spac_excluded_rows": 0}]
     assert stored.AdjustmentFactor.tolist() == [0.5, 0.5, 1.0]
     np.testing.assert_array_equal(stored.Volume, raw.RawVolume * [2, 2, 1])
 
@@ -633,7 +623,7 @@ def test_partial_collection_resume_and_safe_rebuild(local_dataset, tmp_path, mon
     assert sha256(events_path) == event_hash
 
 
-def test_failed_event_adjustment_preserves_verified_raw_without_refetching(local_dataset, tmp_path, monkeypatch):
+def test_unresolved_event_retains_verified_raw_and_reports_the_boundary(local_dataset, tmp_path, monkeypatch):
     from experiments.dataset import pipeline as module
 
     _, settings, _, _ = local_dataset
@@ -651,39 +641,25 @@ def test_failed_event_adjustment_preserves_verified_raw_without_refetching(local
         "validation_version": 3, "observed_end": end, "requested_end": end,
         "trading_days": raw.Date.astype(str).tolist(),
     })
-    pd.DataFrame({
-        "Code": ["123456"], "Name": ["Synthetic"], "Market": ["KOSPI"],
-        "ListingDate": [raw.Date.iloc[0]], "DelistingDate": [pd.NaT], "IsDelisted": [False],
-    }).to_csv(root / "ticker_metadata.csv", index=False)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
     monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: raw)
-
-    def assert_failed_collection(raw_hash):
-        manifest = json.loads((root / "dataset_manifest.json").read_text())
-        assert manifest["krx_raw_files"] == {"123456.parquet": raw_hash}
-        assert not manifest["prices_complete"]
-        assert manifest["raw_files"] == {}
-        assert not (root / "raw/123456.parquet").exists()
-        report = json.loads((root / "collection_report.json").read_text())
-        assert report["prices"][0]["status"] == "failed"
-        assert "123456 2020-03-20" in report["prices"][0]["reason"]
-
-    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["123456"], raw.Date)
-    with pytest.raises(RuntimeError, match="incomplete"):
-        module.collect_dataset(path, action_snapshot=snapshot)
+    snapshot = fixture_snapshot(tmp_path / "remote", ["123456"], pd.DatetimeIndex(raw.Date), raw=raw)
+    module.collect_dataset(path, action_snapshot=snapshot)
     original_path = root / "krx_raw_prices/123456.parquet"
     raw_hash = sha256(original_path)
     pd.testing.assert_frame_equal(pd.read_parquet(original_path), raw)
-    assert_failed_collection(raw_hash)
+    adjusted = pd.read_parquet(root / "raw/123456.parquet")
+    assert adjusted.SegmentId.nunique() == 2
+    assert adjusted.loc[adjusted.Date.eq("2020-03-20"), "Change"].isna().all()
+    queue = pd.read_csv(root / "review_queue.csv")
+    assert queue.Date.tolist() == ["2020-03-20"]
 
     def no_repeat(*_, **kwargs):
-        pytest.fail("Verified KRX source must not be requested again after an adjustment failure")
+        pytest.fail("Verified KRX source must not be requested again")
 
     monkeypatch.setattr(module, "fetch_raw_window", no_repeat)
-    with pytest.raises(RuntimeError, match="incomplete"):
-        module.collect_dataset(path)
+    module.collect_dataset(path)
     assert sha256(original_path) == raw_hash
-    assert_failed_collection(raw_hash)
 
 
 def test_mature_h20_and_observation_boundary():
@@ -772,20 +748,6 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
 
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda *_: {"synthetic": True})
-    monkeypatch.setattr(
-        module,
-        "load_metadata",
-        lambda *_: pd.DataFrame(
-            {
-                "Code": ["005930"],
-                "Name": ["Synthetic"],
-                "Market": ["KOSPI"],
-                "ListingDate": [raw.Date.iloc[0]],
-                "DelistingDate": [pd.NaT],
-                "IsDelisted": [False],
-            }
-        ),
-    )
     monkeypatch.setattr(module, "fetch_raw_window", lambda *_, **kwargs: _synthetic_krx_raw(raw))
 
     def fetch(day, **kwargs):
@@ -807,7 +769,8 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
 
     monkeypatch.setattr(module, "atomic_parquet", tracked_write)
     monkeypatch.setattr(price_collector, "_fetch_investor_day", fetch)
-    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, ["005930"], raw.Date)
+    snapshot = fixture_snapshot(tmp_path / "remote", ["005930"], pd.DatetimeIndex(raw.Date),
+                                raw=_synthetic_krx_raw(raw))
     if flow_status == "interrupted":
         with pytest.raises(KeyboardInterrupt):
             module.collect_dataset(path, rebuild=True, action_snapshot=snapshot)
@@ -931,8 +894,8 @@ def test_independent_schedule_announced_closures_and_end_boundary():
 
 
 def test_krx_active_listings_keep_equities_with_own_dates_and_kosdaq_global(monkeypatch):
-    from experiments.dataset.pipeline import fetch_active_listing_intervals
     from shared.data import providers as price_collector
+    from shared.data.metadata import fetch_active_listing_intervals
 
     rows = [
         {"ISU_SRT_CD": "001040", "ISU_ABBRV": "Common", "MKT_TP_NM": "KOSPI",
@@ -973,7 +936,7 @@ def test_krx_active_listings_keep_equities_with_own_dates_and_kosdaq_global(monk
 
 
 def test_load_metadata_records_krx_listing_source_and_rejects_missing_date(monkeypatch):
-    from experiments.dataset import pipeline as module
+    from shared.data import metadata as module
     from shared.data import metadata as shared_metadata
 
     frame = pd.DataFrame({"Code": ["00104K"], "Name": ["Preferred"], "ListingDate": [pd.Timestamp("2019-08-09")]})
@@ -991,7 +954,7 @@ def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_pa
     from contextlib import nullcontext
 
     from experiments.dataset import pipeline as module
-    from shared.data import bulk_prices, training_prices
+    from shared.data import bulk_prices, segmented_prices
     from shared.data import providers as price_collector
 
     raw, settings, _, _ = local_dataset
@@ -1012,10 +975,6 @@ def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_pa
 
     monkeypatch.setattr(module, "build_calendar", calendar)
     monkeypatch.setattr(module, "verify_calendar_schedule", lambda _: {})
-    monkeypatch.setattr(module, "load_metadata", lambda *_: pd.DataFrame({
-        "Code": codes, "Name": "Synthetic", "Market": "KOSPI", "ListingDate": days[0],
-        "DelistingDate": pd.NaT, "IsDelisted": False,
-    }))
     monkeypatch.setattr(price_collector, "_krx_request_timeout", nullcontext)
     daily_calls, fallback_calls = [], []
 
@@ -1025,15 +984,16 @@ def test_bulk_collection_falls_back_only_for_missing_stock(local_dataset, tmp_pa
         present = codes if day != days[-1] else codes[:-1]
         return pd.DataFrame({**row.to_dict(), "Code": present})
 
-    def individual(code, start, end, *, is_delisted):
-        assert (start, end, is_delisted) == (days[0], days[-1], False)
-        fallback_calls.append(code)
+    def individual(security, start, end):
+        assert (start, end, security.delisting) == (days[0], days[-1], None)
+        assert security.isin == fake_isin(security.code)
+        fallback_calls.append(security.code)
         return raw
 
     monkeypatch.setattr(bulk_prices, "request_day", daily)
     monkeypatch.setattr(bulk_prices.time, "sleep", lambda _: None)
-    monkeypatch.setattr(training_prices, "request_history", individual)
-    snapshot = _test_source_snapshot(module, monkeypatch, tmp_path, codes, days)
+    monkeypatch.setattr(segmented_prices, "request_history", individual)
+    snapshot = fixture_snapshot(tmp_path / "remote", codes, days, raw=raw)
     module.collect_dataset(config, action_snapshot=snapshot)
     assert daily_calls == days.strftime("%Y%m%d").tolist()
     assert fallback_calls == [codes[-1]]

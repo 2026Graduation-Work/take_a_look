@@ -243,7 +243,12 @@ def resolve_tickers(config: dict, anchor_file: str) -> str | list[str]:
         raise ValueError(f"Empty, duplicate or invalid universe codes: {path}")
     codes = list(dict.fromkeys(codes))
     processed = Path(find_processed_dir(config, anchor_file))
-    missing = [code for code in codes if not (processed / f"{code}.parquet").is_file()]
+    manifest_path = processed / "feature_manifest.json"
+    excluded = set()
+    if config.get("contract_version") == 3 and manifest_path.is_file():
+        feature_manifest = json.loads(manifest_path.read_text())
+        excluded = {Path(name).stem for name in feature_manifest.get("spac_policy_excluded_files", [])}
+    missing = [code for code in codes if code not in excluded and not (processed / f"{code}.parquet").is_file()]
     if missing:
         raise ValueError(
             f"Missing processed files for universe: {missing[:10]} ({len(missing)} total)"
@@ -366,7 +371,11 @@ def chart_root(anchor_file: str) -> str:
 
 
 def verified_feature_manifest(config, *, verify_files=True):
-    from shared.data.actions import require_price_provenance
+    from shared.data.resolution_snapshot import (
+        read_resolution_snapshot,
+        require_price_provenance,
+        snapshot_path,
+    )
     from shared.io import sha256
 
     path = _candidate_price_dirs(config)[0]
@@ -382,15 +391,19 @@ def verified_feature_manifest(config, *, verify_files=True):
     if not processed_path.is_file() or sha256(processed_path) != manifest.get("processed_manifest_sha256"):
         raise ValueError("Processed official action provenance differs from feature store")
     processed = json.loads(processed_path.read_text())
+    expected_exclusions = sorted(set(processed["spac_excluded_rows"]) - set(processed["files"]))
+    if manifest.get("spac_policy_excluded_files") != expected_exclusions:
+        raise ValueError("Feature store's SPAC policy exclusions differ from processed inputs")
     dataset_path = root / "dataset_manifest.json"
     if (not dataset_path.is_file() or sha256(dataset_path) != processed.get("dataset_manifest_sha256")
             or evidence != require_price_provenance(processed)):
         raise ValueError("Dataset or processed official action provenance differs from feature store")
     if evidence != require_price_provenance(json.loads(dataset_path.read_text())):
         raise ValueError("Processed official action provenance differs from feature store")
-    snapshot_path = root / "official_actions" / f"{evidence['sha256']}.json"
-    if not snapshot_path.exists() or sha256(snapshot_path) != evidence["sha256"]:
-        raise ValueError("Feature store's official action snapshot is missing or modified")
+    snapshot = read_resolution_snapshot(snapshot_path(root, evidence["sha256"]))
+    if snapshot.provenance != evidence:
+        raise ValueError("Feature store's official resolution snapshot provenance differs")
+
     from shared.processing import processing_contract
 
     expected_contract = config.get("processing_contract")
