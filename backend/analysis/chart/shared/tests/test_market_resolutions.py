@@ -32,6 +32,7 @@ from shared.data.market_notices import (
     superseded_merger_facts,
 )
 from shared.data.market_resolutions import (
+    NoticeFailure,
     Resolution,
     adjustment_events,
     issuer_merger_boundaries,
@@ -113,7 +114,7 @@ def test_official_rights_keep_pre_event_volume_and_observed_amount():
     assert missing.kind == Resolution.SEGMENT_BREAK and missing.price_factor is None and missing.review
     unparsable = FieldEvidence("20180306000001", TEST_SOURCE, "unsupported official terms")
     conflict, = resolve(SAMSUNG, raw, notices, coverage_complete=True,
-                        unparsed_dates={"2018-03-07": [unparsable]}).resolutions
+                        unparsed_dates={"2018-03-07": [NoticeFailure((unparsable,), "notice_parse_failed")]}).resolutions
     assert conflict.kind == Resolution.SEGMENT_BREAK and unparsable in conflict.evidence
 
     mixed = [replace(notices[0], facts=replace(notices[0].facts, reason="권배락(유상증자)"))]

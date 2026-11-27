@@ -20,12 +20,15 @@ from .calendar import scheduled_sessions
 from .disclosures import KIND_VIEWER, Evidence, put_immutable, require
 from .market_notices import SecurityKey
 from .market_resolutions import (
+    COMBINED_OFFERING_BONUS_REASON,
     ISSUER_MERGER_REASON,
     STRUCTURAL_REVIEW_REASON,
     Candidate,
     Resolution,
     ResolvedEvent,
     WindowLedger,
+    ambiguous_document_claims,
+    ambiguous_final_documents,
     issuer_merger_boundaries,
     issuer_merger_resolution,
     merger_facts,
@@ -46,10 +49,10 @@ CANDIDATE_COLUMNS = SECURITY_COLUMNS + ["Date", "PrevDate", "PrevClose", "BasePr
 NOTICE_COLUMNS = SECURITY_COLUMNS + ["AcptNo", "FormId", "Section", "Published", "AppliedDate", "Title", "Kind",
                                     "Reason", "BasePrice", "EvaluationPrice", "Low", "High", "ParBefore", "ParAfter",
                                     "SharesBefore", "SharesAfter", "AddedShares", "Ratio", "Listing", "Sha256",
-                                    "Evidence", "DocNo", "Family", "Final", "PreviousMarket", "PreviousClose"]
-RESOLUTION_COLUMNS = SECURITY_COLUMNS + ["Date", "Resolution", "PriceFactor", "VolumeFactor", "Evidence", "Reason", "Review"]
+                                    "Evidence", "DocNo", "Family", "Final", "PreviousMarket", "PreviousClose", "PaidRecordDate", "PaidListing"]
+RESOLUTION_COLUMNS = SECURITY_COLUMNS + ["Date", "Resolution", "PriceFactor", "VolumeFactor", "Evidence", "Reason", "Review", "FailedCheck"]
 CONFIRMATION_COLUMNS = SECURITY_COLUMNS + ["Date", "OfficialURL", "FormId", "Section", "Ratio"]
-REVIEW_COLUMNS = ["Code", "Date", "PrevClose", "BasePrice", "SharesBefore", "SharesAfter", "NearbyNotices", "Reason"]
+REVIEW_COLUMNS = ["Code", "Date", "PrevClose", "BasePrice", "SharesBefore", "SharesAfter", "NearbyNotices", "Reason", "FailedCheck"]
 BOUNDARIES = {Resolution.SEGMENT_BREAK, Resolution.SPAC_PREMERGER}
 
 
@@ -91,13 +94,14 @@ def _refs(value):
             yield from _refs(item)
 
 
-def _csv(path, columns):
+def _csv(path, columns, *, optional=()):
     with path.open(encoding="utf-8", newline="") as stream:
         reader = csv.DictReader(stream)
-        require(reader.fieldnames == columns, f"Invalid ledger schema: {path.name}")
+        require(reader.fieldnames == [col for col in columns if col not in optional or col in (reader.fieldnames or [])],
+                f"Invalid ledger schema: {path.name}")
         for row in reader:
             require(None not in row and None not in row.values(), f"Invalid ledger row: {path.name}")
-            yield row
+            yield {**dict.fromkeys(optional, ""), **row}
 
 
 def _insert(mapping, key, value):
@@ -121,7 +125,7 @@ def _consumer_hash():
     return canonical_hash({name: sha256(folder / name) for name in (
         "resolution_snapshot.py", "resolution_archive.py", "segmented_prices.py", "market_resolutions.py", "events.py",
         "validation.py", "calendar.py", "market_notices.py", "kind_market.py", "actions.py",
-        "disclosures.py", "training_prices.py",
+        "disclosures.py", "training_prices.py", "issuer_aliases.json",
     )})
 
 
@@ -220,7 +224,7 @@ class ResolutionSnapshot:
                     candidate.shares_before, candidate.shares_after,
                     " ".join(kind_document_url(item)
                              for item in sorted(accessions)),
-                    row.reason,
+                    row.reason, row.failed_check,
                 )))
 
 
@@ -354,8 +358,9 @@ def _load_tables(folder, manifest):
                 and windows[security]["first_session"] <= day <= windows[security]["last_session"]
                 and prev < day and min(quantities) > 0, "Invalid candidate identity, date, or prices")
         _insert(candidates, (security, day), Candidate(security, day, prev, *quantities, _bool(row["Paused"])))
-    notice_refs, merger_refs = {}, defaultdict(dict)
-    for row in _csv(folder / "notices.csv", NOTICE_COLUMNS):
+    notice_refs, merger_refs, combined_terms = {}, defaultdict(dict), {}
+    final_claims, final_sections = [], defaultdict(set)
+    for row in _csv(folder / "notices.csv", NOTICE_COLUMNS, optional=("PaidRecordDate", "PaidListing")):
         security = _security(row)
         accession, form, section = row["AcptNo"], row["FormId"], int(row["Section"])
         published, applied = _day(row["Published"]), _day(row["AppliedDate"])
@@ -367,12 +372,22 @@ def _load_tables(folder, manifest):
                 and section > 0 and re.fullmatch(r"[0-9]{14}", row["DocNo"]) and evidence and evidence[-1].sha256 == row["Sha256"],
                 "Invalid or duplicate official notice")
         _insert(notice_refs, key, set(evidence))
+        if row["Final"] == "True":
+            final_claims.append((row["DocNo"], json.loads(row["Family"])))
+            final_sections[accession, form, section].add(row["DocNo"])
+        if form == "11308" and row["Kind"] == "bonus_terms":
+            require(row["Final"] == "True" and row["Ratio"] and Fraction(row["Ratio"]) > 0
+                    and int(row["AddedShares"]) > 0 and row["Listing"]
+                    and _day(row["PaidRecordDate"]) and _day(row["PaidListing"]),
+                    "Invalid combined offering bonus terms")
+            combined_terms[key] = row
         if (row["Final"] == "True" and merger_facts(row["Kind"], row["Reason"]) and applied in price_hashes
                 and windows[security]["first_session"] <= applied <= windows[security]["last_session"]):
             merger_refs[(security.code[:5], applied, accession, form, section)][security] = set(evidence)
         refs.update(evidence)
         notices[security].append((accession, published, applied))
 
+    ambiguous_finals = ambiguous_document_claims(final_claims)
     section_owners = defaultdict(set)
     for security, accession, form, section in notice_refs:
         section_owners[accession, form, section].add(security)
@@ -395,7 +410,7 @@ def _load_tables(folder, manifest):
                 "KIND auction identity link does not reference the same security")
         linked.add(source)
 
-    for row in _csv(folder / "resolutions.csv", RESOLUTION_COLUMNS):
+    for row in _csv(folder / "resolutions.csv", RESOLUTION_COLUMNS, optional=("FailedCheck",)):
         security, day = _security(row), _day(row["Date"])
         key = (security, day)
         kind, review = Resolution(row["Resolution"]), _bool(row["Review"])
@@ -415,6 +430,8 @@ def _load_tables(folder, manifest):
                         "Invalid official field evidence")
                 if match := re.fullmatch(r"KIND ([0-9]{5})/([0-9]+)", field):
                     form, section = match[1], int(match[2])
+                    require(review or not ambiguous_finals.intersection(final_sections.get((accession, form, section), ())),
+                            "Automatic resolution uses an ambiguous KIND correction family")
                     if inherited_merger:
                         bound = merger_refs.get((security.code[:5], day, accession, form, section), {})
                         valid = any(source != security and ref in refs for source, refs in bound.items())
@@ -445,14 +462,27 @@ def _load_tables(folder, manifest):
                 and (fields or review or kind == Resolution.TICK_ROUNDING),
                 "Missing resolution evidence")
         price, volume = (Fraction(row[name]) if row[name] else None for name in ("PriceFactor", "VolumeFactor"))
-        if kind in {Resolution.UNIT_CHANGE, Resolution.BONUS}:
+        if row["Reason"] == COMBINED_OFFERING_BONUS_REASON:
+            terms = {key: term for key, term in combined_terms.items() if key[0] == security
+                     and any(field.accession == key[1] and field.field == f"KIND 11308/{key[3]}" for field in fields)}
+            require(kind == Resolution.BONUS and candidate and not review and len(terms) == 1,
+                    "Combined offering bonus lacks one final official allocation")
+            term, = terms.values()
+            record, listing = _day(term["AppliedDate"]), _day(term["Listing"])
+            require(price == Fraction(candidate.base_price, candidate.prev_close)
+                    and volume == 1 + Fraction(term["Ratio"]) and abs(price * volume - 1) <= Fraction(1, 50)
+                    and _day(term["PaidRecordDate"]) != record
+                    and day < record <= listing and listing in price_hashes
+                    and len(scheduled_sessions(pd.Timestamp(day), pd.Timestamp(record))) == 2,
+                    "Combined offering bonus factors or dates disagree")
+        elif kind in {Resolution.UNIT_CHANGE, Resolution.BONUS}:
             require(price is not None and volume is not None and price * volume == 1
                     and (kind != Resolution.BONUS or volume > 1), "Share-unit factors disagree")
         elif kind in {Resolution.REFERENCE_RESET, Resolution.TICK_ROUNDING, Resolution.RIGHTS}:
             expected_price = Fraction(candidate.base_price, candidate.prev_close) if kind == Resolution.RIGHTS and candidate else 1
             require(price == expected_price and volume == 1 and (kind != Resolution.RIGHTS or candidate),
                     "Reference or rights factors disagree")
-        _insert(resolutions, key, ResolvedEvent(security, day, kind, row["Reason"], tuple(fields), price, volume, review))
+        _insert(resolutions, key, ResolvedEvent(security, day, kind, row["Reason"], tuple(fields), price, volume, review, row["FailedCheck"]))
 
     require(review_refs.keys() <= resolutions.keys(), "Resolution ledger omits a witnessed structural review")
     require(len(candidates) == manifest["market_candidates"] and
@@ -607,11 +637,13 @@ def read_resolution_snapshot(path, *, verify_archive=False):
         _archive_receipts(refs, [archive])
         session_dates = set(manifest["sources"]["krx_sessions"])
         official, reviews = verify_archive_bindings(folder, coverage, archive, session_dates)
+        ambiguous_finals = ambiguous_final_documents(official)
         inherited = issuer_merger_boundaries(
             official, windows, lambda key, day: key in windows and day in session_dates
             and windows[key]["first_session"] <= day <= windows[key]["last_session"])
         expected = {(key, day): set(issuer_merger_resolution(key, day, sources).evidence)
-                    for key, days in inherited.items() for day, sources in days.items()}
+                    for key, days in inherited.items() for day, sources in days.items()
+                    if not any(notice.document_no in ambiguous_finals for notice in sources)}
         actual = {(key, row.date): set(row.evidence) for key, ledger in ledgers.items()
                   for row in ledger.resolutions if row.reason == ISSUER_MERGER_REASON}
         require(actual == expected, "Issuer merger resolutions differ from the official source archive")

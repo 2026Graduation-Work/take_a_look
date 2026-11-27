@@ -155,7 +155,7 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
             rows = "".join(
                 f"<tr><td>12:00</td><td><a onclick=\"companysummary_open('{issuer}')\">{sources[accession]['company']}</a></td>"
                 f"<td><a onclick=\"openDisclsViewer('{accession}','')\">{sources[accession]['title']}</a></td>"
-                f"<td>{submitter}</td><td></td></tr>" for accession in accessions
+                f"<td>{submitter[accession] if isinstance(submitter, dict) else submitter}</td><td></td></tr>" for accession in accessions
             ) or "조회된 결과값이 없습니다."
             body = f"<table>{rows}</table>전체 <em>{len(accessions)}</em>건 : <strong>1</strong>/1".encode()
         else:
@@ -198,6 +198,7 @@ def test_census_freezes_merger_review_with_or_without_a_raw_observation(tmp_path
     assert (row.Code, row.Date, row.PrevClose, row.BasePrice, row.SharesBefore, row.SharesAfter) == (
         "373200", "2022-01-20", 100, base_price, 3_520_000, 3_520_000)
     assert kind_document_url("20220119000510") in row.NearbyNotices
+    assert row.FailedCheck == "spac_merger_shares_mismatch"
     assert report["market_observations_before_identity"] == report["market_candidates_with_market_observation"] == int(base_price != 100)
     assert report["review_candidates_without_market_observation"] == int(base_price == 100)
     assert report["market_candidates"] == 1 and report["resolutions_without_price_observation"] == 0
@@ -486,7 +487,10 @@ def test_uncoded_auction_archive_checks_exact_companion_listing_and_rename(tmp_p
     snapshot, notices = freeze_kind_case(tmp_path, [
         ("2018-01-04", "006125", "SK케미칼우", "KOSPI", 0, 0, 0, 40500, 0, 0, 0, 2817125),
         ("2018-01-05", "006125", "SK디스커버리우", "KOSPI", 25000, 32500, 25000, 26250, 1250, 745279, 21803809600, 1358455),
-    ], active=[("006125", "KR7006121008", "에스케이디스커버리1우선주", "SK디스커버리우", "KOSPI", "주권", "1989/11/24", "구형우선주")])
+    ], active=[
+        ("006120", "KR7006120000", "에스케이디스커버리보통주", "SK디스커버리", "KOSPI", "주권", "1976/06/29", "보통주"),
+        ("006125", "KR7006121008", "에스케이디스커버리1우선주", "SK디스커버리우", "KOSPI", "주권", "1989/11/24", "구형우선주"),
+    ])
     assert (notices.loc[auction, "Code"], notices.loc[auction, "Section"]) == ("006125", 1)
     link = {"Auction": [auction, "99332", 1], "Witnesses": [[listing, "68151", 4], [listing, "68151", 2]]}
     assert snapshot.coverage["kind_auction_identity_links"] == [link]
@@ -905,7 +909,10 @@ def test_correction_referral_uses_verified_route_daily_listing_and_final_viewer(
         ("2017-01-16", "051910", "LG화학", "KOSPI", 282_000, 283_500, 278_000, 278_500, -4500, 198_568, 55_506_248_500, 66_271_100),
         ("2017-01-17", "051910", "LG화학", "KOSPI", 278_000, 284_000, 276_000, 278_500, 0, 218_884, 61_049_828_500, 70_592_343),
     ]
-    master = [("051910", "KR7051910008", "LG화학", "LG화학", "KOSPI", "주권", "2001/04/25", "보통주")]
+    master = [
+        ("051910", "KR7051910008", "LG화학", "LG화학", "KOSPI", "주권", "2001/04/25", "보통주"),
+        ("051915", "KR7051911006", "LG화학1우선주", "LG화학우", "KOSPI", "주권", "2001/04/25", "구형우선주"),
+    ]
     if case not in {"cold", "warm", "warm_target", "displayed_before_prefix"}:
         with pytest.raises(DisclosureError, match="incomplete source or identity coverage"):
             freeze_kind_case(tmp_path, actual_rows, active=master, budget=3 if case == "budget" else 4, preview=True)

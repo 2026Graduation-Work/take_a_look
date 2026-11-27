@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
 from fractions import Fraction
+from itertools import chain
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -18,8 +19,15 @@ from shared.data.actions import FieldEvidence, action_from_record, read_snapshot
 from shared.data.calendar import scheduled_sessions
 from shared.data.disclosures import DisclosureError, DocumentFormatError, Evidence, require
 from shared.data.events import observation_mask
-from shared.data.kind_market import KindMarket, KindUnavailable
+from shared.data.kind_market import (
+    EXCHANGE,
+    CorrectionError,
+    KindMarket,
+    KindUnavailable,
+    kind_withdrawal,
+)
 from shared.data.market_notices import (
+    NoticeError,
     SecurityKey,
     auction_identity_links,
     auction_identity_witness,
@@ -28,10 +36,18 @@ from shared.data.market_notices import (
     kind_topic,
     match_notice,
     normal_company,
+    notice_security_scope,
     parse_notice,
+    share_identity,
 )
 from shared.data.market_resolutions import (
+    BONUS,
+    COMBINED_LISTING_FAILURE_FIELD,
+    DIVIDEND,
+    NoticeFailure,
     Resolution,
+    ambiguous_final_documents,
+    combined_bonus_observation,
     issuer_merger_boundaries,
     merger_facts,
     observe_candidates,
@@ -108,6 +124,19 @@ def _share_class(label):
     if "우선주" in label or label in {"종류주권", "종류주식"}:
         return "preferred"
     raise DisclosureError(f"Unsupported KRX share class: {label}")
+
+
+def master_security_aliases(master):
+    universe = {}
+    for row in master.itertuples(index=False):
+        if row.Group not in {"주권", "외국주권", "주식예탁증권", "부동산투자회사"}:
+            continue
+        key = SecurityKey(row.Code, row.ISIN, row.ListingDate.date().isoformat(),
+                          row.DelistingDate.date().isoformat() if pd.notna(row.DelistingDate) else None,
+                          row.Market, _share_class(row.KIND_STKCERT_TP_NM))
+        universe.setdefault(key, set()).update(normal_company(str(name)) for name in (row.Name, row.ShortName)
+                                                if pd.notna(name))
+    return universe
 
 
 def _windows(raw, master, sessions, market_observed):
@@ -230,31 +259,93 @@ def _kind_inventory(client, start, end, company_cache, codes, registered=frozens
     return daily, company, targeted, tuple(rows.values()), failures
 
 
+def _final_filing(client, referral, published, daily, issuer):
+    accession = referral.route.accession
+    route_day = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
+    hints = {route_day, *published.get(accession, ())}
+    matches = [target for day in sorted(hints) if (span := daily.get(day))
+               and (target := client.dated_filing(span, accession))]
+    require(len(matches) == 1, "KIND final document is absent or ambiguous in verified daily lists")
+    target, = matches
+    require(issuer and (target.company_id or target.stock_code)[:5] == issuer,
+            "KIND final document identifies another issuer")
+    return target
+
+
 def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys, bounded,
-                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None):
+                     unresolved_issuers=frozenset(), registered=frozenset(), daily=None, expected_days=None, identity_universe=None,
+                     raw_prices=None):
     by_name, by_code, by_company = defaultdict(set), defaultdict(set), defaultdict(set)
     for key, names in aliases.items():
         for name in names:
             by_name[name].add(key)
         by_code[key.code].add(key)
         by_company[key.code[:5]].add(key)
+    complete_identity = identity_universe is not None
+    identity_universe = aliases if identity_universe is None else identity_universe
+    identity_by_company = defaultdict(dict)
+    for key, names in identity_universe.items():
+        identity_by_company[key.code[:5]][key] = names
     parsed, blocked, unparsed, failures = defaultdict(list), defaultdict(set), defaultdict(lambda: defaultdict(list)), []
     structural_gaps, unattributed_structure, nonstock = defaultdict(set), set(), []
     selected, fetched, verified, families = set(), set(), {}, []
+    parse_failures = {}
     missing_merger_sources = set()
     pending_auctions, pending_families = [], []
     structural_reviews = defaultdict(list)
+    supplemental, supplement_failures = defaultdict(dict), {}
+    additions_by_issuer = defaultdict(list)
+    raw_prices = {} if raw_prices is None else raw_prices
 
     def has_session(key, day):
         return expected_days is None or (key in expected_days and pd.Timestamp(day) in expected_days[key])
 
-    def failed(filing, structural, keys, affected, refs, exc):
-        stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or len(refs) == 1 else "kind_notice"
-        if isinstance(exc, DocumentFormatError):
+    def affected_candidates(filing, keys):
+        if kind_topic(filing) != "terms":
+            return [(key, candidate) for key in keys for candidate in candidates[key] if _in_scope(filing, candidate)]
+        reasons = DIVIDEND if "주식배당" in re.sub(r"\s+", "", filing.title) else BONUS
+        return [(key, candidate) for key in keys for candidate in candidates[key]
+                if abs((date.fromisoformat(candidate.date) - filing.published).days) <= 120
+                and any(notice.final and notice.facts.kind == "ex_price" and notice.facts.effective == candidate.date
+                        and re.sub(r"\s+", "", notice.facts.reason) in reasons for notice in parsed[key])]
+
+    def supplemental_failure(filing, refs, exc, targets, failure_record):
+        check = ("combined_bonus_listing_source_missing" if isinstance(exc, KindUnavailable)
+                 else "combined_bonus_listing_source_unverified")
+        item = NoticeFailure(tuple(FieldEvidence(filing.accession, ref, COMBINED_LISTING_FAILURE_FIELD)
+                                   for ref in refs), check, scope="combined_bonus_listing")
+        for key, day in sorted(targets, key=lambda target: (str(target[0]), target[1])):
+            if not targets[key, day] and isinstance(exc, KindUnavailable):
+                continue
+            unparsed[key][day].append(item)
+            failure_record.setdefault("CombinedBonusListing", []).append({
+                **_security_columns(key), "Date": day, "FailedCheck": check,
+            })
+        return check
+
+    def failed(filing, structural, keys, affected, refs, exc, check="notice_parse_failed", *, form=None, body=None,
+               supplemental_only=False):
+        if not structural and form is not None and body is not None:
+            try:
+                targets = notice_security_scope(filing, form, body, identity_universe)
+            except ValueError:
+                targets = set()
+            if targets:
+                affected = [(key, candidate) for key, candidate in affected if (key, candidate.date) in targets]
+        check = getattr(exc, "failed_check", check)
+        stage = "kind_document" if isinstance(exc, (DocumentFormatError, KindUnavailable)) or (
+            len(refs) == 1 and not isinstance(exc, CorrectionError)) else "kind_notice"
+        if isinstance(exc, (CorrectionError, DocumentFormatError)):
             refs += exc.evidence
-        failures.append({"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
-                         "Stage": stage, "Topic": kind_topic(filing), "Reason": str(exc),
-                         "Evidence": [asdict(ref) for ref in refs]})
+        failure_record = {"Code": filing.stock_code or None, "AcptNo": filing.accession, "Date": str(filing.published),
+                          "Topic": kind_topic(filing), "Reason": str(exc), "Evidence": [asdict(ref) for ref in refs]}
+        if filing.accession in addition_accessions:
+            supplement_failures[filing.accession] = (refs, exc, failure_record)
+        if supplemental_only:
+            stage = "kind_notice"
+            check = supplemental_failure(filing, refs, exc, supplemental[filing.accession], failure_record)
+        failure_record.update(Stage=stage, FailedCheck=check)
+        failures.append(failure_record)
         if structural:
             for key in keys:
                 structural_gaps[key].add(filing.accession)
@@ -262,8 +353,8 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if stage == "kind_document":
                 blocked[key].add(candidate.date)
             else:
-                unparsed[key][candidate.date].extend(FieldEvidence(filing.accession, ref, "KIND notice awaiting review")
-                                                    for ref in refs)
+                unparsed[key][candidate.date].append(NoticeFailure(
+                    tuple(FieldEvidence(filing.accession, ref, "KIND notice awaiting review") for ref in refs), check))
 
     def bind(filing, form, body, acquired, issuer, keys, structural, affected):
         sections = parse_notice(filing, form, body)
@@ -272,33 +363,112 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             nonstock.append({"AcptNo": filing.accession, "DocNo": body.document_no, "FormId": form,
                              "Evidence": [asdict(ref) for ref in (filing.evidence, *acquired)]})
         matched = []
+        securities = identity_by_company[issuer] if issuer else identity_universe
         for facts in sections:
-            if facts.code:
-                possible = by_code[facts.code] & keys if issuer else by_code[facts.code]
-            else:
-                possible = keys if issuer else keys | by_name[normal_company(facts.company)]
-            common = facts.share_label in {"보통주", "보통주식"}
-            if not any(key.active(facts.effective) and common == (key.share_class == "common") for key in possible):
-                if (bounded and body.final and filing.company_id[:5] == issuer and issuer
-                        and merger_facts(facts.kind, facts.reason)
-                        and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
-                        and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)):
-                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+            if (complete_identity and body.final and issuer and issuer not in unresolved_issuers
+                    and facts.kind in {"bonus_terms", "dividend_terms"} and facts.code is None and facts.isin is None
+                    and share_identity(facts.share_label) == ("preferred", "", "")
+                    and any(notice.security.share_class == "common" and notice.facts.kind == facts.kind
+                            and notice.facts.effective == facts.effective for notice in matched)
+                    and not any(key.share_class == "preferred" and (key.active(facts.effective)
+                                or facts.listing and key.active(facts.listing)) for key in securities)):
                 continue
-            securities = {key: aliases[key] for key in possible}
+            outside_merger_source = (
+                bounded and body.final and filing.company_id[:5] == issuer and issuer
+                and merger_facts(facts.kind, facts.reason)
+                and (not facts.code or facts.code.startswith(issuer) and not by_code[facts.code])
+                and any(key.active(facts.effective) and has_session(key, facts.effective) for key in keys)
+            )
             try:
-                notice = match_notice(filing, form, facts, body, acquired, securities)
+                notice = match_notice(filing, form, facts, body, acquired, securities,
+                                      identity_universe=securities)
             except DisclosureError as exc:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
+                    continue
                 if not can_join_auction_identity(form, facts, body.final):
                     raise
                 pending_auctions.append((filing, form, facts, body, acquired, securities, structural, keys, affected, exc))
+                continue
+            if notice.security not in keys:
+                if outside_merger_source:
+                    missing_merger_sources.add(facts.code or f"the source security for issuer {issuer}")
                 continue
             parsed[notice.security].append(notice)
             matched.append(notice)
         verified[filing.accession] = matched
 
+    def bind_final(filing, form, body, acquired, issuer, keys, structural, affected):
+        accession = filing.accession
+        if accession in verified:
+            return
+        if accession in parse_failures:
+            raise parse_failures[accession]
+        try:
+            require(body.final, "KIND normal notice parser requires a final document")
+            if filing.withdrawn or kind_withdrawal(filing.title):
+                raise NoticeError("correction_withdrawn", "KIND final disclosure is withdrawn or cancelled")
+            bind(filing, form, body, acquired, issuer, keys, structural, affected)
+        except (ValueError, OSError) as exc:
+            parse_failures[accession] = exc
+            raise
+
+    def supplemental_filings():
+        if not raw_prices:
+            return
+        ambiguous = ambiguous_final_documents(notice for rows in parsed.values() for notice in rows)
+        queued = {}
+        for key, rows in parsed.items():
+            if key not in raw_prices:
+                continue
+            bars = raw_prices[key]
+            days = pd.DatetimeIndex(bars.Date)
+            for notice in rows:
+                if notice.form != "11308" or notice.document_no in ambiguous:
+                    continue
+                facts = notice.facts
+                candidate = max((item for item in candidates[key] if item.date < facts.effective),
+                                key=lambda item: item.date, default=None)
+                if candidate is None:
+                    continue
+                observation, _ = combined_bonus_observation(candidate, facts, bars, days)
+                if observation is None:
+                    continue
+                _, (before, after) = observation
+                listing = date.fromisoformat(facts.listing)
+                related_filings = [row for row in additions_by_issuer[key.code[:5]]
+                                   if -7 <= (row.published - listing).days <= 3]
+                needs_totals = (facts.paid_listing == facts.listing or after - before != facts.added_shares
+                                or any(row.withdrawn or kind_withdrawal(row.title)
+                                       or not re.fullmatch(r"(?:\[(?:정정|기재정정)\])*추가상장\(무상증자\)",
+                                                           re.sub(r"\s+", "", row.title)) for row in related_filings))
+                for related in related_filings:
+                    targets = supplemental[related.accession]
+                    target = key, candidate.date
+                    targets[target] = targets.get(target, False) or needs_totals
+                    queued.setdefault(related.accession, related)
+        for accession, related in queued.items():
+            if related.withdrawn or kind_withdrawal(related.title):
+                failed(related, False, (), (), (related.evidence,),
+                       NoticeError("correction_withdrawn", "KIND additional listing is withdrawn or cancelled"),
+                       supplemental_only=True)
+                continue
+            if accession in supplement_failures:
+                refs, exc, failure_record = supplement_failures[accession]
+                supplemental_failure(related, refs, exc, supplemental[accession], failure_record)
+            if accession not in selected:
+                yield related
+
     ordered = sorted(filings, key=lambda row: (kind_topic(row) == "terms", row.published, row.accession))
+    published = defaultdict(set)
     for filing in ordered:
+        published[filing.accession].add(filing.published)
+        issuer = (filing.company_id or filing.stock_code)[:5]
+        if (raw_prices and issuer and filing.submitter in EXCHANGE and kind_topic(filing)
+                and "추가상장" in re.sub(r"\s+", "", filing.title)):
+            additions_by_issuer[issuer].append(filing)
+    addition_accessions = {filing.accession for rows in additions_by_issuer.values() for filing in rows}
+    for filing in chain(ordered, supplemental_filings()):
         if filing.accession in selected:
             continue
         topic = kind_topic(filing)
@@ -313,52 +483,51 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
                                  "Topic": topic, "Reason": "No verified security matches the KIND list row",
                                  "Evidence": [asdict(filing.evidence)]})
             continue
-        affected = [(key, candidate) for key in keys for candidate in candidates[key]
-                    if _in_scope(filing, candidate)]
+        affected = affected_candidates(filing, keys)
         structural = (topic == "structural" or topic in {"transfer", "new_listing"} and bool(keys & anchors.keys())
                       or topic == "rename" and bool(keys & spac_keys))
-        if topic == "terms":
-            term_type = "주식배당" if "주식배당" in filing.title else "무상증자"
-            affected = [(key, candidate) for key in keys for candidate in candidates[key]
-                        if abs((date.fromisoformat(candidate.date) - filing.published).days) <= 120
-                        and any(notice.final and notice.facts.kind == "ex_price" and notice.facts.effective == candidate.date
-                                and term_type in notice.facts.reason for notice in parsed[key])]
-        if not affected and not structural and filing.accession not in registered:
+        supplemental_only = not affected and not structural and filing.accession not in registered
+        if supplemental_only and filing.accession not in supplemental:
             continue
         selected.add(filing.accession)
         refs = (filing.evidence,)
+        form = body = None
+        scope_form = scope_body = None
+        check = "notice_parse_failed"
+        options = {"cache_only": True} if supplemental_only else {}
         try:
-            form, body, acquired = client.document(filing)
+            form, body, acquired = client.document(filing, **options)
+            scope_form, scope_body = form, body
             refs += acquired
             fetched.add(filing.accession)
             if body.final:
-                bind(filing, form, body, acquired, issuer, keys, structural, affected)
+                bind_final(filing, form, body, acquired, issuer, keys, structural, affected)
                 continue
-            referral = client.final_referral(filing, body, acquired)
-            accession = referral.route.accession
-            route_day = date.fromisoformat(f"{accession[:4]}-{accession[4:6]}-{accession[6:8]}")
-            hints = {route_day, *(row.published for row in ordered if row.accession == accession)}
-            matches = [target for day in sorted(hints) if (span := (daily or {}).get(day))
-                       and (target := client.dated_filing(span, accession))]
-            require(len(matches) == 1, "KIND final document is absent or ambiguous in verified daily lists")
-            target, = matches
-            require(issuer and (target.company_id or target.stock_code)[:5] == issuer,
-                    "KIND final document identifies another issuer")
-            require(accession not in selected or accession in verified, "KIND final document was not verified when selected")
+            original_refs = refs
+            check = "correction_final_unresolved"
+            referral = client.final_referral(filing, body, acquired, **options)
+            refs += (referral.evidence,)
+            target = _final_filing(client, referral, published, daily or {}, issuer)
+            refs += (target.evidence,)
+            accession = target.accession
+            target_affected = affected_candidates(target, keys)
+            affected = list({(key, candidate.date): (key, candidate) for key, candidate in [*affected, *target_affected]}.values())
+            target_form, target_body, target_refs = client.document(target, expected=referral, **options)
             selected.add(accession)
-            target_form, target_body, target_refs = client.document(target, expected=referral)
+            scope_form, scope_body = target_form, target_body
+            refs += target_refs
             fetched.add(accession)
-            if accession not in verified:
-                target_affected = [(key, candidate) for key in keys for candidate in candidates[key]
-                                   if _in_scope(target, candidate)]
-                bind(target, target_form, target_body, target_refs, issuer, keys, structural, target_affected)
+            check = "notice_parse_failed"
+            bind_final(target, target_form, target_body, target_refs, issuer, keys, structural, target_affected)
             family = {"AcptNo": filing.accession, "DocNo": body.document_no, "FinalAcptNo": accession,
                       "FinalDocNo": target_body.document_no, "FormId": target_form,
                       "Evidence": [asdict(ref) for ref in (filing.evidence, acquired[0], referral.evidence,
                                                            target.evidence, *target_refs)]}
-            pending_families.append((filing, structural, keys, affected, refs, target_refs, family, form, body))
+            pending_families.append((filing, structural, keys, affected, original_refs, target_refs, family, form, body, refs,
+                                     supplemental_only))
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc)
+            failed(filing, structural, keys, affected, refs, exc, check, form=scope_form, body=scope_body,
+                   supplemental_only=supplemental_only)
 
     listings = auction_listing_index(notice for rows in parsed.values() for notice in rows)
     for filing, form, facts, body, acquired, securities, structural, keys, affected, initial_error in pending_auctions:
@@ -367,13 +536,16 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
         try:
             if not witness:
                 raise initial_error
-            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness)
+            notice = match_notice(filing, form, facts, body, acquired, securities, identity_witness=witness,
+                                  identity_universe=securities)
+            if notice.security not in keys:
+                continue
             parsed[notice.security].append(notice)
             verified[filing.accession].append(notice)
         except DisclosureError as exc:
-            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc)
+            failed(filing, structural, keys, affected, (filing.evidence, *acquired), exc, form=form, body=body)
 
-    for filing, structural, keys, affected, refs, target_refs, family, form, body in pending_families:
+    for filing, structural, keys, affected, original_refs, target_refs, family, form, body, refs, supplemental_only in pending_families:
         try:
             accession = family["FinalAcptNo"]
             rows = [row for row in verified[accession] if row.security in keys and row.document_no == family["FinalDocNo"]
@@ -383,16 +555,16 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if structural and form == family["FormId"] and role_correction_kind(filing, form):
                 closed = affected_keys = role_correction_windows(
                     filing, form, parse_notice(filing, form, body), rows, keys, has_session)
-                family["OriginalNoticeEvidence"] = [asdict(ref) for ref in refs[2:]]
+                family["OriginalNoticeEvidence"] = [asdict(ref) for ref in original_refs[2:]]
             elif structural and form == "68151" and family["FormId"] == "68155" and all(
                 notice.facts.kind == "rename" for notice in rows
             ):
                 evidence = structural_review_evidence(filing.accession, accession,
-                                                      tuple(Evidence(**ref) for ref in family["Evidence"]), refs[2:])
+                                                      tuple(Evidence(**ref) for ref in family["Evidence"]), original_refs[2:])
                 review = superseded_merger_review(filing, form, body, rows, keys, has_session, evidence)
                 family["ReviewWitness"] = {"Security": _security_columns(review.security), "Date": review.date,
                                            "OriginalFormId": form,
-                                           "OriginalNoticeEvidence": [asdict(ref) for ref in refs[2:]]}
+                                           "OriginalNoticeEvidence": [asdict(ref) for ref in original_refs[2:]]}
                 closed, affected_keys = set(), keys - {review.security}
             else:
                 closed, affected_keys = structural_closure(rows, keys, has_session) if structural else (set(), set())
@@ -403,7 +575,8 @@ def _collect_notices(client, filings, aliases, candidates, *, anchors, spac_keys
             if review:
                 structural_reviews[review.security].append(review)
         except (ValueError, OSError) as exc:
-            failed(filing, structural, keys, affected, refs, exc)
+            failed(filing, structural, keys, affected, refs, exc, "correction_final_unresolved", form=form, body=body,
+                   supplemental_only=supplemental_only)
     require(not missing_merger_sources,
             "Issuer merger source is outside the bounded census; include --code for "
             + ", ".join(sorted(missing_merger_sources)))
@@ -491,7 +664,7 @@ def _resolution_columns(resolution, observations, price_hashes):
     return {**_security_columns(resolution.security), "Date": resolution.date, "Resolution": resolution.kind,
             "PriceFactor": resolution.price_factor, "VolumeFactor": resolution.volume_factor,
             "Evidence": json.dumps(evidence),
-            "Reason": resolution.reason, "Review": resolution.review}
+            "Reason": resolution.reason, "Review": resolution.review, "FailedCheck": resolution.failed_check}
 
 
 def _write_csv(path, columns, rows):
@@ -510,6 +683,7 @@ def _implementation_hashes():
         "experiments/dataset/census_actions.py", "shared/data/actions.py", "shared/data/events.py",
         "shared/data/disclosures.py", "shared/data/kind_market.py", "shared/data/market_notices.py",
         "shared/data/market_resolutions.py", "shared/data/calendar.py", "shared/data/validation.py",
+        "shared/data/issuer_aliases.json",
         "shared/data/resolution_snapshot.py", "shared/data/resolution_archive.py",
     )}
 
@@ -591,6 +765,9 @@ def build_census(args, client):
     raw_codes = raw.Code.nunique()
     failures.extend({"Code": code, "Stage": "identity", "Reason": "No preserved KRX prices in this scope"}
                     for code in sorted(codes - set(raw.Code.unique())))
+    identity_universe = master_security_aliases(master)
+    for key, names in aliases.items():
+        identity_universe.setdefault(key, set()).update(names)
     del raw, master
     candidates = defaultdict(tuple)
     fingerprints = {}
@@ -614,11 +791,14 @@ def build_census(args, client):
     unresolved_issuers = {failure["Code"][:5] for failure in failures if failure["Stage"] == "identity"}
     acquired = _collect_notices(client, filings, aliases, candidates, anchors=anchors,
                                 spac_keys=spac_keys, bounded=bool(codes), unresolved_issuers=unresolved_issuers,
-                                registered=registered, daily=daily, expected_days=expected_days)
+                                registered=registered, daily=daily, expected_days=expected_days,
+                                identity_universe=identity_universe, raw_prices=securities)
     (notices, blocked, unparsed, structural_gaps, unattributed_structure, document_errors, nonstock, families,
      structural_reviews, selected, fetched) = acquired
+    all_notices = [notice for rows in notices.values() for notice in rows]
+    ambiguous_finals = ambiguous_final_documents(all_notices)
     issuer_mergers = issuer_merger_boundaries(
-        [notice for rows in notices.values() for notice in rows], securities,
+        all_notices, securities,
         lambda key, day: key in expected_days and pd.Timestamp(day) in expected_days[key])
     actions = _official_action_snapshots(args.action_snapshot)
     resolved, unresolved, failed_windows, window_coverage = [], [], [], []
@@ -630,7 +810,8 @@ def build_census(args, client):
             ledger = resolve_events(key, bars, expected_days[key], notices[key], actions=actions[key],
                                     covered_dates=covered, blocked_dates=blocked[key], unparsed_dates=unparsed[key],
                                     transfer_anchor=anchors.get(key), transfer_source=anchor_sources.get(key),
-                                    issuer_mergers=issuer_mergers.get(key), structural_reviews=structural_reviews[key])
+                                    issuer_mergers=issuer_mergers.get(key), structural_reviews=structural_reviews[key],
+                                    ambiguous_finals=ambiguous_finals)
         except ValueError as exc:
             failed_windows.append({"Code": key.code, "Stage": "resolver", "Reason": str(exc)})
         coverage_spans = [*company[key.code], *targeted[key.code]]
@@ -647,7 +828,6 @@ def build_census(args, client):
         unresolved.extend({**_security_columns(key), "Date": day, "Reason": "Official search or document incomplete"}
                           for day in ledger.incomplete if not sample or day in targets)
     all_candidates = [c for values in candidates.values() for c in values]
-    all_notices = [n for values in notices.values() for n in values]
     market_counts = Counter(row.kind for row in resolved)
     training_counts = Counter(row.kind for row in resolved if row.security in training)
     requested = set(calendar_days(args.published_start, args.published_end))
@@ -722,6 +902,8 @@ def build_census(args, client):
         "whole_tickers_excluded_by_resolver": None, "training_policy_active": False,
         "failed_windows": len(failed_windows), "failed_codes": len({e["Code"] for e in [*failures, *failed_windows]}),
         "complete_windows": sum(window["complete"] for window in window_coverage),
+        "market_review_count": sum(row.review for row in resolved),
+        "training_review_count": sum(row.review for row in resolved if row.security in training),
         "market_resolution_counts": {kind.value: market_counts[kind] for kind in Resolution},
         "training_resolution_counts": {kind.value: training_counts[kind] for kind in Resolution},
         "inventory_complete": len(daily) == len(requested),
