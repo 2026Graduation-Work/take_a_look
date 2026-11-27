@@ -53,3 +53,27 @@ def test_absolute_grade_with_large_cap_relief():
     assert grade_for(0.691, True) == 3 and grade_for(0.2, True) == 5
     assert grade_for(float("nan"), True) == 1
     assert type(grade_for(np.float64(0.5), False)) is int  # JSON으로 보낸다
+
+
+def test_managed_names_retry_then_none(monkeypatch):
+    from serving import stock_master
+
+    calls = []
+
+    def fail():
+        calls.append(1)
+        raise OSError("HTTP Error 403: Forbidden")
+
+    monkeypatch.setattr(stock_master, "fetch_managed_names", fail)
+    assert stock_master.managed_names_or_none(attempts=3, wait=0) is None and len(calls) == 3
+    monkeypatch.setattr(stock_master, "fetch_managed_names", lambda: {"모나미"})
+    assert stock_master.managed_names_or_none(wait=0) == {"모나미"}
+
+
+def test_main_keeps_previous_master_when_kind_fails(monkeypatch):
+    from serving import stock_master
+
+    monkeypatch.setattr(stock_master, "managed_names_or_none", lambda: None)
+    monkeypatch.setattr(stock_master, "SupabaseStore", lambda: (_ for _ in ()).throw(AssertionError("no write")))
+    monkeypatch.setattr("sys.argv", ["stock_master"])
+    stock_master.main()

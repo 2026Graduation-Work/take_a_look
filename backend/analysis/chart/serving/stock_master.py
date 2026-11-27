@@ -1,11 +1,13 @@
 """종목 마스터(stocks)를 차트 서빙 universe 기준으로 넣고 고친다. 지우지 않는다.
 
-관리종목 목록(KIND)을 받지 못하면 아무것도 쓰지 않고 실패한다. 확인 안 된 종목이 관리종목 회피를 통과하지 않게 하려는 것이다.
+관리종목 목록(KIND)을 재시도 뒤에도 받지 못하면 아무것도 쓰지 않고 경고만 남긴다. 직전 마스터가 그대로 남아
+확인 안 된 종목이 관리종목 회피를 통과하지 않고, 게시가 끝난 서빙 실행도 실패로 표시되지 않는다.
 """
 
 import argparse
 import json
 import re
+import time
 from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
@@ -93,18 +95,33 @@ def classify(universe, prices, managed_names, large_caps=frozenset(), as_of=None
     return rows
 
 
+def managed_names_or_none(attempts=3, wait=20):
+    """KIND 관리종목 목록. 모두 실패하면 None(직전 마스터 유지)."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return fetch_managed_names()
+        except Exception as error:  # 11/26~27 KIND 403(HTTPError), timeout
+            print(f"KIND 관리종목 조회 실패 {attempt}/{attempts}: {error!r}")
+            if attempt < attempts:
+                time.sleep(wait)
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--dry-run", action="store_true", help="쓰지 않고 결과만 JSON으로 출력")
     args = parser.parse_args()
 
+    managed = managed_names_or_none()
+    if managed is None:
+        print("::warning::KIND 관리종목 목록을 받지 못해 종목 마스터를 갱신하지 않았습니다(직전 마스터 유지)")
+        return
     store = SupabaseStore()
     as_of = store._request("GET", "/rest/v1/chart_universe?select=as_of&order=as_of.desc&limit=1")[0]["as_of"]
     universe = store.load_universe(as_of)
     start = (date.fromisoformat(as_of) - timedelta(days=400)).isoformat()
     panel = store.load_price_panel(start, as_of)
     prices = pd.concat([frame.assign(Code=code) for code, frame in panel.items()], ignore_index=True)
-    managed = fetch_managed_names()
     rows = classify(universe, prices, managed, fetch_large_caps(), as_of)
     matched = sum("managed_stock" in row["risk_flags"] for row in rows)
     print(json.dumps({"event": "stock_master", "as_of": as_of, "stocks": len(rows),
