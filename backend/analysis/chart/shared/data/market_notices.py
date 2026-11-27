@@ -799,6 +799,20 @@ def _terms(filing, spec, rows):
     return sections
 
 
+
+def _final_dividend_terms_rows(text, rows, final):
+    comparison = [row for row in rows if list(map(_compact, row)) == ["정정항목", "정정전", "정정후"]]
+    if not comparison:
+        return rows
+    headings = list(re.finditer(r'<div\b[^>]*class=["\']xforms_title["\'][^>]*>(.*?)</div>', text, re.I | re.S))
+    require(final and len(comparison) == len(headings) == 1
+            and _compact(_document_text(headings[0][1])) == "주식배당결정",
+            "KIND dividend correction lacks a unique operative heading")
+    before = deal_table(text[:headings[0].start()])
+    require(any(list(map(_compact, row)) == ["정정항목", "정정전", "정정후"] for row in before),
+            "KIND dividend correction comparison follows the operative heading")
+    return [row for row in deal_table(text[headings[0].end():]) if any(row)]
+
 def _final_bonus_terms_rows(rows):
     comparison = [index for index, row in enumerate(rows)
                   if list(map(_compact, row)) == ["항목", "정정사유", "정정전", "정정후"]]
@@ -953,6 +967,7 @@ def parse_notice(filing, form, body):
             require("자회사의주요경영사항" not in _compact(filing.title)
                     and not any(_compact(row[0]) == "자회사인" for row in rows),
                     "KIND stock dividend terms belong to a subsidiary")
+            rows = _final_dividend_terms_rows(text, rows, getattr(body, "final", False))
         if spec.kind == "bonus_terms" and getattr(body, "final", False):
             rows = _final_bonus_terms_rows(rows)
         return _terms(filing, spec, rows)

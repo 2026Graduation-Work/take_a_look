@@ -179,3 +179,38 @@ def test_failed_price_keeps_verified_security_and_date_scope():
         notice_security_scope(filing, "99301", body, SAMSUNG_UNIVERSE)
     with pytest.raises(DisclosureError):
         notice_security_scope(filing, "99301", replace(body, final=False), SAMSUNG_UNIVERSE)
+
+
+@pytest.mark.parametrize("accession,code,isin,listing,names", [
+    ("20220408000415", "263050", "KR7263050007", "2018-12-24", {"유틸렉스"}),
+    ("20171103000029", "006730", "KR7006730006", "1995-10-06", {"서부티엔디", "서부t&d"}),
+])
+def test_verified_bilingual_issuer_names_keep_the_exact_security_interval(accession, code, isin, listing, names):
+    from shared.tests.test_market_resolutions import official_body
+    filing, form, body = official_body(accession)
+    facts, = parse_notice(filing, form, body)
+    key = SecurityKey(code, isin, listing, None, "KOSDAQ", "common")
+    assert resolve_notice_security(code[:5], facts, {key: names}) == key
+    for issuer, altered in [("01014", key), (code[:5], replace(key, listing="2026-01-01")),
+                            (code[:5], replace(key, delisting=facts.effective))]:
+        with pytest.raises(DisclosureError, match="does not identify one KRX security"):
+            resolve_notice_security(issuer, facts, {altered: names})
+    # The same spelling under another issuer cannot use this issuer's aliases.
+    other = replace(SAMSUNG, listing="1975-01-01")
+    with pytest.raises(DisclosureError):
+        resolve_notice_security("01014", facts, {other: names})
+
+
+def test_actual_yuyu_aggregated_other_shares_do_not_select_one_preferred_series():
+    from shared.tests.test_market_resolutions import official_body
+    filing, form, body = official_body("20210316000101")
+    common, preferred = parse_notice(filing, form, body)
+    universe = {
+        SecurityKey("000220", "KR7000220004", "1975-11-18", None, "KOSPI", "common"): {"유유제약"},
+        SecurityKey("000225", "KR7000221002", "1990-01-05", None, "KOSPI", "preferred"): {"유유제약1우"},
+        SecurityKey("000227", "KR7000222000", "2000-06-20", None, "KOSPI", "preferred"): {"유유제약2우b"},
+    }
+    assert resolve_notice_security("00022", common, universe).code == "000220"
+    assert preferred.added_shares == 1_294_945
+    with pytest.raises(DisclosureError, match="does not identify one KRX security"):
+        resolve_notice_security("00022", preferred, universe)

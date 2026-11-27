@@ -52,10 +52,14 @@ def summarize(folder, baseline=None):
         changed = [key for key, row in before.items() if row["Review"] == "False"
                    and any(row[field] != current[key][field] for field in DECISION)]
         result["previous_automatic_decision_changes"] = changed
+        # Early census tables predate FailedCheck; an absent diagnostic is empty.
+        result["baseline_failed_check_unavailable"] = sum("FailedCheck" not in row for row in before.values())
         result["previous_automatic_metadata_changes"] = [
-            {"identity": key, "before": row["Reason"], "after": current[key]["Reason"]}
+            {"identity": key, "before": row["Reason"], "after": current[key]["Reason"],
+             "changed_fields": {field: {"before": row.get(field, ""), "after": current[key].get(field, "")}
+                                for field in ("Reason", "Evidence", "FailedCheck") if row.get(field, "") != current[key].get(field, "")}}
             for key, row in before.items() if row["Review"] == "False"
-            and any(row[field] != current[key][field] for field in ("Reason", "Evidence"))
+            and any(row.get(field, "") != current[key].get(field, "") for field in ("Reason", "Evidence", "FailedCheck"))
         ]
         result["new_automatic"] = sum(row["Review"] == "True" and current[key]["Review"] == "False"
                                       for key, row in before.items())
@@ -72,6 +76,8 @@ def summarize(folder, baseline=None):
             "remaining_failed_checks": dict(Counter(current[key].get("FailedCheck", "") for key in blocked
                                                      if current[key]["Review"] == "True")),
         }
+        if result["previous_automatic_metadata_changes"]:
+            raise ValueError("Changed previously automatic metadata")
         if changed:
             raise ValueError(f"Changed {len(changed)} previously automatic decisions")
         if (baseline / "review_queue.csv").is_file():

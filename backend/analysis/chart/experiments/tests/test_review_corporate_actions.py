@@ -5,12 +5,12 @@ import pytest
 from experiments.dataset.review_corporate_actions import main
 
 
-def ledger(folder, *, kind="segment_break", review="True", factor="", evidence=None):
+def ledger(folder, *, kind="segment_break", review="True", factor="", evidence=None, failed_check="notice_parse_failed"):
     folder.mkdir()
     security = dict(Code="005930", ISIN="KR7005930003", ListingDate="1975-06-11", DelistingDate="",
                     Market="KOSPI", ShareClass="common", Date="2016-01-04")
     row = dict(security, Resolution=kind, PriceFactor=factor, VolumeFactor="" if review == "True" else "1",
-               Review=review, Reason="test", Evidence=json.dumps(evidence or []), FailedCheck="notice_parse_failed")
+               Review=review, Reason="test", Evidence=json.dumps(evidence or []), FailedCheck=failed_check)
     for name, rows in (("resolutions", [row]), ("candidates", [security])):
         with (folder / f"{name}.csv").open("w", newline="") as stream:
             writer = csv.DictWriter(stream, list(rows[0]))
@@ -52,3 +52,38 @@ def test_replay_does_not_summarize_old_output_after_an_argument_error(tmp_path):
         main(["--output", str(output), "--kind-root", str(tmp_path / "cache"), "--replay-args", str(replay)])
     assert exc.value.code == 2
     assert not (output / "review-summary.json").exists()
+
+
+@pytest.mark.parametrize("field,value", [("Reason", "changed"), ("Evidence", "[] "), ("FailedCheck", "changed")])
+def test_review_comparison_rejects_changed_automatic_metadata(tmp_path, field, value):
+    before, after = tmp_path / "before", tmp_path / "after"
+    ledger(before, kind="rights", review="False", factor="1/2")
+    ledger(after, kind="rights", review="False", factor="1/2")
+    path = after / "resolutions.csv"
+    with path.open(newline="") as stream:
+        row, = csv.DictReader(stream)
+    row[field] = value
+    with path.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, row)
+        writer.writeheader()
+        writer.writerow(row)
+    with pytest.raises(ValueError, match="automatic metadata"):
+        main(["--output", str(after), "--baseline", str(before), "--summarize-only"])
+
+
+def test_review_comparison_accepts_the_pre_diagnostic_census_schema(tmp_path):
+    before, after = tmp_path / "before", tmp_path / "after"
+    for folder in (before, after):
+        ledger(folder, kind="rights", review="False", factor="1/2", failed_check="")
+    path = before / "resolutions.csv"
+    with path.open(newline="") as stream:
+        row, = csv.DictReader(stream)
+    del row["FailedCheck"]
+    with path.open("w", newline="") as stream:
+        writer = csv.DictWriter(stream, row)
+        writer.writeheader()
+        writer.writerow(row)
+    main(["--output", str(after), "--baseline", str(before), "--summarize-only"])
+    result = json.loads((after / "review-summary.json").read_text())
+    assert result["baseline_failed_check_unavailable"] == 1
+    assert result["previous_automatic_metadata_changes"] == []

@@ -47,3 +47,46 @@ def test_per_share_quantity_labels_preserve_facts_and_reject_duplicate_fields(ac
     duplicate = replace(body, body=text.replace(row, row + alternate, 1).encode(body.charset))
     with pytest.raises(DisclosureError, match="KIND dividend or bonus terms lack"):
         parse_notice(filing, form, duplicate)
+
+
+@pytest.mark.parametrize("accession,day,before,added,ratio", [
+    ("20161212000241", "2016-12-31", 12_011_889, 590_407, Fraction(1, 20)),
+    ("20241220000454", "2024-12-31", 1_842_040, 68_805, Fraction(1, 25)),
+])
+def test_dividend_correction_uses_the_unique_operative_body(accession, day, before, added, ratio):
+    filing, form, body = official_body(accession)
+    facts, = parse_notice(filing, form, body)
+    assert (facts.effective, facts.shares_before, facts.added_shares, facts.ratio, facts.share_label) == (
+        day, before, added, ratio, "보통주식",
+    )
+    with pytest.raises(DisclosureError, match="unique operative heading"):
+        parse_notice(filing, form, replace(body, final=False))
+    text = body.text()
+    heading = text.index('<div class="xforms_title">')
+    duplicate = replace(body, body=(text + text[heading:]).encode(body.charset))
+    with pytest.raises(DisclosureError, match="unique operative heading"):
+        parse_notice(filing, form, duplicate)
+    # A correction-only document must not use the comparison's after value as its body.
+    comparison_only = replace(body, body=text[:heading].encode(body.charset))
+    with pytest.raises(DisclosureError, match="unique operative heading"):
+        parse_notice(filing, form, comparison_only)
+
+
+@pytest.mark.parametrize("accession", ["20181220000241", "20250219000916"])
+def test_subsidiary_dividend_stays_outside_the_issuer_terms(accession):
+    filing, form, body = official_body(accession)
+    with pytest.raises(DisclosureError, match="belong to a subsidiary"):
+        parse_notice(filing, form, body)
+
+
+def test_collected_bonus_and_same_day_cb_listing_keep_their_distinct_quantities():
+    facts = []
+    for accession in ("20210823000262", "20210823000265"):
+        filing, form, body = official_body(accession)
+        section, = parse_notice(filing, form, body)
+        facts.append(section)
+    assert [(f.code, f.isin, f.effective, f.reason, f.added_shares) for f in facts] == [
+        ("025620", "KR7025620006", "2021-08-26", "무상증자", 11_535_471),
+        ("025620", "KR7025620006", "2021-08-26", "국내CB전환", 607_566),
+    ]
+    assert sum(f.added_shares for f in facts) == 12_143_037
