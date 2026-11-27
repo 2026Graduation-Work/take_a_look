@@ -48,6 +48,7 @@
 | 문서 | 내용 |
 |---|---|
 | [../frontend/DESIGN.md](../frontend/DESIGN.md) | 화면 규칙. 값은 `frontend/app/globals.css`의 `@theme` |
+| [../frontend/UX_WRITING.md](../frontend/UX_WRITING.md) | 화면 문구와 생성 설명의 가치별 작성 원칙, 검토 질문, 예시 |
 | [brand/README.md](brand/README.md) | 로고 후보, 선택 이유, 사용 규칙 |
 
 ## 연구와 결정
