@@ -1,4 +1,3 @@
-"""Compare serving features against frozen inputs and expected values."""
 import numpy as np
 import pandas as pd
 

@@ -7,19 +7,20 @@ import pytest
 from experiments.evaluation.metrics import calculate_classification_metrics
 from experiments.export.pack import build_pack
 from experiments.train_src.labels import apply_dynamic_sigma_barrier_labeling
+from serving import local_preview
 from serving.internal import calendar, pipeline, prices
 from serving.internal.inference import infer_batch
-from serving.internal.pack import load_pack
+from serving.internal.pack import feature_cache_key, load_pack
 from shared.data import providers
 from shared.data.prices import fetch_price_window
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
-from shared.io import atomic_json
+from shared.io import atomic_json, sha256_file
 from shared.settings import BUILDER_ID, processing_contract
 
 
 @pytest.mark.parametrize("with_flows", [False, True])
-def test_collection_training_export_and_serving(tmp_path, monkeypatch, with_flows):
+def test_collection_training_export_and_serving(tmp_path, monkeypatch, capsys, with_flows):
     days = pd.bdate_range("2019-01-07", periods=230)
     close = 100 + np.sin(np.arange(len(days)) / 4) * 8
     raw = pd.DataFrame({"RawOpen": close - .2, "RawHigh": close + .8, "RawLow": close - .8,
@@ -72,19 +73,29 @@ def test_collection_training_export_and_serving(tmp_path, monkeypatch, with_flow
     root, archive, report = build_pack(pack_id="mock_e2e", output=tmp_path / "packs", models=models,
         predictions=predictions, processed_dir=processed, calendar_file=calendar_path, research_manifest=provenance,
         allow_legacy_artifacts=True)
-    pack, paths = load_pack(root)
+    pack, paths, golden_sha256 = load_pack(root)
     assert archive.is_file() and all(report[f"h{h}"]["sample_rows"] > 0 for h in (5, 20))
     for horizon in (5, 20):
         assert lgb.Booster(model_file=str(paths[horizon][0])).feature_name() == names
         scores = infer_batch(paths[horizon][0], frame.tail(1))[0][0]
         assert sum(scores.values()) == pytest.approx(1)
+    config = tmp_path / "config.yaml"
+    config.write_text(f"active_pack:\n  pack_id: mock_e2e\n  golden_sha256: {golden_sha256}\n")
+    monkeypatch.setattr(pipeline, "config_path", lambda: config)
+    monkeypatch.setattr(pipeline, "SupabaseStore", lambda: pytest.fail("Unexpected storage access"))
+    preview_input = tmp_path / "inputs/raw/005930.parquet"
+    preview_input.parent.mkdir(parents=True)
+    inputs.assign(Name="Synthetic stock").to_parquet(preview_input)
+    key = feature_cache_key(golden_sha256) if with_flows else pack["processing_contract"]["sha256"]
+    atomic_json(preview_input.with_suffix(".manifest.json"), {
+        "source_sha256": sha256_file(preview_input), "processing_contract_sha256": key, "pack_id": "mock_e2e",
+    })
+    local_preview.main(["--code", "005930", "--as-of", str(days[-1].date()), "--compute-only"])
+    assert '"event": "local_preview_computed"' in capsys.readouterr().out
+
     pack["processing_contract"]["preprocessing"]["sigma_window"] = 21
     atomic_json(root / "manifest.json", pack)
-    with pytest.raises(ValueError, match="checksum mismatch"):
+    with pytest.raises(ValueError, match="builder settings mismatch"):
         load_pack(root)
-    config = tmp_path / "config.yaml"
-    config.write_text("active_pack:\n  pack_id: mock_e2e\n")
-    monkeypatch.setattr(pipeline, "config_path", lambda: config)
-    monkeypatch.setattr(pipeline, "SupabaseStore", lambda: pytest.fail("Mismatched pack contacted storage"))
-    with pytest.raises(ValueError, match="checksum mismatch"):
+    with pytest.raises(ValueError, match="builder settings mismatch"):
         pipeline.run(SimpleNamespace(as_of="2019-12-30", dry_run=True, publish=False))

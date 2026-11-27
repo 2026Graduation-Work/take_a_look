@@ -106,7 +106,7 @@ def score(log: pd.DataFrame, labels: pd.DataFrame) -> dict:
 
 def main() -> None:
     config = yaml.safe_load(config_path().read_text())["active_pack"]
-    pack, _ = load_pack(serving_root() / "packs" / config["pack_id"])
+    pack, _, _ = load_pack(serving_root() / "packs" / config["pack_id"], golden_sha256=config.get("golden_sha256"))
     log = pd.DataFrame(fetch("chart_prediction_log", {
         "select": "stock_code,as_of,horizon,prob_down,prob_neutral,prob_up", "order": "as_of,stock_code,horizon"}))
     start = (date.fromisoformat(log.as_of.min()) - timedelta(days=60)).isoformat()  # σ 20거래일 앞 여유

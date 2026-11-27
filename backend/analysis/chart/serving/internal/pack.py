@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -9,34 +10,30 @@ from pathlib import Path
 import lightgbm as lgb
 import pandas as pd
 import yaml
+from shared.golden import GoldenError, check_coverage, compare
 from shared.settings import BUILDER_ID as LOCAL_BUILDER_ID
-from shared.settings import processing_contract, serving_root
+from shared.settings import serving_contract, serving_root
 
-from .hashing import sha256_file
+from .hashing import canonical_hash, sha256_file
 
 FORMAT_VERSION = 2
 BUILDER_ID = LOCAL_BUILDER_ID
+SERVING_DIR = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = SERVING_DIR / "config.yaml"
 
 
-def load_pack(path):
+def load_pack(path, *, golden_sha256=None):
     root = Path(path)
     manifest = json.loads((root / "manifest.json").read_text())
-    if manifest.get("format_version") != FORMAT_VERSION or not manifest.get("pack_id") or root.name != manifest["pack_id"]:
+    pack_id = manifest.get("pack_id")
+    if (manifest.get("format_version") != FORMAT_VERSION or not isinstance(pack_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9_-]+", pack_id) or root.name != pack_id):
         raise ValueError("Pack identity or format mismatch")
     validate_builder(manifest)
     if set(manifest.get("horizons", {})) != {"h5", "h20"}:
         raise ValueError("Pack must contain H5 and H20")
     if manifest.get("calendar_sha256") and sha256_file(root / "calendar.json") != manifest["calendar_sha256"]:
         raise ValueError("Pack calendar checksum mismatch")
-    expected_sources = manifest["processing_contract"]["implementation_sha256"]
-    if set(manifest.get("builder_sources", {})) != set(expected_sources):
-        raise ValueError("Pack builder sources missing")
-    for name, digest in expected_sources.items():
-        relative = Path(manifest["builder_sources"][name])
-        if relative.is_absolute() or ".." in relative.parts or relative.parts[0] != "builder":
-            raise ValueError("Unsafe builder source path")
-        if sha256_file(root / relative) != digest:
-            raise ValueError("Pack builder source checksum mismatch")
     paths = {}
     for horizon in (5, 20):
         item = manifest["horizons"][f"h{horizon}"]
@@ -60,7 +57,42 @@ def load_pack(path):
         if sample_horizons != [horizon]:
             raise ValueError("Historical samples mixed or swapped H5/H20")
         paths[horizon] = tuple(checked)
-    return manifest, paths
+    digest = _validate_golden(root, manifest, golden_sha256)
+    return manifest, paths, digest
+
+
+def _validate_golden(root, manifest, configured_digest):
+    pack_id = manifest["pack_id"]
+    manifest_digest = manifest.get("golden_sha256")
+    if configured_digest is not None and manifest_digest is not None and configured_digest != manifest_digest:
+        raise GoldenError(f"{pack_id}: configured and manifest golden checksums differ")
+    digest = configured_digest or manifest_digest
+    path = SERVING_DIR / "golden" / f"{pack_id}.json"
+    if manifest_digest is not None and not path.is_file():
+        path = root / "golden" / f"{pack_id}.json"
+    if digest is None:
+        active = yaml.safe_load(DEFAULT_CONFIG.read_text())["active_pack"]
+        if active["pack_id"] == pack_id:
+            digest = active.get("golden_sha256")
+    if not path.is_file():
+        raise GoldenError(f"{pack_id}: missing golden file {path}")
+    data = path.read_bytes()
+    if not digest or hashlib.sha256(data).hexdigest() != digest:
+        raise GoldenError(f"{pack_id}: golden checksum mismatch")
+    golden = json.loads(data)
+    contract = serving_contract()
+    if golden.get("pack_id") != pack_id or any(
+        golden.get(key) != contract[key] for key in ("builder_id", "price_basis", "preprocessing")
+    ):
+        raise GoldenError(f"{pack_id}: golden identity or builder settings mismatch")
+    model_features = {name for horizon in manifest["horizons"].values() for name in horizon["feature_names"]}
+    check_coverage(golden, model_features)
+    compare(golden, model_features)
+    return digest
+
+
+def feature_cache_key(golden_sha256):
+    return canonical_hash({**serving_contract(), "golden_sha256": golden_sha256})
 
 
 def download(config_file):
@@ -73,7 +105,7 @@ def download(config_file):
     root = serving_root()
     destination = root / "packs" / pack_id
     if destination.exists():
-        load_pack(destination)
+        load_pack(destination, golden_sha256=config.get("golden_sha256"))
         return destination
     repository = os.environ.get("GITHUB_REPOSITORY")
     if not repository:
@@ -106,21 +138,22 @@ def download(config_file):
                    or Path(member.name).parts[0] != pack_id for member in members):
                 raise ValueError("Unsafe pack archive")
             tar.extractall(temporary, filter="data")
-        load_pack(Path(temporary) / pack_id)
+        load_pack(Path(temporary) / pack_id, golden_sha256=config.get("golden_sha256"))
         (Path(temporary) / pack_id).replace(destination)
-    load_pack(destination)
     return destination
 
 
-
 def validate_builder(manifest):
-    if manifest.get("feature_builder_id") != LOCAL_BUILDER_ID or manifest.get("processing_contract") != processing_contract():
-        raise ValueError("Pack/shared builder settings or implementation checksum mismatch")
+    contract = manifest.get("processing_contract", {})
+    if manifest.get("feature_builder_id") != LOCAL_BUILDER_ID or any(
+        contract.get(key) != expected for key, expected in serving_contract().items()
+    ):
+        raise ValueError("Pack/shared builder settings mismatch")
 
 
 def config_path():
     configured = os.environ.get("CHART_SERVING_CONFIG")
     if configured:
         return Path(configured)
-    local = Path(__file__).parents[1] / "config.local.yaml"
-    return local if local.is_file() else Path(__file__).parents[1] / "config.yaml"
+    local = SERVING_DIR / "config.local.yaml"
+    return local if local.is_file() else DEFAULT_CONFIG

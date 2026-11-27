@@ -4,6 +4,11 @@ import pytest
 from serving.internal import flows, pipeline
 from serving.internal.features import build_feature_frame
 from serving.internal.prices import attach_actual_vwap
+from shared.io import canonical_hash
+from shared.settings import serving_contract
+
+GOLDEN_SHA256 = "b" * 64
+PACK = {"processing_contract": {"sha256": "c" * 64}}
 
 
 def test_uniform_raw_ohlc_and_outside_range_vwap():
@@ -53,7 +58,7 @@ def test_daily_cache_and_query_failure_are_separate(monkeypatch, tmp_path):
     assert pd.isna(merged.Institution_BuyAmount.iloc[0])
 
 
-@pytest.mark.parametrize("archive_mode", ["full_raw", "paired_features", "missing_features"])
+@pytest.mark.parametrize("archive_mode", ["full_raw", "paired_features", "legacy_features", "missing_features"])
 def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
     dates = pd.bdate_range("2024-01-02", periods=75)
     raw = pd.DataFrame({"Date": dates, "Code": "005930", "Open": np.arange(75)+100.,
@@ -71,10 +76,16 @@ def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
             saved.attrs["input_sha256"] = "a" * 64
             return saved
         def load_features(self, code, day, builder, digest):
-            from shared.settings import processing_contract
-            assert builder == pipeline.BUILDER_ID + "_" + processing_contract()["sha256"][:16]
+            key = canonical_hash({**serving_contract(), "golden_sha256": GOLDEN_SHA256})
             assert digest == "a" * 64
-            return None if archive_mode == "missing_features" else build_feature_frame(raw, set(dates.date)).tail(1)
+            if builder == pipeline.BUILDER_ID + "_" + key[:16]:
+                if archive_mode != "paired_features":
+                    return None
+            else:
+                assert builder == pipeline.BUILDER_ID + "_" + PACK["processing_contract"]["sha256"][:16]
+                if archive_mode != "legacy_features":
+                    return None
+            return build_feature_frame(raw, set(dates.date)).tail(1)
         def upload_features(self, *args):
             pytest.fail("Replay wrote feature archive")
         def upload_feature_panel(self, *args):
@@ -83,9 +94,9 @@ def test_replay_uses_archive_without_network(monkeypatch, archive_mode):
     monkeypatch.setattr(pipeline, "collect_flows", lambda *args: pytest.fail("Replay fetched flows"))
     if archive_mode == "missing_features":
         with pytest.raises(ValueError, match="Archived compatible feature input absent"):
-            pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+            pipeline.collect(dates[-1].date().isoformat(), Store(), pack=PACK, golden_sha256=GOLDEN_SHA256, replay=True)
     else:
-        result = pipeline.collect(dates[-1].date().isoformat(), Store(), replay=True)
+        result = pipeline.collect(dates[-1].date().isoformat(), Store(), pack=PACK, golden_sha256=GOLDEN_SHA256, replay=True)
         assert list(result[1]) == ["005930"]
 
 
@@ -128,7 +139,7 @@ def test_live_collect_joins_recent_flows_and_archives_history(monkeypatch, provi
         requests.append(start)
         return raw.copy()
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
-    result = pipeline.collect(dates[-1].date().isoformat(), Store())
+    result = pipeline.collect(dates[-1].date().isoformat(), Store(), pack=PACK, golden_sha256=GOLDEN_SHA256)
     assert result[2] == ({"000660": "price_source_unavailable"} if provider_failure else {})
     assert requests == [dates[0].date().isoformat() if recently_listed else "2016-01-01"]
     assert result[1]["005930"][1]["flow_foreign_20"] == pytest.approx(.1)
@@ -271,7 +282,7 @@ def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, ch
         return fresh.copy()
     monkeypatch.setattr(pipeline, "_retry_fetch", fetch)
     as_of = dates[-1].date().isoformat()
-    result = pipeline.collect(as_of, Store())
+    result = pipeline.collect(as_of, Store(), pack=PACK, golden_sha256=GOLDEN_SHA256)
     assert requests == [(start.date().isoformat(), as_of)]
     expected = pd.concat([stored, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
     actual = saved[0].drop(columns="Code")
@@ -283,7 +294,7 @@ def test_source_revision_merges_recent_rows_without_full_refetch(monkeypatch, ch
     assert saved[0].attrs[pipeline.VERIFIED_PRICE_FROM] == (
         fresh.Date.min().date().isoformat() if changed_column == "Close" else dates[0].date().isoformat()
     )
-    rerun = pipeline.collect(as_of, Store())
+    rerun = pipeline.collect(as_of, Store(), pack=PACK, golden_sha256=GOLDEN_SHA256)
     assert rerun[1]["005930"][0] == result[1]["005930"][0]
     assert rerun[3] == result[3]
 
@@ -322,7 +333,7 @@ def test_legacy_adjustment_prefix_stays_out_of_basis_across_daily_runs(monkeypat
     events = []
     for day in dates[-2:]:
         as_of = day.date().isoformat()
-        result = pipeline.collect(as_of, Store())
+        result = pipeline.collect(as_of, Store(), pack=PACK, golden_sha256=GOLDEN_SHA256)
         assert not result[2]
         events.append(result[1]["005930"][0]["event_basis"])
 

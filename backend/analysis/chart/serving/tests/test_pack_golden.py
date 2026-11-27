@@ -2,10 +2,13 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 from shared.golden import GoldenError, check_coverage, compare
+from shared.io import sha256_file
 
-PACK_ID = "kospi_shared_v3_flow_train2023_2025_20261014"
-GOLDEN_PATH = Path(__file__).parents[1] / "golden" / f"{PACK_ID}.json"
+SERVING = Path(__file__).parents[1]
+ACTIVE_PACK = yaml.safe_load((SERVING / "config.yaml").read_text())["active_pack"]
+GOLDEN_PATH = SERVING / "golden" / f'{ACTIVE_PACK["pack_id"]}.json'
 
 
 @pytest.fixture
@@ -45,3 +48,15 @@ def test_coverage_requires_corporate_event(golden):
     golden["cases"] = [case for case in golden["cases"] if case["kind"] != "corporate_event"]
     with pytest.raises(GoldenError, match="corporate_event"):
         check_coverage(golden, golden["feature_names"])
+
+
+def test_active_pack_reproduces_expected_features(golden):
+    compare(golden, golden["feature_names"])
+
+
+def test_active_pack_expected_features_have_coverage(golden):
+    check_coverage(golden, golden["feature_names"])
+
+
+def test_active_pack_golden_checksum():
+    assert sha256_file(GOLDEN_PATH) == ACTIVE_PACK["golden_sha256"]
