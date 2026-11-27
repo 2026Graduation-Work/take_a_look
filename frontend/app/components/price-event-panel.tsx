@@ -46,21 +46,21 @@ function SourceDetails<T>({ name, source, retry, children }: {
   );
 }
 
-function DisclosureItems({ items }: {
-  items: Extract<NonNullable<PriceEvents["context"]>["disclosures"], { status: "available" }>["items"];
-}) {
+type EventItem = { id: string; title: string; url: string | null; date: string; detail: string };
+
+function EventItems({ items }: { items: EventItem[] }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <>
       <ul className="m-0 list-none p-0">
         {(expanded ? items : items.slice(0, 3)).map(item => (
-          <li key={item.rceptNo} className="flex flex-col gap-1 py-2">
+          <li key={item.id} className="flex flex-col gap-1 py-2">
             {item.url
               ? <a href={item.url} target="_blank" rel="noopener noreferrer" className="min-h-11 content-center text-sm text-ink underline underline-offset-4 [overflow-wrap:anywhere]">{item.title}</a>
               : <span className="text-sm text-ink [overflow-wrap:anywhere]">{item.title}</span>}
             <p className="m-0 flex flex-wrap gap-x-3 text-xs text-muted">
-              <time dateTime={item.filedOn}>{formatKstDateTime(item.filedOn)}</time>
-              <span>{DISCLOSURE_KIND[item.kind]?.label ?? DISCLOSURE_KIND.other.label}</span>
+              <time dateTime={item.date}>{formatKstDateTime(item.date)}</time>
+              {item.detail && <span>{item.detail}</span>}
             </p>
           </li>
         ))}
@@ -92,18 +92,25 @@ export default function PriceEventPanel({ events }: { events: PriceEvents }) {
         <p className="m-0 text-xs tabular-nums text-muted">{formatKstDateTime(context.disclosureWindow.from)} ~ {formatKstDateTime(context.disclosureWindow.through)}</p>
         {context.disclosureWindow.endReason === "snapshot_boundary" && <p className="m-0 text-xs text-muted">차트 기준일까지 나온 자료만 확인했어요.</p>}
         <SourceDetails name="disclosures" source={context.disclosures} retry={() => retry("disclosures", move.date)}>
-          {items => <DisclosureItems key={move.date} items={items} />}
+          {items => <EventItems key={move.date} items={items.map(item => ({
+            id: item.rceptNo, title: item.title, url: item.url, date: item.filedOn,
+            detail: DISCLOSURE_KIND[item.kind]?.label ?? DISCLOSURE_KIND.other.label,
+          }))} />}
         </SourceDetails>
       </section>
-      <section aria-label="이날 뉴스" className="flex flex-wrap items-baseline gap-x-2">
-        <h4 className="m-0 text-xs font-medium">이날 뉴스</h4>
-        <SourceDetails name="news" source={context.news}>{() => null}</SourceDetails>
+      <section aria-label="이날 뉴스" className="flex min-w-0 flex-col gap-1">
+        <h4 className="m-0 text-sm font-semibold">이날 뉴스</h4>
+        <SourceDetails name="news" source={context.news} retry={() => retry("news", move.date)}>
+          {items => <EventItems key={move.date} items={items.map(item => ({
+            id: item.id, title: item.title, url: item.url, date: item.publishedAt ?? item.date, detail: item.press || "언론사 미상",
+          }))} />}
+        </SourceDetails>
       </section>
       <div className="flex flex-col gap-1 text-xs text-muted">
         <p className="m-0">가격이 움직인 이유는 이 자료만으로 알 수 없어요.</p>
         {basis && <p className="m-0">수정종가 등락 폭이 평소 하루 변동 폭({(basis.dailySigma * 100).toFixed(2)}%)의 {PRICE_EVENT_MULTIPLIER}배를 넘은 날 중 등락 폭이 큰 최대 3일을 표시해요.</p>}
         {coverageNote && <p className="m-0">{coverageNote}</p>}
-        <p className="m-0">코스피 KRX, 공시 DART</p>
+        <p className="m-0">코스피 KRX, 공시 DART{context.news.status === "available" && ", 뉴스 NewsAPI.ai"}</p>
       </div>
     </div>
   );

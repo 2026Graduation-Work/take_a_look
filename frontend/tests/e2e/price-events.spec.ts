@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import type { DatedClose } from "../../lib/price-events";
-import { eventChartRows, eventDates, priceEventsFixture } from "./price-events-fixture.mjs";
+import { eventChartRows, eventDates, eventNews, eventNewsSelect, isEventNewsQuery, priceEventsFixture } from "./price-events-fixture.mjs";
 
 const firstStock = "005930";
 const secondStock = "005380";
@@ -11,6 +11,7 @@ const formatted = (date: string) => date.replaceAll("-", ".");
 const panel = (page: Page) => page.getByRole("dialog", { name: "가격이 크게 움직인 날" });
 const eventStatus = (page: Page) => page.getByRole("status", { name: "변동일 조회 상태" });
 const disclosures = (page: Page) => panel(page).getByRole("region", { name: "앞뒤 거래일에 나온 공시" });
+const news = (page: Page) => panel(page).getByRole("region", { name: "이날 뉴스" });
 const kospi = (page: Page) => panel(page).getByRole("region", { name: "같은 날 코스피" });
 const selected = (page: Page) => panel(page).locator("p[aria-live=polite]");
 const marker = (page: Page, date: string) => page.getByRole("button", { name: new RegExp(`^차트에서 ${formatted(date)}`) });
@@ -28,6 +29,7 @@ type FixtureQuery = (route: Route, url: URL, fixture: unknown) => Promise<void> 
 const isMarket = (url: URL) => url.pathname.endsWith("/market_status");
 const isDisclosure = (url: URL) => url.pathname.endsWith("/disclosures");
 const isChart = (url: URL) => url.pathname.endsWith("/latest_chart_signal_snapshots");
+const isNewsOn = (url: URL, date: string) => isEventNewsQuery(url) && url.searchParams.get("article_date") === `eq.${date}`;
 async function mockContext(page: Page, handle?: FixtureQuery) {
   const calls: URL[] = [];
   await page.route("**/rest/v1/**", async route => {
@@ -42,6 +44,7 @@ async function mockContext(page: Page, handle?: FixtureQuery) {
       market: calls.filter(isMarket).length,
       disclosures: calls.filter(isDisclosure).length,
     }),
+    newsCalls: () => calls.filter(isEventNewsQuery),
   };
 }
 const isLatestDisclosure = (url: URL) => isDisclosure(url) &&
@@ -57,15 +60,17 @@ async function capturePanel(page: Page, name: string) {
   await page.screenshot({ path: join(directory, `${name}-${page.viewportSize()?.width}.png`) });
 }
 
-async function ignoreDisclosureAbort(page: Page) {
-  await page.addInitScript(() => {
+async function ignoreEventSourceAbort(page: Page) {
+  await page.addInitScript(newsSelect => {
     const original = window.fetch;
     window.fetch = (input, options) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
-      return url.pathname.endsWith("/disclosures") && url.searchParams.has("filed_on")
+      const disclosure = url.pathname.endsWith("/disclosures") && url.searchParams.has("filed_on");
+      const article = url.pathname.endsWith("/news_articles") && url.searchParams.get("select") === newsSelect;
+      return disclosure || article
         ? original(input, { ...options, signal: undefined }) : original(input, options);
     };
-  });
+  }, eventNewsSelect);
 }
 
 test.use({ hasTouch: true });
@@ -84,6 +89,7 @@ test("hover opens the date popup and the pointer can cross into its links", asyn
   await expect(selected(page)).toContainText(formatted(latest));
   const firstLink = disclosures(page).getByRole("link").first();
   await expect(firstLink).toHaveAttribute("href", /^https:\/\/dart\.fss\.or\.kr\//);
+  await expect(news(page)).toContainText("삼성전자 가상 뉴스 1");
   await capturePanel(page, "hover-popup");
   const box = await firstLink.boundingBox();
   assert.ok(box);
@@ -98,6 +104,7 @@ test("hover opens the date popup and the pointer can cross into its links", asyn
 });
 
 test("keyboard and touch open chart markers without additional reads", async ({ page }) => {
+  const newsEnabled = (process.env.NEXT_PUBLIC_PRICE_EVENT_NEWS_ENABLED ?? "1") === "1";
   const db = await mockContext(page);
   await page.goto(`/stocks/${firstStock}`);
   await expect.poll(db.counts).toEqual({ market: 1, disclosures: 3 });
@@ -107,11 +114,25 @@ test("keyboard and touch open chart markers without additional reads", async ({ 
   await expect(disclosures(page)).toContainText("실적");
   await expect(disclosures(page)).toContainText("차트 기준일까지 나온 자료만 확인했어요.");
   await expect(kospi(page)).toContainText("코스피 0.00%");
-  await expect(panel(page).getByRole("region", { name: "이날 뉴스" })).toContainText("이 자료는 지금 제공하지 않아요.");
+  if (newsEnabled) {
+    await expect(news(page)).toContainText("삼성전자 가상 뉴스 1");
+    await expect.poll(() => db.newsCalls().length).toBe(3);
+    expect(db.newsCalls().map(url => url.searchParams.get("article_date")).sort()).toEqual(eventDates.map(date => `eq.${date}`).sort());
+    for (const url of db.newsCalls()) {
+      expect(url.searchParams.get("stock_code")).toBe(`eq.${firstStock}`);
+      expect(url.searchParams.get("track")).toBe("eq.live");
+      expect(url.searchParams.get("order")).toBe("published_at.desc.nullslast,news_id.asc");
+      expect(url.searchParams.get("limit")).toBe("50");
+    }
+  } else {
+    await expect(news(page)).toContainText("이 자료는 지금 제공하지 않아요.");
+    await expect(retry(news(page))).toHaveCount(0);
+  }
   await openEvent(page, oldest);
   await expect(marker(page, oldest)).toHaveAttribute("aria-expanded", "true");
   await expect(selected(page)).toContainText(formatted(oldest));
   await expect(kospi(page)).toContainText("+0.75%");
+  if (newsEnabled) await expect(news(page)).toContainText(`${formatted(oldest)} 14:00`);
   await marker(page, middle).press("Space");
   await expect(marker(page, middle)).toHaveAttribute("aria-expanded", "true");
   await expect(selected(page)).toContainText(formatted(middle));
@@ -128,6 +149,7 @@ test("keyboard and touch open chart markers without additional reads", async ({ 
     await page.setViewportSize({ width, height: 844 });
     await marker(page, latest).tap();
     await expect(selected(page)).toContainText(formatted(latest));
+    if (newsEnabled) await expect(news(page)).toContainText("삼성전자 가상 뉴스 1");
     const box = await panel(page).boundingBox();
     assert.ok(box);
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -139,6 +161,7 @@ test("keyboard and touch open chart markers without additional reads", async ({ 
     await expect(panel(page)).toHaveCount(0);
   }
   expect(db.counts()).toEqual({ market: 1, disclosures: 3 });
+  expect(db.newsCalls()).toHaveLength(newsEnabled ? 3 : 0);
 });
 
 test("Escape keeps the hovered date closed until the pointer leaves", async ({ page }) => {
@@ -196,9 +219,112 @@ test("source failures, empty coverage and one invalid KOSPI day stay local", asy
   await expect(disclosures(page)).toContainText("수집 범위를 확인하지 못했어요.");
 });
 
+test("news distinguishes rate limit, malformed response, access denial and a successful empty day", async ({ page }) => {
+  let latestAttempt = 0;
+  let middleAttempt = 0;
+  const db = await mockContext(page, (route, url) => {
+    if (isNewsOn(url, latest) && ++latestAttempt === 1) return route.fulfill({ status: 429, json: { message: "fixture rate detail" } });
+    if (isNewsOn(url, middle)) return route.fulfill({ json: ++middleAttempt === 1 ? { invalid: true } : [] });
+    if (isNewsOn(url, oldest)) return route.fulfill({ status: 403, json: { message: "fixture access detail" } });
+  });
+  await page.goto(`/stocks/${firstStock}`);
+  await openEvent(page);
+  const source = news(page);
+  await expect(source).toContainText("조회 요청이 제한돼 지금은 자료를 확인할 수 없어요.");
+  await expect(disclosures(page)).toContainText("삼성전자 가상 공시 1");
+  await expect(kospi(page)).toContainText("코스피 0.00%");
+  await expect.poll(() => db.newsCalls().length).toBe(3);
+  await retry(source).click();
+  const first = source.getByRole("link", { name: "삼성전자 가상 뉴스 1" });
+  await expect(first).toHaveAttribute("href", `https://example.test/news/${firstStock}/${latest}/1`);
+  await expect(first).toHaveAttribute("rel", "noopener noreferrer");
+  await first.scrollIntoViewIfNeeded();
+  const popupBox = await panel(page).boundingBox();
+  const newsBox = await first.boundingBox();
+  assert.ok(popupBox && newsBox);
+  expect(newsBox.y).toBeGreaterThanOrEqual(popupBox.y);
+  expect(newsBox.y + newsBox.height).toBeLessThanOrEqual(popupBox.y + popupBox.height);
+  await capturePanel(page, "news-popup");
+  await expect(first.locator("..")).toContainText("가상 언론사");
+  await expect(first.locator("..").locator("time")).toHaveText(`${formatted(latest)} 14:00`);
+  await expect(source.getByText("삼성전자 가상 뉴스 3")).toBeVisible();
+  await expect(source.getByRole("link", { name: "삼성전자 가상 뉴스 3" })).toHaveCount(0);
+  await expect(source.getByRole("listitem")).toHaveCount(3);
+  await source.getByRole("button", { name: "더 보기(1)" }).click();
+  await expect(source.getByRole("listitem")).toHaveCount(4);
+  await expect(source.getByRole("link", { name: "삼성전자 가상 뉴스 4" }).locator("..").locator("time")).toHaveText(formatted(latest));
+  expect(db.newsCalls()).toHaveLength(4);
+  expect(db.counts()).toEqual({ market: 1, disclosures: 3 });
+
+  await openEvent(page, middle);
+  await expect(source).toContainText("받은 자료의 형식이 맞지 않아 표시할 수 없어요.");
+  await retry(source).click();
+  await expect(source).toContainText("조회된 뉴스가 없어요.");
+  await expect(source).toContainText("저장된 뉴스만 조회해요.");
+  await expect(retry(source)).toHaveCount(0);
+  await expect(source.getByRole("listitem")).toHaveCount(0);
+
+  await openEvent(page, oldest);
+  await expect(source).toContainText("이 자료에 접근할 수 없어요.");
+  await expect(retry(source)).toHaveCount(0);
+  expect(db.newsCalls()).toHaveLength(5);
+  expect(db.counts()).toEqual({ market: 1, disclosures: 3 });
+});
+
+test("a timed-out news refresh keeps the last result and ignores its late response after retry", async ({ page }) => {
+  await page.clock.install();
+  await ignoreEventSourceAbort(page);
+  const waiting = deferred();
+  const release = deferred();
+  let attempt = 0;
+  const db = await mockContext(page, async (route, url, fixture) => {
+    if (isNewsOn(url, latest)) {
+      const [article] = eventNews(firstStock, latest);
+      attempt += 1;
+      if (attempt === 2) {
+        waiting.resolve();
+        await release.promise;
+        return route.fulfill({ json: [{ ...article, title: "늦게 도착한 가상 뉴스" }] });
+      }
+      if (attempt === 3) return route.fulfill({ json: [{ ...article, title: "새로 확인한 가상 뉴스" }] });
+    }
+    return route.fulfill({ json: fixture });
+  });
+  await page.goto(`/stocks/${firstStock}`);
+  await openEvent(page);
+  const source = news(page);
+  await expect(source).toContainText("삼성전자 가상 뉴스 1");
+  await focusRefresh(page);
+  await waiting.promise;
+  await expect(source).toContainText("새로 확인하는 중이에요.");
+  await expect(source).toContainText("삼성전자 가상 뉴스 1");
+  const status = source.getByRole("status", { name: "뉴스 조회 상태" });
+  const checked = status.locator("time");
+  const firstTime = await checked.getAttribute("datetime");
+  assert.ok(firstTime);
+  await page.clock.fastForward(10_001);
+  await expect(status).toContainText("새로 확인하는 데 시간이 오래 걸려 중단했어요. 이전 조회 자료를 표시해요.");
+  await expect(checked).toHaveAttribute("datetime", firstTime);
+  await expect(source).toContainText("삼성전자 가상 뉴스 1");
+  await expect(disclosures(page)).toContainText("삼성전자 가상 공시 1");
+  await expect(kospi(page)).toContainText("코스피 0.00%");
+  await expect.poll(db.counts).toEqual({ market: 2, disclosures: 6 });
+  await expect.poll(() => db.newsCalls().length).toBe(6);
+  await retry(source).press("Enter");
+  await expect(status).toBeFocused();
+  await expect(source).toContainText("새로 확인한 가상 뉴스");
+  await expect(checked).toHaveCount(0);
+  const lateResponse = page.waitForResponse(response => isNewsOn(new URL(response.url()), latest));
+  release.resolve();
+  await (await lateResponse).finished();
+  await expect(source).not.toContainText("늦게 도착한 가상 뉴스");
+  expect(db.newsCalls()).toHaveLength(7);
+  expect(db.counts()).toEqual({ market: 2, disclosures: 6 });
+});
+
 test("same-key retry retains previous success and rejects an older late response", async ({ page }) => {
   await page.clock.install();
-  await ignoreDisclosureAbort(page);
+  await ignoreEventSourceAbort(page);
   let attempt = 0;
   const waiting = deferred();
   const release = deferred();
@@ -232,32 +358,40 @@ test("same-key retry retains previous success and rejects an older late response
   await expect(disclosures(page)).not.toContainText("늦게 끝난 이전 자료");
 });
 
-test("switching stocks discards delayed disclosure results from the previous stock", async ({ page }) => {
-  await ignoreDisclosureAbort(page);
-  const waiting = deferred();
+test("switching stocks discards delayed disclosure and news results from the previous stock", async ({ page }) => {
+  await ignoreEventSourceAbort(page);
+  const pendingDisclosure = deferred();
+  const pendingNews = deferred();
   const release = deferred();
   await mockContext(page, (route, url, fixture) => {
-    if (!isLatestDisclosure(url) || url.searchParams.get("stock_code") !== `eq.${firstStock}`) return;
-    waiting.resolve();
+    if (url.searchParams.get("stock_code") !== `eq.${firstStock}`) return;
+    if (isLatestDisclosure(url)) pendingDisclosure.resolve();
+    else if (isNewsOn(url, latest)) pendingNews.resolve();
+    else return;
     return release.promise.then(() => route.fulfill({ json: fixture }));
   });
   await page.goto(`/stocks/${firstStock}`);
-  await waiting.promise;
+  await Promise.all([pendingDisclosure.promise, pendingNews.promise]);
   await openEvent(page);
   await expect(disclosures(page)).toContainText("자료를 불러오는 중이에요.");
+  await expect(news(page)).toContainText("자료를 불러오는 중이에요.");
   await page.getByRole("searchbox", { name: "종목 검색" }).fill(secondStock);
   await page.getByRole("link", { name: /현대차 005380/ }).click();
   await expect(page).toHaveURL(`/stocks/${secondStock}`);
   await openEvent(page);
   await expect(disclosures(page)).toContainText("현대차 가상 공시 1");
-  const oldResponse = page.waitForResponse(response => {
-    const url = new URL(response.url());
-    return isLatestDisclosure(url) && url.searchParams.get("stock_code") === `eq.${firstStock}`;
-  });
+  await expect(news(page)).toContainText("현대차 가상 뉴스 1");
+  const oldResponses = [isLatestDisclosure, (url: URL) => isNewsOn(url, latest)].map(matches =>
+    page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return matches(url) && url.searchParams.get("stock_code") === `eq.${firstStock}`;
+    }));
   release.resolve();
-  await (await oldResponse).finished();
+  await Promise.all(oldResponses.map(async response => (await response).finished()));
   await expect(disclosures(page)).toContainText("현대차 가상 공시 1");
   await expect(disclosures(page)).not.toContainText("삼성전자 가상 공시");
+  await expect(news(page)).toContainText("현대차 가상 뉴스 1");
+  await expect(news(page)).not.toContainText("삼성전자 가상 뉴스");
 });
 
 test("legacy snapshots still display chart and skip event source reads", async ({ page }) => {
@@ -620,22 +754,27 @@ test("failed refresh of an earlier empty read keeps its time and a recovery can 
   expect(db.counts()).toEqual({ market: 2, disclosures: 7 });
 });
 
-test("a new batch aborts the previous request and ignores its late payload", async ({ page }) => {
-  await page.addInitScript(({ code, date }) => {
+test("a new batch aborts previous disclosure and news reads and ignores their late payloads", async ({ page }) => {
+  await page.addInitScript(({ code, date, newsSelect }) => {
     const fetch = window.fetch;
     window.fetch = (input, options) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.href);
-      if (!url.pathname.endsWith("/disclosures") || url.searchParams.get("stock_code") !== `eq.${code}` ||
-          !url.searchParams.getAll("filed_on").includes(`lte.${date}`)) return fetch(input, options);
+      if (url.searchParams.get("stock_code") !== `eq.${code}`) return fetch(input, options);
+      const disclosure = url.pathname.endsWith("/disclosures") && url.searchParams.getAll("filed_on").includes(`lte.${date}`);
+      const news = url.pathname.endsWith("/news_articles") && url.searchParams.get("select") === newsSelect &&
+        url.searchParams.get("article_date") === `eq.${date}`;
+      if (!disclosure && !news) return fetch(input, options);
       options?.signal?.addEventListener("abort", () => {
-        document.documentElement.dataset.fixtureAborted = "true";
+        document.documentElement.dataset[news ? "fixtureNewsAborted" : "fixtureAborted"] = "true";
       }, { once: true });
       return fetch(input, { ...options, signal: undefined });
     };
-  }, { code: firstStock, date: latest });
+  }, { code: firstStock, date: latest, newsSelect: eventNewsSelect });
   let newBatch = false;
   let attempt = 0;
+  let newsAttempt = 0;
   const waiting = deferred();
+  const waitingNews = deferred();
   const release = deferred();
   await mockContext(page, async (route, url, fixture) => {
     if (isChart(url) && newBatch) {
@@ -652,22 +791,39 @@ test("a new batch aborts the previous request and ignores its late payload", asy
         return route.fulfill({ json: [row(firstStock, latest, "늦게 도착한 이전 배치 가상 공시")] });
       }
     }
+    if (isNewsOn(url, latest)) {
+      const [article] = eventNews(firstStock, latest);
+      newsAttempt += 1;
+      if (newBatch) return route.fulfill({ json: [{ ...article, title: "새 배치 가상 뉴스" }] });
+      if (newsAttempt === 2) {
+        waitingNews.resolve();
+        await release.promise;
+        return route.fulfill({ json: [{ ...article, title: "늦게 도착한 이전 배치 가상 뉴스" }] });
+      }
+    }
     return route.fulfill({ json: fixture });
   });
   await page.goto(`/stocks/${firstStock}`);
   await openEvent(page);
   await expect(disclosures(page)).toContainText("삼성전자 가상 공시 1");
+  await expect(news(page)).toContainText("삼성전자 가상 뉴스 1");
   await focusRefresh(page);
-  await waiting.promise;
+  await Promise.all([waiting.promise, waitingNews.promise]);
   await expect(disclosures(page)).toContainText("새로 확인하는 중이에요.");
   newBatch = true;
   await focusRefresh(page);
   await expect(page.locator("html")).toHaveAttribute("data-fixture-aborted", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-fixture-news-aborted", "true");
   await expect(disclosures(page)).toContainText("새 배치 가상 공시");
-  const deliveredLate = page.waitForResponse(response => isLatestDisclosure(new URL(response.url())));
+  await expect(news(page)).toContainText("새 배치 가상 뉴스");
+  const deliveredLate = [isLatestDisclosure, (url: URL) => isNewsOn(url, latest)].map(matches =>
+    page.waitForResponse(response => matches(new URL(response.url()))));
   release.resolve();
-  await (await deliveredLate).finished();
+  await Promise.all(deliveredLate.map(async response => (await response).finished()));
   await expect(disclosures(page)).toContainText("새 배치 가상 공시");
   await expect(disclosures(page)).not.toContainText("이전 배치 가상 공시");
   await expect(retry(disclosures(page))).toHaveCount(0);
+  await expect(news(page)).toContainText("새 배치 가상 뉴스");
+  await expect(news(page)).not.toContainText("이전 배치 가상 뉴스");
+  await expect(retry(news(page))).toHaveCount(0);
 });

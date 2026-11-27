@@ -37,6 +37,7 @@ export default defineConfig({
         NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "e2e-anon-key",
         NEXT_PUBLIC_CHART_LOCAL_PREVIEW: "0",
+        NEXT_PUBLIC_PRICE_EVENT_NEWS_ENABLED: process.env.NEXT_PUBLIC_PRICE_EVENT_NEWS_ENABLED ?? "1",
       },
     },
   ],

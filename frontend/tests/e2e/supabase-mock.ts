@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 
-export const SUPABASE_URL = "http://127.0.0.1:54321";
+export const SUPABASE_URL = process.env.PLAYWRIGHT_SUPABASE_URL ?? "http://127.0.0.1:54321";
 
 interface MockUser {
   id: string;
