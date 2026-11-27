@@ -1,7 +1,7 @@
-# 안내·투자 팁 전후 화면
+# 안내·알고 계셨나요? 전후 화면
 
 - 변경 전: `86ed26e39f8f70743dfa6219b9581d2223d83e61` (`main`)
-- 변경 후: `ba48950a0930b43ae713e16f8f7bc15a7d6e8769` (`feat/tips-reading-pages`)
+- 변경 후: `50601b4866aa29acd0771b8b62f3aaad52b97af5` (`feat/tips-reading-pages`)
 - 촬영일: 2026-11-27 (Asia/Seoul)
 - 크기: 데스크톱 1280×950, 모바일 390×844. Light 모드, Chrome. 변경 전은 기본 모션 설정에 캡처 애니메이션 비활성화, 변경 후는 동작 줄이기 설정.
 - 모든 이미지는 실제 로컬 Next.js 프로덕션 화면의 원본 PNG 캡처다.
@@ -29,6 +29,7 @@
 - `pnpm build`: 통과.
 - `CI=1 PATH=/Users/cracker/Library/pnpm/.tools/pnpm/10.33.0/bin:$PATH node node_modules/@playwright/test/cli.js test --config=playwright.local.config.ts tests/e2e/tips.spec.ts tests/e2e/guide.spec.ts tests/e2e/market-tip-strip.spec.ts tests/e2e/tap-targets.spec.ts`: 27개 통과.
 - 임시 Playwright 설정은 저장소 설정을 가져와 Chrome 채널, video off, 기존 mock 서버 재사용을 적용했다. 실행 후 제거했다.
+- 명칭 변경 후 `CI=1 PATH=/Users/cracker/Library/pnpm/.tools/pnpm/10.33.0/bin:$PATH node node_modules/@playwright/test/cli.js test --config=playwright.local.config.ts tests/e2e/tips.spec.ts tests/e2e/guide.spec.ts tests/e2e/tap-targets.spec.ts`: 18개 통과.
 - `git diff --check`: 통과.
 - 원래 작업 복원 범위는 화면 주소·선택 탭·기존 저장 설정이다. 팁 목록의 카드 위치·초점도 복원한다.
 
