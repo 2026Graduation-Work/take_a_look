@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 import tempfile
 from pathlib import Path
@@ -13,12 +14,19 @@ from experiments.config import (
     identity,
     load_dataset_config,
 )
+from shared.data.actions import (
+    PRICE_POLICY,
+    SNAPSHOT_VERSION,
+    read_snapshot,
+    require_price_provenance,
+)
 from shared.data.calendar import (  # noqa: F401
     build_calendar,
     fetch_authenticated_index,
     scheduled_sessions,
     verify_calendar_schedule,
 )
+from shared.data.disclosures import put_immutable
 from shared.data.events import EVENT_COLUMNS
 from shared.data.metadata import fetch_active_listing_intervals, load_metadata  # noqa: F401
 from shared.data.training_prices import (
@@ -28,6 +36,7 @@ from shared.data.training_prices import (
     fetch_raw_window,
     load_training_raw,
     preserve_training_raw,
+    resolve_krx_isin,
 )
 from shared.data.validation import (  # noqa: F401
     expected_sessions,
@@ -40,15 +49,16 @@ from shared.io import sha256
 from shared.processing import build_feature_frame, processing_contract
 from shared.settings import TRAINING_PRICE_BASIS, VALIDATION_VERSION
 
-_TRAINING_PRICE_POLICY = "immutable_krx_raw_preserve_market_moves"
 
-
-def flow_coverage(root, investors, columns, market_days):
+def flow_coverage(root, investors, columns, market_days, *, price_files):
     """Missing ranking rows are unknown observations, never inferred zero trades."""
     from shared.features.flow import build_flow_features
 
     coverage = []
-    for path in sorted((root / "raw").glob("*.parquet")):
+    for name in sorted(price_files):
+        path = root / "raw" / name
+        if sha256(path) != price_files[name]:
+            raise ValueError(f"Flow coverage price input changed: {name}")
         frame = pd.read_parquet(path)
         features = build_flow_features(frame, market_days)
         for investor in investors:
@@ -81,6 +91,8 @@ def verify_cached_flows(config_path):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
     calendar = json.loads((root / "calendar.json").read_text())
+    manifest = json.loads((root / "dataset_manifest.json").read_text())
+    _require_current_training_prices(manifest, root)
     failures, verified = [], 0
     for day in pd.to_datetime(calendar["trading_days"]):
         cache = root / "investor_flow_cache" / f"{day:%Y-%m-%d}.parquet"
@@ -94,7 +106,8 @@ def verify_cached_flows(config_path):
             failures.append({"date": str(day.date()), "reason": str(exc)})
         if (verified + len(failures)) % 250 == 0:
             print(f"Flow caches checked: {verified + len(failures)}/{len(calendar['trading_days'])}", flush=True)
-    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"])
+    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"],
+                             price_files=manifest["raw_files"])
     summary = {}
     for investor in source._INVESTORS:
         rows = [row for row in coverage if row["investor"] == investor]
@@ -126,23 +139,54 @@ def verify_cached_flows(config_path):
     return report
 
 
-def collect_dataset(config_path, *, mode="full", rebuild=False):
+def collect_dataset(config_path, *, mode="full", rebuild=False, action_snapshot=None):
+    config = load_dataset_config(config_path)
+    root = Path(config["root"])
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "collection.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("A price collector already owns this dataset root") from None
+        return _collect_dataset(config, mode, rebuild, action_snapshot)
+
+
+def _collect_dataset(config, mode, rebuild, action_snapshot):
     from shared.data import providers as source
 
-    config = load_dataset_config(config_path)
     contract = processing_contract(config["preprocessing"])
     root = Path(config["root"])
     if rebuild and mode != "full":
         raise ValueError("--rebuild requires full")
-    if rebuild and root.exists() and any(root.iterdir()):
+    if rebuild and root.exists() and any(path.name != "collection.lock" for path in root.iterdir()):
         raise FileExistsError("--rebuild requires a new dataset root; preserve existing data")
-    root.mkdir(parents=True, exist_ok=True)
-    append_collection_event(root, {"state": "started", "stage": "collection", "mode": mode})
     manifest_path = root / "dataset_manifest.json"
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+    pin_file = root / "collection_action_pin.json"
     collection_identity = identity(config["collection"])
-    if manifest and manifest["collection_identity"] != collection_identity:
-        raise ValueError("Collection settings changed; use a new dataset root")
+    if manifest or pin_file.exists():
+        pin = manifest if manifest else json.loads(pin_file.read_text())
+        if pin["collection_identity"] != collection_identity:
+            raise ValueError("Collection settings changed; use a new dataset root")
+        action_provenance = _require_current_training_prices(pin, root)
+        pinned = root / "official_actions" / f"{action_provenance['sha256']}.json"
+        if action_snapshot is not None and sha256(action_snapshot) != action_provenance["sha256"]:
+            raise ValueError("Official action snapshot changed; use a new dataset root")
+    else:
+        if action_snapshot is None:
+            raise ValueError("An official action snapshot is required for a new dataset")
+        action_snapshot = Path(action_snapshot)
+        digest = sha256(action_snapshot)
+        if action_snapshot.name != f"{digest}.json":
+            raise ValueError("Expected a hash-addressed official action snapshot")
+        read_snapshot(action_snapshot, verify_archive=True)
+        pinned = root / "official_actions" / action_snapshot.name
+        put_immutable(pinned, action_snapshot.read_bytes())
+        action_provenance = {"sha256": digest, "version": SNAPSHOT_VERSION}
+        atomic_json(pin_file, {"price_basis": TRAINING_PRICE_BASIS, "price_policy": PRICE_POLICY,
+                               "official_actions": action_provenance, "collection_identity": collection_identity})
+    snapshot = read_snapshot(pinned)
+    append_collection_event(root, {"state": "started", "stage": "collection", "mode": mode})
     # End date is immutable inside a build, including resumed and update executions.
     calendar_path = root / "calendar.json"
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "calendar"})
@@ -199,7 +243,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         if expected.empty:
             continue
         try:
-            previous = pd.read_parquet(path) if path.exists() else None
+            previous = pd.read_parquet(path) if (manifest and path.name in manifest["raw_files"] and path.exists()) else None
             saved = load_training_raw(original_path, expected, krx_raw_files.get(path.name))
             windows = []
             for row in intervals.itertuples():
@@ -230,7 +274,17 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
             price_parts, event_parts = [], []
             for row, days in windows:
                 raw = saved.loc[saved.Date.isin(days)].reset_index(drop=True)
-                prices, events = adjust_training_window(code, raw, days, as_of)
+                isin = getattr(row, "Isin", None)
+                if pd.isna(isin):
+                    with source._krx_request_timeout():
+                        isin = resolve_krx_isin(code, is_delisted=row.IsDelisted)
+                share_class = getattr(row, "ShareClass", None)
+                prices, events = adjust_training_window(
+                    code, raw, days, as_of, snapshot, listing=row.ListingDate.date(),
+                    delisting=None if pd.isna(row.DelistingDate) else row.DelistingDate.date(),
+                    isin=isin, market=row.Market,
+                    share_class=None if pd.isna(share_class) else share_class,
+                )
                 price_parts.append(prices.assign(Code=code, Name=row.Name, IsDelisted=row.IsDelisted))
                 if not events.empty:
                     event_parts.append(events)
@@ -294,7 +348,8 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": _TRAINING_PRICE_POLICY,
+        "price_policy": PRICE_POLICY,
+        "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
         "raw_files": price_files,
         "krx_raw_files": krx_raw_files,
@@ -412,7 +467,8 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         stage_flow_parts()
         merge_staged_flows()
         report["flow_progress"] = progress
-    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"])
+    coverage = flow_coverage(root, source._INVESTORS, source._FLOW_COLUMNS, calendar["trading_days"],
+                             price_files=checkpoint["raw_files"])
     report["flow_coverage"] = coverage
     failed = any(item["status"] == "failed" for item in report["prices"])
     manifest = {
@@ -420,7 +476,8 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "config": config,
         "dataset_id": config["dataset_id"],
         "collection_identity": collection_identity,
-        "price_policy": _TRAINING_PRICE_POLICY,
+        "price_policy": PRICE_POLICY,
+        "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
         "raw_files": checkpoint["raw_files"],
         "krx_raw_files": krx_raw_files,
@@ -431,7 +488,7 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
         "flow_queries_complete": bool(config["collection"]["investor_flows"])
         and not report["flow_failures"]
         and report.get("flow_progress", {}).get("completed_days") == len(calendar["trading_days"]),
-        "flows_complete": not report["flow_failures"]
+        "flows_complete": bool(coverage) and not report["flow_failures"]
         and all(item["complete_rows"] == item["total_rows"] for item in coverage),
     }
     atomic_json(manifest_path, manifest)
@@ -449,12 +506,18 @@ def collect_dataset(config_path, *, mode="full", rebuild=False):
     print(f"Verified dataset: {root}; frozen end: {calendar['observed_end']}")
 
 
-def _require_current_training_prices(manifest):
-    if ("price_basis" in manifest or "price_policy" in manifest) and (
-        manifest.get("price_basis") != TRAINING_PRICE_BASIS
-        or manifest.get("price_policy") != _TRAINING_PRICE_POLICY
-    ):
-        raise ValueError("Unsupported dataset price basis or policy; rerun collection before preprocessing")
+def _require_current_training_prices(manifest, root):
+    if manifest.get("price_basis") != TRAINING_PRICE_BASIS:
+        raise ValueError("Unsupported dataset price basis; rerun collection before preprocessing")
+    try:
+        evidence = require_price_provenance(manifest)
+    except ValueError:
+        raise ValueError("Unsupported dataset price policy; rerun collection before preprocessing") from None
+    snapshot = root / "official_actions" / f"{evidence['sha256']}.json"
+    if not snapshot.is_file() or sha256(snapshot) != evidence["sha256"]:
+        raise ValueError("Pinned official action snapshot is missing or modified")
+    read_snapshot(snapshot)
+    return evidence
 
 
 def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
@@ -464,7 +527,7 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     if not manifest_path.exists():
         raise FileNotFoundError("Run price_collector.py --config first")
     manifest = json.loads(manifest_path.read_text())
-    _require_current_training_prices(manifest)
+    action_provenance = _require_current_training_prices(manifest, root)
     if not manifest.get("prices_complete") and not allow_partial:
         raise ValueError("Price collection incomplete; resume collection first")
     calendar = json.loads((root / "calendar.json").read_text())
@@ -483,7 +546,8 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
             raise ValueError("Preserve the previous processed data; use a new dataset root for this builder")
     reports = []
     outputs = {}
-    for path in sorted((root / "raw").glob("*.parquet")):
+    for name in sorted(manifest["raw_files"]):
+        path = root / "raw" / name
         try:
             raw_hash = sha256(path)
             if manifest["raw_files"].get(path.name) != raw_hash:
@@ -492,7 +556,7 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
             intervals = metadata.loc[metadata.Code.eq(path.stem)]
             raw = validate_prices(
                 raw, expected_sessions(intervals, calendar),
-                event_adjusted=manifest.get("price_basis") == TRAINING_PRICE_BASIS,
+                event_adjusted=True,
             )
             pieces = []
             for row in intervals.itertuples():
@@ -537,12 +601,17 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
         {
             "contract_version": VALIDATION_VERSION,
             "settings": config["preprocessing"],
+            "price_policy": PRICE_POLICY,
+            "official_actions": action_provenance,
+            "dataset_manifest_sha256": sha256(manifest_path),
             "processing_contract": contract,
             "raw_files": (
                 {name: manifest["raw_files"][name] for name in outputs}
                 if allow_partial else manifest["raw_files"]
             ),
             "allow_partial": allow_partial,
+            "excluded_price_files": sorted(set(manifest.get("krx_raw_files", {})) - outputs.keys()
+                                           | (manifest["raw_files"].keys() - outputs.keys())),
             "files": outputs,
             "implementation_sha256": contract["implementation_sha256"]["features/builder.py"],
         },
@@ -559,7 +628,9 @@ def validate_processed_inputs(config):
         raise FileNotFoundError("Run preprocess_data.py --config first")
     processed = json.loads(path.read_text())
     dataset = json.loads((root / "dataset_manifest.json").read_text())
-    _require_current_training_prices(dataset)
+    evidence = _require_current_training_prices(dataset, root)
+    if require_price_provenance(processed) != evidence:
+        raise ValueError("Processed official action provenance changed")
     if (
         (not dataset.get("prices_complete") and not processed.get("allow_partial"))
         or processed.get("contract_version") != VALIDATION_VERSION
@@ -571,7 +642,8 @@ def validate_processed_inputs(config):
     contract = processing_contract(config["preprocessing"])
     if processed.get("processing_contract") != contract:
         raise ValueError("Shared processing changed; rerun preprocessing in a new dataset root")
-    if processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw:
+    if (processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw
+            or processed.get("dataset_manifest_sha256") != sha256(root / "dataset_manifest.json")):
         raise ValueError("Dataset changed; rerun preprocessing before preparing features")
     if processed["implementation_sha256"] != contract["implementation_sha256"]["features/builder.py"]:
         raise ValueError("Feature implementation changed; rerun preprocessing")

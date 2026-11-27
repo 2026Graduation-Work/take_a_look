@@ -14,6 +14,8 @@ from shared.data import trading_calendar
 from shared.features.columns import BASE_FEATURES
 from shared.io import atomic_json, atomic_parquet, sha256
 from shared.processing import QLIB_PREPROCESSING, build_feature_frame, processing_contract
+from shared.settings import TRAINING_PRICE_BASIS
+from shared.tests.official_fixtures import price_provenance
 from test_local_pipeline_contract import local_dataset as local_dataset
 
 
@@ -178,8 +180,10 @@ def test_qlib_inference_matches_training_panel_after_60_rows(
         "trading_days": days.iloc[: start + 61].dt.strftime("%Y-%m-%d").tolist(),
     })
     atomic_json(root / "dataset_manifest.json", {
+        "price_basis": TRAINING_PRICE_BASIS,
         "prices_complete": True,
         "raw_files": {path.name: sha256(path)},
+        **price_provenance(root, ["005930"], pd.DatetimeIndex(current.Date)),
     })
     pd.DataFrame(intervals, columns=["Code", "ListingDate", "DelistingDate"]).to_csv(
         root / "ticker_metadata.csv", index=False,

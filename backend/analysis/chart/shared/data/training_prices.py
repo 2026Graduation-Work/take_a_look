@@ -7,7 +7,8 @@ import pandas as pd
 
 from shared.io import atomic_parquet, sha256
 
-from .events import apply_events, derive_events
+from .actions import actions_for_window
+from .events import apply_events, verify_events
 from .validation import KRX_RAW_COLUMNS, validate_krx_raw, validate_prices
 
 KRX_FIELDS = {
@@ -27,8 +28,7 @@ def parse_krx_fields(rows):
     return frame
 
 
-def request_history(code, start, end, *, is_delisted):
-    from pykrx.website.krx.market.core import 개별종목시세
+def resolve_krx_isin(code, *, is_delisted):
     from pykrx.website.krx.market.ticker import StockTicker
 
     tickers = StockTicker()
@@ -40,7 +40,14 @@ def request_history(code, start, end, *, is_delisted):
     ]
     if len(securities) != 1:
         raise ValueError(f"{code}: expected one KRX security identifier, found {len(securities)}")
-    rows = 개별종목시세().fetch(start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), securities[0], 1)
+    return securities[0]
+
+
+def request_history(code, start, end, *, is_delisted):
+    from pykrx.website.krx.market.core import 개별종목시세
+
+    isin = resolve_krx_isin(code, is_delisted=is_delisted)
+    rows = 개별종목시세().fetch(start.strftime("%Y%m%d"), end.strftime("%Y%m%d"), isin, 1)
     frame = parse_krx_fields(rows)
     frame["Date"] = pd.to_datetime(frame["TRD_DD"], format="%Y/%m/%d")
     return frame[KRX_RAW_COLUMNS]
@@ -104,10 +111,12 @@ def preserve_training_raw(path, frame):
             check_raw_overlap(before, frame)
 
 
-def adjust_training_window(code, raw, days, as_of):
+def adjust_training_window(code, raw, days, as_of, snapshot, *, listing, delisting=None, isin=None, share_class=None, market=None):
     if days.empty or days[-1] > pd.Timestamp(as_of):
         raise ValueError("KRX raw price dates exceed the dataset as_of")
-    events = derive_events(code, raw, days)
+    actions = actions_for_window(snapshot, code, days, listing=listing, delisting=delisting, isin=isin,
+                                 share_class=share_class, market=market)
+    events = verify_events(code, raw, days, actions)
     adjusted = apply_events(raw, events, as_of=as_of)
     adjusted["ExchangeChange"] = 100 * raw.RawChange / (raw.RawClose - raw.RawChange)
     adjusted["Change"] = adjusted.Close.pct_change(fill_method=None) * 100

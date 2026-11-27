@@ -1,5 +1,7 @@
 import glob
+import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -23,13 +25,23 @@ def load_parquet_data(
     universe_intervals: pd.DataFrame = None,
     feature_columns: list[str] = None,
     sample_only: bool = False,
+    file_names=None,
 ) -> pd.DataFrame:
     """
     Parquet 파일들을 디스크에서 읽어오는 로더입니다.
     메모리 절약을 위해 종목별 로딩 시점에 Y 라벨 생성 및 피처 분리를 즉시 수행합니다.
     """
-    files = sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
-    files = [path for path in files if os.path.basename(path) != "sample_keys.parquet"]
+    manifest_path = Path(data_dir) / "feature_manifest.json"
+    if file_names is None and manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text())
+        file_names = manifest.get("file_hashes")
+        if file_names is None:
+            file_names = [item["file"] for item in manifest["files"]]
+    if file_names is not None:
+        files = [str(Path(data_dir) / name) for name in sorted(file_names)]
+    else:
+        files = [path for path in sorted(glob.glob(os.path.join(data_dir, "*.parquet")))
+                 if os.path.basename(path) != "sample_keys.parquet"]
 
     if tickers == "KOSPI_TOP200":
         raise ValueError(

@@ -1,0 +1,164 @@
+{
+  "20180503000318.notice.html": {
+    "sha256": "bf752ec862a850ba862e9d6b9a800ac2ced55b216b2c75f990627577fbc73f8c",
+    "url": "https://kind.krx.co.kr/external/2018/05/03/000318/20180503000874/68155.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "20200317000810.notice.html": {
+    "sha256": "d2ac9fa502c909ba4b4aa5803527a83c148064062d7871fa8aa77568b8629805",
+    "url": "https://kind.krx.co.kr/external/2020/03/17/000810/20200317002023/68155.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "20200319001024.notice.html": {
+    "sha256": "cb23491bab2bbb9841ec356eb43aa012a3a769364733e196309bfdf82294c2c2",
+    "url": "https://kind.krx.co.kr/external/2020/03/19/001024/20200319002796/99328.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "samsung-empty.html": {
+    "sha256": "91ef886c473c8379fd98dba9c3e963f14c0cc42d7caafee7d650ecb2575d2714",
+    "url": "https://kind.krx.co.kr/disclosure/detailsExt.do",
+    "query": {
+      "method": "searchDetailsMktactSubExt",
+      "forward": "details_mktact_sub_ext",
+      "searchCodeType": "number",
+      "repIsuSrtCd": "A005930",
+      "searchCorpName": "005930",
+      "searchCorpNameTmp": "005930",
+      "fromData": "2018-06-04",
+      "toData": "2018-06-08",
+      "currentPageSize": "15",
+      "pageIndex": "1"
+    },
+    "charset": "utf-8"
+  },
+  "samsung-small-1.html": {
+    "sha256": "75d09ac788df0840a5ed458de3baf7282fab45a26a6c390f950b0ab9e05993d9",
+    "url": "https://kind.krx.co.kr/disclosure/detailsExt.do",
+    "query": {
+      "method": "searchDetailsMktactSubExt",
+      "forward": "details_mktact_sub_ext",
+      "searchCodeType": "number",
+      "repIsuSrtCd": "A005930",
+      "searchCorpName": "005930",
+      "searchCorpNameTmp": "005930",
+      "fromData": "2018-05-02",
+      "toData": "2018-05-05",
+      "currentPageSize": "2",
+      "pageIndex": "1"
+    },
+    "charset": "utf-8"
+  },
+  "samsung-small-2.html": {
+    "sha256": "9be649afdf4a13d66faddd12973310a2a28c327ff4e53803a3adfae0009db221",
+    "url": "https://kind.krx.co.kr/disclosure/detailsExt.do",
+    "query": {
+      "method": "searchDetailsMktactSubExt",
+      "forward": "details_mktact_sub_ext",
+      "searchCodeType": "number",
+      "repIsuSrtCd": "A005930",
+      "searchCorpName": "005930",
+      "searchCorpNameTmp": "005930",
+      "fromData": "2018-05-02",
+      "toData": "2018-05-05",
+      "currentPageSize": "2",
+      "pageIndex": "2"
+    },
+    "charset": "utf-8"
+  },
+  "20201201000101.notice.html": {
+    "sha256": "2645af0951e93fc49dce4dcc099ffbe2c41a9dc633068180e2fbabda89a3da5c",
+    "url": "https://kind.krx.co.kr/external/2020/12/01/000101/20201201000196/68151.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "20201203000329.notice.html": {
+    "sha256": "c1edbbfaebde4226a1a4f0e8b76dd070caa9b6dad8380e35b7f3f94008c1f154",
+    "url": "https://kind.krx.co.kr/external/2020/12/03/000329/20201203000928/99328.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "031820.notice.html": {
+    "sha256": "4c0c5621f273c8c40e668a1290b5ca7e5349ca7560e5e8e0333d0fd65da2f9c9",
+    "url": "https://kind.krx.co.kr/external/2026/04/29/000143/20260429000216/68155.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "104620.notice.html": {
+    "sha256": "a95ead452701bc912f92f592392f680b891171b47b285401b4dcccde1869474b",
+    "url": "https://kind.krx.co.kr/external/2021/07/21/000416/20210721001234/70766.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "20180131800068.body.html": {
+    "sha256": "fef6d3fe6955f6f05aa38a4ef98c5458a27dd11fcdbfec5b1ed72bec4e122d83",
+    "url": "https://dart.fss.or.kr/report/viewer.do?rcpNo=20180131800068&dcmNo=5935944&eleId=0&offset=0&length=0&dtd=HTML",
+    "query": null,
+    "charset": "ms949"
+  },
+  "20180316800856.body.html": {
+    "sha256": "615d10f0224f2c07da1b500d1465e341f0d45dc87ef541b8d5f0aa50ed708e66",
+    "url": "https://dart.fss.or.kr/report/viewer.do?rcpNo=20180316800856&dcmNo=6000758&eleId=0&offset=0&length=0&dtd=HTML",
+    "query": null,
+    "charset": "ms949"
+  },
+  "20260303801271.body.html": {
+    "sha256": "0c77d67cea0cf8319ab145be94a9304f6e76aa20cb2c56fd0b90ad2168f059b2",
+    "url": "https://dart.fss.or.kr/report/viewer.do?rcpNo=20260303801271&dcmNo=11086453&eleId=0&offset=0&length=0&dtd=HTML",
+    "query": null,
+    "charset": "ms949"
+  },
+  "104620-bonus.response": {
+    "sha256": "0b3403607dba32c1130cbd6d576fb3bda1917e8f1dcc7ea64c828e0b63161af2",
+    "url": "https://opendart.fss.or.kr/api/fricDecsn.json",
+    "query": {
+      "corp_code": "00632845",
+      "bgn_de": "20210701",
+      "end_de": "20210831"
+    },
+    "charset": "utf-8"
+  },
+  "403870-bonus.response": {
+    "sha256": "d21c6ae61dba8da46a2db77c7ecc6f76f80ec0e57793a40bab94e2855f9fb442",
+    "url": "https://opendart.fss.or.kr/api/fricDecsn.json",
+    "query": {
+      "corp_code": "01288827",
+      "bgn_de": "20230101",
+      "end_de": "20230630"
+    },
+    "charset": "utf-8"
+  },
+  "004920-reduction.response": {
+    "sha256": "ed15c0ec65cd6a99093995950b88c04f7ad5036a2a6c51f1a272ad5c2b02ff20",
+    "url": "https://opendart.fss.or.kr/api/crDecsn.json",
+    "query": {
+      "corp_code": "00127158",
+      "bgn_de": "20191201",
+      "end_de": "20200331"
+    },
+    "charset": "utf-8"
+  },
+  "003410-reduction.response": {
+    "sha256": "b5c4325da09e61d729162767b8186ad7de235aeadfbbc5cf9d0be7704f520376",
+    "url": "https://opendart.fss.or.kr/api/crDecsn.json",
+    "query": {
+      "corp_code": "00138224",
+      "bgn_de": "20200101",
+      "end_de": "20201231"
+    },
+    "charset": "utf-8"
+  },
+  "403870.notice.html": {
+    "sha256": "ed78399c13134cd188d1d6d792d4f016acc6727f842e72bc333f1890cf09b135",
+    "url": "https://kind.krx.co.kr/external/2023/03/15/002060/20230315005026/70766.htm",
+    "query": null,
+    "charset": "utf-8"
+  },
+  "104620-raw.csv": {
+    "sha256": "c17048cd8d6444227ebe226db5e50889faf8d49952dc4e20277f3f1dcaa7f87e",
+    "source": "KRX MDCSTAT01701 adjStkPrc=1 via pykrx",
+    "original_parquet_sha256": "08aeecc6751bde3ca8cb0f1b5aace17e03ad45397f7a9bc7fead6bb8dabd4bf4"
+  }
+}

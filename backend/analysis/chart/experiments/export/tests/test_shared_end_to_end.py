@@ -1,3 +1,4 @@
+import json
 import sys
 from types import SimpleNamespace
 
@@ -16,8 +17,9 @@ from shared.data import providers
 from shared.data.prices import fetch_price_window
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
-from shared.io import atomic_json, sha256_file
-from shared.settings import BUILDER_ID, processing_contract
+from shared.io import atomic_json, sha256, sha256_file
+from shared.settings import BUILDER_ID, TRAINING_PRICE_BASIS, processing_contract
+from shared.tests.official_fixtures import price_provenance
 
 
 @pytest.mark.parametrize("with_flows", [False, True])
@@ -86,7 +88,15 @@ def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, cap
         predictions[horizon] = tmp_path / f"p{horizon}.parquet"
         pd.DataFrame({"Date": test.Date, "Code": "005930", "fold_id": 0,
                       "prob_up": probabilities[:, 2]}).to_parquet(predictions[horizon], index=False)
-    provenance = {"feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
+    proof = price_provenance(tmp_path, ["005930"], pd.DatetimeIndex(days))
+    dataset_manifest = tmp_path / "dataset_manifest.json"
+    raw_files = {"005930.parquet": sha256(processed / "005930.parquet")}
+    atomic_json(dataset_manifest, {**proof, "price_basis": TRAINING_PRICE_BASIS,
+                                  "prices_complete": True, "raw_files": raw_files})
+    processed_manifest = tmp_path / "processed_manifest.json"
+    atomic_json(processed_manifest, {**proof, "files": raw_files, "raw_files": raw_files,
+                                    "dataset_manifest_sha256": sha256(dataset_manifest)})
+    provenance = {**proof, "processed_manifest_sha256": sha256(processed_manifest), "feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
                   "models": {f"h{h}": {"labels": {"up_mult": 1.75 if h == 5 else 3.75, "down_mult": 1.5 if h == 5 else 3.0}} for h in (5, 20)},
                   "known_issues": ["Synthetic fixture only."], "validation_status": "synthetic_mock_end_to_end_only",
                   "training_period": {"start": str(frame.Date.iloc[60].date()), "end": str(frame.Date.iloc[160].date())},
@@ -94,6 +104,12 @@ def test_legacy_krx_price_features_export_and_serving(tmp_path, monkeypatch, cap
     root, archive, report = build_pack(pack_id="mock_e2e", output=tmp_path / "packs", models=models,
         predictions=predictions, processed_dir=processed, calendar_file=calendar_path, research_manifest=provenance,
         allow_legacy_artifacts=True)
+    dataset = json.loads(dataset_manifest.read_text())
+    atomic_json(dataset_manifest, {**dataset, "prices_complete": False, "raw_files": {}})
+    with pytest.raises(ValueError, match="Export training price provenance"):
+        build_pack(pack_id="stale", output=tmp_path / "packs", models=models, predictions=predictions,
+                   processed_dir=processed, calendar_file=calendar_path, research_manifest=provenance)
+    assert not (tmp_path / "packs/stale").exists()
     pack, paths, golden_sha256 = load_pack(root)
     assert archive.is_file() and all(report[f"h{h}"]["sample_rows"] > 0 for h in (5, 20))
     for horizon in (5, 20):

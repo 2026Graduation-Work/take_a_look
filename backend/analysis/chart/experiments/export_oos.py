@@ -10,6 +10,7 @@ import pandas as pd
 from experiments.experiment_utils import resolve_splits
 from experiments.export_performance import checked_manifest, paired_frames, validate_pair_contract
 from experiments.train_src.labels import barrier_labels
+from shared.data.actions import require_price_provenance
 from shared.io import sha256
 
 
@@ -96,6 +97,9 @@ def export(suite, output, input_evidence):
     if manifests["h20_B"]["config"]["data"]["price_dir"] != str(root):
         raise ValueError("H5/H20 B input stores differ")
     feature_manifest = checked_manifest(root / "feature_manifest.json", pinned["sigma_feature_manifest_sha256"])
+    official_actions = require_price_provenance(feature_manifest)
+    if any(require_price_provenance(item) != official_actions for item in manifests.values()):
+        raise ValueError("OOS runs use different official action snapshots")
     if feature_manifest["feature_columns"] != manifests["h5_B"]["feature_columns"]:
         raise ValueError("Price input feature contract differs")
     groups = {h: {code: part for code, part in frames[f"h{h}_A"].groupby("Code", sort=False)} for h in (5, 20)}
@@ -114,6 +118,7 @@ def export(suite, output, input_evidence):
     if any(groups.values()):
         raise ValueError("OOS stock price files are missing")
     report = {"run_id": status["run_id"], "input_evidence_sha256": sha256(input_evidence),
+              "price_policy": feature_manifest["price_policy"], "official_actions": official_actions,
               "feature_manifest_sha256": pinned["sigma_feature_manifest_sha256"],
               "source_artifacts": evidence, "exporter_sha256": sha256(Path(__file__)),
               "label_implementation_sha256": sha256(Path(__file__).parent / "train_src/labels.py"),

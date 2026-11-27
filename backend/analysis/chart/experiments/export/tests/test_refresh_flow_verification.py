@@ -7,7 +7,8 @@ from experiments.export.refresh_pack import verify_inputs
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256_file
-from shared.settings import PREPROCESSING, PRICE_BASIS, processing_contract
+from shared.settings import PREPROCESSING, TRAINING_PRICE_BASIS, processing_contract
+from shared.tests.official_fixtures import NEW_POLICY, price_provenance
 
 
 @pytest.mark.parametrize("case_name", ["current_contract", "tampered_flow", "stale_contract"])
@@ -30,12 +31,14 @@ def test_flow_training_values_and_missingness_are_verified(tmp_path, monkeypatch
         trained.loc[missing, "flow_foreign_20"] = 0.
     trained.to_parquet(store / "005930.parquet", index=False)
     raw_hashes = {"005930.parquet": sha256_file(tmp_path / "raw/005930.parquet")}
-    atomic_json(tmp_path / "dataset_manifest.json", {"contract_version": 3, "prices_complete": True,
-                "price_basis": PRICE_BASIS, "raw_files": raw_hashes})
+    provenance = price_provenance(tmp_path, ["005930"], pd.DatetimeIndex(raw.Date))
+    atomic_json(tmp_path / "dataset_manifest.json", {**provenance, "contract_version": 3, "prices_complete": True,
+                "price_basis": TRAINING_PRICE_BASIS, "raw_files": raw_hashes})
     contract = processing_contract()
     if case_name == "stale_contract":
         contract["sha256"] = "0" * 64
-    atomic_json(tmp_path / "processed_manifest.json", {"settings": PREPROCESSING, "raw_files": raw_hashes,
+    atomic_json(tmp_path / "processed_manifest.json", {**provenance, "settings": PREPROCESSING, "raw_files": raw_hashes,
+                "dataset_manifest_sha256": sha256_file(tmp_path / "dataset_manifest.json"),
                 "processing_contract": contract,
                 "files": {"005930.parquet": sha256_file(tmp_path / "processed/005930.parquet")}})
     atomic_json(tmp_path / "calendar.json", {"trading_days": raw.Date.astype(str).tolist()})
@@ -60,17 +63,18 @@ def test_flow_activation_refuses_incomplete_preview_before_config_write(tmp_path
     from experiments.export import refresh_pack
     dataset = tmp_path / "dataset"
     dataset.mkdir()
+    atomic_json(dataset / "dataset_manifest.json", NEW_POLICY)
     atomic_json(dataset / "calendar.json", {"trading_days": ["2026-10-06"]})
     config = tmp_path / "serving/config.local.yaml"
     config.parent.mkdir()
     config.write_text("active_pack:\n  pack_id: previous\n")
     original = config.read_bytes()
     source = {"h5": {"feature_columns": list(BASE_FEATURES) + list(FLOW_FEATURES),
-                      "training_feature_store": str(tmp_path)},
-              "h20": {"training_feature_store": str(tmp_path)}}
+                      "training_feature_store": str(tmp_path), "official_actions": NEW_POLICY["official_actions"]},
+              "h20": {"training_feature_store": str(tmp_path), "official_actions": NEW_POLICY["official_actions"]}}
     monkeypatch.setattr(refresh_pack, "CHART_ROOT", tmp_path)
     monkeypatch.setattr(refresh_pack, "verify_runs", lambda *args, **kwargs: ({}, {}, source, dataset))
-    monkeypatch.setattr(refresh_pack, "verify_inputs", lambda *args: {})
+    monkeypatch.setattr(refresh_pack, "verify_inputs", lambda *args: {"processed_manifest_sha256": "synthetic"})
     monkeypatch.setattr(refresh_pack, "build_pack", lambda **kwargs: (tmp_path, tmp_path / "pack.tar.gz", {}))
     monkeypatch.setattr(refresh_pack, "load_pack", lambda *args: ({}, {}, "a" * 64))
     monkeypatch.setattr(refresh_pack.pd, "read_parquet", lambda *args: pd.DataFrame())

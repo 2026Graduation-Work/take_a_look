@@ -13,7 +13,8 @@ from shared.features.columns import BASE_FEATURES
 from shared.io import atomic_json, sha256_file
 from shared.processing import QLIB_PREPROCESSING
 from shared.processing import processing_contract as research_contract
-from shared.settings import BUILDER_ID, processing_contract
+from shared.settings import BUILDER_ID, TRAINING_PRICE_BASIS, processing_contract
+from shared.tests.official_fixtures import price_provenance
 
 
 @pytest.fixture
@@ -39,8 +40,17 @@ def pack_inputs(tmp_path):
         pd.DataFrame({"Date": days[:1], "Code": "005930", "fold_id": 0,
                       "prob_up": .4}).to_parquet(predictions[horizon])
 
+    proof = price_provenance(tmp_path, ["005930"], days)
+    dataset_manifest = tmp_path / "dataset_manifest.json"
+    processed_manifest = tmp_path / "processed_manifest.json"
+    files = {"005930.parquet": sha256_file(processed / "005930.parquet")}
+    atomic_json(dataset_manifest, {**proof, "price_basis": TRAINING_PRICE_BASIS,
+                                  "prices_complete": True, "raw_files": files})
+    atomic_json(processed_manifest, {**proof, "files": files, "raw_files": files,
+                                    "dataset_manifest_sha256": sha256_file(dataset_manifest)})
     period = {"start": "2019-01-02", "end": "2019-01-31"}
-    provenance = {"feature_builder_id": BUILDER_ID, "processing_contract": contract,
+    provenance = {**proof, "processed_manifest_sha256": sha256_file(processed_manifest),
+                  "feature_builder_id": BUILDER_ID, "processing_contract": contract,
                   "models": {f"h{h}": {"labels": {"up_mult": 1.5, "down_mult": 1.2}} for h in models},
                   "known_issues": [], "validation_status": "synthetic_test",
                   "training_period": period, "data_period": period}

@@ -9,27 +9,31 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import yaml
+from experiments.dataset.pipeline import _require_current_training_prices
 from experiments.experiment_utils import resolve_splits
 from serving.internal.inference import infer_batch
 from serving.internal.pack import feature_cache_key, load_pack
+from shared.data.actions import require_price_provenance
 from shared.data.calendar import verify_calendar_schedule
 from shared.data.providers import _attach_actual_vwap
 from shared.data.validation import validate_prices
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256_file
-from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, PRICE_BASIS, processing_contract
+from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, processing_contract
 
 from .pack import build_pack
 
 
-def verify_inputs(dataset, names, feature_store=None):
+def verify_inputs(dataset, names, feature_store=None, operational=False):
     original = json.loads((dataset / "dataset_manifest.json").read_text())
     processed = json.loads((dataset / "processed_manifest.json").read_text())
     calendar = json.loads((dataset / "calendar.json").read_text())
     verify_calendar_schedule(calendar)
+    official_actions = _require_current_training_prices(original, dataset)
     if (original.get("contract_version") != 3 or not original.get("prices_complete")
-            or original.get("price_basis") != PRICE_BASIS
+            or require_price_provenance(processed) != official_actions
+            or processed.get("dataset_manifest_sha256") != sha256_file(dataset / "dataset_manifest.json")
             or processed["settings"] != PREPROCESSING
             or processed["raw_files"] != original["raw_files"]):
         raise ValueError("Preserved v3 dataset settings or raw provenance mismatch")
@@ -53,24 +57,28 @@ def verify_inputs(dataset, names, feature_store=None):
             raise ValueError(f"Preserved raw/processed checksum mismatch: {name}")
         raw = pd.read_parquet(source)
         expected = pd.read_parquet(expected_path)
+        if operational:
+            indexed = raw.set_index("Date")
+            fields = ["RawOpen", "RawHigh", "RawLow", "RawClose", "RawVolume", "Amount"]
+            parity = _attach_actual_vwap(indexed, indexed[fields])
+            frame_cols = ["Open", "High", "Low", "Close", "Volume", "VWAP"]
+            if not np.allclose(parity[frame_cols], indexed[frame_cols], rtol=1e-8, atol=1e-10, equal_nan=True):
+                raise ValueError(f"Official-adjusted prices differ from serving price parity: {name}")
         if feature_store is not None:
             trained = pd.read_parquet(feature_store / name, columns=["Date", *names])
             if (not pd.to_datetime(trained.Date).equals(pd.to_datetime(expected.Date))
                     or not np.allclose(trained[base_names].to_numpy(dtype=float), expected[base_names].to_numpy(dtype=float), rtol=1e-8, atol=1e-10, equal_nan=True)):
                 raise ValueError(f"Model training store/v3 processed input mismatch: {name}")
-        indexed = raw.set_index("Date")
-        fields = [f"Raw{c}" for c in ("Open", "High", "Low", "Close", "Volume")] + ["Amount"]
-        attached = _attach_actual_vwap(indexed, indexed[fields]).reset_index()
         pieces = []
         for interval in metadata.loc[metadata.Code.eq(Path(name).stem)].itertuples():
-            active = pd.to_datetime(attached.Date).ge(interval.ListingDate)
+            active = pd.to_datetime(raw.Date).ge(interval.ListingDate)
             if pd.notna(interval.DelistingDate):
-                active &= pd.to_datetime(attached.Date).lt(interval.DelistingDate)
-            subset = attached.loc[active].copy()
+                active &= pd.to_datetime(raw.Date).lt(interval.DelistingDate)
+            subset = raw.loc[active].copy()
             if subset.empty:
                 continue
             active_days = days[(days >= subset.Date.min()) & (days <= subset.Date.max())]
-            subset = validate_prices(subset, pd.DatetimeIndex(active_days))
+            subset = validate_prices(subset, pd.DatetimeIndex(active_days), event_adjusted=True)
             pieces.append(build_feature_frame(subset, days, PREPROCESSING))
         rebuilt = pd.concat(pieces, ignore_index=True)
         if not pd.to_datetime(rebuilt.Date).equals(pd.to_datetime(expected.Date)):
@@ -111,6 +119,7 @@ def verify_runs(result_dirs, *, with_flows=False):
     for horizon, result in result_dirs.items():
         manifest_path = result / "run_manifest.json"
         manifest = json.loads(manifest_path.read_text())
+        official_actions = require_price_provenance(manifest)
         cfg = manifest["config"]
         if (cfg.get("contract_version") != 3 or cfg["features"]["groups"] != groups
                 or cfg["labels"]["horizon"] != horizon or manifest["feature_columns"] != names
@@ -146,7 +155,7 @@ def verify_runs(result_dirs, *, with_flows=False):
         store = (CHART_ROOT / Path(cfg["features"]["materialized_dir"])).resolve()
         feature_manifest_path = store / "feature_manifest.json"
         feature_manifest = json.loads(feature_manifest_path.read_text())
-        if feature_manifest["feature_columns"] != names:
+        if require_price_provenance(feature_manifest) != official_actions or feature_manifest["feature_columns"] != names:
             raise ValueError("Training feature store order differs from the models")
         for name, digest in feature_manifest["file_hashes"].items():
             if sha256_file(store / name) != digest:
@@ -159,7 +168,7 @@ def verify_runs(result_dirs, *, with_flows=False):
             "feature_manifest_sha256": sha256_file(feature_manifest_path), "training_feature_store": str(store), "fold": last,
             "oos_period": {"start": prediction.Date.min().date().isoformat(), "end": "2026-10-06"},
             "labels": cfg["labels"], "prediction_rows": len(prediction),
-            "feature_groups": groups, "feature_columns": names}
+            "feature_groups": groups, "feature_columns": names, "official_actions": official_actions}
         configs.append(cfg)
     if configs[0]["dataset"] != configs[1]["dataset"]:
         raise ValueError("H5/H20 datasets disagree")
@@ -179,8 +188,14 @@ def main(argv=None):
     stores = {source["training_feature_store"] for source in sources.values()}
     if len(stores) != 1:
         raise ValueError("H5/H20 training feature stores disagree")
-    evidence = verify_inputs(dataset, sources["h5"]["feature_columns"], Path(next(iter(stores))))
+    evidence = verify_inputs(dataset, sources["h5"]["feature_columns"], Path(next(iter(stores))), args.activate)
+    price_manifest = json.loads((dataset / "dataset_manifest.json").read_text())
+    official_actions = require_price_provenance(price_manifest)
+    if any(source["official_actions"] != official_actions for source in sources.values()):
+        raise ValueError("Model runs and export inputs use different official snapshots")
     info = {"feature_builder_id": BUILDER_ID, "processing_contract": processing_contract(),
+            "price_policy": price_manifest["price_policy"], "official_actions": official_actions,
+            "processed_manifest_sha256": evidence["processed_manifest_sha256"],
             "training_period": {"start": "2023-01-01", "end": "2025-12-31"},
             "data_period": {"start": "2016-01-04", "end": "2026-10-06", "partial_years": [2026]},
             "validation_status": "all_preserved_v3_price_feature_hashes_and_local_inference_passed",

@@ -13,7 +13,7 @@ PREPROCESSING = {"sigma_window": 20, "sigma_min_periods": 10,
                  "barrier_feature_up_mult": 1.5, "barrier_feature_down_mult": 1.2}
 IMPLEMENTATIONS = ("settings.py", "io.py", "data/providers.py", "data/prices.py",
                    "data/metadata.py", "data/krx.py", "data/calendar.py", "data/trading_calendar.py", "data/validation.py",
-                   "data/bulk_prices.py", "data/events.py", "data/training_prices.py", "features/builder.py", "features/flow.py", "features/columns.py")
+                   "data/bulk_prices.py", "data/events.py", "data/training_prices.py", "data/actions.py", "data/disclosures.py", "features/builder.py", "features/flow.py", "features/columns.py")
 
 
 def processing_contract(settings=None):

@@ -81,8 +81,13 @@ def scheduled_sessions(start, end):
 
     if start < pd.Timestamp("2016-01-01") or end > pd.Timestamp("2026-12-31"):
         raise ValueError("Calendar rules reviewed for 2016..2026 only; review new KRX closures first")
-    schedule = calendars.get_calendar("XKRX", start=start, end=end)
-    return schedule.sessions.tz_localize(None).difference(
+    if start == end:
+        offset = pd.Timedelta(days=7)
+        schedule = calendars.get_calendar("XKRX", start=start - offset, end=end + offset)
+    else:
+        schedule = calendars.get_calendar("XKRX", start=start, end=end)
+    sessions = schedule.sessions.tz_localize(None)
+    return sessions[(sessions >= start) & (sessions <= end)].difference(
         pd.DatetimeIndex(pd.to_datetime(list(ANNOUNCED_CLOSURES)))
     )
 
