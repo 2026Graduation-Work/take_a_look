@@ -10,6 +10,11 @@ jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        sample: [1, 2, 3]
     defaults:
       run:
         working-directory: backend/analysis/chart
@@ -66,9 +71,9 @@ jobs:
               print(json.dumps({'event': 'krx_managed_invalid', 'keys': sorted(payload)}, ensure_ascii=False))
               raise RuntimeError('KRX managed rows missing')
           fields = sorted(rows[0])
-          names = {str(row['ISU_NM']).strip() for row in rows}
-          if '' in names:
-              raise RuntimeError('Empty managed stock name')
+          if any(not isinstance(row.get('ISU_NM'), str) or not row['ISU_NM'].strip() for row in rows):
+              raise RuntimeError('Invalid managed stock name')
+          names = {row['ISU_NM'].strip() for row in rows}
           print(json.dumps({'event': 'krx_managed', 'at': datetime.now(timezone.utc).isoformat(),
                             'status': response.status_code, 'rows': len(rows), 'names': len(names),
                             'fields': fields, 'name_sha256': digest(names)}, ensure_ascii=False))
@@ -81,7 +86,8 @@ jobs:
           listing_response.raise_for_status()
           listing = listing_response.json()['OutBlock_1']
           service_names = {row['ISU_ABBRV'] for row in listing
-                           if row['MKT_TP_NM'] == 'KOSPI' or row['ISU_SRT_CD'] == '247540'}
+                           if row['MKT_TP_NM'] in {'KOSPI', 'KOSDAQ', 'KOSDAQ GLOBAL'}}
+          market_by_name = {row['ISU_ABBRV']: row['MKT_TP_NM'] for row in listing}
           if len(service_names) < 500:
               raise RuntimeError('Listing scope invalid')
           
@@ -98,7 +104,8 @@ jobs:
               print(json.dumps({'event': 'source_comparison', 'kind_status': 200, 'kind_names': len(kind_names),
                   'krx_names': len(names), 'global_equal': names == kind_names,
                   'global_krx_only': len(names-kind_names), 'global_kind_only': len(kind_names-names),
-                  'service_names': len(service_names), 'krx_service_managed': len(names & service_names),
+                  'difference_markets': {name: market_by_name.get(name, 'not in current listing') for name in sorted(names ^ kind_names)},
+                  'scope': 'current KOSPI and KOSDAQ listings', 'service_names': len(service_names), 'krx_service_managed': len(names & service_names),
                   'kind_service_managed': len(kind_names & service_names),
                   'service_equal': (names & service_names) == (kind_names & service_names),
                   'service_difference_count': len((names ^ kind_names) & service_names)}, ensure_ascii=False))
