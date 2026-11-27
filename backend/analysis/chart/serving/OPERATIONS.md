@@ -16,6 +16,19 @@ python -m serving.local_preview --code 005930 --as-of 2026-10-06 --compute-only
 
 프리뷰는 `workspace/serving/inputs/raw/`의 명시적으로 내보낸 운영 입력과 해당 출처·해시 manifest만 읽는다. 연구 데이터셋 자동 탐색은 없다. `--compute-only`는 Supabase에 접속하지 않고 결과를 운영 `batches/`에 기록한다.
 
+### 가격 입력 기대값 검증
+
+`serving/tests/test_price_input_golden.py`는 빈 임시 캐시에서 `fetch_prices`의 KRX 우선 경로를 실행한다. pykrx 호출에는 고정 응답을 넣고 거래일 달력은 테스트 데이터로 제공한다. KRX 인증과 네트워크 연결 없이 날짜별 수정 OHLC, VWAP, 수정배율, 플래그를 기대값과 비교한다. 값이 다르면 입력 경우, 날짜, 열을 출력한다.
+
+삼성전자 2018-05-04 액면분할과 거래정지 사례의 원본 OHLC와 거래량·거래대금은 KRX 기록에서 가져왔다. 수정 응답은 네이버 수정종가를 기준으로 합성했다. 정규장 OHLC 미제공 사례는 두 응답 모두 합성했다. 이 사례는 원본과 수정 응답의 시가·고가·저가·거래량·거래대금을 다르게 넣어 응답 선택을 검증한다.
+
+변환 결과를 의도적으로 바꿨다면 아래 명령으로 `serving/tests/fixtures/price-input-golden.json`을 다시 만든다. 달라진 경우, 날짜, 열과 변경 이유를 PR에 적는다.
+
+```bash
+python -m pip install pytest
+python -m serving.tests.price_input_golden
+```
+
 ## 일일 실행과 재실행
 
 ```bash
@@ -43,7 +56,7 @@ Storage에는 날짜별 최근 원본 최대 61행과 전체 입력 해시를 �
 
 `serving/config.yaml`은 수급 포함 팩 `kospi_shared_v3_flow_train2023_2025_20261014`의 기존 릴리스와 `serving/golden/<pack_id>.json`을 지정한다. 기본 161개와 수급 9개 입력을 쓴다. 필요한 수급 입력이 결측이면 해당 모델·종목 추론을 `flow_window_incomplete`로 제외한다.
 
-팩 로딩은 builder ID, 가격 기준, 전처리 설정, H5/H20 모델의 피처 기대값을 확인한다. 비교가 실패하면 입력 경우와 달라진 피처 이름을 출력한다. 압축 파일, 모델, 과거 사례, 달력은 각 SHA-256으로 검증한다. 기대값 검사는 수정 가격과 VWAP가 준비된 입력부터 시작한다. KRX 응답을 수정 가격·VWAP로 변환하는 단계는 별도로 검증해야 한다.
+팩 로딩은 builder ID, 가격 기준, 전처리 설정, H5/H20 모델의 피처 기대값을 확인한다. 비교가 실패하면 입력 경우와 달라진 피처 이름을 출력한다. 압축 파일, 모델, 과거 사례, 달력은 각 SHA-256으로 검증한다. 기대값 검사는 수정 가격과 VWAP가 준비된 입력부터 시작한다. KRX 응답을 수정 가격·VWAP로 변환하는 단계는 위의 [가격 입력 기대값 검증](#가격-입력-기대값-검증)이 맡는다.
 
 팩 내보내기는 학습 산출물의 연구 계약 해시가 현재 코드와 일치해야 진행된다. 주석만 바뀌어도 해시 대상 파일이면 기존 산출물로 새 팩을 내보낼 수 없다. 팩에 기록한 `processing_contract`와 `builder/` 사본은 학습 당시 구현을 추적하기 위한 기록이다.
 
