@@ -7,6 +7,7 @@
 1. `git fetch origin`을 실행하고 `git switch -c feat/기능명 origin/main`처럼 최신 `origin/main`에서 작업 브랜치를 만든다.
 2. 변경 블록을 로컬에서 검증한 뒤 커밋·push한다. 브랜치 접두는 `feat/`, `fix/`, `docs/`, `chore/`, `refactor/`, `test/`를 쓴다.
 3. [PR 템플릿](../.github/pull_request_template.md)을 채운다. 기능 추가·수정이면 변경 요약, 로컬 검증 결과와 해당하는 확인용 주소를 남긴다.
+   - 이 PR로 해결하는 이슈마다 본문의 **관련 이슈 / 노션 링크**에 `Closes #번호`를 한 줄씩 적는다. 예를 들어 `Closes #12`로 연결하면 `main`에 머지할 때 이슈 #12가 자동으로 닫힌다. 후속 작업이 남은 이슈는 `Refs #12`처럼 참조한다.
 4. 팀 방침은 필수 체크를 통과한 PR의 작성자 셀프 머지를 허용한다. PR까지만 요청받았다면 거기서 끝낸다. 머지할 PR 번호를 `pr_number`에 지정해 아래 명령을 실행한다.
 
 ```sh
@@ -20,7 +21,7 @@ gh pr checks "${pr_number:?PR 번호를 지정하세요}" --required --watch --f
 
 1. 저장소를 포크하고, 포크에서 위 접두 규칙대로 브랜치를 만든다.
 2. 바꾼 블록만 로컬에서 검증한다. 웹은 `frontend/`에서 `pnpm install` 뒤 `pnpm build`, 화면 문구를 바꿨으면 `pnpm test:unit`도 실행한다. Python 블록은 해당 폴더에서 `ruff check .`와 `pytest`를 실행한다.
-3. 원 저장소 `main`으로 PR을 열고 [PR 템플릿](../.github/pull_request_template.md)을 채운다. 관련 이슈 번호를 적는다.
+3. 원 저장소 `main`으로 PR을 열고 [PR 템플릿](../.github/pull_request_template.md)을 채운다. 이 PR로 해결하는 이슈마다 본문에 `Closes #번호`를 적는다.
 4. 처음 기여하는 계정의 PR은 팀원이 승인해야 CI와 Vercel 미리보기가 돈다. 머지는 팀원이 리뷰한 뒤에 한다. 위의 셀프 머지는 팀원에게만 해당한다.
 
 맡을 만한 일은 [good first issue](https://github.com/2026Graduation-Work/take_a_look/labels/good%20first%20issue)와 [help wanted](https://github.com/2026Graduation-Work/take_a_look/labels/help%20wanted) 라벨에 모아 둔다. 시작 전에 이슈에 댓글을 남기면 담당자로 함께 지정한다. 실제 계좌나 보유 종목이 보이는 캡처는 올리지 않는다.
