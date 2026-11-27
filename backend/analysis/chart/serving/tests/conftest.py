@@ -8,7 +8,7 @@ import pytest
 def legacy_preview_pack(monkeypatch):
     from serving import publish_preview
     manifest = json.loads((Path(__file__).parent / "fixtures/legacy-preview-pack.json").read_text())
-    monkeypatch.setattr(publish_preview, "load_pack", lambda _: (manifest, {}))
+    monkeypatch.setattr(publish_preview, "load_pack", lambda _: (manifest, {}, None))
     return manifest
 
 

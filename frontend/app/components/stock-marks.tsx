@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { saveNote, setWatched, syncMarks, useMarks } from "@/lib/stock-marks";
 import { STOCK_NAMES } from "@/lib/mock-data";
 import { formatKstDateTime } from "@/lib/display";
@@ -9,6 +9,10 @@ import ConfirmButton from "./confirm-button";
 import StepNav from "./step-nav";
 
 const localDate = (iso: string) => formatKstDateTime(iso).slice(0, 10);
+
+function saveErrorMessage(cause: unknown) {
+  return cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.";
+}
 
 export function useStockMarks() {
   const { mode } = useOnboarding().state;
@@ -24,88 +28,177 @@ export default function StockMarks({ code, name }: { code: string; name: string 
   const watched = watchlist.some((item) => item.code === code);
   const note = notes[code];
   const [draft, setDraft] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [watchError, setWatchError] = useState("");
+  const [memoError, setMemoError] = useState("");
+  const [memoPending, setMemoPending] = useState(false);
+  const memoRequest = useRef(false);
+  const memoInput = useRef<HTMLTextAreaElement>(null);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const memoTrigger = useRef<HTMLButtonElement>(null);
+  const memoTitle = useId();
+  const focusEdit = useCallback((node: HTMLButtonElement | null) => {
+    if (dialog.current?.open) node?.focus();
+  }, []);
 
-  async function run(task: () => Promise<void>) {
-    setError("");
+  async function toggleWatch() {
+    setWatchError("");
     try {
-      await task();
+      await setWatched({ code, name }, !watched, mode);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+      setWatchError(saveErrorMessage(cause));
     }
   }
 
+  async function commitMemo(text: string) {
+    const activeDialog = dialog.current;
+    if (!activeDialog?.open || memoRequest.current) return;
+    memoRequest.current = true;
+    setMemoPending(true);
+    setMemoError("");
+    try {
+      await saveNote(code, text, mode);
+      if (dialog.current === activeDialog) activeDialog.close();
+    } catch (cause) {
+      if (dialog.current === activeDialog) {
+        setMemoError(saveErrorMessage(cause));
+        memoInput.current?.focus();
+      }
+    } finally {
+      memoRequest.current = false;
+      if (dialog.current === activeDialog) setMemoPending(false);
+    }
+  }
+
+  function closeMemo() {
+    if (!memoRequest.current) dialog.current?.close();
+  }
+
+  const watchLabel = watched ? "관심 종목에서 빼기" : "관심 종목에 두기";
+  const memoLabel = note ? "판단 메모 보기" : "판단 메모 쓰기";
+  const iconButton = "grid size-11 shrink-0 place-items-center rounded-sm text-brand hover:bg-brand-soft";
+
   return (
-    <section aria-label="관심 종목과 내 판단 메모" className="flex flex-col gap-3 px-1">
-      <div className="flex flex-wrap items-center gap-3">
+    <>
+      <div className="flex shrink-0 items-center">
         <button
           type="button"
+          aria-label={watchLabel}
           aria-pressed={watched}
-          onClick={() => void run(() => setWatched({ code, name }, !watched, mode))}
-          className={`min-h-11 rounded-md px-4 text-sm font-medium ${watched ? "bg-brand-soft text-brand" : "bg-track text-body hover:bg-line"}`}
+          title={watchLabel}
+          onClick={toggleWatch}
+          className={iconButton}
         >
-          {watched ? "관심 종목 ✓" : "관심 종목에 두기"}
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill={watched ? "currentColor" : "none"} stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+            <path d="m12 2.8 2.8 5.8 6.4.9-4.6 4.5 1.1 6.4L12 17.4l-5.7 3 1.1-6.4-4.6-4.5 6.4-.9z" />
+          </svg>
         </button>
-        {!note && draft === null && (
-          <button type="button" onClick={() => setDraft("")} className="btn-text text-sm">
-            판단 메모 쓰기
-          </button>
-        )}
-      </div>
-
-      {note && draft === null && (
-        <div className="surface flex flex-col gap-2 px-5 py-4">
-          <span className="text-xs text-muted tabular-nums">지난 메모, {localDate(note.updatedAt)}</span>
-          <p className="m-0 whitespace-pre-wrap text-sm text-ink">{note.text}</p>
-          <div className="flex gap-4">
-            <button type="button" onClick={() => setDraft(note.text)} className="btn-text text-sm">
-              고치기
-            </button>
-            <ConfirmButton
-              title="이 메모를 지울까요?"
-              message="지운 메모는 되돌릴 수 없어요."
-              confirmLabel="메모 지우기"
-              onConfirm={() => void run(() => saveNote(code, "", mode))}
-              className="btn-text text-sm"
-            >
-              지우기
-            </ConfirmButton>
-          </div>
-        </div>
-      )}
-
-      {draft !== null && (
-        <form
-          className="surface flex flex-col gap-3 px-5 py-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void run(async () => {
-              await saveNote(code, draft, mode);
-              setDraft(null);
-            });
+        <button
+          ref={memoTrigger}
+          type="button"
+          aria-label={memoLabel}
+          aria-haspopup="dialog"
+          title={memoLabel}
+          onClick={() => {
+            setMemoError("");
+            setDraft(note ? null : "");
+            dialog.current?.showModal();
           }}
+          className={iconButton}
         >
-          <label className="flex flex-col gap-2 text-xs text-muted">
-            내 판단 메모
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              rows={3}
-              maxLength={1000}
-              autoFocus
-              placeholder="예: 실적 발표(10월 말) 뒤에 다시 보기"
-              className="w-full resize-none rounded-md bg-field px-4 py-3 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
-            />
-          </label>
-          <StepNav onBack={() => setDraft(null)} backLabel="취소" nextType="submit" nextLabel="저장" nextDisabled={!draft.trim()} />
-        </form>
-      )}
-      {error && (
-        <p role="alert" className="m-0 text-sm text-danger">
-          {error}
-        </p>
-      )}
-    </section>
+          <span aria-hidden="true" className={`grid h-[18px] w-[15px] content-center gap-[3px] rounded-[3px] border-[1.5px] border-current px-[3px] ${note ? "bg-brand-soft" : ""}`}>
+            <span className="h-px bg-current" />
+            <span className="h-px w-1 bg-current" />
+          </span>
+        </button>
+      </div>
+      {watchError && <p role="alert" className="m-0 basis-full text-xs text-danger">{watchError}</p>}
+
+      <dialog
+        ref={dialog}
+        aria-labelledby={memoTitle}
+        onCancel={(event) => {
+          if (memoRequest.current) event.preventDefault();
+        }}
+        onClose={(event) => {
+          if (event.target !== event.currentTarget) return;
+          setDraft(null);
+          setMemoError("");
+          memoTrigger.current?.focus();
+        }}
+        className="m-auto w-[min(420px,calc(100vw-32px))] rounded-xl bg-white p-0 text-ink shadow-modal backdrop:bg-black/30"
+      >
+        <div className="flex flex-col gap-4 p-6">
+          <div className="flex items-center justify-between gap-4">
+            <h2 id={memoTitle} className="text-xl font-semibold">판단 메모</h2>
+            <button type="button" onClick={closeMemo} disabled={memoPending} className="btn-text text-sm">닫기</button>
+          </div>
+          {note && draft === null && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-muted tabular-nums">지난 메모, {localDate(note.updatedAt)}</span>
+              <p className="m-0 whitespace-pre-wrap break-words text-sm text-ink">{note.text}</p>
+              <div className="flex gap-4">
+                <button ref={focusEdit} type="button" disabled={memoPending} onClick={() => setDraft(note.text)} className="btn-text text-sm">
+                  고치기
+                </button>
+                <ConfirmButton
+                  title="이 메모를 지울까요?"
+                  message="지운 메모는 되돌릴 수 없어요."
+                  confirmLabel="메모 지우기"
+                  onConfirm={() => void commitMemo("")}
+                  disabled={memoPending}
+                  className="btn-text text-sm"
+                >
+                  지우기
+                </ConfirmButton>
+              </div>
+            </div>
+          )}
+
+          {draft !== null && (
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (draft.trim()) void commitMemo(draft);
+              }}
+            >
+              <label className="flex flex-col gap-2 text-xs text-muted">
+                내 판단 메모
+                <textarea
+                  ref={memoInput}
+                  value={draft}
+                  readOnly={memoPending}
+                  onChange={(event) => setDraft(event.target.value)}
+                  rows={3}
+                  maxLength={1000}
+                  autoFocus
+                  placeholder="예: 실적 발표(10월 말) 뒤에 다시 보기"
+                  className="w-full resize-none rounded-md bg-field px-4 py-3 text-sm text-ink outline-none focus:bg-white focus:ring-2 focus:ring-brand/30"
+                />
+              </label>
+              <StepNav
+                onBack={() => {
+                  if (memoRequest.current) return;
+                  if (!note) {
+                    closeMemo();
+                    return;
+                  }
+                  setDraft(null);
+                }}
+                backLabel="취소"
+                backDisabled={memoPending}
+                nextType="submit"
+                nextLabel="저장"
+                nextDisabled={!draft.trim()}
+                nextBusy={memoPending}
+              />
+            </form>
+          )}
+          {memoPending && draft === null && <p role="status" className="m-0 text-xs text-muted">메모를 지우는 중이에요.</p>}
+          {memoError && <p role="alert" className="m-0 text-sm text-danger">{memoError}</p>}
+        </div>
+      </dialog>
+    </>
   );
 }
 

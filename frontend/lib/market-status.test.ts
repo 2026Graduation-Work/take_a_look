@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { staleLabel } from "./market-status.ts";
+import { showLocalAsOf, staleLabel } from "./market-status.ts";
 
 const at = (kst: string) => Date.parse(`${kst}+09:00`);
 
@@ -34,4 +34,14 @@ test("공휴일: KRX 휴장 평일은 밀린 날로 세지 않는다", () => {
 
 test("아주 오래된 데이터", () => {
   assert.equal(staleLabel("2025-12-30", at("2026-10-06T12:00:00")), "280일 전 데이터예요");
+});
+
+test("시장 바와 같은 최신 기준일만 생략하고 다른 시점과 갱신 지연은 남긴다", () => {
+  const now = at("2026-10-21T12:00:00");
+  assert.equal(showLocalAsOf("2026-10-20", "2026-10-20", now), false);
+  assert.equal(showLocalAsOf("2026-10-19", "2026-10-20", now), true);
+  assert.equal(showLocalAsOf("2026-10-16", "2026-10-16", now), true);
+  assert.equal(showLocalAsOf("2026-10-20", "", now), true);
+  assert.equal(showLocalAsOf(undefined, "2026-10-20", now), false);
+  assert.equal(showLocalAsOf("", "2026-10-20", now), false);
 });

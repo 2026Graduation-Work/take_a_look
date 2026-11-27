@@ -1,8 +1,9 @@
 import { Bone, SkeletonPage } from "@/app/components/skeleton";
+import { DelayedTipStrip } from "@/app/components/tip-strip";
 
 export default function Loading() {
   return (
-    <SkeletonPage label="종목 정보를 불러오는 중이에요." width="wide">
+    <SkeletonPage label="종목 정보를 불러오는 중이에요." width="wide" beneathHeader={<DelayedTipStrip />}>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-1">
         <div className="flex flex-col gap-2">
           <Bone className="h-4 w-24" />

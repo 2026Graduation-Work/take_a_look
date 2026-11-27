@@ -9,9 +9,9 @@
      하락 청색과 뜻이 겹쳐 쓰지 않는다. */
   --color-brand: #124532; /* 성균 진녹 — 주요 버튼·링크·현재 위치·포커스·로고 글자. 흰 배경 10.9:1 */
   --color-brand-deep: #0c3325; /* 눌림·호버 */
-  --color-brand-soft: #eaf1ec; /* 선택된 조작 요소의 옅은 바탕 */
+  --color-brand-soft: #eaf1ec; /* 선택된 조작 요소와 초보 투자 팁의 옅은 바탕 */
   --color-brand-accent: #8dc63f; /* 성균 연두 — 선택 표시(밑줄·막대)·진행률·차트의 "나". 글자 금지(2.0:1) */
-  /* 브랜드 마크(docs/brand/README.md). "색은 가격 방향과 초록 버튼뿐" 규칙의 유일한 예외 */
+  /* 브랜드 마크(docs/brand/README.md) */
   --color-logo-tile: #124532; /* 타일 = 성균 진녹 */
   --color-logo-tile-on-dark: #2f7a5c; /* 다크 배경(#1c1c1e) 위 타일 — 진녹은 1.6:1로 묻혀서 밝힌다(3.3:1, 흰 얼굴과 5.2:1) */
   --color-logo-face: #ffffff; /* 고양이 얼굴 */
@@ -66,7 +66,9 @@
   /* ── 타이포 스케일 ───────────────────────────────────────
      본문 15px, 보조 13px, 제목·대표 수치 28~40px. 임의값 금지.
      글자를 키운 대신 한 화면 정보량을 줄인다. */
-  --text-2xs: 0.8125rem; /* 13px — 각주·차트 눈금. 이보다 작게 쓰지 않는다 */
+  --text-tip-link: 0.6875rem; /* 11px — 팁 띠의 자세히 보기 링크에만 사용 */
+  --text-tip-link--line-height: 1.6;
+  --text-2xs: 0.8125rem; /* 13px — 각주·차트 눈금. 팁 링크 외에는 이보다 작게 쓰지 않는다 */
   --text-2xs--line-height: 1.6;
   --text-xs: 0.8125rem; /* 13px — 화면 규칙 v2 글자 4단계: 보조는 13 하나(2xs와 같음) */
   --text-xs--line-height: 1.6;
@@ -341,6 +343,11 @@ summary::-webkit-details-marker {
   .disclosure[open] > summary::after {
     transform: rotate(-135deg) translateY(-2px);
   }
+}
+
+@keyframes tip-rise {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {

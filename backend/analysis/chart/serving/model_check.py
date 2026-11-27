@@ -15,7 +15,7 @@ from .internal.pipeline import (
 
 
 def main():
-    pack, paths = active_pack()
+    pack, paths, golden_sha256 = active_pack()
     expected = list(BASE_FEATURES) + list(FLOW_FEATURES)
     for horizon in (5, 20):
         if pack["horizons"][f"h{horizon}"]["feature_names"] != expected:
@@ -30,7 +30,7 @@ def main():
         upsert_prices=lambda *_: None,
         upload_feature_panel=lambda *_: None,
     )
-    collected = collect(as_of, store, code="005930", historical_test=True)
+    collected = collect(as_of, store, pack=pack, golden_sha256=golden_sha256, code="005930", historical_test=True)
     if collected is None:
         raise ValueError("Confirmed session missing from collector calendar")
     batch, snapshots = build_batch(as_of, pack, paths, *collected)

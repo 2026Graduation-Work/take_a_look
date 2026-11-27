@@ -13,7 +13,7 @@ import pandas as pd
 import yaml
 from shared.data.calendar import scheduled_sessions
 from shared.data.providers import KrxResponseError
-from shared.settings import processing_contract, serving_root
+from shared.settings import serving_root
 
 from .calendar import refresh_krx_trading_days
 from .distribution import SampleIndex
@@ -21,13 +21,14 @@ from .features import BUILDER_ID, build_feature_frame
 from .flows import collect_flows
 from .hashing import canonical_hash, sha256_file
 from .inference import infer_batch
-from .pack import config_path, load_pack
-from .prices import fetch_prices, price_snapshot
+from .pack import config_path, feature_cache_key, load_pack
+from .prices import HISTORY_SIZE, fetch_prices, price_snapshot
 from .progress import report
 from .snapshot import build_snapshot, unavailable_snapshot
 from .storage import SupabaseStore
 
 KST = ZoneInfo("Asia/Seoul")
+VERIFIED_PRICE_FROM = "event_basis_verified_from"
 
 
 def official_day(requested=None):
@@ -82,7 +83,7 @@ def _retry_fetch(code, start, as_of):
             time.sleep(10 * (attempt + 1))
 
 
-def collect(as_of, store, *, replay=False, code=None, historical_test=False):
+def collect(as_of, store, *, pack, golden_sha256, replay=False, code=None, historical_test=False):
     start = "2016-01-01"
     recent_start = (pd.Timestamp(as_of) - pd.Timedelta(240, unit="D")).date().isoformat()
     if replay:
@@ -100,26 +101,30 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
         if not historical_test:
             store.save_calendar(as_of, days)
             store.save_universe(as_of, universe)
+    sessions = pd.DatetimeIndex(pd.to_datetime(sorted(days)))
     if universe.Code.duplicated().any():
         raise ValueError("Duplicate archived universe")
     flow, flow_report = (pd.DataFrame(), {"mode": "archived_inputs"}) if replay else collect_flows(days, store)
     frames, unavailable, raw_hashes, price_archives = {}, {}, {}, {}
-    archive_builder = BUILDER_ID + "_" + processing_contract()["sha256"][:16]
+    archive_builder = BUILDER_ID + "_" + feature_cache_key(golden_sha256)[:16]
+    legacy_digest = pack.get("processing_contract", {}).get("sha256") or ""
     for row in universe.itertuples():
         code = row.Code
         try:
+            basis_from = None
             if replay:
                 archived = store.load_raw_prices(code, as_of)
                 if archived is None:
                     raise ValueError(f"Corrected raw input archive absent for {code}/{as_of}")
-                stored = archived
-                if stored.empty or stored.Date.max().date().isoformat() != as_of:
+                if archived.empty or archived.Date.max().date().isoformat() != as_of:
                     raise ValueError(f"Historical inputs absent for {code}/{as_of}")
-                raw = stored
+                raw = archived
+                listing_sessions = sessions if len(raw) >= HISTORY_SIZE else sessions[sessions >= raw.Date.min()]
             else:
                 listing = pd.to_datetime(getattr(row, "ListingDate", None))
                 if pd.isna(listing):
                     raise ValueError(f"Verified listing interval absent for {code}")
+                listing_sessions = sessions[sessions >= listing]
                 previous = None if historical_test else store.load_price_history(code)
                 if previous is not None:
                     previous = previous.loc[pd.to_datetime(previous.Date).ge(listing)].copy()
@@ -128,12 +133,18 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                 first = max(pd.Timestamp(start), listing).date().isoformat()
                 request_start = first if previous is None else max(pd.Timestamp(recent_start), listing).date().isoformat()
                 fresh = _retry_fetch(code, request_start, as_of)
+                basis_from = fresh.Date.min()
                 if previous is not None:
                     previous = previous.loc[pd.to_datetime(previous.Date).le(pd.Timestamp(as_of))]
-                    # Daily serving updates only the recent input window. Keep the
-                    # saved prefix for the existing feature calculation; source
-                    # revisions must never trigger a 2016~ history requery.
+                    stored_bound = pd.to_datetime(previous.attrs.pop(VERIFIED_PRICE_FROM, None), errors="coerce")
+                    if pd.notna(stored_bound):
+                        old_close = previous.set_index("Date").Close
+                        new_close = fresh.set_index("Date").Close
+                        overlap = old_close.index.intersection(new_close.index)
+                        if not overlap.empty and old_close.loc[overlap].astype(float).eq(new_close.loc[overlap]).all():
+                            basis_from = min(stored_bound, basis_from)
                     fresh = pd.concat([previous, fresh], ignore_index=True).drop_duplicates("Date", keep="last")
+                fresh = fresh.sort_values("Date").reset_index(drop=True)
                 if fresh.Date.max().date().isoformat() != as_of:
                     unavailable[code] = "price_not_confirmed_for_session"
                     continue
@@ -146,14 +157,20 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
                     raw = raw.merge(flow.loc[flow.Code.eq(code)].drop(columns="Code"),
                                     on="Date", how="left", validate="one_to_one")
                 if not historical_test:
-                    store.save_price_history(code, raw)
-            raw = raw.sort_values("Date").reset_index(drop=True)
+                    stored_history = raw.copy(deep=False)
+                    stored_history.attrs[VERIFIED_PRICE_FROM] = basis_from.date().isoformat()
+                    store.save_price_history(code, stored_history)
             if raw.empty or raw.Date.max().date().isoformat() != as_of:
                 unavailable[code] = "price_not_confirmed_for_session"
                 continue
-            digest = raw.attrs.get("input_sha256") if replay else None
-            if digest:
+            archived_digest = raw.attrs.get("input_sha256") if replay else None
+            digest = archived_digest or frame_hash(raw)
+            prices = price_snapshot(raw, as_of, listing_sessions, digest, replay=replay, basis_from=basis_from)
+            if archived_digest:
                 current = store.load_features(code, as_of, archive_builder, digest)
+                if current is None and re.fullmatch(r"[a-f0-9]{64}", legacy_digest):
+                    legacy_builder = BUILDER_ID + "_" + legacy_digest[:16]
+                    current = store.load_features(code, as_of, legacy_builder, digest)
                 if current is None:
                     raise ValueError(f"Archived compatible feature input absent for {code}/{as_of}")
             else:
@@ -162,17 +179,18 @@ def collect(as_of, store, *, replay=False, code=None, historical_test=False):
             if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
                 unavailable[code] = "feature_row_missing"
                 continue
-            digest = digest or frame_hash(raw)
             if not replay and not historical_test:
-                archive = raw.tail(60).copy()
-                archive.attrs["input_sha256"] = digest
+                archive = raw.tail(HISTORY_SIZE + 1).copy()
+                archive.attrs = {"input_sha256": digest}
+                if "event_basis" in prices:
+                    archive.attrs["event_basis"] = prices["event_basis"]
                 if hasattr(store, "save_raw_price_panel"):
                     price_archives[code] = archive
                 else:
                     store.save_raw_prices(code, as_of, archive)
             if not replay and not hasattr(store, "upload_feature_panel"):
                 store.upload_features(code, as_of, archive_builder, digest, current)
-            frames[code] = (raw, current.iloc[0].to_dict(), current)
+            frames[code] = (prices, current.iloc[0].to_dict(), current)
             raw_hashes[code] = digest
         except ValueError as exc:
             if replay:
@@ -197,9 +215,11 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
     names = dict(zip(universe.Code, universe.Name))
     codes = sorted(names)
     batch_id = canonical_hash({"as_of": as_of, "pack_id": pack["pack_id"],
-                               "output_policy": "winning_class_contribution_hist2_v2",
+                               "output_policy": "winning_class_contribution_hist2_price_events_v3",
                                "builder": pack["feature_builder_id"], "names": names,
-                               "raw_hashes": raw_hashes, "unavailable": unavailable})
+                               "raw_hashes": raw_hashes, "unavailable": unavailable,
+                               "price_outputs": {code: canonical_hash(prices)
+                                                 for code, (prices, _, _) in frames.items()}})
     snapshots = []
     for horizon in (5, 20):
         item = pack["horizons"][f"h{horizon}"]
@@ -219,9 +239,11 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
                     code=code, stock_name=names[code], as_of=as_of, horizon=horizon,
                     pack_id=pack["pack_id"], batch_id=batch_id,
                     reason=unavailable.get(code, "flow_window_incomplete"), model_sha256=item["model_sha256"],
-                    samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack)))
+                    samples_sha256=item["samples_sha256"], config_sha256=canonical_hash(pack),
+                    prices=frames[code][0] if code in incomplete else None,
+                    prices_sha256=raw_hashes.get(code)))
                 continue
-            raw, row, _ = frames[code]
+            prices, row, _ = frames[code]
             scores, contributions, features_hash, contribution_total = by_code[code]
             target = max(range(3), key=lambda i: scores[("down", "neutral", "up")[i]])
             sigma, close = float(row["Sigma"]), float(row["Close"])
@@ -232,15 +254,12 @@ def build_batch(as_of, pack, paths, universe, frames, unavailable, raw_hashes, f
                                                        "down": close * (1 - down * sigma)},
                          "contribution_space": f"class_{target}_raw_margin", "features": contributions,
                          "contribution_abs_sum": contribution_total}
-            price = price_snapshot(raw, code, as_of, "KRX 비수정 OHLC·거래대금, 동일 수정계수 적용")
-            if price["status"] != "available":
-                raise ValueError(f"Stale price in batch: {code}")
             distribution = history.distribution(horizon=horizon, score=scores["up"], sigma=sigma, as_of=as_of)
             snapshots.append(build_snapshot(
                 code=code, stock_name=names[code], as_of=as_of, horizon=horizon,
                 pack_id=pack["pack_id"], batch_id=batch_id, inference=inference,
                 distribution=distribution,
-                prices={"basis": "adjusted_close", "source": price["source"], "history": price["history"]},
+                prices=prices,
                 sources={"model_sha256": item["model_sha256"], "features_sha256": features_hash,
                          "prices_sha256": raw_hashes[code], "cases_sha256": item["samples_sha256"],
                          "config_sha256": canonical_hash(pack)}))
@@ -263,7 +282,7 @@ def run(args):
             raise ValueError("--historical-test is dry-run only")
         if as_of == datetime.now(KST).date().isoformat():
             raise ValueError("--historical-test requires a past date")
-    pack, paths = active_pack(root)
+    pack, paths, golden_sha256 = active_pack(root)
     if pack["feature_builder_id"] != BUILDER_ID:
         raise ValueError("Daily inference requires a pack matching the corrected feature builder")
     # Automatic runs have no archived universe on weekends or exchange holidays.
@@ -274,7 +293,7 @@ def run(args):
     store = SupabaseStore()
     # Live collection for the latest confirmed day even when a delayed schedule starts after midnight KST
     replay = getattr(args, "replay", False) or (as_of != official_day(None) and not historical_test)
-    collected = collect(as_of, store, replay=replay, code=args.code if historical_test else None,
+    collected = collect(as_of, store, pack=pack, golden_sha256=golden_sha256, replay=replay, code=args.code if historical_test else None,
                         historical_test=historical_test)
     if collected is None:
         print(json.dumps({"event": "holiday", "as_of": as_of, "pack_id": pack["pack_id"]}))
@@ -339,13 +358,19 @@ def run_preview(args):
     root = serving_root()
     config = yaml.safe_load(config_path().read_text())["active_pack"]
     pack_dir = root / "packs" / config["pack_id"]
-    pack, paths = load_pack(pack_dir)
+    pack, paths, golden_sha256 = load_pack(pack_dir, golden_sha256=config.get("golden_sha256"))
     if pack["feature_builder_id"] == BUILDER_ID:
         dataset = root / "inputs"
         input_path = dataset / "raw" / f"{args.code}.parquet"
         input_manifest = json.loads(input_path.with_suffix(".manifest.json").read_text())
+        expected_key = feature_cache_key(golden_sha256)
+        if "feature_cache_key" in input_manifest:
+            valid_key = input_manifest["feature_cache_key"] == expected_key
+        else:
+            legacy_key = input_manifest.get("processing_contract_sha256")
+            valid_key = bool(legacy_key) and legacy_key in (expected_key, pack["processing_contract"].get("sha256"))
         if (input_manifest["source_sha256"] != sha256_file(input_path)
-                or input_manifest["processing_contract_sha256"] != pack["processing_contract"]["sha256"]
+                or not valid_key
                 or input_manifest["pack_id"] != pack["pack_id"]):
             raise ValueError("Operational preview input provenance mismatch")
         raw = pd.read_parquet(input_path)
@@ -358,7 +383,8 @@ def run_preview(args):
             raise ValueError("Requested date is absent from corrected inputs")
         name = str(raw.iloc[-1].Name)
         calendar = json.loads((pack_dir / "calendar.json").read_text())
-        current = build_feature_frame(raw, set(pd.to_datetime(calendar["trading_days"]).date))
+        sessions = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
+        current = build_feature_frame(raw, set(sessions.date))
         current = current.loc[current.Date.eq(as_of)]
         if len(current) != 1 or not pd.notna(current.iloc[0].Sigma):
             raise ValueError("No complete corrected feature row")
@@ -367,12 +393,13 @@ def run_preview(args):
         raise ValueError("Preview requires a pack compatible with the shared builder")
     digest = frame_hash(raw)
     universe = pd.DataFrame({"Code": [args.code], "Name": [name]})
+    prices = price_snapshot(raw, as_of, sessions[sessions >= raw.Date.min()], digest)
     if not args.compute_only:
         store = SupabaseStore()
         store.save_universe(as_of, universe)
         store.upsert_prices(args.code, raw)
         store.upload_features(args.code, as_of, pack["feature_builder_id"], digest, current)
-    frames = {args.code: (raw, current.iloc[0].to_dict(), current)}
+    frames = {args.code: (prices, current.iloc[0].to_dict(), current)}
     batch, snapshots = build_batch(as_of, pack, paths, universe, frames, {}, {args.code: digest})
     out = root / "batches" / batch["id"]
     out.mkdir(parents=True, exist_ok=True)
@@ -394,7 +421,7 @@ def data_root():
 
 def active_pack(root=None):
     config = yaml.safe_load(config_path().read_text())["active_pack"]
-    return load_pack((root or data_root()) / "packs" / config["pack_id"])
+    return load_pack((root or data_root()) / "packs" / config["pack_id"], golden_sha256=config.get("golden_sha256"))
 
 
 def write_batch(root, batch, snapshots):

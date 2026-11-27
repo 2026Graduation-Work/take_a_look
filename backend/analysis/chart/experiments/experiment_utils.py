@@ -7,6 +7,9 @@ from pathlib import Path
 import pandas as pd
 
 CACHE_SCHEMA_VERSION = 3
+_PREDICTION_MANIFEST_RECOVERY = (
+    "Restore the original manifest or move the prediction parquet and manifest aside before rerunning train.py"
+)
 
 
 def _normalize_split(split: dict, fold_id: int) -> dict:
@@ -369,6 +372,8 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
                 "Run python -m experiments.features.build_feature_panel --config first"
             )
         manifest = json.loads(manifest_path.read_text())
+        if manifest.get("config", {}).get("processing_contract") != config["processing_contract"]:
+            raise ValueError("Shared processing changed; prepare features again")
         if manifest["feature_columns"] != config["feature_columns"]:
             raise ValueError("Feature list changed; prepare features again")
         for name, digest in manifest["file_hashes"].items():
@@ -377,9 +382,10 @@ def find_processed_dir(config: dict, anchor_file: str) -> str:
     return str(path)
 
 
-def cache_dir(anchor_file: str) -> str:
+def cache_dir(anchor_file: str, *, create: bool = True) -> str:
     path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "predictions")
-    os.makedirs(path, exist_ok=True)
+    if create:
+        os.makedirs(path, exist_ok=True)
     return path
 
 
@@ -392,13 +398,17 @@ def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_fil
     return os.path.join(cache_dir(anchor_file), f"{pred_hash}_predictions.parquet")
 
 
-def result_dir(config: dict, anchor_file: str) -> str:
+def result_path(config: dict, anchor_file: str) -> Path:
     exp_name = config.get("experiment_name", "default_exp")
     if config.get("contract_version") == 3:
         from experiments.config import identity
 
         exp_name += "_" + identity(config)
-    path = os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "runs", exp_name)
+    return Path(chart_root(anchor_file)) / "workspace" / "experiments" / "runs" / exp_name
+
+
+def result_dir(config: dict, anchor_file: str) -> str:
+    path = result_path(config, anchor_file)
     os.makedirs(path, exist_ok=True)
     if config.get("contract_version") == 3:
         from shared.io import atomic_json
@@ -412,7 +422,7 @@ def result_dir(config: dict, anchor_file: str) -> str:
                 "processing_contract": config["processing_contract"],
             },
         )
-    return path
+    return str(path)
 
 
 def label_params_from_config(config: dict) -> dict:
@@ -428,6 +438,32 @@ def label_params_from_config(config: dict) -> dict:
         "volatility_window": labels.get("volatility_window", 20),
         "ewma_span": labels.get("ewma_span", 20),
     }
+
+
+def _validate_prediction_labels(manifest: dict, config: dict) -> None:
+    trained_config = manifest.get("config") if isinstance(manifest, dict) else None
+    trained_labels = trained_config.get("labels") if isinstance(trained_config, dict) else None
+    error = "Invalid prediction manifest config.labels"
+    if not isinstance(trained_labels, dict):
+        raise ValueError(
+            f"{error}: expected the recorded training labels. {_PREDICTION_MANIFEST_RECOVERY}"
+        )
+    label_type = trained_labels.get("type")
+    if label_type not in ("dynamic_sigma", "fixed"):
+        raise ValueError(
+            f"{error}.type: expected dynamic_sigma or fixed. {_PREDICTION_MANIFEST_RECOVERY}"
+        )
+    barrier_keys = {"up_mult", "down_mult"} if label_type == "dynamic_sigma" else {"tp", "sl"}
+    if missing := (barrier_keys | {"horizon"}) - trained_labels.keys():
+        raise ValueError(f"{error}: missing {sorted(missing)}. {_PREDICTION_MANIFEST_RECOVERY}")
+    requested_labels = config["labels"]
+    if label_params_from_config(trained_config) != label_params_from_config(config) or any(
+        trained_labels.get(key, default) != requested_labels.get(key, default)
+        for key, default in (("down_class", 0), ("neutral_class", 1), ("up_class", 2))
+    ):
+        raise ValueError(
+            f"Trained prediction labels {trained_labels} do not match requested labels {requested_labels}"
+        )
 
 
 def test_date_bounds(splits: list[dict]) -> tuple[str, str]:
@@ -455,8 +491,14 @@ def load_predictions(
     if config.get("contract_version") == 3:
         manifest_path = Path(str(path) + ".manifest.json")
         if not manifest_path.exists():
-            raise ValueError("Prediction manifest required; rerun train.py")
-        manifest = json.loads(manifest_path.read_text())
+            raise ValueError(f"Prediction manifest required. {_PREDICTION_MANIFEST_RECOVERY}")
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid prediction manifest JSON. {_PREDICTION_MANIFEST_RECOVERY}"
+            ) from exc
+        _validate_prediction_labels(manifest, config)
         if (
             manifest.get("predictions_hash") != generate_predictions_hash(config, splits)
             or manifest.get("feature_columns") != config["feature_columns"]

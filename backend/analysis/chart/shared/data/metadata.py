@@ -8,8 +8,8 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 
-from shared.io import atomic_json, atomic_parquet, sha256
-from shared.settings import processing_contract
+from shared.io import atomic_json, atomic_parquet, canonical_hash, sha256
+from shared.settings import serving_contract
 
 
 def fetch_active_listing_intervals(market):
@@ -126,7 +126,7 @@ def fetch_current_universe(as_of, *, root, code=None):
             raise ValueError("Invalid KOSPI universe size")
     path = Path(root) / f"{as_of}_{'single' if code else 'kospi'}.parquet"
     sidecar = path.with_suffix(".json")
-    contract = processing_contract()["sha256"]
+    contract = canonical_hash(serving_contract())
     metadata = None
     if path.exists() and sidecar.exists():
         saved = json.loads(sidecar.read_text())

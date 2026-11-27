@@ -21,7 +21,7 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     _, snapshots, _ = load_preview()
-    _, paths = active_pack()
+    _, paths, _ = active_pack()
     frame = pd.read_parquet(args.features)
     rows = []
     for snapshot in snapshots:
