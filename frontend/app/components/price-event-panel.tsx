@@ -113,6 +113,13 @@ export default function PriceEventPanel({ events }: { events: PriceEvents }) {
         {coverageNote && <p className="m-0">{coverageNote}</p>}
         <p className="m-0">코스피 KRX, 공시 DART{context.news.status === "available" && ", 뉴스 NewsAPI.ai"}</p>
       </div>
+      {basis && result.status === "ready" && <details className="disclosure">
+        <summary>계산 근거</summary>
+        <div className="flex flex-col gap-1 text-xs tabular-nums text-muted">
+          <p className="m-0">{formatKstDateTime(basis.periodStart)} ~ {formatKstDateTime(basis.periodEnd)}의 일간 로그수익률 {basis.returnCount}개로 평소 하루 변동 폭을 계산했어요.</p>
+          <p className="m-0">최근 거래일 중 {result.evaluatedDays}일을 비교했고, {result.excludedDays}일을 제외했어요.</p>
+        </div>
+      </details>}
     </div>
   );
 }
