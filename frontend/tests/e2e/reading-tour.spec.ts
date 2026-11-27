@@ -5,7 +5,7 @@ import { finishDemo } from "./demo-steps";
 import { mockSupabaseAuth } from "./supabase-mock";
 
 const demoKey = "takealook.demo-reading-history.v1";
-const hint = "다른 종목에서도 숫자의 기간과 비교 기준부터 확인해 보세요.";
+const hint = "다른 종목에서도 숫자가 어느 기간의 값인지, 무엇과 비교했는지 살펴봐요.";
 const basis = "/stocks/000660";
 const invite = (page: Page) => page.getByRole("button", { name: "같이 읽기", exact: true });
 const replay = (page: Page) => page.getByRole("button", { name: "읽는 법", exact: true });
@@ -29,7 +29,7 @@ async function introStop(page: Page, tab: string) {
 }
 
 async function orderStop(page: Page) {
-  await expect(message(page).getByRole("heading", { name: "어떤 순서로 보면 되나요?" })).toBeVisible();
+  await expect(message(page).getByRole("heading", { name: "이 순서로 살펴봐요" })).toBeVisible();
   await expect(message(page).getByText("읽는 순서", { exact: true })).toBeVisible();
   await expect(message(page).getByText(/\d+\s*\/\s*\d+/)).toHaveCount(0);
   await expect(previous(page)).toHaveCount(0);
@@ -88,7 +88,7 @@ for (const { turnover, typeLabel, order } of [
     await orderStop(page);
     await expect(message(page)).toContainText(names.join(" → "));
     await expect(message(page)).toContainText(typeLabel);
-    await expect(message(page)).toContainText("각 탭을 언제 열고, 무엇과 비교하는지");
+    await expect(message(page)).toContainText("각 정보를 언제, 왜 보고 어떻게 비교하면 좋을지");
     await expect(message(page)).not.toContainText("정보의 정확성");
     const targets: Record<string, string[]> = {
       overview: ["overview-summary", "overview-cohort", "overview-range"],
@@ -117,7 +117,7 @@ for (const { turnover, typeLabel, order } of [
         if (target === "overview-summary") await expect(page.getByRole("region", { name: "모델 신호 설명" })).toHaveCount(0);
         if (target === "overview-cohort") await expect(message(page)).toContainText(/상승 점수와 평소 가격 흔들림.*신호 당일과 20거래일 뒤의 종가/);
         if (target === "overview-range") await expect(message(page)).toContainText("가운데 68%");
-        if (target === "trading-total") await expect(message(page)).toContainText(/최근 1영업일의 합계.*개인, 외국인, 기관/);
+        if (target === "trading-total") await expect(message(page)).toContainText(/최근 1영업일 동안.*개인, 외국인, 기관.*같은 기간의 순매수 합계/);
         if (target === "trading-latest") await expect(message(page)).toContainText("1영업일뿐이라 기간 합계와 같아요");
         if (target === "company-metric") {
           await expect(message(page)).toContainText("104.8%");
@@ -192,18 +192,18 @@ test("안내 페이지에서 다시 시작하고 뒤로 이동하면 강조와 �
   await open(page);
   await page.getByRole("button", { name: "직접 둘러보기" }).click();
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 다시 같이 읽기" }).click();
+  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
   await orderStop(page);
   await page.goBack();
   await expect(page).toHaveURL("/guide");
   await expect(page.locator(".driver-overlay")).toHaveCount(0);
   await expect(page.locator("[inert]")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "종목 상세 다시 같이 읽기" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "종목 상세 읽는 법" })).toBeVisible();
 });
 
 test("로그아웃 상태에서도 이용 안내의 종목 상세 안내를 시작할 수 있어요", async ({ page }) => {
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 다시 같이 읽기" }).click();
+  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
   await orderStop(page);
   await expect(message(page)).not.toContainText(/진단 결과|추종형|독립 분석형|적극 축적형|자산 보존형/);
   await expect(message(page)).toContainText("투자 유형에 따라 순서가 달라질 수 있어요.");
@@ -278,7 +278,7 @@ test("자료가 없는 종목은 미제공 상태가 있는 패널을 가리켜�
   await invite(page).click();
   await orderStop(page);
   const chapters = [
-    { tab: "overview", label: "한눈에 보기", target: "overview-summary", text: "현재 제공된 모델 신호가 없어요." },
+    { tab: "overview", label: "한눈에 보기", target: "overview-summary", text: "지금은 표시할 모델 신호가 없어요." },
     { tab: "trading", label: "누가 사고팔았나", target: "trading-heading" },
     { tab: "news", label: "시장 분위기", target: "news-heading", text: "지금은 표시할 뉴스 분위기 자료가 없어요." },
     { tab: "model", label: "모델이 본 이유", target: "model-heading" },
@@ -397,7 +397,7 @@ for (const width of [320, 390, 1280]) {
 test("안내 도중 화면을 좁혀도 강조 대상과 말풍선이 함께 보여요", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 다시 같이 읽기" }).click();
+  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
   await advanceUntil(page, activePanel(page).locator('.driver-active-element[data-reading-target="news-heading"]'));
   await stop(page, "news", "news-heading");
 

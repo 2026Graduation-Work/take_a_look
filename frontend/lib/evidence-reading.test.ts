@@ -17,7 +17,9 @@ test("화면에 제공된 기사 수, 모델 대상, 0% 재무 값을 안내에 
     "overview-summary", "news-summary", "news-periods", "model-summary", "model-bars", "company-metric", "company-basis",
   ]);
   assert.match(steps[1].text, /2026\.09\.21 09:13.*3건.*중립/);
-  assert.match(steps[4].text, /오른쪽 막대는 하락 점수를 높이고/);
+  assert.match(steps[3].text, /하락 점수.*가상 항목.*현재 신호와 여기서 설명하는 점수의 방향은 다를 수 있어요/);
+  assert.match(steps[4].text, /오른쪽 막대는 하락 점수를 높인 정도, 왼쪽은 낮춘 정도/);
+  assert.match(steps[4].text, /가장 긴 막대.*이 화면 안에서만.*날짜나 기간이 다른 막대는 길이를 비교할 수 없어요.*예측 확률이나 수익률은 알 수 없어요/);
   assert.match(steps[5].text, /본업의 이익.*영업이익률.*0%.*코스피 중간값 4.5%보다 낮아요/);
   assert.match(steps[6].text, /2026년 반기.*매출과 본업 이익 중 무엇이 바뀌었는지/);
 });
@@ -37,7 +39,7 @@ test("한 번 읽는 순서를 안내한 뒤 탭 소개와 확인 사항을 이�
   const steps = readingSteps(tabs, facts);
   const [order, ...chapters] = steps;
   assert.deepEqual([order.phase, order.tab, order.target], ["order", "overview", "tab-list"]);
-  assert.match(order.text, /각 탭을 언제 열고, 무엇과 비교.*기본 순서/);
+  assert.match(order.text, /각 정보를 언제, 왜 보고 어떻게 비교.*기본 순서/);
   assert.match(order.text, /투자 유형에 따라 순서가 달라질 수 있어요/);
   assert.match(order.text, /한눈에 보기 → 회사 상태 → 누가 사고팔았나 → 모델이 본 이유 → 시장 분위기/);
   const [personalized] = readingSteps(tabs, { ...facts, readerTypeLabel: "추종형" });
@@ -60,9 +62,9 @@ test("알 수 없는 재무 지표에는 있는 값만 쓰고 비교 기준을 �
     ...facts,
     company: { metricKey: "unknown", metric: "기타 지표", value: "0배", period: "2026년 반기", comparison: null },
   }).filter(({ phase, tab }) => phase === "focus" && tab === "company");
-  assert.match(steps[0].text, /기타 지표.*0배.*표시할 비교 기준은 없어요/);
+  assert.match(steps[0].text, /기타 지표.*0배.*표시할 비교 기준이 없어요/);
   assert.doesNotMatch(steps[0].text, /코스피|업종/);
-  assert.match(steps[1].text, /기간 길이를 맞춘 이전 보고서의 같은 지표/);
+  assert.match(steps[1].text, /기간 길이가 같은 이전 보고서의 같은 지표/);
 });
 
 test("실제 범위와 근거가 있는 경우에만 한눈에 보기 세 단계로 안내해요", () => {
@@ -99,11 +101,11 @@ test("실제 범위와 근거가 있는 경우에만 한눈에 보기 세 단계
 test("마지막 날과 기간 전체가 같은 때를 구분해 설명해요", () => {
   const oneDay = readingSteps(["trading"], { ...facts, trading: { days: 1, hasVolume: true } })
     .filter(({ phase }) => phase === "focus");
-  assert.match(oneDay[0].text, /1영업일의 합계.*개인, 외국인, 기관/);
-  assert.match(oneDay[1].text, /1영업일뿐이라 기간 합계와 같아요.*같은 기간 하루 평균 거래량/);
+  assert.match(oneDay[0].text, /1영업일 동안.*큰 숫자를 나란히.*같은 기간의 순매수 합계/);
+  assert.match(oneDay[1].text, /가장 최근 하루의 순매수.*1영업일뿐이라 기간 합계와 같아요.*합계의 크기를 같은 기간 하루 평균 거래량과 비교한 값/);
   const fiveDays = readingSteps(["trading"], { ...facts, trading: { days: 5, hasVolume: false } })
     .filter(({ phase }) => phase === "focus");
-  assert.match(fiveDays[0].text, /5영업일의 합계/);
-  assert.match(fiveDays[1].text, /기간 전체와 마지막 하루의 거래 방향이 같은지.*거래량 자료가 없어/);
+  assert.match(fiveDays[0].text, /5영업일 동안/);
+  assert.match(fiveDays[1].text, /기간 전체와 마지막 날에 더 샀는지, 더 팔았는지 비교.*거래량 자료가 없어/);
   assert.doesNotMatch(fiveDays[1].text, /합계와 같아요/);
 });
