@@ -17,7 +17,7 @@ from experiments.dataset.pipeline import (
 )
 from experiments.experiment_utils import resolve_splits
 from serving.internal.inference import infer_batch
-from serving.internal.pack import load_pack
+from serving.internal.pack import feature_cache_key, load_pack
 from shared.data.calendar import verify_calendar_schedule
 from shared.data.providers import _attach_actual_vwap
 from shared.data.resolution_snapshot import require_price_provenance
@@ -219,7 +219,7 @@ def main(argv=None):
     root, archive, reports = build_pack(pack_id=args.pack_id, output=output, models=models,
         predictions=predictions, processed_dir=dataset / "processed",
         calendar_file=dataset / "calendar.json", research_manifest=info)
-    pack, paths = load_pack(root)
+    pack, paths, golden_sha256 = load_pack(root)
     if args.activate:
         raw = pd.read_parquet(dataset / "raw/005930.parquet")
         days = pd.to_datetime(json.loads((dataset / "calendar.json").read_text())["trading_days"])
@@ -243,7 +243,7 @@ def main(argv=None):
         temporary = config_path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump({"active_pack": {"pack_id": args.pack_id,
             "release_tag": "chart-serving-" + args.pack_id, "asset_name": archive.name,
-            "sha256": sha256_file(archive), "builder_sha256": processing_contract()["sha256"]}}, sort_keys=False))
+            "sha256": sha256_file(archive), "golden_sha256": golden_sha256}}, sort_keys=False))
         temporary.replace(config_path)
         inputs = CHART_ROOT / "workspace/serving/inputs/raw"
         inputs.mkdir(parents=True, exist_ok=True)
@@ -258,7 +258,7 @@ def main(argv=None):
                 shutil.copy2(previous_metadata, backup.with_suffix(".manifest.json"))
         shutil.copy2(source, destination)
         atomic_json(destination.with_suffix(".manifest.json"), {"source": str(source), "source_sha256": sha256_file(source),
-                    "processing_contract_sha256": processing_contract()["sha256"], "pack_id": args.pack_id,
+                    "feature_cache_key": feature_cache_key(golden_sha256), "pack_id": args.pack_id,
                     "purpose": "explicit local preview input transfer"})
     atomic_json(CHART_ROOT / "docs/local-pack-validation.json", {
         "pack_id": args.pack_id, "processing_contract": pack["processing_contract"],

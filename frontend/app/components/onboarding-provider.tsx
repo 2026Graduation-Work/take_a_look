@@ -33,6 +33,14 @@ export default function OnboardingProvider({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
+  if (process.env.NODE_ENV !== "production" && pathname === "/lab/backtest") return children;
+  return <ServiceOnboardingProvider pathname={pathname}>{children}</ServiceOnboardingProvider>;
+}
+
+function ServiceOnboardingProvider({
+  children,
+  pathname,
+}: Readonly<{ children: React.ReactNode; pathname: string }>) {
   const router = useRouter();
   const requestId = useRef(0);
   const [state, setState] = useState<OnboardingState>({

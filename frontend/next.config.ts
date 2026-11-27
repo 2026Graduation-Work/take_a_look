@@ -39,9 +39,13 @@ const nextConfig: NextConfig = {
       { source: "/ocr/v1/:file*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
     ];
   },
-// /dev-ocr는 page의 notFound()만으로는 상태가 200으로 나가서(스트리밍) 운영에서는 없는 경로로 돌린다(404)
+  // 전용 개발 페이지를 운영에서 없는 경로로 돌려 스트리밍 응답에도 404를 보장한다.
   async rewrites() {
-    return dev ? [] : { beforeFiles: [{ source: "/dev-ocr", destination: "/_dev-only-not-found" }], afterFiles: [], fallback: [] };
+    return dev ? [] : {
+      beforeFiles: ["/dev-ocr", "/lab/backtest"].map((source) => ({ source, destination: "/_dev-only-not-found" })),
+      afterFiles: [],
+      fallback: [],
+    };
   },
 };
 

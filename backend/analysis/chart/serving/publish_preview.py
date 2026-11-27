@@ -17,7 +17,7 @@ def load_preview(directory=PREVIEW_DIR):
     directory = Path(directory)
     batch = json.loads((directory / "batch.json").read_text())
     snapshots = json.loads((directory / "snapshots.json").read_text())
-    pack, _ = load_pack(data_root() / "packs" / batch["pack_id"])
+    pack, _, _ = load_pack(data_root() / "packs" / batch["pack_id"])
     if not batch["result"].get("historical_test") or batch["pack_id"] != pack["pack_id"]:
         raise ValueError("Expected a historical display-test batch for the active pack")
     expected = {(code, h) for code in batch["expected_stock_codes"] for h in (5, 20)}

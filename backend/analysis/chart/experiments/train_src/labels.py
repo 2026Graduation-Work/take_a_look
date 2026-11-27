@@ -4,6 +4,17 @@ import numpy as np
 import pandas as pd
 
 LABEL_VERSION = 4
+# A barrier computed as close × (1 + m × σ) carries float rounding (100 × 1.1 = 110.00000000000001).
+# Count prices within the relative tolerance as touches because barriers are not rounded to ticks.
+BARRIER_RTOL = 1e-9
+
+
+def reached_up(price, line):
+    return price >= line * (1 - BARRIER_RTOL)
+
+
+def reached_down(price, line):
+    return price <= line * (1 + BARRIER_RTOL)
 
 
 def barrier_labels(df, horizon, *, up_mult=None, down_mult=None, tp=None, sl=None):
@@ -40,8 +51,8 @@ def _barrier_labels(df, horizon, *, up_mult, down_mult, tp, sl):
         active = ~halt[distance:] & (passed <= horizon)
         finite = np.isfinite(high[distance:]) & np.isfinite(close[distance:])
         valid_path[:-distance] &= ~active | finite
-        first_up = active & finite & (high[distance:] >= up[:-distance])
-        first_down = active & finite & (close[distance:] <= down[:-distance])
+        first_up = active & finite & reached_up(high[distance:], up[:-distance])
+        first_down = active & finite & reached_down(close[distance:], down[:-distance])
         hit_up[:-distance] = np.minimum(hit_up[:-distance], np.where(first_up, passed, np.inf))
         hit_down[:-distance] = np.minimum(
             hit_down[:-distance], np.where(first_down, passed, np.inf)

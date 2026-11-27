@@ -56,9 +56,10 @@ def test_main_records_verified_evaluation_pack_and_distinct_horizon_labels(pack,
     config.write_text("active_pack:\n  pack_id: evaluation-pack\n")
     monkeypatch.setattr(live, "config_path", lambda: config)
     monkeypatch.setattr(live, "serving_root", lambda: tmp_path)
-    def verified_pack(path):
+    def verified_pack(path, *, golden_sha256):
         assert path == tmp_path / "packs/evaluation-pack"
-        return pack, {}
+        assert golden_sha256 is None
+        return pack, {}, None
     monkeypatch.setattr(live, "load_pack", verified_pack)
     monkeypatch.setattr(live, "fetch", lambda table, _: log if table == "chart_prediction_log"
                         else prices.assign(trade_date=prices.trade_date.dt.strftime("%Y-%m-%d")).to_dict("records"))

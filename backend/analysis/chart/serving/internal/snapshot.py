@@ -19,7 +19,7 @@ def build_snapshot(*, code, stock_name, as_of, horizon, pack_id, batch_id,
 
 def unavailable_snapshot(*, code, stock_name, as_of, horizon, pack_id, batch_id,
                          reason, model_sha256=None, samples_sha256=None,
-                         config_sha256=None):
+                         config_sha256=None, prices=None, prices_sha256=None):
     return build_snapshot(
         code=code, stock_name=stock_name, as_of=as_of, horizon=horizon,
         pack_id=pack_id, batch_id=batch_id,
@@ -33,8 +33,8 @@ def unavailable_snapshot(*, code, stock_name, as_of, horizon, pack_id, batch_id,
                       "period_start": None, "period_end": None,
                       "observed_through": None, "by_fold": {},
                       "histogram": {"bins": [], "central_68": None}},
-        prices={"basis": "adjusted_close", "source": "unavailable", "history": []},
+        prices=prices or {"basis": "adjusted_close", "source": "unavailable", "history": []},
         sources={"model_sha256": model_sha256, "features_sha256": None,
-                 "prices_sha256": None, "cases_sha256": samples_sha256,
+                 "prices_sha256": prices_sha256, "cases_sha256": samples_sha256,
                  "config_sha256": config_sha256},
     )

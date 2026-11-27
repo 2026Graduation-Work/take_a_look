@@ -1,0 +1,10 @@
+contract_version: 3
+dataset_id: qlib_2016
+root: workspace/experiments/datasets/qlib_2016
+collection:
+  start_date: '2016-01-01'
+  end_date: null
+  markets: [KOSPI]
+  include_delisted: true
+  investor_flows: true
+preprocessing: qlib_alpha158

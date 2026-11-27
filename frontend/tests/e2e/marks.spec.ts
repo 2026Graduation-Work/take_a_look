@@ -22,11 +22,12 @@ async function watchAndNote(page: Page) {
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
   await page.goto("/stocks/005930");
   await page.getByRole("button", { name: "관심 종목에 두기" }).click();
-  await expect(page.getByRole("button", { name: /관심 종목 ✓/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "관심 종목에서 빼기" })).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("실적 발표 뒤에 다시 보기");
   await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText(/지난 메모, \d{4}\.\d{2}\.\d{2}/)).toBeVisible();
 
   await page.goto("/");
@@ -34,11 +35,13 @@ async function watchAndNote(page: Page) {
   await expect(watched.getByRole("link", { name: /삼성전자/ })).toBeVisible();
 
   await page.goto("/stocks/005930");
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText("실적 발표 뒤에 다시 보기")).toBeVisible();
   await page.getByRole("button", { name: "고치기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("10월 말 실적 발표 뒤에 다시 보기");
   await page.getByRole("button", { name: "저장", exact: true }).click();
   await page.reload();
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText("10월 말 실적 발표 뒤에 다시 보기")).toBeVisible();
   await page.getByRole("button", { name: "지우기" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "메모 지우기" }).click();
@@ -71,8 +74,25 @@ test("로그인: 관심 종목·판단 메모가 Supabase에 저장되고 다시
   await page.getByRole("button", { name: "관심 종목에 두기" }).click();
   await expect.poll(() => tables.watchlist.get("005930")?.is_active).toBe(true);
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
-  await page.getByRole("textbox", { name: "내 판단 메모" }).fill("DB에 남는 메모");
-  await page.getByRole("button", { name: "저장", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "판단 메모", exact: true });
+  await dialog.getByRole("textbox", { name: "내 판단 메모" }).fill("DB에 남는 메모");
+  let releaseWrite!: () => void;
+  const writeGate = new Promise<void>(resolve => { releaseWrite = resolve; });
+  await page.route(/\/rest\/v1\/stock_notes(?:\?|$)/, async (route) => {
+    if (route.request().method() === "POST") await writeGate;
+    await route.fallback();
+  });
+  try {
+    await dialog.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "닫기" })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("textbox")).toHaveValue("DB에 남는 메모");
+  } finally {
+    releaseWrite();
+  }
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "판단 메모 보기" })).toBeFocused();
   await expect.poll(() => tables.stock_notes.get("005930")?.note).toBe("DB에 남는 메모");
 
   await page.evaluate(() => {
@@ -82,12 +102,13 @@ test("로그인: 관심 종목·판단 메모가 Supabase에 저장되고 다시
   await page.goto("/");
   await expect(page.getByRole("region", { name: "관심 종목" }).getByRole("link", { name: /삼성전자/ })).toBeVisible();
   await page.goto("/stocks/005930");
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText("DB에 남는 메모")).toBeVisible();
 
   await page.getByRole("button", { name: "지우기" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "메모 지우기" }).click();
   await expect.poll(() => tables.stock_notes.has("005930")).toBe(false);
-  await page.getByRole("button", { name: /관심 종목 ✓/ }).click();
+  await page.getByRole("button", { name: "관심 종목에서 빼기" }).click();
   await expect.poll(() => tables.watchlist.get("005930")?.is_active).toBe(false);
   await page.goto("/");
   await expect(page.getByRole("region", { name: "관심 종목" })).toHaveCount(0);
@@ -108,9 +129,11 @@ test("로그인 + stock_notes 테이블 적용 전: 메모는 브라우저에 �
   await page.getByRole("button", { name: "판단 메모 쓰기" }).click();
   await page.getByRole("textbox", { name: "내 판단 메모" }).fill("테이블 없어도 남는 메모");
   await page.getByRole("button", { name: "저장", exact: true }).click();
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText(/지난 메모/)).toBeVisible();
   await expect(page.locator("p[role=alert]")).toHaveCount(0);
   await page.reload();
+  await page.getByRole("button", { name: "판단 메모 보기" }).click();
   await expect(page.getByText("테이블 없어도 남는 메모")).toBeVisible();
 });
 

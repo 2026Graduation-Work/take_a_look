@@ -3,6 +3,7 @@ import Link from "next/link";
 import BrandHeader from "../components/brand-header";
 import GuideAccount from "./guide-account";
 import DisclaimerFooter from "../components/disclaimer-footer";
+import { BEGINNER_TIPS } from "@/lib/beginner-tips";
 import { DISCLAIMER, SERVICE_NAME } from "@/lib/brand";
 import { HORIZON_GUIDE, TERM_INFO } from "@/lib/copy-glossary";
 
@@ -17,6 +18,7 @@ const SECTIONS = [
   ["routine", "하루 5분 공부 루틴"],
   ["screens", "화면 읽는 법"],
   ["terms", "용어 모음"],
+  ["beginner-tips", "알고 계셨나요?"],
   ["notes", "알아 둘 점"],
 ] as const;
 
@@ -43,7 +45,7 @@ const SCREENS: [string, string][] = [
 
 const NOTES = [
   "모델 신호는 과거 비슷한 경우의 통계예요. 앞으로의 가격을 맞히는 값이 아니고 틀릴 수 있어요.",
-  "기준일은 시장 바의 ⓘ를 누르면 맨 아래 줄에 있어요. 데이터가 2영업일 넘게 밀리면 시장 바와 그 카드에 따로 적어요.",
+  "시세 기준일과 실시간 시세가 아니라는 안내는 시장 바 오른쪽 끝에 있어요. 화면이 좁으면 같은 바 안에서 줄이 바뀌어요. 데이터가 2영업일 이상 밀리면 시장 바와 그 카드에 따로 적어요.",
   "코스피에 상장된 주식(보통주, 우선주)을 다뤄요. ETF, ETN, 해외 주식은 아직 다루지 않아요.",
   DISCLAIMER,
 ];
@@ -129,7 +131,31 @@ export default function GuidePage() {
             </dl>
           </Section>
 
-          <Section id="notes" title={SECTIONS[5][1]}>
+          <Section id="beginner-tips" title={SECTIONS[5][1]}>
+            <dl className="m-0 flex flex-col gap-6">
+              {BEGINNER_TIPS.map(tip => (
+                <div key={tip.id} id={`tip-${tip.id}`} className="flex scroll-mt-20 flex-col gap-1">
+                  <dt className="text-base font-semibold text-ink">{tip.title}</dt>
+                  <dd className="m-0 max-w-2xl text-sm text-body">{tip.summary}</dd>
+                  {tip.detail.map(line => (
+                    <dd key={line} className="m-0 max-w-2xl text-sm text-body">{line}</dd>
+                  ))}
+                  {tip.formula && <dd className="m-0 text-xs text-muted tabular-nums">계산 예시 {tip.formula}</dd>}
+                  {tip.inService && <dd className="m-0 max-w-2xl text-sm text-body">{tip.inService}</dd>}
+                  <dd className="m-0 text-xs text-muted">
+                    출처 {tip.sources.map((source, index) => (
+                      <span key={source.label}>
+                        {index > 0 && ", "}
+                        {source.url ? <a href={source.url} className="inline-flex min-h-11 items-center underline underline-offset-2">{source.label}</a> : source.label}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Section>
+
+          <Section id="notes" title={SECTIONS[6][1]}>
             <ul className="m-0 flex list-disc flex-col gap-2 pl-5 text-sm text-body">
               {NOTES.map((note) => <li key={note} className="max-w-2xl">{note}</li>)}
             </ul>
