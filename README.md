@@ -2,6 +2,8 @@
 
 **초보 투자자를 위한 의사결정 지원 서비스**
 
+English summary: [README.en.md](README.en.md)
+
 행동재무학 기반 투자 판단 보조 플랫폼 · 성균관대 소프트웨어학과 2026 졸업작품.
 투자 성향을 진단해 근거를 보여 주는 순서를 사람마다 다르게 하고, 주가 예측 모델은 여러 근거 중 하나로만 씁니다.
 
@@ -148,7 +150,7 @@ docs/               설계·데이터·설정 문서 (색인: docs/README.md)
 
 ## 기여하기
 
-브랜치·커밋·PR 규칙은 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), 아키텍처 원칙과 금지 표현은 [AGENTS.md](AGENTS.md)에 있습니다. 보안 문제는 [SECURITY.md](SECURITY.md)를, 접근성 불편은 [ACCESSIBILITY.md](ACCESSIBILITY.md)를 봐 주세요.
+브랜치·커밋·PR 규칙은 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md), 아키텍처 원칙과 금지 표현은 [AGENTS.md](AGENTS.md)에 있습니다. 보안 문제는 [SECURITY.md](SECURITY.md)를, 접근성 불편은 [ACCESSIBILITY.md](ACCESSIBILITY.md)를 봐 주세요. 팀원이 아니어도 [good first issue](https://github.com/2026Graduation-Work/take_a_look/labels/good%20first%20issue)와 [help wanted](https://github.com/2026Graduation-Work/take_a_look/labels/help%20wanted) 이슈부터 시작할 수 있습니다.
 
 ## 팀
 

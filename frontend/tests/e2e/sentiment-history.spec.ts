@@ -11,6 +11,7 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
     localStorage.setItem("takealook.ips-profile.v1", JSON.stringify(profile));
   }, PROFILE);
   await page.goto("/stocks/035420");
+  await page.getByRole("tab", { name: "시장 분위기", exact: true }).click();
   const panel = page.locator("#sentiment-panel");
   const timeline = page.getByLabel("감성 시점 탐색");
   const tabs = page.getByRole("tablist", { name: "뉴스 분위기 기간" });
@@ -30,17 +31,24 @@ test("전체 일·월·연 기간 탐색과 오늘 Live 선 연결", async ({ pa
   await expect(page.getByRole("button", { name: "2026.10.04", exact: true })).toHaveCount(0);
 
   await tabs.getByRole("tab", { name: "월별", exact: true }).click();
-  await expect(tick("2026.10")).toHaveCount(1);
+  const currentMonth = new Intl.DateTimeFormat("sv-SE", { year: "numeric", month: "2-digit", timeZone: "Asia/Seoul" })
+    .format(new Date()).replace("-", ".");
+  await expect(tick(currentMonth)).toHaveCount(1);
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(0);
   await expect(page.getByText("월 평균과 연 평균은 과거 뉴스와 오늘 Live 기사를 기사 수에 따라 함께 반영해요.")).toBeVisible();
-  await expect(page.getByText(/직전 24시간.*NewsAPI.ai/)).toBeVisible();
   await tabs.getByRole("tab", { name: "연별", exact: true }).click();
   await expect(tick("2016")).toHaveCount(1);
-  await expect(tick("2026")).toHaveCount(1);
+  await expect(tick(currentMonth.slice(0, 4))).toHaveCount(1);
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(0);
   await tabs.getByRole("tab", { name: "연별", exact: true }).press("ArrowRight");
   await expect(tabs.getByRole("tab", { name: "일별", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(panel.locator('[data-sentiment-live="today"]')).toHaveCount(1);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+  await expect(page.getByText(/NewsAPI\.ai와 KR-FinBERT/)).toHaveCount(0);
+  await page.getByRole("tab", { name: "모델이 본 이유", exact: true }).click();
+  const source = page.getByText(/NewsAPI\.ai와 KR-FinBERT/);
+  await expect(source).toBeHidden();
+  await page.getByText("데이터 출처", { exact: true }).click();
+  await expect(source).toBeVisible();
 });

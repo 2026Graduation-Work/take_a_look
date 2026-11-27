@@ -115,7 +115,7 @@ python -m experiments.dataset.census_actions \
 python -m experiments.dataset.verify_training_prices --root workspace/experiments/datasets/krx_price_check
 ```
 
-`shared/` 변경은 `processing_contract`와 pack 해시를 바꾼다. 기존 활성 pack을 이 checkout에서 그대로 실행할 수 없다. 이 작업은 pack 재생성·활성화·운영 게시를 수행하지 않는다. 서빙 전환과 재학습은 후속 작업이다.
+`shared/` 변경은 연구용 `processing_contract`를 바꾼다. 기존 운영 팩은 서빙 계약과 고정 피처 기대값으로 별도 검증한다.
 
 ## 학습 경로의 KRX 원천
 
@@ -125,7 +125,7 @@ python -m experiments.dataset.verify_training_prices --root workspace/experiment
 
 2016-01-01부터 2026-11-20까지 두 시장의 2,669영업일이 기존 지수 목록 및 XKRX와 일치했다. 실제 5종목 검증에서는 학습 코드의 FDR import를 금지하고도 수집이 완료됐다. 변경 전후 원주가·파생 가격 파일 해시와 두 지수의 날짜·종가·수익률이 같았다.
 
-백테스트 KOSPI는 pykrx 1001을 사용한다. 이전 FDR 벤치마크 캐시는 재사용하지 않는다. 평가 기간과 바로 전 영업일 종가가 빠지면 중단하며, 실제 휴장일만 보유 수익률을 0으로 계산한다. 검증을 통과한 새 응답만 저장한다.
+백테스트는 `evaluation.benchmark_file`에 지정한 동결 지수 파일을 사용한다. 학습 수집기가 pykrx KOSPI 1001과 KOSDAQ 2001을 검증해 `benchmarks/`에 저장한다. 백테스트 실행 중 지수를 다시 다운로드하지 않는다.
 
 FDR은 `shared/requirements.txt`에서 제거하고 `serving/requirements.txt`에 남겼다. 서빙 전환이 완료될 때까지 종목 마스터와 기존 서빙 가격 대체 어댑터만 사용한다. 가격 어댑터는 `shared/data/prices.py`로 옮겨 동작을 보존했고 학습 수집기는 해당 어댑터를 호출하지 않는다.
 

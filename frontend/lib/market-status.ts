@@ -57,3 +57,7 @@ export function staleLabel(date: string, now: number = Date.now()): string | nul
   if (tradingDaysAfter(date, kstDay(now - PUBLISH_OFFSET_MS)) < 2) return null;
   return `${Math.round((Date.parse(kstDay(now)) - Date.parse(date)) / 86_400_000)}일 전 데이터예요`;
 }
+
+export function showLocalAsOf(date: string | undefined, marketAsOf: string, now: number = Date.now()): boolean {
+  return Boolean(date && (date !== marketAsOf || staleLabel(date, now)));
+}

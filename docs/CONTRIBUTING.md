@@ -16,6 +16,19 @@ gh pr checks "${pr_number:?PR 번호를 지정하세요}" --required --watch --f
 
 필수 체크 이름은 `lint-and-build`, `profiling-test`, `chart-test`, `text-test`다. 영향이 없는 블록은 CI에서 건너뛴다. 실제 머지 요건은 GitHub의 main Ruleset을 따른다.
 
+## 팀 밖에서 기여할 때
+
+1. 저장소를 포크하고, 포크에서 위 접두 규칙대로 브랜치를 만든다.
+2. 바꾼 블록만 로컬에서 검증한다. 웹은 `frontend/`에서 `pnpm install` 뒤 `pnpm build`, 화면 문구를 바꿨으면 `pnpm test:unit`도 실행한다. Python 블록은 해당 폴더에서 `ruff check .`와 `pytest`를 실행한다.
+3. 원 저장소 `main`으로 PR을 열고 [PR 템플릿](../.github/pull_request_template.md)을 채운다. 관련 이슈 번호를 적는다.
+4. 처음 기여하는 계정의 PR은 팀원이 승인해야 CI와 Vercel 미리보기가 돈다. 머지는 팀원이 리뷰한 뒤에 한다. 위의 셀프 머지는 팀원에게만 해당한다.
+
+맡을 만한 일은 [good first issue](https://github.com/2026Graduation-Work/take_a_look/labels/good%20first%20issue)와 [help wanted](https://github.com/2026Graduation-Work/take_a_look/labels/help%20wanted) 라벨에 모아 둔다. 시작 전에 이슈에 댓글을 남기면 담당자로 함께 지정한다. 실제 계좌나 보유 종목이 보이는 캡처는 올리지 않는다.
+
+## 이슈 작성
+
+정해진 동작과 실제 동작이 다르면 [버그 보고](../.github/ISSUE_TEMPLATE/bug_report.md)를, 새 동작이나 기존 기능 개선은 [기능 추가·고도화](../.github/ISSUE_TEMPLATE/feature_request.md)를 쓴다. [이슈 작성 안내](issue-writing.md)에 따라 사용자 문제·선택 이유·완료 조건을 구체화하고, 구현 뒤 실제 검증 결과와 결정 변경 이력을 남긴다. 처음 제보할 때 모르는 내용은 `미확인`으로 두고 담당자가 보완한다.
+
 ## 블록과 커밋
 
 | 블록·커밋 범위 | 경로 |
@@ -43,4 +56,5 @@ gh pr checks "${pr_number:?PR 번호를 지정하세요}" --required --watch --f
 ## 운영 경로 변경
 
 - 워크플로, 비밀키, 인증, 차트 서빙 팩, DB 마이그레이션을 바꾸면 머지 전에 main 대비 diff만 보안 검토한다. 지원하는 도구에서는 `/security-review`로 검토한다.
+- 되돌리기 힘든 설계 문서(스키마, 계약, 운영 경로)와 인수인계 문서는 구현 전에 작성에 참여하지 않은 새 세션에 문서만 주고 "이 문서만으로 구현할 때 막히는 곳"을 묻는다. 지적은 문서를 고쳐서 닫는다.
 - 정기 작업은 해당 워크플로가 지원하는 `dry_run`으로 검증한다. 지원하지 않는 작업은 테스트 DB나 모의 클라이언트에서 해당 경로를 검증한다. 뉴스·공시·재무 워크플로의 수동 `mode`는 운영에 적재한다. 검증 방법과 결과를 PR에 남긴다.

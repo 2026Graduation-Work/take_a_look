@@ -1,12 +1,15 @@
 import argparse
 import glob
 import hashlib
+import json
 import math
 import os
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from multiprocessing import cpu_count
+from pathlib import Path
 
 import pandas as pd
 import yaml
@@ -17,6 +20,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 _model = None
+_preprocessing = None
 
 
 def resolve_model_path(profile, model_path=None, registry_path=None):
@@ -52,16 +56,74 @@ def resolve_model_path(profile, model_path=None, registry_path=None):
     return resolved
 
 
-def init_worker(model_path):
-    global _model
+def init_worker(model_path, legacy_without_manifest=False):
+    global _model, _preprocessing
     import lightgbm as lgb
+    from shared.io import sha256
+    from shared.processing import processing_contract
+    from shared.settings import PREPROCESSING
 
-    _model = lgb.Booster(model_file=model_path)
+    _model, _preprocessing = None, None
+    manifest_path = Path(f"{model_path}.manifest.json")
+    manifest = None
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("kind") != "model"
+            or manifest.get("sha256") != sha256(model_path)
+        ):
+            raise ValueError(f"Invalid model manifest: {manifest_path}")
+        contract = manifest.get("processing_contract")
+        if (
+            not isinstance(contract, dict)
+            or not isinstance(settings := contract.get("preprocessing"), dict)
+            or contract != processing_contract(settings)
+        ):
+            raise ValueError(f"Model processing contract mismatch: {manifest_path}")
+    elif legacy_without_manifest:
+        settings = dict(PREPROCESSING)
+    else:
+        raise ValueError(f"Missing model manifest: {manifest_path}. Use --legacy-model for legacy models.")
+
+    model = lgb.Booster(model_file=str(model_path))
+    if manifest is not None and manifest.get("feature_columns") != model.feature_name():
+        raise ValueError(f"Model feature order differs from manifest: {manifest_path}")
+    _model, _preprocessing = model, settings
+
+
+def _qlib_history(history, path, target_date):
+    from shared.data.validation import expected_sessions, validate_prices
+    from shared.settings import VALIDATION_VERSION
+
+    root = path.parent.parent
+    calendar = json.loads((root / "calendar.json").read_text(encoding="utf-8"))
+    if calendar.get("validation_version") != VALIDATION_VERSION:
+        raise ValueError("Unverified calendar")
+    metadata = pd.read_csv(
+        root / "ticker_metadata.csv",
+        dtype={"Code": str},
+        parse_dates=["ListingDate", "DelistingDate"],
+    )
+    active = metadata.loc[
+        metadata.Code.eq(path.stem)
+        & metadata.ListingDate.le(target_date)
+        & (metadata.DelistingDate.isna() | metadata.DelistingDate.gt(target_date))
+    ]
+    if len(active) != 1:
+        raise ValueError("Expected one active listing interval on target date")
+    days = expected_sessions(active, calendar)
+    days = days[days <= target_date]
+    history = history.loc[history.Date.ge(active.ListingDate.iloc[0])]
+    return validate_prices(history, days), days
 
 
 def process_ticker(file_path, target_date, threshold):
-    global _model
-    ticker = os.path.basename(file_path).replace(".parquet", "")
+    from shared.features.qlib_alpha158 import ENGINE
+
+    path = Path(file_path)
+    ticker = path.stem
+    uses_qlib = _preprocessing is not None and _preprocessing.get("feature_engine") == ENGINE
     try:
         df = pd.read_parquet(file_path)
         if df.empty:
@@ -69,28 +131,43 @@ def process_ticker(file_path, target_date, threshold):
 
         df["Date"] = pd.to_datetime(df["Date"])
 
-        # 피처 생성에 필요한 최근 85 영업일 분량만 슬라이스 (성능 최적화)
         if target_date:
             target_dt = pd.to_datetime(target_date)
-            df_slice = df[df["Date"] <= target_dt].tail(85).copy()
+            df_slice = df[df["Date"] <= target_dt]
             if df_slice.empty or df_slice["Date"].max() != target_dt:
                 return None
         else:
-            df_slice = df.tail(85).copy()
+            df_slice = df
+            target_dt = df_slice.Date.max()
 
-        if len(df_slice) < 65:
-            return None
+        from shared.processing import build_feature_frame
 
-        from shared.data.trading_calendar import get_krx_trading_days
-        from shared.features.builder import build_feature_frame
-        days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
-        frame = build_feature_frame(df_slice, days)
-        prob_series = pd.Series(_model.predict(frame[_model.feature_name()])[:, 2], index=frame.index)
+        columns = _model.feature_name()
+        if uses_qlib:
+            df_slice, days = _qlib_history(df_slice, path, target_dt)
+            lookback = max(
+                (int(match[1]) for name in columns if (match := re.search(r"_(5|10|20|30|60)$", name))),
+                default=1,
+            )
+            if len(df_slice) <= lookback:
+                return None
+        else:
+            if len(df_slice) < 65:
+                return None
+            from shared.data.trading_calendar import get_krx_trading_days
 
-        if prob_series.empty:
-            return None
+            df_slice = df_slice.tail(85)
+            days = get_krx_trading_days(str(df_slice.Date.min().date()), str(df_slice.Date.max().date()))
+        frame = build_feature_frame(df_slice, days, _preprocessing)
+        if uses_qlib:
+            from shared.features.columns import FLOW_FEATURES
 
-        model_score = float(prob_series.iloc[-1])
+            latest = frame.iloc[-1]
+            flow_columns = [name for name in columns if name in FLOW_FEATURES]
+            if latest.Trading_Halt != 0 or pd.isna(latest.Sigma) or latest[flow_columns].isna().any():
+                return None
+
+        model_score = float(_model.predict(frame[columns].tail(1))[0, 2])
         last_row = df_slice.iloc[-1]
 
         return {
@@ -103,7 +180,9 @@ def process_ticker(file_path, target_date, threshold):
             "Model_Score": model_score,
             "Review_Flag": "REVIEW" if model_score >= threshold else "NORMAL",
         }
-    except Exception:
+    except Exception as exc:
+        if uses_qlib:
+            print(f"Alpha158 추론 실패 ({ticker}): {exc}", file=sys.stderr)
         return None
 
 
@@ -144,6 +223,16 @@ def parse_args(argv=None):
         help="모델 직접 지정. 생략하면 --profile에 따라 registry.yaml 사용",
     )
     parser.add_argument(
+        "--raw-dir",
+        default=os.path.join(project_root, "data", "raw"),
+        help="모델 전처리에 사용할 종목별 원본 Parquet 디렉토리",
+    )
+    parser.add_argument(
+        "--legacy-model",
+        action="store_true",
+        help="검증 파일이 없는 기존 모델에 기본 전처리 적용",
+    )
+    parser.add_argument(
         "--target-date",
         type=str,
         default=None,
@@ -180,7 +269,7 @@ def main():
     model_path = resolve_model_path(args.profile, args.model_path)
     print(f"📦 모델 로드: {os.path.basename(model_path)} ({args.profile})")
 
-    raw_dir = os.path.join(project_root, "data", "raw")
+    raw_dir = args.raw_dir
     data_files = glob.glob(os.path.join(raw_dir, "*.parquet"))
 
     if not data_files:
@@ -193,7 +282,7 @@ def main():
     results = []
 
     with ProcessPoolExecutor(
-        max_workers=num_workers, initializer=init_worker, initargs=(model_path,)
+        max_workers=num_workers, initializer=init_worker, initargs=(model_path, args.legacy_model)
     ) as executor:
         futures = [
             executor.submit(process_ticker, f, args.target_date, args.threshold) for f in data_files

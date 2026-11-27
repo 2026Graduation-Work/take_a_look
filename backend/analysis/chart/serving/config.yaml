@@ -3,4 +3,4 @@ active_pack:
   release_tag: chart-serving-kospi_shared_v3_flow_train2023_2025_20261014
   asset_name: kospi_shared_v3_flow_train2023_2025_20261014.tar.gz
   sha256: 20da6a515edc32f5e906116f748484bac0fd224220ad4d9b9c0e1561f9b88086
-  builder_sha256: ac4d23b4a17d9427efffb079c9a9e0d8f543ae8d6b1620b1f867700cf2faeb88
+  golden_sha256: d85f39143b021238b21176a806ec80b413937baf99e724993afad53efbf83983
