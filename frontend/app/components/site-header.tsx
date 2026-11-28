@@ -10,10 +10,9 @@ interface SiteHeaderProps {
   marketStatus: MarketStatus;
   query?: string;
   onQueryChange?: (value: string) => void;
-  rotateQuotesOnMobile?: boolean;
 }
 
-export default function SiteHeader({ query, onQueryChange, profile, marketStatus, rotateQuotesOnMobile }: SiteHeaderProps) {
+export default function SiteHeader({ query, onQueryChange, profile, marketStatus }: SiteHeaderProps) {
   return (
     <>
       <BrandHeader>
@@ -25,7 +24,7 @@ export default function SiteHeader({ query, onQueryChange, profile, marketStatus
 
         <AccountControls profile={profile} />
       </BrandHeader>
-      <MarketStatusBar status={marketStatus} rotateQuotesOnMobile={rotateQuotesOnMobile} />
+      <MarketStatusBar status={marketStatus} />
       <TipStrip />
     </>
   );

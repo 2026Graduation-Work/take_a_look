@@ -310,7 +310,7 @@ export default function StockDetailView({
   return (
     <>
     <div ref={readingRoot} inert={reading.state === "reading"} className="w-full">
-      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} rotateQuotesOnMobile />
+      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} />
 
       <main className="page pb-12 pt-6">
       <div className="flex flex-col gap-6">
