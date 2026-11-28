@@ -63,7 +63,7 @@ export default function MarketStatusBar({ status: snapshot }: { status: MarketSt
 
   // 헤더 유리와 한 층으로 보이게 반투명 흰 면(v1.1.0). 지수가 먼저, 흔들림과 거래는 오른쪽 끝, 기준일은 ⓘ 안(10/20, 11/27 사용자 피드백)
   return (
-    <section aria-label="시장 브리핑" className="border-t border-line/60 bg-white/70 shadow-[0_1px_0_rgb(0_0_0/0.06)]">
+    <section aria-label="시장 브리핑" className="glass-bar border-t border-white/60">
       <div className="page flex min-h-11 flex-wrap items-center gap-x-5 gap-y-1 py-2">
         {quotes.length > 0 ? (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">

@@ -4,7 +4,7 @@ import { DISCLAIMER } from "@/lib/brand";
 export default function DisclaimerFooter({ fixed = true }: { fixed?: boolean }) {
   return (
     <footer
-      className={`${fixed ? "fixed inset-x-0 bottom-0 z-[60]" : "relative"} border-t border-line bg-white px-8 py-3 text-center`}
+      className={`${fixed ? "fixed inset-x-0 bottom-0 z-[60]" : "relative"} glass-bar border-t border-white/60 px-8 py-3 text-center`}
     >
       <span className="text-xs text-muted">{DISCLAIMER}</span>
       <span className="-mt-2 -mb-3 flex justify-center gap-6">

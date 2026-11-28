@@ -4,7 +4,7 @@ import { TERM } from "./copy-glossary.ts";
 export const READING_START_EVENT = "takealook:reading-start";
 export const READING_REPLAY_HASH = "#read-together";
 
-export const READING_ERROR = "안내를 열지 못했어요. 읽는 법을 다시 눌러 주세요.";
+export const READING_ERROR = "안내를 열지 못했어요. 가이드를 다시 눌러 주세요.";
 
 export const READING_TAB_LABELS = {
   overview: "한눈에 보기",

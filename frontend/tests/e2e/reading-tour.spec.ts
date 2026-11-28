@@ -8,7 +8,7 @@ const demoKey = "takealook.demo-reading-history.v1";
 const hint = "다른 종목에서도 숫자가 어느 기간의 값인지, 무엇과 비교했는지 살펴봐요.";
 const basis = "/stocks/000660";
 const invite = (page: Page) => page.getByRole("button", { name: "같이 읽기", exact: true });
-const replay = (page: Page) => page.getByRole("button", { name: "읽는 법", exact: true });
+const replay = (page: Page) => page.getByRole("button", { name: "가이드", exact: true });
 const message = (page: Page) => page.getByRole("dialog").filter({
   has: page.getByRole("button", { name: "안내 닫기", exact: true }),
 });
@@ -136,7 +136,7 @@ for (const { turnover, typeLabel, order } of [
   });
 }
 
-test("첫 방문 안내 줄 없이 읽는 법으로 언제든 다시 시작해요", async ({ page }) => {
+test("첫 방문 안내 줄 없이 가이드로 언제든 다시 시작해요", async ({ page }) => {
   await finishDemo(page);
   await open(page);
   await expect(invite(page)).toHaveCount(0);
@@ -172,18 +172,18 @@ test("안내 페이지에서 다시 시작하고 뒤로 이동하면 강조와 �
   await finishDemo(page);
   await open(page);
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
+  await page.getByRole("link", { name: "종목 상세 가이드" }).click();
   await orderStop(page);
   await page.goBack();
   await expect(page).toHaveURL("/guide");
   await expect(page.locator(".driver-overlay")).toHaveCount(0);
   await expect(page.locator("[inert]")).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "종목 상세 읽는 법" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "종목 상세 가이드" })).toBeVisible();
 });
 
 test("로그아웃 상태에서도 이용 안내의 종목 상세 안내를 시작할 수 있어요", async ({ page }) => {
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
+  await page.getByRole("link", { name: "종목 상세 가이드" }).click();
   await orderStop(page);
   await expect(message(page)).not.toContainText(/진단 결과|추종형|독립 분석형|적극 축적형|자산 보존형/);
   await expect(message(page)).toContainText("성향에 따라 순서가 달라져요.");
@@ -382,7 +382,7 @@ for (const width of [320, 390, 1280]) {
 test("안내 도중 화면을 좁혀도 강조 대상과 말풍선이 함께 보여요", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/guide");
-  await page.getByRole("link", { name: "종목 상세 읽는 법" }).click();
+  await page.getByRole("link", { name: "종목 상세 가이드" }).click();
   await advanceUntil(page, activePanel(page).locator('.driver-active-element[data-reading-target="news-heading"]'));
   await stop(page, "news", "news-heading");
 

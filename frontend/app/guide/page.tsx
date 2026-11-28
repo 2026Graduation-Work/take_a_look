@@ -117,7 +117,7 @@ export default function GuidePage() {
 
           <Section id="screens" title={SECTIONS[4][1]}>
             <Link href={`/stocks/005930${READING_REPLAY_HASH}`} className="btn-text inline-flex min-h-11 self-start">
-              종목 상세 읽는 법
+              종목 상세 가이드
             </Link>
             <dl className="m-0 flex flex-col gap-5">
               {SCREENS.map(([name, body]) => (

@@ -65,7 +65,7 @@ export default function TipStrip() {
       aria-label="알고 계셨나요?"
       inert={closing}
       aria-hidden={closing || undefined}
-      className={`grid bg-brand-soft transition-[grid-template-rows] ease-out motion-reduce:transition-none ${closing ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
+      className={`grid bg-brand-soft/70 backdrop-blur-[20px] backdrop-saturate-[1.8] transition-[grid-template-rows] ease-out motion-reduce:transition-none ${closing ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}
       style={{ transitionDuration: `${COLLAPSE_MS}ms` }}
     >
       <Suspense>
