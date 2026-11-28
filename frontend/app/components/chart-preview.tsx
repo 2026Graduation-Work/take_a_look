@@ -7,14 +7,14 @@ import type { StockInsights } from "@/lib/providers";
 import StockDetailView from "./stock-detail";
 import { useSignalHorizon } from "@/lib/use-signal-horizon";
 
-export default function ChartPreviewDetail({ data, insights, readingHistoryKey, readingInvite, readingUsesDiagnosis }: {
-  data: StockDetailData; insights: StockInsights; readingHistoryKey: string | null; readingInvite: boolean; readingUsesDiagnosis: boolean;
+export default function ChartPreviewDetail({ data, insights, readingHistoryKey, readingUsesDiagnosis }: {
+  data: StockDetailData; insights: StockInsights; readingHistoryKey: string | null; readingUsesDiagnosis: boolean;
 }) {
   const [signalHorizon, chooseHorizon] = useSignalHorizon();
   const { charts, loading, error, retry, revision } = usePublicCharts([data.detail.code]);
   const snapshots = charts?.get(data.detail.code);
   const detail = chartDetail(data.detail, snapshots?.get(signalHorizon), signalHorizon);
-  return <StockDetailView {...data} detail={detail} readingHistoryKey={readingHistoryKey} readingInvite={readingInvite} readingUsesDiagnosis={readingUsesDiagnosis}
+  return <StockDetailView {...data} detail={detail} readingHistoryKey={readingHistoryKey} readingUsesDiagnosis={readingUsesDiagnosis}
     insights={{ ...insights, provenance: { ...insights.provenance, contributions: detail.provenance } }}
     chartSnapshots={snapshots ?? null} chartRevision={revision} loading={loading} signalHorizon={signalHorizon} onHorizonChange={chooseHorizon}
     dataError={error || (!loading && !snapshots ? "이 종목의 게시된 예측 결과가 아직 없어요." : "")}

@@ -50,15 +50,6 @@ export function recordReadingOutcome(key: string, code: string, status: "dismiss
   writeReadingHistory(key, status === "dismissed" ? { status } : { status, code, hinted: [] });
 }
 
-export function claimReadingHint(key: string, code: string) {
-  const history = readReadingHistory(key);
-  if (history.status !== "completed" || history.hinted.length >= 2 || history.hinted.includes(code) || history.code === code) {
-    return false;
-  }
-  writeReadingHistory(key, { ...history, hinted: [...history.hinted, code] });
-  return true;
-}
-
 export function clearDemoReadingHistory() {
   const key = STORAGE_KEYS.demoReadingHistory;
   volatileHistory.delete(key);

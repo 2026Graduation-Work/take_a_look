@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import Link from "next/link";
 import DisclaimerFooter from "./disclaimer-footer";
 import {
@@ -14,15 +14,12 @@ import {
   PricePsychology,
   SourceList,
   SupplyPanel,
-  moodWord,
-  oneDecimal,
-  supplyTotals,
 } from "./insight-cards";
 import StockMarks from "./stock-marks";
 import Segmented from "./segmented";
 import MarketDetail from "./market-detail";
 import { useEvidenceReading } from "./reading-controls";
-import { READING_HINT, READING_INVITATION, READING_TAB_LABELS as TAB_LABELS, readingSteps, type ReadingTab } from "@/lib/evidence-reading";
+import { READING_TAB_LABELS as TAB_LABELS, readingSteps, type ReadingTab } from "@/lib/evidence-reading";
 import { SUMMARY_SCALE, stageIndex, stageWord } from "@/lib/profiling/axis-scale";
 import { BIT_LABEL, classifyBit, type CardId } from "@/lib/profiling/bit";
 import GainText from "./gain-text";
@@ -52,7 +49,7 @@ import {
   SIGNAL_WORD,
   topPercentLabel,
 } from "@/lib/copy-glossary";
-import { bandPrice, changeMeta, formatKstDateTime, formatShares, formatSignedPercent, formatWonChange, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
+import { bandPrice, changeMeta, formatKstDateTime, formatSignedPercent, formatWonChange, RISK_FLAG_LABEL, SIGNAL_META, signedPercent } from "@/lib/display";
 import { chartDirection } from "@/lib/chart-detail";
 import type { ChartHorizon, ChartSnapshot } from "@/lib/chart-public";
 import { marketSentimentView, riskSnapshot, todayLiveSentimentView, type HoldingWeight, type StockInsights } from "@/lib/providers";
@@ -120,7 +117,6 @@ interface StockDetailViewProps {
   chartSnapshots?: Map<ChartHorizon, ChartSnapshot> | null;
   chartRevision?: number;
   readingHistoryKey?: string | null;
-  readingInvite?: boolean;
   readingUsesDiagnosis?: boolean;
 }
 
@@ -138,7 +134,6 @@ export default function StockDetailView({
   chartSnapshots,
   chartRevision = 0,
   readingHistoryKey = null,
-  readingInvite = false,
   readingUsesDiagnosis = false,
   signalHorizon = 20,
   onHorizonChange,
@@ -208,13 +203,15 @@ export default function StockDetailView({
   const volatility = detail.volatilityAnnual == null ? null : `${(detail.volatilityAnnual * 100).toFixed(1)}%`;
   const volatilityRank = detail.volatilityPercentile == null ? null : Math.max(1, Math.round((1 - detail.volatilityPercentile) * 100));
   const riskNote = styleAxes && detail.riskGrade < safeMaxRiskTier
-    ? `설문에서 위험 감수를 ‘${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))}’ 쪽으로 답했어요. ${volatility && volatilityRank !== null
-        ? `이 종목의 최근 1년 가격 흔들림은 ${volatility}, 코스피 전 종목 중 큰 쪽 상위 ${volatilityRank}%예요.`
-        : `이 종목의 위험도는 ${riskLabel}이에요.`}`
+    ? {
+        text: "답하신 위험 감수 범위보다 오르내림이 큰 종목이에요.",
+        reason: `설문에서 위험 감수를 ‘${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))}’ 쪽으로 답했어요. ${volatility && volatilityRank !== null
+          ? `이 종목의 최근 1년 가격 흔들림은 ${volatility}, 코스피 전 종목 중 큰 쪽 상위 ${volatilityRank}%예요.`
+          : `이 종목의 위험도는 ${riskLabel}이에요.`}`,
+      }
     : null;
 
   const { supply, financial, psychology, disclosures } = insights;
-  const institution = supply?.length ? supplyTotals(supply).find(({ key }) => key === "institution") : null;
   const metric = financial?.metrics.find(({ key, value }) => key === "debt_ratio" && value != null)
     ?? financial?.metrics.find(({ value }) => value != null);
   const sentimentView = marketSentimentView(insights);
@@ -229,16 +226,6 @@ export default function StockDetailView({
       {currentPrice !== null && <span className="font-normal text-body"> ({bandPrice(currentPrice, detail.returnBand.high)})</span>}
     </>
   );
-  const summary: Record<DetailTab, ReactNode> = {
-    model: signal.label,
-    trading: institution
-      ? <>기관 <ChangeText value={institution.total}>{formatShares(institution.total)}</ChangeText></>
-      : "투자자별 순매수 미제공",
-    company: metric?.value != null
-      ? <>{TERM_INFO[metric.key as keyof typeof TERM_INFO]?.label ?? metric.label} {oneDecimal(metric.value)}{metric.unit}</>
-      : "재무 지표 미제공",
-    news: sentimentView ? moodWord(sentimentView.score) : "뉴스 분위기 미제공",
-  };
   const detailTabs = bit
     ? [...new Set(bit.cardOrder.flatMap((card) => CARD_TO_TAB[card] ?? []))]
     : DEFAULT_DETAIL_TABS;
@@ -262,7 +249,6 @@ export default function StockDetailView({
   const readingReplay = useRef<HTMLButtonElement>(null);
   const reading = useEvidenceReading({
     historyKey: loading ? null : readingHistoryKey,
-    invite: readingInvite,
     code: detail.code,
     selectTab,
     root: readingRoot,
@@ -334,7 +320,7 @@ export default function StockDetailView({
           </div>
         )}
 
-        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-6">
           <section aria-labelledby="stock-name" className="flex min-w-0 flex-col gap-2 px-1">
             <div className="flex min-w-0 flex-col gap-2">
               <span className="flex flex-wrap items-center gap-x-3 text-2xs text-muted tabular-nums">
@@ -384,30 +370,16 @@ export default function StockDetailView({
           <Checkpoints bit={bit} detail={detail} insights={insights} holdings={nudgeHoldings} extra={riskNote} />
         </div>
 
-        {readingHistoryKey && !loading && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            {reading.entry === "invitation" && (
-              <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-2">
-                <p className="m-0 text-sm text-body">{READING_INVITATION}</p>
-                <button type="button" className="btn-primary" disabled={reading.state === "loading"}
-                  onClick={(event) => reading.start(event.currentTarget)}>같이 읽기</button>
-                <button type="button" className="btn-text min-h-11"
-                  onClick={(event) => reading.dismiss(event.currentTarget)}>직접 둘러보기</button>
-              </div>
-            )}
-            {reading.entry === "hint" && <p role="note" className="m-0 text-sm text-body">{READING_HINT}</p>}
-            <button type="button" ref={readingReplay} className="btn-text min-h-11 self-end sm:ml-auto sm:self-auto"
-              disabled={reading.state === "loading"} onClick={(event) => reading.start(event.currentTarget)}>읽는 법</button>
-            {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
-          </div>
-        )}
+        {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
 
+        {/* 읽는 법은 넓은 화면에서 탭 줄 오른쪽 끝, 좁은 화면에서는 탭 위 오른쪽(탭이 넘치지 않게) */}
+        <div className="flex min-w-0 flex-wrap items-end gap-x-2 border-b border-line">
         <div
           role="tablist"
           aria-label="종목 상세"
           data-reading-tablist
           onKeyDown={onTabKeyDown}
-          className={`flex min-w-0 overflow-x-auto border-b border-line [scrollbar-width:thin] sm:gap-4 ${reading.phase === "order" ? "max-sm:flex-wrap" : ""}`}
+          className={`flex min-w-0 basis-full overflow-x-auto [scrollbar-width:thin] sm:basis-0 sm:flex-1 sm:gap-4 ${reading.phase === "order" ? "max-sm:flex-wrap" : ""}`}
         >
           {tabs.map((id) => (
             <button
@@ -425,6 +397,11 @@ export default function StockDetailView({
               {TAB_LABELS[id]}
             </button>
           ))}
+        </div>
+          {readingHistoryKey && !loading && (
+            <button type="button" ref={readingReplay} className="btn-text order-first ml-auto min-h-11 shrink-0 whitespace-nowrap sm:order-none"
+              disabled={reading.state === "loading"} onClick={(event) => reading.start(event.currentTarget)}>읽는 법</button>
+          )}
         </div>
 
         {tabs.map((id) => (
@@ -505,27 +482,6 @@ export default function StockDetailView({
                         </>}
                       </ul>
                     </details>}
-                  </section>
-
-                  <section aria-labelledby="stock-summaries" className="flex flex-col gap-2">
-                    <h2 id="stock-summaries" className="text-xl font-semibold">분야별 근거</h2>
-                    <ul className="m-0 grid list-none gap-x-8 p-0 lg:grid-cols-2">
-                      {detailTabs.map((tab) => (
-                        <li key={tab} className="border-b border-line-soft last:border-b-0 lg:nth-last-2:border-b-0">
-                          <button
-                            type="button"
-                            onClick={() => selectTab(tab, true)}
-                            className="flex min-h-11 w-full items-center justify-between gap-4 rounded-sm py-3 text-left hover:bg-track"
-                          >
-                            <span className="flex min-w-0 flex-col gap-1 break-words">
-                              <span className="font-semibold text-ink">{TAB_LABELS[tab]}</span>
-                              <span className="text-sm text-body">{summary[tab]}</span>
-                            </span>
-                            <span aria-hidden="true" className="shrink-0 text-muted">›</span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
                   </section>
                 </div>
               ) : (

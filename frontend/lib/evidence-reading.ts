@@ -4,8 +4,6 @@ import { TERM } from "./copy-glossary.ts";
 export const READING_START_EVENT = "takealook:reading-start";
 export const READING_REPLAY_HASH = "#read-together";
 
-export const READING_INVITATION = "이 종목을 보면서, 각 정보를 언제 보고 어떻게 비교하면 좋을지 알아봐요.";
-export const READING_HINT = "다른 종목에서도 숫자가 어느 기간의 값인지, 무엇과 비교했는지 살펴봐요.";
 export const READING_ERROR = "안내를 열지 못했어요. 읽는 법을 다시 눌러 주세요.";
 
 export const READING_TAB_LABELS = {

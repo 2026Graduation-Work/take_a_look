@@ -52,11 +52,8 @@ test("3. 한눈에 보기는 먼저, 판단 근거 탭과 바로가기는 투자
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => tabs.evaluate((row) => row.scrollWidth - row.clientWidth)).toBe(0);
   const overview = page.getByRole("tabpanel", { name: "한눈에 보기" });
-  const shortcuts = overview.getByRole("region", { name: "분야별 근거" }).getByRole("button");
-  for (const [index, label] of labels.slice(1).entries()) {
-    await expect(shortcuts.nth(index)).toContainText(label);
-  }
-  await overview.getByRole("button", { name: /^모델이 본 이유/ }).click();
+  await expect(overview.getByRole("region", { name: "분야별 근거" })).toHaveCount(0);
+  await tabs.getByRole("tab", { name: "모델이 본 이유" }).click();
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("모델이 본 이유");
   await expect(tabs.getByRole("tab")).toHaveText(labels);
 });
