@@ -16,7 +16,7 @@ export default function GlossaryPage() {
       <ReadingNavigation current="glossary" />
       <main className="page pb-12 pt-6 lg:pt-8">
         <div className="page-narrow flex flex-col gap-6">
-          <h1 className="m-0 text-3xl font-semibold">용어 모음</h1>
+          <h1 className="m-0 px-1 text-3xl font-semibold">용어 모음</h1>
           <dl className="surface m-0 flex flex-col gap-6 p-4 sm:p-6">
             {terms.map(term => (
               <div key={term.label} className="flex flex-col gap-2">

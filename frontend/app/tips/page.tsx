@@ -23,14 +23,9 @@ export default async function TipsPage({ searchParams }: PageProps<"/tips">) {
 
   return (
     <div className="page-narrow flex flex-col gap-6">
-      <h1 className="m-0 text-3xl font-semibold">{topic === "all" ? "알고 계셨나요?" : TIP_TOPICS[topic]}</h1>
+      <h1 className="m-0 px-1 text-3xl font-semibold">{topic === "all" ? "알고 계셨나요?" : TIP_TOPICS[topic]}</h1>
       {visibleTips.length ? <TipList tips={visibleTips} /> : <p className="m-0 text-sm text-body">이 주제에 팁이 없어요.</p>}
       {pageCount > 1 && <TipPagination page={page} pageCount={pageCount} topic={topic} returnTo={returnTo} />}
-      {returnTo && (
-        <Link href={returnTo} className="flex min-h-11 w-fit items-center text-sm underline underline-offset-2">
-          원래 화면으로 돌아가기
-        </Link>
-      )}
     </div>
   );
 }

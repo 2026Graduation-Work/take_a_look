@@ -24,15 +24,8 @@ export default async function TipDetailPage({ params, searchParams }: TipPagePro
 
   return (
     <div className="page-narrow flex flex-col gap-6">
-      <Link
-        href={listHref}
-        aria-label="알고 계셨나요? 목록"
-        title="알고 계셨나요? 목록"
-        className="flex size-11 items-center justify-center rounded-md bg-brand-soft text-brand hover:text-brand-deep"
-      >
-        <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m11 5-7 7 7 7M4 12h16" />
-        </svg>
+      <Link href={listHref} className="btn-text w-fit gap-1 px-1">
+        <span aria-hidden="true">‹</span>알고 계셨나요? 목록
       </Link>
       <article aria-labelledby="tip-title" className="surface flex min-w-0 flex-col gap-6 p-4 wrap-anywhere sm:p-6">
         <header className="flex flex-col gap-2">
@@ -72,11 +65,6 @@ export default async function TipDetailPage({ params, searchParams }: TipPagePro
           )}
         </section>
       </article>
-      {returnTo && (
-        <Link href={returnTo} className="flex min-h-11 w-fit items-center text-sm underline underline-offset-2">
-          원래 화면으로 돌아가기
-        </Link>
-      )}
     </div>
   );
 }
