@@ -20,7 +20,7 @@ test("가격 판정이 불가능한 사유, 비교 거래일 없음과 기준 �
     assert.ok(priceMoveMessages({ status: "unavailable", reason }).message?.includes(copy));
   }
   assert.deepEqual(priceMoveMessages({ status: "ready", moves: [], evaluatedDays: 59, excludedDays: 1 }), {
-    message: "확인한 날 중 기준을 넘은 날이 없어요.",
+    message: "이 기간에 평소 흔들림보다 크게 움직인 날은 없어요.",
     coverageNote: "일부 거래일은 비교하지 못했어요.",
   });
 });

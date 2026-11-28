@@ -209,7 +209,7 @@ export default function StockDetailView({
   const volatilityRank = detail.volatilityPercentile == null ? null : Math.max(1, Math.round((1 - detail.volatilityPercentile) * 100));
   const riskNote = styleAxes && detail.riskGrade < safeMaxRiskTier
     ? `설문에서 위험 감수를 ‘${stageWord(SUMMARY_SCALE.riskTaking, stageIndex(profile.riskTolerance / 50 - 1))}’ 쪽으로 답했어요. ${volatility && volatilityRank !== null
-        ? `이 종목의 최근 1년 변동성은 ${volatility}, 코스피 전 종목 중 큰 쪽 상위 ${volatilityRank}%예요.`
+        ? `이 종목의 최근 1년 가격 흔들림은 ${volatility}, 코스피 전 종목 중 큰 쪽 상위 ${volatilityRank}%예요.`
         : `이 종목의 위험도는 ${riskLabel}이에요.`}`
     : null;
 
@@ -420,7 +420,7 @@ export default function StockDetailView({
               aria-controls={`stock-panel-${id}`}
               tabIndex={activeTab === id ? 0 : -1}
               onClick={() => selectTab(id)}
-              className="min-h-11 min-w-11 grow shrink-0 whitespace-nowrap border-b-2 border-transparent px-0.5 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:grow-0 sm:px-4 sm:text-sm"
+              className="min-h-11 min-w-11 grow shrink-0 whitespace-nowrap border-b-2 border-transparent px-0 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:grow-0 sm:px-4 sm:text-sm"
             >
               {TAB_LABELS[id]}
             </button>

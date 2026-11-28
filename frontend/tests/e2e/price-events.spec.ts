@@ -535,7 +535,7 @@ const unusableCharts = [
   { name: "different-bases", copy: "기간마다 가격 기록이나 계산 기준이 달라 변동일을 확인할 수 없어요." },
   { name: "different-prices", copy: "기간마다 가격 기록이나 계산 기준이 달라 변동일을 확인할 수 없어요." },
   { name: "no-comparisons", copy: "가격 변화를 비교할 수 있는 거래일이 없어요." },
-  { name: "no-moves", copy: "확인한 날 중 기준을 넘은 날이 없어요." },
+  { name: "no-moves", copy: "이 기간에 평소 흔들림보다 크게 움직인 날은 없어요." },
 ] as const;
 
 for (const { name, copy } of unusableCharts) {
