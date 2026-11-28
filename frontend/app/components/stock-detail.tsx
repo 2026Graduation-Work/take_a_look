@@ -296,7 +296,7 @@ export default function StockDetailView({
   return (
     <>
     <div ref={readingRoot} inert={reading.state === "reading"} className="w-full">
-      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} rotateQuotesOnMobile />
+      <SiteHeader query={query} onQueryChange={setQuery} profile={profile} marketStatus={currentMarketStatus} />
 
       <main className="page pb-12 pt-6">
       <div className="flex flex-col gap-6">
@@ -392,7 +392,7 @@ export default function StockDetailView({
               aria-controls={`stock-panel-${id}`}
               tabIndex={activeTab === id ? 0 : -1}
               onClick={() => selectTab(id)}
-              className="min-h-11 min-w-11 grow shrink-0 whitespace-nowrap border-b-2 border-transparent px-0.5 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:grow-0 sm:px-4 sm:text-sm"
+              className="min-h-11 min-w-11 grow shrink-0 whitespace-nowrap border-b-2 border-transparent px-0 text-xs font-medium text-body aria-selected:border-brand-accent aria-selected:font-semibold aria-selected:text-brand sm:grow-0 sm:px-4 sm:text-sm"
             >
               {TAB_LABELS[id]}
             </button>

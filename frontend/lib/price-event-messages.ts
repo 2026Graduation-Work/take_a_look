@@ -12,7 +12,7 @@ const priceMoveFailure = {
 export function priceMoveMessages(result: PriceMoveResult) {
   if (result.status === "unavailable") return { message: priceMoveFailure[result.reason] };
   return {
-    message: result.moves.length ? undefined : "확인한 날 중 기준을 넘은 날이 없어요.",
+    message: result.moves.length ? undefined : "이 기간에 평소 흔들림보다 크게 움직인 날은 없어요.",
     coverageNote: result.excludedDays ? "일부 거래일은 비교하지 못했어요." : undefined,
   };
 }
