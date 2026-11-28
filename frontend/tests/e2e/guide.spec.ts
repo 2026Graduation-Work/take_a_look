@@ -32,7 +32,7 @@ test("개인정보 처리방침은 로그인 없이 열리고, 하단과 가입 
   await page.goto("/privacy");
   await expect(page).toHaveURL(/\/privacy$/);
   await expect(page.getByRole("heading", { level: 1, name: "개인정보 처리방침" })).toBeVisible();
-  for (const text of ["Supabase", "Vercel", "fourmi103@g.skku.edu", "계정 삭제", "어디에도 보내지 않아요"]) {
+  for (const text of ["Supabase", "Vercel", "fourmi103@g.skku.edu", "계정 삭제", "어디에도 보내지 않아요", "국외 이전", "만 14세 미만"]) {
     await expect(page.locator("main")).toContainText(text);
   }
   await expect(page.locator("footer").getByRole("link", { name: "개인정보 처리방침" })).toBeVisible();
@@ -40,4 +40,9 @@ test("개인정보 처리방침은 로그인 없이 열리고, 하단과 가입 
   await page.getByRole("button", { name: "이메일로 시작" }).click();
   await page.getByRole("tab", { name: "회원가입" }).click();
   await expect(page.getByRole("link", { name: "개인정보 처리방침" })).toHaveAttribute("href", "/privacy");
+  for (const name of [/만 14세 이상/, /개인정보 수집과 이용에 동의/]) {
+    await expect(page.getByRole("checkbox", { name })).toHaveAttribute("required", "");
+  }
+  await page.getByText("내용 보기").click();
+  await expect(page.getByText("동의하지 않을 권리")).toBeVisible();
 });

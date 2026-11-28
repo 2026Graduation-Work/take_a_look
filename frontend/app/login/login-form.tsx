@@ -13,6 +13,7 @@ import Link from "next/link";
 import BrandHeader from "../components/brand-header";
 import Wordmark from "@/components/brand/Wordmark";
 import { SERVICE_TAGLINE } from "@/lib/brand";
+import { PRIVACY_ITEMS, PRIVACY_REFUSAL, PRIVACY_RETENTION } from "@/lib/privacy";
 
 type AccountTab = "signin" | "signup";
 
@@ -49,7 +50,7 @@ export default function LoginForm() {
         await refresh(true);
         return;
       }
-      const { needsEmailConfirmation } = await signUpWithPassword(email.trim(), password, name.trim());
+      const { needsEmailConfirmation } = await signUpWithPassword(email.trim(), password, name.trim(), new Date().toISOString());
       if (needsEmailConfirmation) {
         setNotice(`${email.trim()}로 확인 메일을 보냈어요. 메일의 링크를 누르면 로그인돼요.`);
         return;
@@ -159,6 +160,7 @@ export default function LoginForm() {
                 </label>
                 {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요.</p>}
               </div>
+              {tab === "signup" && <SignupConsent />}
               <Messages notice={notice} error={error} />
               <StepNav
                 className="pt-2"
@@ -196,6 +198,45 @@ export default function LoginForm() {
         </section>
       </main>
     </>
+  );
+}
+
+// 만 14세 미만은 법정대리인 동의가 필요해 받지 않고(제22조의2), 수집 항목, 목적, 보유 기간, 거부권을 가입 전에 알린다(제15조 2항)
+function SignupConsent() {
+  const box = "mt-1 size-4 shrink-0 accent-brand";
+  return (
+    <fieldset className="m-0 flex flex-col gap-3 border-0 p-0">
+      <legend className="sr-only">가입 동의</legend>
+      <label className="flex items-start gap-2 text-sm text-body">
+        <input type="checkbox" name="age14" required className={box} />
+        <span><span className="text-muted">[필수]</span> 만 14세 이상이에요</span>
+      </label>
+      <div className="flex flex-col gap-2">
+        <label className="flex items-start gap-2 text-sm text-body">
+          <input type="checkbox" name="privacy" required className={box} />
+          <span><span className="text-muted">[필수]</span> 개인정보 수집과 이용에 동의해요</span>
+        </label>
+        <details className="ml-6 text-xs text-muted">
+          <summary className="cursor-pointer text-brand">내용 보기</summary>
+          <dl className="m-0 mt-2 flex flex-col gap-2">
+            {PRIVACY_ITEMS.map(([title, what, why]) => (
+              <div key={title}>
+                <dt className="text-body">{title}</dt>
+                <dd className="m-0">{what}. 쓰는 곳: {why}</dd>
+              </div>
+            ))}
+            <div>
+              <dt className="text-body">보관 기간</dt>
+              <dd className="m-0">{PRIVACY_RETENTION}</dd>
+            </div>
+            <div>
+              <dt className="text-body">동의하지 않을 권리</dt>
+              <dd className="m-0">{PRIVACY_REFUSAL}</dd>
+            </div>
+          </dl>
+        </details>
+      </div>
+    </fieldset>
   );
 }
 
