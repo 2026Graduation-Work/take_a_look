@@ -2,9 +2,11 @@
 
 import argparse
 
+import fcntl
 import gc
 import json
 import os
+from pathlib import Path
 
 import lightgbm as lgb
 import numpy as np
@@ -17,6 +19,7 @@ from experiments.experiment_utils import (
     generate_dataset_hash,
     generate_predictions_hash,
     load_universe_intervals,
+    predictions_cache_path,
     label_params_from_config,
     result_dir,
     resolve_splits,
@@ -272,7 +275,10 @@ def main(config_path):
     from experiments.config import load_experiment_config
 
     config = load_experiment_config(config_path)
+    from experiments.features.local_panel import prepare_local_panel
     from functools import partial
+
+    prepare_local_panel(config)
     from experiments.train_src.loaders import load_parquet_data as base_loader
 
     global load_parquet_data
@@ -298,6 +304,13 @@ def main(config_path):
     dataset_hash = generate_dataset_hash(config, splits)
     predictions_hash = generate_predictions_hash(config, splits)
     print(f"[*] Dataset Cache Hash: {dataset_hash} | Predictions Cache Hash: {predictions_hash}")
+    with (Path(cache_dir(__file__)) / f"{predictions_hash}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _run_training(config, splits, dataset_hash, predictions_hash)
+
+
+def _run_training(config, splits, dataset_hash, predictions_hash):
+    exp_name = config["experiment_name"]
     out_dir = result_dir(config, __file__)
 
     processed_dir = find_processed_dir(config, __file__)
@@ -311,15 +324,18 @@ def main(config_path):
     universe_intervals = load_universe_intervals(config)
     skip_validation = bool(config.get("training", {}).get("skip_validation", False))
 
-    exp_cache_dir = cache_dir(__file__)
-    predictions_cache_path = os.path.join(exp_cache_dir, f"{predictions_hash}_predictions.parquet")
-
-    if os.path.exists(predictions_cache_path):
+    prediction_path = predictions_cache_path(config, splits, __file__)
+    cached_predictions = Path(prediction_path).is_file()
+    model_wrapper = LGBMWrapper(config)
+    fold_model_paths = [os.path.join(model_wrapper.cache_dir, "models", f"{predictions_hash}_fold{idx}_model.txt")
+                        for idx in range(len(splits))]
+    if cached_predictions and all(model_wrapper.cache_entry(path, "model")[1]
+                                  for path in fold_model_paths):
         from experiments.experiment_utils import load_predictions
 
-        load_predictions(config, splits, __file__)
+        load_predictions(config, splits, __file__, prediction_path)
         print("\n⚡ [CACHE HIT] 기존 설정 기반 예측 캐시를 찾았습니다!")
-        print(f"   -> 캐시 파일: {os.path.basename(predictions_cache_path)}")
+        print(f"   -> 캐시 파일: {os.path.basename(prediction_path)}")
         if skip_validation:
             print("[*] Validation 복원 생략: config training.skip_validation=true")
             print(f"\n🎉 모델 학습 및 예측 캐시 빌드 [{exp_name}] 완료!")
@@ -335,19 +351,8 @@ def main(config_path):
             label_observation_end = (
                 pd.to_datetime(split_info["test_start"]) - pd.Timedelta(1, unit="D")
             ).strftime("%Y-%m-%d")
-            fold_pred_hash = f"{predictions_hash}_fold{idx}"
-            model_wrapper = LGBMWrapper(config)
-            model_save_path = os.path.join(
-                model_wrapper.cache_dir, "models", f"{fold_pred_hash}_model.txt"
-            )
-            if not os.path.exists(model_save_path):
-                print(
-                    f"[!] Validation 복원 스킵: fold 모델 캐시가 없습니다 -> "
-                    f"{os.path.basename(model_save_path)}"
-                )
-                continue
-
-            model_wrapper.load_cached_model(model_save_path)
+            model_save_path, _ = model_wrapper.cache_entry(fold_model_paths[idx], "model")
+            model_wrapper.load_cached_model(str(model_save_path))
             feature_cols = model_wrapper.model.feature_name()
             val_df = _load_validation_df(
                 processed_dir,
@@ -399,15 +404,13 @@ def main(config_path):
 
             fold_pred_hash = f"{predictions_hash}_fold{idx}"
             model_wrapper = LGBMWrapper(config)
-            models_dir = os.path.join(model_wrapper.cache_dir, "models")
-            os.makedirs(models_dir, exist_ok=True)
-            model_save_path = os.path.join(models_dir, f"{fold_pred_hash}_model.txt")
+            model_save_path, reusable = model_wrapper.cache_entry(fold_model_paths[idx], "model")
 
-            if os.path.exists(model_save_path):
+            if reusable:
                 print(
                     f"\n⚡ [MODEL CACHE HIT] 기존 학습된 모델 파라미터 발견! -> {os.path.basename(model_save_path)}"
                 )
-                model_wrapper.load_cached_model(model_save_path)
+                model_wrapper.load_cached_model(str(model_save_path))
                 feature_cols = model_wrapper.model.feature_name()
             else:
                 print("\n[2] 모델 학습 준비 (LGBM Wrapper)...")
@@ -416,12 +419,13 @@ def main(config_path):
                 train_bin_path = os.path.join(
                     model_wrapper.cache_dir, f"{fold_data_hash}_train.bin"
                 )
-                if os.path.exists(train_bin_path):
+                train_cached_path, reusable = model_wrapper.cache_entry(train_bin_path, "dataset")
+                if reusable:
                     print(
                         f"  [CACHE HIT] 기존 Train .bin으로 학습 데이터 로드 -> "
-                        f"{os.path.basename(train_bin_path)}"
+                        f"{train_cached_path.name}"
                     )
-                    train_data = model_wrapper.load_cached_dataset(train_bin_path)
+                    train_data = model_wrapper.load_cached_dataset(str(train_cached_path))
                     train_data.construct()
                     feature_cols = train_data.feature_name
                 else:
@@ -546,24 +550,22 @@ def main(config_path):
             del test_df, X_test
             gc.collect()
 
-        final_predictions = pd.concat(all_predictions, ignore_index=True)
-        final_predictions.to_parquet(predictions_cache_path, index=False)
-        from shared.io import atomic_json
-        from shared.io import sha256
+        if not cached_predictions:
+            final_predictions = pd.concat(all_predictions, ignore_index=True)
+            from shared.io import atomic_json, atomic_parquet, sha256
 
-        atomic_json(
-            predictions_cache_path + ".manifest.json",
-            {
-                "predictions_hash": predictions_hash,
-                "feature_columns": config["feature_columns"],
-                "config": config,
-                "sha256": sha256(predictions_cache_path),
-                "processing_contract": config["processing_contract"],
-            },
-        )
-        print(
-            f"\n💾 [CACHE SAVE] 예측 결과 캐시 완료 -> {os.path.basename(predictions_cache_path)}"
-        )
+            atomic_parquet(prediction_path, final_predictions)
+            atomic_json(
+                prediction_path + ".manifest.json",
+                {
+                    "predictions_hash": predictions_hash,
+                    "feature_columns": config["feature_columns"],
+                    "config": config,
+                    "sha256": sha256(prediction_path),
+                    "processing_contract": config["processing_contract"],
+                },
+            )
+            print(f"\n💾 [CACHE SAVE] {os.path.basename(prediction_path)}")
     print(f"\n🎉 모델 학습 및 예측 캐시 빌드 [{exp_name}] 완료!")
 
 

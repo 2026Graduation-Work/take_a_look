@@ -354,9 +354,18 @@ class KindMarket:
         pointer = self.root / "requests" / f"{canonical_hash(request)}.json"
         if page_caches is not None:
             page_caches.append(pointer)
+        response = None
         if pointer.exists():
-            return parse(self._cached(pointer, request, self.root))
-        response = self._prior_response(request)
+            cached = self._cached(pointer, request, self.root)
+            try:
+                return parse(cached)
+            except DisclosureError:
+                if cache_only:
+                    raise
+                pointer.unlink()
+                response = self._request(request)
+        if response is None:
+            response = self._prior_response(request)
         if response is None and daily:
             response = self._import_daily(daily, request)
         if response is None and legacy and legacy.is_file():
@@ -384,22 +393,30 @@ class KindMarket:
                 path.unlink(missing_ok=True)
             raise
 
-    def cached_company(self, code, start, end):
-        """Import a bounded issuer search. Daily market coverage remains independent."""
-        require(self.company_cache and re.fullmatch(r"[0-9A-Z]{6}", code), "Invalid KIND company cache or code")
+    def company(self, code, start, end, *, cache_only=False):
+        require(re.fullmatch(r"[0-9A-Z]{6}", code) and 0 <= (end - start).days <= 729,
+                "Invalid or unbounded KIND issuer search")
+        page_caches = []
 
         def page_at(page):
             form = {"method": "searchDetailsSub", "currentPageSize": str(COMPANY_SIZE), "pageIndex": str(page),
                     "orderMode": "1", "orderStat": "D", "forward": "details_sub", "searchCodeType": "number",
                     "searchCorpName": code, "repIsuSrtCd": "A" + code, "fromDate": start.isoformat(),
                     "toDate": end.isoformat(), "reportNm": "", "reportNmTemp": ""}
-            cached = self.company_cache / f"{code}_{start}_{end}_p{page}.html"
-            if not cached.is_file():
-                raise KindUnavailable("Cached KIND company page is missing")
-            return self._get(COMPANY_URL, form=form, referer=COMPANY_MAIN, legacy=cached,
-                             parse=lambda response: company_page(response, code, start, end, page))
+            cached = self.company_cache / f"{code}_{start}_{end}_p{page}.html" if self.company_cache else None
+            return self._get(COMPANY_URL, form=form, referer=COMPANY_MAIN, legacy=cached, cache_only=cache_only,
+                             parse=lambda response: company_page(response, code, start, end, page),
+                             page_caches=page_caches)
 
-        return collect_pages("KIND company disclosure list", start, end, COMPANY_SIZE, page_at)
+        try:
+            return collect_pages("KIND company disclosure list", start, end, COMPANY_SIZE, page_at)
+        except PageConsistencyError:
+            for path in page_caches:
+                path.unlink(missing_ok=True)
+            raise
+
+    def cached_company(self, code, start, end):
+        return self.company(code, start, end, cache_only=True)
 
     def archived_market_lists(self, from_day, to_day, codes):
         queries = set()
@@ -418,22 +435,28 @@ class KindMarket:
                 if start <= to_day and from_day <= end and (not codes or code in codes):
                     queries.add((code, start, end))
         for code, start, end in sorted(queries):
-            rows, span = self._archived_market_list(code, start, end)
+            rows, span = self.market_actions(code, start, end, cache_only=True)
             yield code, rows, span
 
-    def _archived_market_list(self, code, start, end):
+    def market_actions(self, code, start, end, *, cache_only=False):
+        require(re.fullmatch(r"[0-9A-Z]{6}", code) and 0 <= (end - start).days <= 729,
+                "Invalid or unbounded KIND market-action search")
+        page_caches = []
+
         def page_at(page):
             form = {"method": "searchDetailsMktactSubExt", "forward": "details_mktact_sub_ext",
                     "searchCodeType": "number", "repIsuSrtCd": f"A{code}", "searchCorpName": code,
                     "searchCorpNameTmp": code, "fromData": start.isoformat(), "toData": end.isoformat(),
                     "currentPageSize": str(PAGE_SIZE), "pageIndex": str(page)}
-            request = {"url": KIND_SEARCH, "form": form, "referer": KIND_MAIN}
-            response = self._prior_response(request)
-            if response is None:
-                raise KindUnavailable("Archived KIND market-action page is missing")
-            return kind_page(response, start, end, page)
+            return self._get(KIND_SEARCH, form=form, referer=KIND_MAIN, cache_only=cache_only,
+                             parse=lambda response: kind_page(response, start, end, page), page_caches=page_caches)
 
-        rows, span = collect_pages("Archived KIND market actions", start, end, PAGE_SIZE, page_at)
+        try:
+            rows, span = collect_pages("Archived KIND market actions", start, end, PAGE_SIZE, page_at)
+        except PageConsistencyError:
+            for path in page_caches:
+                path.unlink(missing_ok=True)
+            raise
         return [MarketFiling(**{**vars(row), "stock_code": code}, displayed=row.published,
                              submitter="한국거래소") for row in rows], span
 
@@ -459,10 +482,12 @@ class KindMarket:
         require(selected == (body.document_no, "N") and not body.final, "KIND correction source selection differs")
         final_no = final_document_number(selected, family)
         lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": final_no})
-        response = self._get(lookup, referer=viewer, cache_only=cache_only)
-        route = document_route(response)
-        require(route.document_no == final_no and route.accession != filing.accession, "KIND correction route differs")
-        return FinalReferral(route, family, response.evidence)
+        def parse(response):
+            route = document_route(response)
+            require(route.document_no == final_no and route.accession != filing.accession, "KIND correction route differs")
+            return FinalReferral(route, family, response.evidence)
+
+        return self._get(lookup, referer=viewer, cache_only=cache_only, parse=parse)
 
     def document(self, filing, *, expected=None, cache_only=False):
         accession = filing.accession
@@ -474,23 +499,32 @@ class KindMarket:
             return folder / f"{accession}_{suffix}" if folder else None
 
         viewer = KIND_VIEWER + "?" + urlencode({"method": "search", "acptno": accession})
-        shell = self._get(viewer, referer=DAILY_MAIN, legacy=cached("viewer.html"), cache_only=cache_only)
-        refs = [shell.evidence]
-        try:
-            (doc_no, final), family = viewer_documents(accession, shell)
-            if expected and ((doc_no, final) != (expected.route.document_no, "Y") or set(family) != set(expected.family)):
-                raise CorrectionError("KIND final viewer selection or correction family differs", (shell.evidence,))
-            lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": doc_no})
-            route = self._get(lookup, referer=viewer, legacy=cached("contents.html"), cache_only=cache_only)
-            refs.append(route.evidence)
-            source, form = kind_route(accession, route)
-            require(f"/{doc_no}/" in urlsplit(source).path, "KIND route document identifier changed")
-            if expected:
-                require((source, form) == (expected.route.url, expected.route.form), "KIND final route differs from referral")
-        except (CorrectionError, KindUnavailable):
-            raise
-        except DisclosureError as exc:
-            raise DocumentFormatError(str(exc), tuple(refs)) from None
+        def parse_viewer(response):
+            try:
+                return response.evidence, viewer_documents(accession, response)
+            except CorrectionError:
+                raise
+            except DisclosureError as exc:
+                raise DocumentFormatError(str(exc), (response.evidence,)) from None
+
+        shell, ((doc_no, final), family) = self._get(
+            viewer, referer=DAILY_MAIN, legacy=cached("viewer.html"), cache_only=cache_only, parse=parse_viewer)
+        if expected and ((doc_no, final) != (expected.route.document_no, "Y") or set(family) != set(expected.family)):
+            raise CorrectionError("KIND final viewer selection or correction family differs", (shell,))
+        lookup = KIND_VIEWER + "?" + urlencode({"method": "searchContents", "docNo": doc_no})
+
+        def parse_route(response):
+            try:
+                source, form = kind_route(accession, response)
+                require(f"/{doc_no}/" in urlsplit(source).path, "KIND route document identifier changed")
+            except DisclosureError as exc:
+                raise DocumentFormatError(str(exc), (shell, response.evidence)) from None
+            return response.evidence, source, form
+
+        route, source, form = self._get(
+            lookup, referer=viewer, legacy=cached("contents.html"), cache_only=cache_only, parse=parse_route)
+        if expected and (source, form) != (expected.route.url, expected.route.form):
+            raise DocumentFormatError("KIND final route differs from referral", (shell, route))
         body = self._get(source, referer=viewer, legacy=cached("doc.htm"), cache_only=cache_only)
         family_numbers = tuple(number for number, _ in family)
-        return form, KindBody(body.body, body.charset, body.evidence, doc_no, family_numbers, final == "Y"), (*refs, body.evidence)
+        return form, KindBody(body.body, body.charset, body.evidence, doc_no, family_numbers, final == "Y"), (shell, route, body.evidence)

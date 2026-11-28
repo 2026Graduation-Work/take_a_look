@@ -8,6 +8,7 @@ from experiments.dataset.pipeline import _require_current_training_prices
 from serving.internal.pack import FORMAT_VERSION, load_pack
 from shared.data.resolution_snapshot import require_price_provenance
 from shared.io import sha256_file
+from shared.processing import processing_compatible
 from shared.settings import BUILDER_ID, CHART_ROOT, processing_contract
 
 from .golden import DEFAULT_INPUTS, generate
@@ -29,7 +30,8 @@ def _verify_artifact(path, expected_contract, *, kind, allow_legacy):
     config = metadata.get("config")
     if kind == "prediction" and isinstance(config, dict) and "processing_contract" in config:
         contracts.append(config["processing_contract"])
-    if not contracts or any(contract != expected_contract for contract in contracts):
+    if (not contracts or any(contract != contracts[0] for contract in contracts[1:])
+            or not processing_compatible(contracts[0], expected_contract)):
         raise ValueError(f"Export {kind} processing contract mismatch: {path}")
     if metadata.get("sha256") != sha256_file(path):
         raise ValueError(f"Export {kind} checksum mismatch: {path}")
@@ -43,7 +45,7 @@ def build_pack(*, pack_id, output, models, predictions, processed_dir, calendar_
     if not research_manifest or not calendar_file:
         raise ValueError("A verified research manifest and calendar are required")
     expected_contract = processing_contract()
-    if research_manifest.get("processing_contract") != expected_contract:
+    if not processing_compatible(research_manifest.get("processing_contract"), expected_contract):
         raise ValueError("Export/shared processing contract mismatch")
     if research_manifest.get("feature_builder_id") != BUILDER_ID:
         raise ValueError("Export/shared feature builder mismatch")

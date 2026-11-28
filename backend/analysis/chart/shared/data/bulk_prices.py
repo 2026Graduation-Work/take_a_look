@@ -1,21 +1,31 @@
 """Bounded daily KRX price snapshots shared by all local stock collectors."""
 
+import hashlib
 import json
 import time
 
 import numpy as np
 import pandas as pd
 
-from shared.io import append_collection_event, atomic_json, atomic_parquet
+from shared.io import append_collection_event, atomic_json, atomic_parquet, sha256
 
+from .disclosures import put_immutable
 from .training_prices import parse_krx_fields
 from .validation import KRX_RAW_COLUMNS, expected_sessions
 
 CACHE_VERSION = 2
+SOURCE_DAY_VERSION = 1
+SOURCE_DAY_FIELDS = ("ISU_ABBRV", "MKT_NM", "SECT_TP_NM")
 
 
-def validate_day(frame, day):
-    required = ["Code", *KRX_RAW_COLUMNS]
+class MissingListingPrices(ValueError):
+    def __init__(self, message, days):
+        super().__init__(message)
+        self.days = days
+
+
+def validate_day(frame, day, *, source_day=False):
+    required = ["Code", *KRX_RAW_COLUMNS, *(SOURCE_DAY_FIELDS if source_day else ())]
     if frame.empty or set(required) - set(frame):
         raise ValueError("Empty/incomplete daily KRX price response")
     frame = frame[required].copy()
@@ -28,6 +38,14 @@ def validate_day(frame, day):
     if not np.isfinite(values.to_numpy()).all() or values.drop(columns="RawChange").lt(0).any().any():
         raise ValueError("Invalid daily KRX raw prices/volume/amount")
     frame[values.columns] = values
+    if source_day:
+        if (frame[["ISU_ABBRV", "MKT_NM"]].isna().any().any()
+                or frame["ISU_ABBRV"].str.strip().eq("").any()
+                or not frame.MKT_NM.isin({"KOSPI", "KOSDAQ", "KOSDAQ GLOBAL", "KONEX"}).all()
+                or values.ne(np.trunc(values)).any().any()):
+            raise ValueError("Incomplete daily KRX issuer, market or quantity fields")
+        frame[list(SOURCE_DAY_FIELDS)] = frame[list(SOURCE_DAY_FIELDS)].astype("string").fillna("")
+        frame[values.columns] = values.astype("int64")
     return frame
 
 
@@ -38,13 +56,13 @@ def request_day(day):
     return parse_krx_fields(rows).rename(columns={"ISU_SRT_CD": "Code"}).assign(Date=day)
 
 
-def fetch_day(source, day, record):
+def fetch_day(source, day, record, *, source_day=False):
     for attempt in range(1, 4):
         record({"date": str(day.date()), "attempt": attempt, "state": "requesting"})
         started = time.monotonic()
         try:
             with source._krx_request_timeout():
-                return validate_day(request_day(day), day)
+                return validate_day(request_day(day), day, source_day=source_day)
         except Exception as exc:
             response = getattr(exc, "response", None)
             details = getattr(exc, "details", {})
@@ -61,10 +79,53 @@ def fetch_day(source, day, record):
             time.sleep(delay)
 
 
+def supersede_incomplete_days(directory, rejected):
+    archive = directory.parent / "krx_day_archive"
+    for day, digest in sorted(rejected.items()):
+        day = pd.Timestamp(day).date().isoformat()
+        price = directory / f"{day}.parquet"
+        receipt = price.with_suffix(".json")
+        if not receipt.is_file():
+            continue
+        metadata = receipt.read_bytes()
+        if json.loads(metadata)["sha256"] != digest:
+            continue
+        payload = price.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != digest:
+            raise ValueError(f"Verified KRX source cache changed: {price}")
+        put_immutable(archive / "objects" / digest, payload)
+        put_immutable(archive / "receipts" / f"{hashlib.sha256(metadata).hexdigest()}.json", metadata)
+        receipt.unlink()
+
+
+def prepare_source_days(directory, sessions, record):
+    from . import providers
+
+    for day in sessions:
+        session = day.date().isoformat()
+        path = directory / f"{session}.parquet"
+        receipt = path.with_suffix(".json")
+        query = {"version": SOURCE_DAY_VERSION, "source": "KRX MDCSTAT01501 daily ALL", "date": session}
+        if receipt.exists():
+            stored = json.loads(receipt.read_text())
+            if not path.is_file() or any(stored.get(key) != value for key, value in query.items()) or stored[
+                "sha256"
+            ] != sha256(path):
+                raise ValueError(f"Verified KRX source cache changed: {path}")
+            continue
+        started = time.monotonic()
+        try:
+            frame = fetch_day(providers, day, record, source_day=True)
+        except (ValueError, OSError, RuntimeError) as exc:
+            raise ValueError(f"KRX daily ALL {session} is incomplete: {exc}") from exc
+        atomic_parquet(path, frame)
+        atomic_json(receipt, {**query, "rows": len(frame), "sha256": sha256(path),
+                              "received_at": pd.Timestamp.now(tz="UTC").isoformat()})
+        time.sleep(max(0, 1.0 - (time.monotonic() - started)))
+
+
 def prepare_bulk_prices(root, metadata, calendar, report, source):
     """Skip saved stocks; amortize daily requests only when cheaper than histories."""
-    from shared.io import sha256
-
     needed = {}
     for code, intervals in metadata.groupby("Code", sort=True):
         days = expected_sessions(intervals, calendar)

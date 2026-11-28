@@ -1,6 +1,7 @@
 import gzip
 import hashlib
 import json
+from argparse import Namespace
 from collections import defaultdict
 from datetime import date, timedelta
 from fractions import Fraction
@@ -9,7 +10,7 @@ from unittest.mock import MagicMock, Mock
 
 import pandas as pd
 import pytest
-from experiments.dataset.census_actions import _collect_notices, main
+from experiments.dataset.census_actions import _collect_notices, build_census, main
 from experiments.dataset.freeze_resolution_snapshot import freeze_resolution_snapshot
 from experiments.dataset.pipeline import training_metadata, write_review_queue
 from shared.data.disclosures import DisclosureError, Evidence
@@ -22,7 +23,11 @@ from shared.data.kind_market import (
 )
 from shared.data.market_notices import SecurityKey, kind_topic, normal_company
 from shared.data.market_resolutions import STRUCTURAL_REVIEW_REASON, Resolution
-from shared.data.resolution_snapshot import kind_document_url, read_resolution_snapshot
+from shared.data.resolution_snapshot import (
+    VerifiedSourceDays,
+    kind_document_url,
+    read_resolution_snapshot,
+)
 from shared.data.segmented_prices import adjust_training_window
 from shared.io import sha256
 
@@ -129,15 +134,21 @@ def test_census_never_compares_across_a_missing_security_session(tmp_path, capsy
     assert intact["raw_sha256"] and intact["price_rows"] == intact["expected_sessions"] == 3
 
 
-def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
+def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter, aliases=None):
     fixtures = Path(__file__).parents[2] / "shared/tests/fixtures/market_actions"
     sources = json.loads((fixtures / "sources.json").read_text())
+    aliases = aliases or {}
+    sources.update({delivered: sources[original] for delivered, original in aliases.items()})
     documents = {}
     accessions = [accession for rows in filings.values() for accession in rows]
     flags = {sources[accession]["document_no"]: "Y" if sources[accession]["final"] else "N" for accession in accessions}
     for accession in accessions:
         source = sources[accession]
         viewer, document, url = kind_document_url(accession), source["document_no"], source["body_url"]
+        if accession in aliases:
+            base = url.rsplit("/", 6)[0]
+            day = date.fromisoformat(accession[:8])
+            url = f"{base}/{day:%Y/%m/%d}/{accession[8:]}/{document}/{url.rsplit('/', 1)[-1]}"
         options = "".join(f'<option value="{number}|{flags.get(number, "N")}"'
                           f'{" selected" if number == document else ""}></option>' for number in source["family"])
         documents[viewer] = (f'<input name="acptNo" id="acptNo" value="{accession}">'
@@ -145,7 +156,7 @@ def use_archived_kind_bodies(monkeypatch, filings, *, issuer, submitter):
         documents[viewer.split("?")[0] + f"?method=searchContents&docNo={document}"] = (
             f"parent.setPath('', '{url}')"
         ).encode()
-        body = gzip.decompress((fixtures / f"{accession}.html.gz").read_bytes())
+        body = gzip.decompress((fixtures / f"{aliases.get(accession, accession)}.html.gz").read_bytes())
         assert hashlib.sha256(body).hexdigest() == source["sha256"]
         documents[url] = body
 
@@ -301,7 +312,7 @@ def test_census_keeps_lotte_survivor_and_preferred_auctions_bound_to_their_listi
 
 
 def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=False, codes=(), published_start=None,
-                     spac_before=None):
+                     spac_before=None, correction_cutoff=None):
     days, cache, output = (tmp_path / name for name in ("days", "kind", "output"))
     days.mkdir()
     columns = ["Date", "Code", "ISU_ABBRV", "MKT_NM", "RawOpen", "RawHigh", "RawLow", "RawClose", "RawChange",
@@ -318,11 +329,21 @@ def freeze_kind_case(tmp_path, raw, *, active, delisted=(), budget=0, preview=Fa
     pd.DataFrame(delisted, columns=["Symbol", "ISIN", "Name", "Market", "SecuGroup", "ListingDate", "DelistingDate",
                                     "KIND_STKCERT_TP_NM"]).to_parquet(delisted_path, index=False)
     start, end = bars.Date.min().date(), bars.Date.max().date()
-    main(["--start", str(start), "--end", str(end), "--published-start", str(published_start or start - timedelta(days=7)),
-          "--published-end", str(end + timedelta(days=3)), "--krx-days", str(days), "--active-master", str(active_path),
-          "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output),
-          "--request-budget", str(budget), *(["--preview"] if preview else []),
-          *(arg for code in codes for arg in ("--code", code))])
+    first = published_start or start - timedelta(days=7)
+    last = end + timedelta(days=3)
+    if correction_cutoff is None:
+        main(["--start", str(start), "--end", str(end), "--published-start", str(first),
+              "--published-end", str(last), "--krx-days", str(days), "--active-master", str(active_path),
+              "--delisted-master", str(delisted_path), "--kind-root", str(cache), "--output", str(output),
+              "--request-budget", str(budget), *(["--preview"] if preview else []),
+              *(arg for code in codes for arg in ("--code", code))])
+    else:
+        output.mkdir()
+        build_census(Namespace(
+            start=start, end=end, published_start=first, published_end=last, krx_days=days,
+            active_master=active_path, delisted_master=delisted_path, output=output, kind_company_cache=None,
+            sample=None, code=codes, action_snapshot=(), automated=True, correction_cutoff=correction_cutoff,
+        ), KindMarket(cache, budget=budget))
     path = freeze_resolution_snapshot(output, tmp_path / "official_actions", krx_days=days,
                                        active_master=active_path, delisted_master=delisted_path, evidence_archives=[cache])
     notices = pd.read_csv(output / "notices.csv", dtype={"Code": str, "AcptNo": str}).set_index("AcptNo")
@@ -373,16 +394,20 @@ def test_spac_rename_correction_closes_only_the_name_change(tmp_path, monkeypatc
                                        evidence_archives=[tmp_path / "kind"])
 
 
-def test_official_nonfinal_merger_and_krx_shares_derive_only_a_review_boundary(tmp_path, monkeypatch):
-    original, final, event_day = "20201116000323", "20201119000393", "2020-11-19"
-    use_archived_kind_bodies(monkeypatch, {"2020-11-16": (original,), "2020-11-19": (final,)},
-                            issuer="00509", submitter="유가증권시장본부")
+@pytest.mark.parametrize("late", [False, True])
+def test_official_nonfinal_merger_and_krx_shares_derive_only_a_review_boundary(tmp_path, monkeypatch, late):
+    original, ordinary, event_day = "20201116000323", "20201119000393", "2020-11-19"
+    day = "2020-11-24" if late else "2020-11-19"
+    final = "20201124000393" if late else ordinary
+    use_archived_kind_bodies(monkeypatch, {"2020-11-16": (original,), day: (final,)},
+                            issuer="00509", submitter="유가증권시장본부", aliases={final: ordinary} if late else None)
     snapshot, notices = freeze_kind_case(tmp_path, [
         ("2020-11-17", "005090", "삼광글라스", "KOSPI", 38000, 38700, 37600, 38500, 100, 17086, 655396200, 4854418),
         ("2020-11-18", "005090", "삼광글라스", "KOSPI", 38500, 40750, 38500, 39850, 1350, 99458, 3940092850, 4854418),
         ("2020-11-19", "005090", "에스지씨에너지", "KOSPI", 36500, 37200, 33900, 36750, -3100, 534698, 19041017350, 14677004),
         ("2020-11-20", "005090", "SGC에너지", "KOSPI", 36800, 37150, 35300, 35950, -800, 107180, 3850331700, 14677004),
-    ], active=[("005090", "KR7005090006", "SGC에너지", "SGC에너지", "KOSPI", "주권", "1993/01/06", "보통주")])
+    ], active=[("005090", "KR7005090006", "SGC에너지", "SGC에너지", "KOSPI", "주권", "1993/01/06", "보통주")],
+        correction_cutoff=date.fromisoformat(day) if late else None)
     assert list(notices.index) == [final]
     assert (notices.loc[final, "Kind"], notices.loc[final, "AppliedDate"]) == ("rename", "2020-11-20")
     family, = snapshot.coverage["kind_final_families"]
@@ -408,6 +433,17 @@ def test_official_nonfinal_merger_and_krx_shares_derive_only_a_review_boundary(t
     assert adjusted.Change.isna().tolist() == [True, False, True, False]
     assert adjusted.Close.tolist() == raw.RawClose.tolist() and adjusted.Volume.tolist() == raw.RawVolume.tolist()
     assert adjusted.Amount.tolist() == raw.Amount.tolist()
+    selected = days[2:]
+    proof = VerifiedSourceDays.read(snapshot, selected, tmp_path / "days")
+    clipped, factors = adjust_training_window(security, raw.iloc[2:], selected, selected[-1], snapshot, source=proof)
+    pd.testing.assert_frame_equal(clipped, adjusted.iloc[2:].reset_index(drop=True))
+    assert factors.empty
+    assert list(snapshot.review_rows(sessions=selected)) == [review]
+    assert not list(snapshot.review_rows(sessions=days[:2]))
+    if late:
+        assert [row["start"] for row in snapshot.coverage["correction_daily"]] == [day]
+        assert day not in {row["start"] for row in snapshot.coverage["daily"]}
+        return
 
     output = tmp_path / "output"
     paths = {key: output / filename for key, filename in

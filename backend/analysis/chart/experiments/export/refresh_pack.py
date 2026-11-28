@@ -15,7 +15,7 @@ from experiments.dataset.pipeline import (
     eligible_training_prices,
     verify_training_metadata,
 )
-from experiments.experiment_utils import resolve_splits
+from experiments.experiment_utils import cache_slot, generate_predictions_hash, resolve_splits
 from serving.internal.inference import infer_batch
 from serving.internal.pack import feature_cache_key, load_pack
 from shared.data.calendar import verify_calendar_schedule
@@ -25,6 +25,7 @@ from shared.data.validation import expected_sessions, validate_prices
 from shared.features.builder import build_feature_frame
 from shared.features.columns import BASE_FEATURES, FLOW_FEATURES
 from shared.io import atomic_json, sha256_file
+from shared.processing import processing_compatible
 from shared.settings import BUILDER_ID, CHART_ROOT, PREPROCESSING, processing_contract
 
 from .pack import build_pack
@@ -44,7 +45,7 @@ def verify_inputs(dataset, names, feature_store=None, operational=False):
             or processed["raw_files"] != original["raw_files"]):
         raise ValueError("Preserved v3 dataset settings or raw provenance mismatch")
     contract = processing_contract()
-    if processed.get("processing_contract") != contract:
+    if not processing_compatible(processed.get("processing_contract"), contract):
         raise ValueError("Processed data processing contract mismatch")
     metadata = verify_training_metadata(dataset, snapshot, original["config"]["collection"], calendar)
     days = pd.to_datetime(calendar["trading_days"])
@@ -139,15 +140,31 @@ def verify_runs(result_dirs, *, with_flows=False):
         cache_hash = manifest["predictions_hash"]
         models[horizon] = CHART_ROOT / "workspace/experiments/cache/training/models" / f"{cache_hash}_fold{last['fold_id']}_model.txt"
         predictions[horizon] = CHART_ROOT / "workspace/experiments/cache/predictions" / f"{cache_hash}_predictions.parquet"
+        if len(cache_hash) == 16:
+            def verified_generation(base, field, expected):
+                def valid(path):
+                    try:
+                        sidecar = json.loads(Path(f"{path}.manifest.json").read_text())
+                        return sidecar.get(field) == expected and sidecar.get("sha256") == sha256_file(path)
+                    except (AttributeError, OSError, ValueError):
+                        return False
+
+                return cache_slot(base, valid)[0]
+
+            models[horizon] = verified_generation(models[horizon], "cache_key", models[horizon].name)
+            predictions[horizon] = verified_generation(predictions[horizon], "predictions_hash", cache_hash)
         model_meta_path = Path(str(models[horizon]) + ".manifest.json")
         prediction_meta_path = Path(str(predictions[horizon]) + ".manifest.json")
         model_meta = json.loads(model_meta_path.read_text())
         pred_meta = json.loads(prediction_meta_path.read_text())
         if (sha256_file(models[horizon]) != model_meta["sha256"]
                 or sha256_file(predictions[horizon]) != pred_meta["sha256"]
-                or pred_meta["predictions_hash"] != cache_hash or pred_meta["config"] != cfg
+                or pred_meta["predictions_hash"] != cache_hash
+                or (len(cache_hash) != 16 and pred_meta["config"] != cfg)
                 or pred_meta["feature_columns"] != manifest["feature_columns"]
-                or model_meta["feature_columns"] != manifest["feature_columns"]):
+                or model_meta["feature_columns"] != manifest["feature_columns"]
+                or not processing_compatible(model_meta.get("processing_contract"), manifest.get("processing_contract"))
+                or manifest.get("processing_contract") != cfg.get("processing_contract")):
             raise ValueError("Preserved model/prediction provenance mismatch")
         model = lgb.Booster(model_file=str(models[horizon]))
         if model.num_model_per_iteration() != 3 or model.feature_name() != manifest["feature_columns"]:
@@ -162,11 +179,23 @@ def verify_runs(result_dirs, *, with_flows=False):
         store = (CHART_ROOT / Path(cfg["features"]["materialized_dir"])).resolve()
         feature_manifest_path = store / "feature_manifest.json"
         feature_manifest = json.loads(feature_manifest_path.read_text())
-        if require_price_provenance(feature_manifest) != official_actions or feature_manifest["feature_columns"] != names:
+        if (require_price_provenance(feature_manifest) != official_actions or feature_manifest["feature_columns"] != names
+                or ("feature_manifest_sha256" in manifest
+                    and manifest["feature_manifest_sha256"] != sha256_file(feature_manifest_path))):
             raise ValueError("Training feature store order differs from the models")
         for name, digest in feature_manifest["file_hashes"].items():
             if sha256_file(store / name) != digest:
                 raise ValueError(f"Training feature store checksum mismatch: {name}")
+        if len(cache_hash) == 16:
+            trained = pred_meta["config"]
+            trained_contract = trained.get("processing_contract")
+            file_hashes = feature_manifest["file_hashes"]
+            if (not manifest.get("feature_manifest_sha256")
+                    or not processing_compatible(trained_contract, cfg["processing_contract"])
+                    or pred_meta.get("processing_contract") != trained_contract
+                    or generate_predictions_hash(cfg, folds, feature_hashes=file_hashes) != cache_hash
+                    or generate_predictions_hash(trained, resolve_splits(trained), feature_hashes=file_hashes) != cache_hash):
+                raise ValueError("Preserved prediction training inputs differ")
         provenance[f"h{horizon}"] = {
             "run_manifest_sha256": sha256_file(manifest_path), "original_run_manifest": str(manifest_path),
             "prediction_hash": cache_hash, "prediction_sha256": pred_meta["sha256"],

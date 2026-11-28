@@ -40,7 +40,7 @@ def fake_isin(code):
     return next(isin for i in range(10) if valid_isin(isin := f"KR7{code}00{i}"))
 
 
-def fixture_snapshot(root, codes, dates, actions=(), *, raw=None, keys=None, events=(), spac_codes=()):
+def fixture_snapshot(root, codes, dates, actions=(), *, raw=None, keys=None, events=(), spac_codes=(), source_days=None):
     from experiments.dataset.census_actions import (
         _candidate_columns,
         _resolution_columns,
@@ -69,7 +69,8 @@ def fixture_snapshot(root, codes, dates, actions=(), *, raw=None, keys=None, eve
                                           "toDate": str(right), "pageIndex": "1", "currentPageSize": "100"}}})
         proofs[code] = Evidence(body_hash, sha256(receipt))
         (archive / "receipts" / f"{proofs[code].receipt}.json").write_bytes(receipt.read_bytes())
-    sessions = {str(day.date()): "a" * 64 for day in dates}
+    sessions = {str(day.date()): sha256(source_days / f"{day:%Y-%m-%d}.parquet") if source_days else "a" * 64
+                for day in dates}
     windows, candidates, resolutions, names = [], [], [], {}
     if raw is None:
         raw = pd.DataFrame({"Date": dates, "RawOpen": 100, "RawHigh": 102, "RawLow": 98, "RawClose": 100,

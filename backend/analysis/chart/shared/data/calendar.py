@@ -1,4 +1,5 @@
 """KRX index sessions checked against the XKRX exchange schedule."""
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -116,7 +117,47 @@ def verify_calendar_schedule(payload):
         "sessions": len(expected),
     }
 
-def build_calendar(root, collection):
+def _cached_index(source_root, provider, fetch, start, end):
+    days = scheduled_sessions(start, end)
+    directory = source_root / provider
+    parts = []
+    for receipt in sorted(directory.glob("*.json")):
+        lo, hi = (pd.Timestamp(value) for value in receipt.stem.split("_"))
+        if lo > end or hi < start:
+            continue
+        metadata = json.loads(receipt.read_text())
+        path = receipt.with_suffix(".parquet")
+        if (metadata.get("version") != CALENDAR_RULES_VERSION or metadata.get("provider") != provider
+                or metadata.get("start") != lo.date().isoformat() or metadata.get("end") != hi.date().isoformat()
+                or not path.is_file() or sha256(path) != metadata["sha256"]):
+            raise ValueError(f"Verified KRX index cache changed: {path}")
+        series = validate_index(pd.read_parquet(path).set_index("Date"), lo, hi)
+        if not series.index.equals(scheduled_sessions(lo, hi)):
+            raise ValueError(f"Incomplete KRX index cache coverage: {path}")
+        parts.append(series.loc[(series.index >= start) & (series.index <= end)])
+    existing = pd.concat(parts) if parts else pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    if existing.groupby(level=0).nunique().gt(1).any():
+        raise ValueError(f"Conflicting KRX index revisions in {directory}")
+    existing = existing.loc[~existing.index.duplicated()]
+    missing = ~days.isin(existing.index)
+    ranges = days.to_series().groupby((missing != pd.Series(missing).shift(fill_value=False)).cumsum().to_numpy())
+    for _, adjacent in ranges:
+        lo, hi = adjacent.iloc[[0, -1]]
+        if lo in existing.index:
+            continue
+        series = validate_index(fetch(lo, hi), lo, hi)
+        if not series.index.equals(pd.DatetimeIndex(adjacent)):
+            raise ValueError(f"{provider} incomplete KRX index coverage: {lo.date()}..{hi.date()}")
+        path = directory / f"{lo:%Y-%m-%d}_{hi:%Y-%m-%d}.parquet"
+        atomic_parquet(path, series.rename("Close").rename_axis("Date").reset_index())
+        atomic_json(path.with_suffix(".json"), {"version": CALENDAR_RULES_VERSION, "provider": provider,
+                   "start": lo.date().isoformat(), "end": hi.date().isoformat(), "sha256": sha256(path),
+                   "received_at": pd.Timestamp.now(tz="UTC").isoformat()})
+        existing = pd.concat([existing, series])
+    return existing.sort_index()
+
+
+def build_calendar(root, collection, *, source_root=None):
     from shared.data import trading_calendar as calendar
 
     start = pd.Timestamp(collection["start_date"])
@@ -134,9 +175,16 @@ def build_calendar(root, collection):
     )
     if latest_reference is not None:
         end = latest_reference
+    def index(provider, fetch, stop):
+        if source_root is None:
+            return validate_index(fetch(start, stop), start, stop)
+        return _cached_index(source_root, provider, fetch, start, stop)
+
     primary_provider = "pykrx KOSPI 1001"
-    primary = validate_index(calendar._fetch_pykrx_index(start, end), start, end)
-    secondary = validate_index(fetch_authenticated_index(start, end), start, end)
+    primary = index("pykrx-kospi-1001", calendar._fetch_pykrx_index, end)
+    secondary = index("krx-kospi-1001", fetch_authenticated_index, end)
+    if primary.empty:
+        raise ValueError("No KRX sessions in the requested collection range")
     if not primary.index.equals(secondary.index):
         raise ValueError(
             "Calendar providers disagree; no verified coverage: "
@@ -149,7 +197,7 @@ def build_calendar(root, collection):
     if latest_reference is not None and effective_end != latest_reference:
         raise ValueError("Index response is stale relative to KRX latest-session reference")
     kosdaq_provider = "pykrx KOSDAQ 2001"
-    kosdaq = validate_index(calendar._fetch_pykrx_index(start, effective_end, "2001"), start, effective_end)
+    kosdaq = index("pykrx-kosdaq-2001", lambda lo, hi: calendar._fetch_pykrx_index(lo, hi, "2001"), effective_end)
     if not kosdaq.index.equals(primary.index):
         raise ValueError("KOSDAQ index has missing sessions")
     payload = {
@@ -171,11 +219,11 @@ def build_calendar(root, collection):
         "unverified_tail": str(requested_end.date()) if requested_end > effective_end else None,
     }
     payload["schedule_validation"] = verify_calendar_schedule(payload)
-    atomic_json(root / "calendar.json", payload)
+    payload["benchmarks"] = {}
     for name, series in [("KOSPI", primary), ("KOSDAQ", kosdaq)]:
-        atomic_parquet(
-            root / "benchmarks" / f"{name}.parquet",
-            series.rename("Close").rename_axis("Date").reset_index(),
-        )
+        path = root / "benchmarks" / f"{name}.parquet"
+        atomic_parquet(path, series.rename("Close").rename_axis("Date").reset_index())
+        payload["benchmarks"][path.name] = sha256(path)
+    atomic_json(root / "calendar.json", payload)
     return payload
 

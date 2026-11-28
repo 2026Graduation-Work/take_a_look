@@ -66,7 +66,7 @@ def measure(census, krx_days, active_master, delisted_master, *, prior_actions=(
             or sha256(delisted_master) != sources["delisted_master_sha256"]
             or [sha256(path) for path in prior_actions] != sources["official_action_snapshots"]):
         raise ValueError("Diagnostic census master or legacy action hashes differ")
-    raw, hashes = _price_frame(krx_days, sessions, set(codes))
+    raw, hashes = _price_frame(krx_days, sessions, set(codes), markets=manifest["scope"].get("markets", ()))
     if hashes != sources["krx_sessions"]:
         raise ValueError("Diagnostic KRX day hashes differ from the census")
     master = _security_master(active_master, delisted_master)

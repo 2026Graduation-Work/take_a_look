@@ -318,39 +318,15 @@ def load_experiment_config(path):
         raise ValueError("probability_bins must increase from 0 to 1")
     base = Path(dataset["root"]) / "processed"
     config["features"]["base_processed_dir"] = str(base)
-    # Feature identity is independent of model, labels and strategy.
-    input_files = [Path(dataset["root"]) / "processed_manifest.json"]
-    features_root = CHART_ROOT / "experiments" / "features"
-    input_files += [
-        features_root / name
-        for name in (
-            "registry.py",
-            "flow.py",
-            "local_panel.py",
-            "panel_builder.py",
-            "psychology/market_psychology.py",
-        )
-    ]
-    input_files += [chart_path(source["path"]) for source in features.get("sources", [])]
     for source in features.get("sources", []):
         source["path"] = str(chart_path(source["path"]))
     if features.get("matched_sample_file"):
         features["matched_sample_file"] = str(chart_path(features["matched_sample_file"]))
-        input_files.append(Path(features["matched_sample_file"]))
-    from shared.io import sha256
-
-    feature_id = identity(
-        {
-            "dataset": dataset,
-            "features": features,
-            "columns": config["feature_columns"],
-            "inputs": {str(p): sha256(p) if p.exists() else None for p in input_files},
-        }
-    )
-    store = Path(dataset["root"]) / "feature_store" / feature_id
-    config["features"]["materialized_dir"] = str(store)
-    config["data"]["price_dir"] = str(store)
     config["data"]["version"] = dataset["dataset_id"]
     config["contract_version"] = CONTRACT_VERSION
     config["processing_contract"] = processing_contract(dataset["preprocessing"])
+
+    from experiments.features.local_panel import locate_feature_store
+
+    locate_feature_store(config)
     return config

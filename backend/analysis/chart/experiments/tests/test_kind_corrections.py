@@ -6,12 +6,15 @@ from unittest.mock import Mock
 import pandas as pd
 import pytest
 from experiments.dataset import census_actions
-from shared.data.disclosures import Evidence, Response
+from shared.data.disclosures import DocumentFormatError, Evidence, Response
 from shared.data.kind_market import (
+    DAILY_MAIN,
+    KIND_VIEWER,
     CorrectionError,
     DocumentRoute,
     FinalReferral,
     KindBody,
+    KindMarket,
     MarketFiling,
     daily_page,
     final_document_number,
@@ -20,6 +23,7 @@ from shared.data.kind_market import (
 )
 from shared.data.market_notices import SecurityKey
 from shared.data.market_resolutions import Resolution, observe_candidates, resolve_events
+from shared.io import atomic_json, canonical_hash
 from shared.tests.test_market_resolutions import bars
 from shared.tests.test_notice_security import SAMSUNG_UNIVERSE, _price_notice
 
@@ -82,6 +86,55 @@ def _viewer(filing, marker, other):
     return Response((f'<input name="acptNo" id="acptNo" value="{filing.accession}">'
                      f'<select id="mainDoc"><option value="20210104009998|{marker}" selected></option>'
                      f'<option value="20210104009999|{other}"></option></select>').encode(), "utf-8", _evidence(90))
+
+
+@pytest.mark.parametrize("step", ["viewer", "route"])
+@pytest.mark.parametrize("old_pointer", [False, True])
+def test_invalid_kind_route_response_remains_retryable(tmp_path, monkeypatch, step, old_pointer):
+    filing = _filing(4)
+    number = "20210104009998"
+    viewer = f"{KIND_VIEWER}?method=search&acptno={filing.accession}"
+    lookup = f"{KIND_VIEWER}?method=searchContents&docNo={number}"
+    payload = f"https://kind.krx.co.kr/external/2021/01/04/000001/{number}/68155.htm"
+    invalid_url = viewer if step == "viewer" else lookup
+    invalid = b"<html>Temporary upstream error</html>"
+    replies = {viewer: _viewer(filing, "Y", "N").body,
+               lookup: f"parent.setPath('', '{payload}')".encode(),
+               payload: b"<html><table>Official notice</table></html>"}
+    client = KindMarket(tmp_path, budget=10)
+    calls = []
+    invalid_evidence = []
+
+    def request(form):
+        url = form["url"]
+        calls.append(url)
+        if not old_pointer and url == invalid_url and not invalid_evidence:
+            response = client._store(form, invalid, "utf-8", None, "fixture")
+            invalid_evidence.append(response.evidence)
+            return response
+        return client._store(form, replies[url], "utf-8", None, "fixture")
+
+    monkeypatch.setattr(client, "_request", request)
+    form = {"url": invalid_url, "form": None, "referer": DAILY_MAIN if step == "viewer" else viewer}
+    pointer = tmp_path / "requests" / f"{canonical_hash(form)}.json"
+    if old_pointer:
+        response = client._store(form, invalid, "utf-8", None, "fixture")
+        invalid_evidence.append(response.evidence)
+        atomic_json(pointer, vars(response.evidence))
+    else:
+        with pytest.raises(DocumentFormatError):
+            client.document(filing)
+        assert not pointer.exists()
+
+    doc_form, body, refs = client.document(filing)
+    assert (doc_form, body.document_no, body.final, body.body) == ("68155", number, True, replies[payload])
+    assert calls.count(invalid_url) == (1 if old_pointer else 2)
+    assert (tmp_path / "objects" / invalid_evidence[0].sha256).read_bytes() == invalid
+    assert (tmp_path / "receipts" / f"{invalid_evidence[0].receipt}.json").is_file()
+    assert invalid_evidence[0] not in refs
+    calls.clear()
+    assert client.document(filing)[1:] == (body, refs)
+    assert not calls
 
 
 def test_absent_and_multiple_finals_are_reported_as_review():

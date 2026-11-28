@@ -113,35 +113,41 @@ def _attach_actual_vwap(adjusted_df: pd.DataFrame, raw_df: pd.DataFrame) -> pd.D
     return combined
 
 
+def krx_listing_response(form, *, timeout=(10, 30), session=None):
+    if session is None:
+        session = get_krx_session()
+    if session is None:
+        raise RuntimeError("KRX_ID와 KRX_PW를 설정해야 상폐 이력과 수급을 수집할 수 있습니다")
+    response = session.post("https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
+                            data=form, timeout=timeout)
+    response.raise_for_status()
+    return response
+
+
+def delisted_listing_form(start, end):
+    return {"bld": "dbms/MDC/STAT/issue/MDCSTAT23801",
+            "mktId": "ALL", "isuCd": "ALL", "isuCd2": "ALL",
+            "strtDd": start.strftime("%Y%m%d"), "endDd": end.strftime("%Y%m%d"),
+            "share": "1", "csvxls_isNo": "true"}
+
+
 def _fetch_delisted_list(start_date: str) -> pd.DataFrame:
     """로그인된 KRX 세션으로 상폐 이력을 2년 단위로 조회합니다."""
     session = get_krx_session()
     if session is None:
         raise RuntimeError("KRX_ID와 KRX_PW를 설정해야 상폐 이력과 수급을 수집할 수 있습니다")
-
     start = pd.Timestamp(start_date)
     end = pd.Timestamp.today().normalize()
     parts = []
     while start <= end:
-        chunk_end = min(start + pd.DateOffset(years=2) - pd.Timedelta(1, unit="D"), end)
-        response = session.post(
-            "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
-            data={
-                "bld": "dbms/MDC/STAT/issue/MDCSTAT23801",
-                "mktId": "ALL", "isuCd": "ALL", "isuCd2": "ALL",
-                "strtDd": start.strftime("%Y%m%d"),
-                "endDd": chunk_end.strftime("%Y%m%d"),
-                "share": "1", "csvxls_isNo": "true",
-            },
-            timeout=30,
-        )
-        response.raise_for_status()
+        chunk_end = min(start + pd.DateOffset(years=2) - pd.Timedelta(days=1), end)
+        response = krx_listing_response(delisted_listing_form(start, chunk_end), timeout=30, session=session)
         try:
             rows = response.json()["output"]
         except (ValueError, KeyError, TypeError) as exc:
             raise RuntimeError(f"KRX 상폐 목록 응답 오류: {start:%Y-%m-%d}~{chunk_end:%Y-%m-%d}") from exc
         parts.append(pd.DataFrame(rows))
-        start = chunk_end + pd.Timedelta(1, unit="D")
+        start = chunk_end + pd.Timedelta(days=1)
 
     raw = pd.concat(parts, ignore_index=True)
     if raw.empty:

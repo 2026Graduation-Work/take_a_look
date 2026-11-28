@@ -139,9 +139,11 @@ def require_price_provenance(manifest):
 
 def read_snapshot(path, *, verify_archive=False):
     payload = json.loads(Path(path).read_text())
+    lineage = payload.get("implementation_sha256")
     require(payload.get("version") == SNAPSHOT_VERSION and payload.get("price_policy") == PRICE_POLICY
-            and payload.get("implementation_sha256") == implementation_hashes(),
-            "Unsupported official action snapshot implementation")
+            and isinstance(lineage, dict) and lineage
+            and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) for value in lineage.values()),
+            "Unsupported official action snapshot version, price policy or producer lineage")
     if verify_archive:
         archive = Path(path).parent.parent / "archive"
 

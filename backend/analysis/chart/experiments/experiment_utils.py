@@ -2,13 +2,18 @@ import csv
 import hashlib
 import json
 import os
+import re
+from importlib.metadata import version
+from itertools import count
 from pathlib import Path
 
 import pandas as pd
 
-CACHE_SCHEMA_VERSION = 3
+CACHE_SCHEMA_VERSION = 4
+TRAINING_INPUT_VERSION = 1
+MODEL_TRAINING_VERSION = 1
 _PREDICTION_MANIFEST_RECOVERY = (
-    "Restore the original manifest or move the prediction parquet and manifest aside before rerunning train.py"
+    "Use an intact prediction artifact or rerun train.py to rebuild the cache"
 )
 
 
@@ -271,24 +276,18 @@ def load_universe_intervals(config: dict) -> pd.DataFrame | None:
 
 
 def data_fingerprint(config: dict) -> dict:
-    """Hashes parquet names, sizes and mtimes, not contents.
-
-    Set ``data.version`` when replacing data while keeping that metadata identical.
-    """
+    """Identify verified local content or the file metadata of a legacy store."""
     configured_version = config.get("data", {}).get("version")
     source_dir = next((path for path in _candidate_price_dirs(config) if path.is_dir()), None)
     if source_dir is None:
         return {"status": "missing", "configured_version": configured_version}
 
     if config.get("contract_version") == 3:
-        from shared.io import sha256
-
         path = source_dir / "feature_manifest.json"
         if not path.exists():
             return {"status": "missing_feature_manifest", "configured_version": configured_version}
-        _, manifest = verified_feature_manifest(config, verify_files=False)
-        return {"status": "available", "configured_version": configured_version,
-                "file_count": len(manifest["file_hashes"]), "manifest_sha256": sha256(path)}
+        manifest = json.loads(path.read_text())
+        return {"status": "available", "file_hashes": manifest["file_hashes"]}
     digest = hashlib.sha256()
     count = 0
     for file_path in sorted(source_dir.rglob("*.parquet")):
@@ -304,10 +303,10 @@ def data_fingerprint(config: dict) -> dict:
     }
 
 
-def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool) -> dict:
+def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool, *, feature_hashes=None) -> dict:
     data_cfg = config.get("data", {})
     payload = {
-        "cache_schema_version": CACHE_SCHEMA_VERSION,
+        "cache_schema_version": CACHE_SCHEMA_VERSION if config.get("contract_version") == 3 else 3,
         "data": {
             "tickers": data_cfg.get("tickers", None),
             "universe_file_sha256": (
@@ -317,7 +316,8 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
             ),
             "universe": data_cfg.get("universe", None),
             "price_dir": data_cfg.get("price_dir", None),
-            "data_fingerprint": data_fingerprint(config),
+            "data_fingerprint": (data_fingerprint(config) if feature_hashes is None
+                                 else {"status": "available", "file_hashes": feature_hashes}),
             "start_date": data_cfg.get("start_date", None),
             "end_date": data_cfg.get("end_date", None),
             "split_strategy": data_cfg.get("split_strategy", "single"),
@@ -328,19 +328,20 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
         "labels": config.get("labels", {}),
     }
     if config.get("contract_version") == 3:
-        from shared.io import sha256
+        from shared.processing import processing_compatibility
 
-        root = Path(__file__).resolve().parent
-        implementations = [
-            root / "train_src" / filename
-            for filename in ("labels.py", "loaders.py", "lgbm_wrapper.py")
-        ]
-        payload["implementation"] = {str(p.name): sha256(p) for p in implementations}
+        payload["data"].pop("price_dir")
+        payload["data"]["point_in_time"] = data_cfg.get("point_in_time", False)
+        payload.pop("features")
+        payload["training_input_version"] = TRAINING_INPUT_VERSION
+        payload["lightgbm_version"] = version("lightgbm")
         payload["feature_columns"] = config["feature_columns"]
-        payload["dataset"] = config["dataset"]
-        payload["processing_contract"] = config["processing_contract"]
+        payload["processing_contract"] = processing_compatibility(config["processing_contract"])
         payload["class_weight"] = config.get("model", {}).get("params", {}).get("class_weight")
         payload["max_bin"] = config.get("model", {}).get("params", {}).get("max_bin", 255)
+        payload["skip_validation"] = config.get("training", {}).get("skip_validation", False)
+        if include_model:
+            payload["model_training_version"] = MODEL_TRAINING_VERSION
     if include_model:
         payload["model"] = config.get("model", {})
         if config.get("training"):
@@ -348,18 +349,20 @@ def _hash_payload(config: dict, resolved_splits: list[dict], include_model: bool
     return payload
 
 
+def _cache_hash(config, resolved_splits, *, include_model, feature_hashes=None):
+    payload = _hash_payload(config, resolved_splits, include_model=include_model, feature_hashes=feature_hashes)
+    payload = json.dumps(payload, sort_keys=True).encode()
+    if config.get("contract_version") == 3:
+        return hashlib.sha256(payload).hexdigest()[:16]
+    return hashlib.md5(payload).hexdigest()[:8]
+
+
 def generate_dataset_hash(config: dict, resolved_splits: list[dict]) -> str:
-    hash_str = json.dumps(
-        _hash_payload(config, resolved_splits, include_model=False), sort_keys=True
-    )
-    return hashlib.md5(hash_str.encode()).hexdigest()[:8]
+    return _cache_hash(config, resolved_splits, include_model=False)
 
 
-def generate_predictions_hash(config: dict, resolved_splits: list[dict]) -> str:
-    hash_str = json.dumps(
-        _hash_payload(config, resolved_splits, include_model=True), sort_keys=True
-    )
-    return hashlib.md5(hash_str.encode()).hexdigest()[:8]
+def generate_predictions_hash(config: dict, resolved_splits: list[dict], *, feature_hashes=None) -> str:
+    return _cache_hash(config, resolved_splits, include_model=True, feature_hashes=feature_hashes)
 
 
 def experiments_dir(anchor_file: str) -> str:
@@ -370,7 +373,7 @@ def chart_root(anchor_file: str) -> str:
     return os.path.dirname(experiments_dir(anchor_file))
 
 
-def verified_feature_manifest(config, *, verify_files=True):
+def verified_feature_manifest(config, *, verify_files=True, archived=False):
     from shared.data.resolution_snapshot import (
         read_resolution_snapshot,
         require_price_provenance,
@@ -384,7 +387,8 @@ def verified_feature_manifest(config, *, verify_files=True):
         raise FileNotFoundError("Run python -m experiments.features.build_feature_panel --config first")
     manifest = json.loads(manifest_path.read_text())
     evidence = require_price_provenance(manifest)
-    if manifest["feature_columns"] != config["feature_columns"]:
+    recorded = manifest.get("config", {})
+    if manifest["feature_columns"] != (recorded if archived else config).get("feature_columns"):
         raise ValueError("Feature list changed; prepare features again")
     root = Path(config["dataset"]["root"])
     processed_path = root / "processed_manifest.json"
@@ -404,17 +408,54 @@ def verified_feature_manifest(config, *, verify_files=True):
     if snapshot.provenance != evidence:
         raise ValueError("Feature store's official resolution snapshot provenance differs")
 
-    from shared.processing import processing_contract
+    from experiments.features.local_panel import (
+        FEATURE_VERSION,
+        feature_files_match,
+        feature_inputs,
+        feature_settings,
+        matches_feature_inputs,
+    )
+    from shared.processing import processing_compatible, processing_contract
 
     expected_contract = config.get("processing_contract")
     if expected_contract is None:
         expected_contract = processing_contract(processed["settings"])
-    if manifest.get("config", {}).get("processing_contract") != expected_contract:
+    if not processing_compatible(manifest.get("config", {}).get("processing_contract"), expected_contract):
         raise ValueError("Shared processing changed; prepare features again")
-    if verify_files:
-        for name, digest in manifest["file_hashes"].items():
-            if not (path / name).exists() or sha256(path / name) != digest:
-                raise ValueError(f"Modified/missing feature input {name}; prepare features again")
+    if archived:
+        from shared.io import identity
+
+        options = recorded["features"]
+        inputs = manifest.get("inputs")
+        source_names = {source["name"] for source in options.get("sources", [])}
+        matched_sample = bool(options.get("matched_sample_file"))
+        if inputs is not None:
+            sources = inputs.get("sources", {})
+            sample_hash = inputs.get("matched_sample")
+            recipe = {"processed_manifest_sha256": manifest["processed_manifest_sha256"],
+                      "settings": feature_settings(recorded), "sources": sources, "matched_sample": sample_hash,
+                      "feature_columns": recorded["feature_columns"], "feature_version": FEATURE_VERSION}
+            valid_recipe = (sources.keys() == source_names and bool(sample_hash) == matched_sample
+                            and all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value)
+                                    for value in [*sources.values(), *([sample_hash] if matched_sample else [])])
+                            and matches_feature_inputs(recorded, manifest, processed, recipe))
+        else:
+            legacy = {"processed": processed, "sources": {}, "selected": recorded["feature_columns"],
+                      "version": FEATURE_VERSION}
+            input_identity = manifest.get("input_identity", "")
+            # Earlier archives did not include enough evidence to replay external source fingerprints.
+            valid_recipe = bool(re.fullmatch(r"[a-f0-9]{16}", input_identity)) if source_names or matched_sample else (
+                input_identity == identity(legacy))
+        if (not valid_recipe or manifest.get("feature_version") != FEATURE_VERSION
+                or manifest.get("dataset_id") != recorded["dataset"]["dataset_id"]
+                or recorded["processing_contract"] != processed.get("processing_contract")
+                or set(manifest["file_hashes"]) != set(processed["files"])):
+            raise ValueError("Archived feature inputs differ from the recorded processing contract")
+    elif not matches_feature_inputs({**config, "processing_contract": expected_contract}, manifest,
+                                    processed, feature_inputs(config), archived=True):
+        raise ValueError("Feature inputs changed; prepare features again")
+    if verify_files and not feature_files_match(path, manifest):
+        raise ValueError("Modified/missing feature input; prepare features again")
     return path, manifest
 
 
@@ -435,17 +476,59 @@ def model_cache_dir(anchor_file: str) -> str:
     return os.path.join(experiments_dir(anchor_file), "..", "workspace", "experiments", "cache", "training", "models")
 
 
-def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_file: str) -> str:
+def cache_slot(base, valid):
+    base = path = Path(base)
+    for attempt in count(1):
+        sidecar = Path(f"{path}.manifest.json")
+        if not path.exists() and not sidecar.exists():
+            return path, False
+        if path.is_file() and valid(path):
+            return path, True
+        path = base.with_name(f"{base.stem}-retry-{attempt}{base.suffix}")
+
+
+def _prediction_sidecar_matches(path, config, prediction_id):
+    from shared.io import sha256
+    from shared.processing import processing_compatible
+
+    try:
+        manifest = json.loads(Path(f"{path}.manifest.json").read_text())
+        _validate_prediction_labels(manifest, config)
+        trained = manifest["config"]["processing_contract"]
+        return (
+            manifest.get("predictions_hash") == prediction_id
+            and manifest.get("feature_columns") == config["feature_columns"]
+            and manifest.get("processing_contract", trained) == trained
+            and processing_compatible(trained, config["processing_contract"])
+            and manifest.get("sha256") == sha256(path)
+        )
+    except (AttributeError, KeyError, OSError, TypeError, ValueError):
+        return False
+
+
+def predictions_cache_path(config: dict, resolved_splits: list[dict], anchor_file: str, *, create=True) -> str:
     pred_hash = generate_predictions_hash(config, resolved_splits)
-    return os.path.join(cache_dir(anchor_file), f"{pred_hash}_predictions.parquet")
+    base = Path(cache_dir(anchor_file, create=create)) / f"{pred_hash}_predictions.parquet"
+    if config.get("contract_version") != 3:
+        return str(base)
+    return str(cache_slot(base, lambda path: _prediction_sidecar_matches(path, config, pred_hash))[0])
 
 
 def result_path(config: dict, anchor_file: str) -> Path:
     exp_name = config.get("experiment_name", "default_exp")
     if config.get("contract_version") == 3:
-        from experiments.config import identity
+        from experiments.config import chart_path
+        from shared.io import identity, sha256
 
-        exp_name += "_" + identity(config)
+        request = {key: value for key, value in config.items()
+                   if key not in {"data", "dataset", "features", "processing_contract"}}
+        request["predictions_hash"] = generate_predictions_hash(config, resolve_splits(config))
+        feature_manifest = _candidate_price_dirs(config)[0] / "feature_manifest.json"
+        request["feature_manifest_sha256"] = sha256(feature_manifest) if feature_manifest.is_file() else None
+        if benchmark := config.get("evaluation", {}).get("benchmark_file"):
+            path = chart_path(benchmark)
+            request["benchmark_sha256"] = sha256(path) if path.is_file() else None
+        exp_name += "_" + identity(request)
     return Path(chart_root(anchor_file)) / "workspace" / "experiments" / "runs" / exp_name
 
 
@@ -455,11 +538,17 @@ def result_dir(config: dict, anchor_file: str) -> str:
     if config.get("contract_version") == 3:
         from shared.io import atomic_json
 
-        _, features = verified_feature_manifest(config, verify_files=False)
+        feature_path, features = verified_feature_manifest(config, verify_files=False)
+        manifest_path = Path(path) / "run_manifest.json"
+        if manifest_path.is_file():
+            return str(path)
+        from shared.io import sha256
+
         atomic_json(
-            Path(path) / "run_manifest.json",
+            manifest_path,
             {
                 "config": config,
+                "feature_manifest_sha256": sha256(feature_path / "feature_manifest.json"),
                 "price_policy": features["price_policy"],
                 "official_actions": features["official_actions"],
                 "predictions_hash": generate_predictions_hash(config, resolve_splits(config)),
@@ -511,6 +600,17 @@ def _validate_prediction_labels(manifest: dict, config: dict) -> None:
         )
 
 
+def _legacy_prediction_matches(path, manifest, config, splits):
+    key = manifest.get("predictions_hash")
+    if (not isinstance(key, str) or len(key) != 8
+            or Path(path).name != f"{key}_predictions.parquet"):
+        return False
+    trained = manifest["config"]
+    return (all(trained.get(field) == config.get(field) for field in ("data", "dataset", "features", "model", "training"))
+            and [split_identity(split) for split in resolve_splits(trained)] ==
+            [split_identity(split) for split in splits])
+
+
 def test_date_bounds(splits: list[dict]) -> tuple[str, str]:
     if not splits:
         raise ValueError("분할 폴드(Splits) 목록이 비어 있습니다.")
@@ -544,13 +644,18 @@ def load_predictions(
                 f"Invalid prediction manifest JSON. {_PREDICTION_MANIFEST_RECOVERY}"
             ) from exc
         _validate_prediction_labels(manifest, config)
-        if (
-            manifest.get("predictions_hash") != generate_predictions_hash(config, splits)
-            or manifest.get("feature_columns") != config["feature_columns"]
-        ):
-            raise ValueError("Predictions belong to another run")
-    if config.get("contract_version") == 3:
         from shared.io import sha256
+        from shared.processing import processing_compatible
+
+        expected = generate_predictions_hash(config, splits)
+        trained = manifest["config"]
+        recorded_contract = manifest.get("processing_contract", trained.get("processing_contract"))
+        if (manifest.get("feature_columns") != config["feature_columns"]
+                or recorded_contract != trained.get("processing_contract")
+                or not processing_compatible(recorded_contract, config.get("processing_contract"))
+                or (manifest.get("predictions_hash") != expected
+                    and not (predictions_path and _legacy_prediction_matches(path, manifest, config, splits)))):
+            raise ValueError("Predictions belong to another run")
 
         if manifest.get("sha256") != sha256(path):
             raise ValueError("Prediction file changed; rerun train.py")
