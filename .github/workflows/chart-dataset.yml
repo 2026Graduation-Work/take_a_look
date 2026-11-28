@@ -1,0 +1,127 @@
+name: Chart dataset build
+
+# #486: 학습 데이터셋을 Actions에서 다시 만든다. 결과는 암호화해 하루만 보관하고 사람이 H:로 옮긴다.
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "Collection start (YYYY-MM-DD)"
+        required: true
+        default: "2025-01-01"
+      end_date:
+        description: "Collection end (YYYY-MM-DD)"
+        required: true
+        default: "2025-12-31"
+      markets:
+        description: "Comma-separated markets"
+        required: true
+        default: "KOSPI"
+      run_name:
+        description: "Dataset id and root folder name"
+        required: true
+        default: "actions_kospi_2025_trial"
+
+permissions:
+  contents: read
+
+# 같은 KRX 계정 중복 로그인(CD011)을 막기 위해 매일 서빙과 같은 그룹에서 차례로 돈다
+concurrency:
+  group: chart-serving-publish
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 345
+    defaults:
+      run:
+        working-directory: backend/analysis/chart
+    env:
+      PYTHONUNBUFFERED: "1"
+      START: ${{ inputs.start_date || '2025-01-01' }}
+      END: ${{ inputs.end_date || '2025-12-31' }}
+      MARKETS: ${{ inputs.markets || 'KOSPI' }}
+      RUN_NAME: ${{ inputs.run_name || 'actions_kospi_2025_trial' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # actions/cache는 쓰지 않는다(포크 PR이 기본 브랜치 캐시를 읽을 수 있음)
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r shared/requirements.txt
+
+      - name: Check inputs and secrets
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: |
+          [[ "$START" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && "$END" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::bad date"; exit 1; }
+          [[ "$RUN_NAME" =~ ^[a-z0-9_]+$ && "$MARKETS" =~ ^[A-Z,]+$ ]] || { echo "::error::bad run_name or markets"; exit 1; }
+          [ -n "$KRX_ID" ] && [ -n "$KRX_PW" ] || { echo "::error::missing KRX secret"; exit 1; }
+
+      - name: Write dataset config
+        run: |
+          python - <<'PYTHON'
+          import os, yaml
+          name = os.environ["RUN_NAME"]
+          config = {"contract_version": 3, "dataset_id": name, "root": f"workspace/experiments/datasets/{name}",
+                    "collection": {"start_date": os.environ["START"], "end_date": os.environ["END"],
+                                   "markets": os.environ["MARKETS"].split(","), "include_delisted": True,
+                                   "investor_flows": True},
+                    "preprocessing": "shared_v3"}
+          os.makedirs("workspace", exist_ok=True)
+          yaml.safe_dump(config, open("workspace/dataset.yaml", "w"), sort_keys=False)
+          PYTHON
+
+      # 종목별 수치가 공개 로그에 남지 않게 출력은 암호화되는 로그 파일로만 보낸다
+      - name: Collect
+        id: collect
+        timeout-minutes: 270
+        env:
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
+        run: |
+          start=$(date +%s)
+          python -u -m experiments.dataset.collect --config workspace/dataset.yaml --mode full > workspace/collect.log 2>&1 || status=$?
+          echo "collect seconds: $(( $(date +%s) - start )), exit ${status:-0}, log lines $(wc -l < workspace/collect.log)"
+          tail -n 3 workspace/collect.log | grep -oE "(Error|Exception)[A-Za-z]*" | head -3 || true
+          exit ${status:-0}
+
+      - name: Preprocess
+        timeout-minutes: 45
+        run: |
+          start=$(date +%s)
+          python -u -m experiments.dataset.preprocess --config workspace/dataset.yaml --mode full > workspace/preprocess.log 2>&1 || status=$?
+          echo "preprocess seconds: $(( $(date +%s) - start )), exit ${status:-0}"
+          tail -n 3 workspace/preprocess.log | grep -oE "(Error|Exception)[A-Za-z]*" | head -3 || true
+          exit ${status:-0}
+
+      # 멈춰도 그때까지 검증된 root를 올린다
+      - name: Hash, encrypt
+        id: archive
+        if: ${{ always() && steps.collect.outcome != 'skipped' }}
+        env:
+          KEY: ${{ secrets.DATASET_ARCHIVE_KEY }}
+        run: |
+          root="workspace/experiments/datasets/$RUN_NAME"
+          mkdir -p "$root" && cp workspace/*.log workspace/dataset.yaml "$root"/ 2>/dev/null || true
+          (cd "$root" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          echo "files $(wc -l < "$root/SHA256SUMS"), size $(du -sh "$root" | cut -f1)"
+          tar -C workspace/experiments/datasets -czf "$RUNNER_TEMP/$RUN_NAME.tar.gz" "$RUN_NAME"
+          echo "tar.gz $(du -h "$RUNNER_TEMP/$RUN_NAME.tar.gz" | cut -f1)"
+          # 키가 없으면 원자료를 공개 아티팩트로 올리지 않고 크기만 잰다
+          if [ -z "$KEY" ]; then echo "::warning::DATASET_ARCHIVE_KEY missing; skipping upload"; exit 0; fi
+          printf '%s' "$KEY" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 --symmetric --cipher-algo AES256 -o "$RUNNER_TEMP/$RUN_NAME.tar.gz.gpg" "$RUNNER_TEMP/$RUN_NAME.tar.gz"
+          echo "archive $(du -h "$RUNNER_TEMP/$RUN_NAME.tar.gz.gpg" | cut -f1)"
+          echo "encrypted=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && steps.archive.outputs.encrypted == 'true' }}
+        with:
+          name: ${{ env.RUN_NAME }}
+          path: ${{ runner.temp }}/${{ env.RUN_NAME }}.tar.gz.gpg
+          retention-days: 1
+          if-no-files-found: error
