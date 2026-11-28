@@ -14,11 +14,13 @@ export default function TipsLayout({ children }: { children: ReactNode }) {
     <>
       <BrandHeader><GuideAccount /></BrandHeader>
       <ReadingNavigation current="tips" />
-      <main className="page grid gap-6 pb-12 pt-6 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8 lg:pt-8">
-        <Suspense>
-          <TipTopicNavigation topicsById={topicsById} />
-        </Suspense>
-        <div className="min-w-0 lg:col-start-2 lg:row-start-1">{children}</div>
+      <main className="page pb-12 pt-6 lg:pt-8">
+        <div className="page-narrow flex flex-col gap-6">
+          <Suspense>
+            <TipTopicNavigation topicsById={topicsById} />
+          </Suspense>
+          {children}
+        </div>
       </main>
       <DisclaimerFooter fixed={false} />
     </>

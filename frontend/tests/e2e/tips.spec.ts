@@ -5,6 +5,26 @@ import { finishDemo } from "./demo-steps";
 const first = BEGINNER_TIPS[0];
 const habit = BEGINNER_TIPS.find(tip => tip.category === "투자 습관")!;
 
+async function headingTextX(page: import("@playwright/test").Page) {
+  return page.locator("main h1").first().evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return Math.round(range.getBoundingClientRect().x);
+  });
+}
+
+test("안내 세 화면의 제목은 같은 시작선에서 시작한다", async ({ page }) => {
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const xs = [];
+    for (const path of ["/guide", "/tips", "/glossary"]) {
+      await page.goto(path);
+      xs.push(await headingTextX(page));
+    }
+    expect(new Set(xs).size).toBe(1);
+  }
+});
+
 test("데스크톱은 상세에서도 같은 주제 바를 유지하고 목록 필터를 복원한다", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.goto("/tips?category=habits");
@@ -13,7 +33,7 @@ test("데스크톱은 상세에서도 같은 주제 바를 유지하고 목록 �
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("투자 습관");
   const navBox = await navigation.boundingBox();
   const listBox = await page.getByRole("list", { name: "알고 계셨나요? 목록", exact: true }).boundingBox();
-  expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(listBox!.x);
+  expect(navBox!.y + navBox!.height).toBeLessThanOrEqual(listBox!.y);
   await expect(page.getByText(/개 중 .*번부터/)).toHaveCount(0);
   await page.getByRole("link", { name: habit.title, exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === `/tips/${habit.id}` && url.searchParams.get("category") === "habits");
@@ -21,7 +41,7 @@ test("데스크톱은 상세에서도 같은 주제 바를 유지하고 목록 �
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(habit.title);
   const detailNavBox = await navigation.boundingBox();
   const articleBox = await page.getByRole("article").boundingBox();
-  expect(detailNavBox!.x + detailNavBox!.width).toBeLessThanOrEqual(articleBox!.x);
+  expect(detailNavBox!.y + detailNavBox!.height).toBeLessThanOrEqual(articleBox!.y);
   await page.getByRole("link", { name: "알고 계셨나요? 목록", exact: true }).click();
   await expect(page).toHaveURL(url => url.pathname === "/tips" && url.searchParams.get("category") === "habits");
   await expect(page.getByRole("link", { name: habit.title, exact: true })).toBeVisible();
@@ -58,22 +78,21 @@ test("제목, 요약, 설명, 계산식과 출처를 접기 없이 한 본문에
 test("모바일은 상세 위에 주제 선택을 유지하고 320px에서도 가로로 넘치지 않는다", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tips?category=habits");
-  const subject = page.getByRole("combobox", { name: "주제", exact: true });
+  const subject = page.getByRole("navigation", { name: "알고 계셨나요? 주제" });
   await expect(subject).toBeVisible();
-  await expect(subject).toHaveValue("habits");
+  await expect(subject.getByRole("link", { name: "투자 습관" })).toHaveAttribute("aria-current", "true");
   const subjectBox = await subject.boundingBox();
   const headingBox = await page.getByRole("heading", { level: 1 }).boundingBox();
   expect(subjectBox!.y + subjectBox!.height).toBeLessThanOrEqual(headingBox!.y);
   await page.getByRole("link", { name: habit.title, exact: true }).click();
   await expect(subject).toBeVisible();
-  await expect(subject).toHaveValue("habits");
+  await expect(subject.getByRole("link", { name: "투자 습관" })).toHaveAttribute("aria-current", "true");
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(subject).toBeInViewport();
     expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   }
-  await subject.selectOption("calculation");
-  await page.getByRole("button", { name: "목록 보기", exact: true }).click();
+  await subject.getByRole("link", { name: "계산 착각" }).click();
   await expect(page).toHaveURL(url => url.pathname === "/tips" && url.searchParams.get("category") === "calculation");
 });
 
@@ -206,8 +225,7 @@ test("모바일 페이지 번호는 넘치지 않고 주제를 바꾸면 첫 페
       expect(box!.height).toBeGreaterThanOrEqual(44);
     }
   }
-  await page.getByRole("combobox", { name: "주제", exact: true }).selectOption("habits");
-  await page.getByRole("button", { name: "목록 보기", exact: true }).click();
+  await page.getByRole("navigation", { name: "알고 계셨나요? 주제" }).getByRole("link", { name: "투자 습관" }).click();
   await expect(page).toHaveURL(url => url.searchParams.get("category") === "habits" && [null, "1"].includes(url.searchParams.get("page")) && url.searchParams.get("returnTo") === "/performance");
   await expect(page.getByRole("link", { name: habit.title, exact: true })).toBeVisible();
 });
@@ -241,7 +259,7 @@ test("존재하지 않는 페이지 번호를 넣어도 빈 목록 대신 유효
 test("중복 주소 값은 본문과 주제 바가 같은 첫 값을 사용한다", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tips?category=habits&category=costs&returnTo=%2Fportfolio&returnTo=%2Fperformance");
-  await expect(page.getByRole("combobox", { name: "주제", exact: true })).toHaveValue("habits");
+  await expect(page.getByRole("navigation", { name: "알고 계셨나요? 주제" }).getByRole("link", { name: "투자 습관" })).toHaveAttribute("aria-current", "true");
   await expect(page.getByRole("link", { name: habit.title, exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /돌아가기/ })).toHaveAttribute("href", "/portfolio");
 });
