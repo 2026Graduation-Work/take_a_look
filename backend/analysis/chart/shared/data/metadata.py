@@ -11,21 +11,15 @@ import pandas as pd
 from shared.io import atomic_json, atomic_parquet, canonical_hash, sha256
 from shared.settings import serving_contract
 
+ACTIVE_LISTING_FORM = {"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": "ALL",
+                       "share": "1", "csvxls_isNo": "false"}
+
 
 def fetch_active_listing_intervals(market):
     """Use each security's own KRX listing date, including preferred shares."""
-    from shared.data.providers import get_krx_session
+    from .providers import krx_listing_response
 
-    session = get_krx_session()
-    if session is None:
-        raise ValueError("KRX authenticated session required for listing metadata")
-    response = session.post(
-        "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd",
-        data={"bld": "dbms/MDC/STAT/standard/MDCSTAT01901", "mktId": "ALL",
-              "share": "1", "csvxls_isNo": "false"},
-        timeout=(10, 30),
-    )
-    response.raise_for_status()
+    response = krx_listing_response(ACTIVE_LISTING_FORM)
     frame = pd.DataFrame(response.json()["OutBlock_1"]).rename(columns={
         "ISU_SRT_CD": "Code", "ISU_ABBRV": "Name", "MKT_TP_NM": "Market",
         "LIST_DD": "ListingDate", "SECUGRP_NM": "SecurityGroup",

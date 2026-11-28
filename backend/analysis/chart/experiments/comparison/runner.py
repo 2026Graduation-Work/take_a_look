@@ -136,8 +136,7 @@ def _verified_price_files(price_dir):
         _, manifest = verified_feature_manifest({
             "data": {"price_dir": str(price_dir)},
             "dataset": {"root": str(price_dir.parent.parent)},
-            "feature_columns": features["feature_columns"],
-        })
+        }, archived=True)
         return manifest["file_hashes"]
     dataset_manifest = price_dir.parent / "dataset_manifest.json"
     if price_dir.name == "processed" and dataset_manifest.is_file():

@@ -15,7 +15,9 @@
 
 `settings.py`는 원문 해시까지 pack 계약에 포함된다. 설명을 추가하는 변경도 기존 pack과의 호환성을 확인해야 하므로, 채점 오류를 고치려고 공통 피처 설정을 바꾸지 않는다.
 
-실행법: [실험](experiments/README.md), [serving](serving/OPERATIONS.md). 해석 전 [품질 제한](docs/RESULTS.md#품질-제한)을 확인한다.
+실험은 `experiments.dataset.collect`로 KRX 원주가, 상장 이력, KIND 공시를 수집하고 검증된 장부를 데이터셋에 고정한다. 여러 데이터셋은 원천 캐시를 공유한다. 전처리는 데이터셋에 고정된 입력을 읽는다. 학습 자료를 열 때는 파일 해시로 내용의 무결성을 확인하고, 처리 엔진과 가격 정책, 피처 순서로 호환성을 확인한다. [실험 수집과 재개](experiments/README.md#환경과-명령)
+
+[서빙 운영](serving/OPERATIONS.md)과 [품질 제한](docs/RESULTS.md#품질-제한)을 확인한다.
 
 공식 Qlib Alpha158로 재학습할 때는 [원본 적용과 모델 호환성](docs/ALPHA158_COMPATIBILITY.md)을 따른다. `preprocessing: qlib_alpha158`는 원본 패키지를 직접 사용한다. 기존 운영 모델은 기존 `shared_v3` 계산을 유지하며, 이 경로는 재학습 전환 때 삭제할 임시 경로다([#464](https://github.com/2026Graduation-Work/take_a_look/issues/464)).
 

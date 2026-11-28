@@ -20,7 +20,11 @@ from experiments.train_src.loaders import load_parquet_data
 from shared.data.calendar import scheduled_sessions
 from shared.data.market_notices import SecurityKey
 from shared.data.market_resolutions import Resolution
-from shared.data.resolution_snapshot import PRICE_POLICY, read_resolution_snapshot
+from shared.data.resolution_snapshot import (
+    PRICE_POLICY,
+    VerifiedSourceDays,
+    read_resolution_snapshot,
+)
 from shared.data.segmented_prices import adjust_training_window
 from shared.io import atomic_json
 from shared.settings import PREPROCESSING
@@ -64,7 +68,7 @@ def test_pinned_price_window_keeps_adjustment_factors_inside_the_segment(tmp_pat
     assert first.groupby("SegmentId", sort=False).head(1).Change.isna().all()
     assert event_table.PriceFactor.tolist() == [.5, .5]
     pd.testing.assert_frame_equal(first[raw.columns], raw)
-    with pytest.raises(ValueError, match="entire verified listing window"):
+    with pytest.raises(ValueError, match="partial window requires verified KRX source days"):
         adjust_training_window(key, raw.iloc[1:], sessions[1:], day(-1), snapshot)
     changed = raw.copy()
     changed.loc[0, "Amount"] += 1
@@ -74,6 +78,42 @@ def test_pinned_price_window_keeps_adjustment_factors_inside_the_segment(tmp_pat
     field.write_bytes(field.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="snapshot file hash differs"):
         read_resolution_snapshot(path)
+
+
+def test_subset_reuses_verified_daily_prices_and_preserves_segment(tmp_path, sessions):
+    sessions = sessions[:8]
+    raw = price_rows(sessions)
+    source_days = tmp_path / "all"
+    source_days.mkdir()
+    daily = raw.assign(Code="005930", MKT_NM="KOSPI", ISU_ABBRV="Synthetic", SECT_TP_NM="")
+    for row in daily.itertuples():
+        daily.loc[daily.Date.eq(row.Date)].to_parquet(source_days / f"{row.Date:%Y-%m-%d}.parquet", index=False)
+    events = [
+        (str(sessions[1].date()), Resolution.SEGMENT_BREAK, None, None),
+        (str(sessions[6].date()), Resolution.BONUS, Fraction(1, 2), Fraction(2)),
+    ]
+    path = fixture_snapshot(tmp_path / "wide", ["005930"], sessions, raw=raw, events=events, source_days=source_days)
+    snapshot = read_resolution_snapshot(path, verify_archive=True)
+    security, = snapshot.windows
+    full, _ = adjust_training_window(security, raw, sessions, sessions[-1], snapshot)
+    selected = sessions[2:5]
+    pinned_days = tmp_path / "pinned"
+    VerifiedSourceDays.read(snapshot, selected, source_days, destination=pinned_days)
+    proof = VerifiedSourceDays.read(snapshot, selected, pinned_days)
+    prices, applied = adjust_training_window(security, raw.iloc[2:5], selected, selected[-1], snapshot, source=proof)
+    assert prices.SegmentId.tolist() == full.SegmentId.iloc[2:5].tolist()
+    assert prices.AdjustmentFactor.tolist() == [1., 1., 1.]
+    assert pd.isna(prices.Change.iloc[0])
+    assert applied.empty
+    changed = raw.iloc[2:5].assign(ListedShares=20_000)
+    with pytest.raises(ValueError, match="prices differ"):
+        adjust_training_window(security, changed, selected, selected[-1], snapshot, source=proof)
+    file = pinned_days / f"{selected[0]:%Y-%m-%d}.parquet"
+    file.write_bytes(file.read_bytes() + b"x")
+    with pytest.raises(ValueError, match="source day bytes differ"):
+        VerifiedSourceDays.read(snapshot, selected, pinned_days)
+    with pytest.raises(ValueError, match="complete sessions"):
+        snapshot.select_sessions(sessions[[2, 4]])
 
 
 @pytest.mark.parametrize("kind", ["fixed", "dynamic_sigma"])

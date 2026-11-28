@@ -34,6 +34,7 @@ from shared.io import sha256
 
 from .census_actions import (
     _anchor_sources,
+    _missing_training_windows,
     _official_action_snapshots,
     _price_frame,
     _security_master,
@@ -58,9 +59,12 @@ def freeze_resolution_snapshot(census_dir, destination, *, krx_days, active_mast
             and [sha256(path) for path in action_snapshots] == sources["official_action_snapshots"],
             "Census KRX master or Action input bytes differ")
     master = _security_master(active_master, delisted_master)
-    raw, hashes = _price_frame(krx_days, sessions, set(codes))
+    raw, hashes = _price_frame(krx_days, sessions, set(codes), markets=manifest["scope"].get("markets", ()))
     require(hashes == sources["krx_sessions"], "Census KRX daily input bytes differ")
     securities, expected, aliases, anchors, training, _, _, failures = _windows(raw, master, sessions, {})
+    scope = manifest["scope"]
+    if "universe_start" in scope:
+        failures.extend(_missing_training_windows(master, training, sessions, scope))
     identity_universe = master_security_aliases(master)
     for key, aliases_for_key in aliases.items():
         identity_universe.setdefault(key, set()).update(aliases_for_key)

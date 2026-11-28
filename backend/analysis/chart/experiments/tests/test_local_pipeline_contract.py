@@ -1,3 +1,4 @@
+import fcntl
 import json
 from pathlib import Path
 
@@ -790,6 +791,25 @@ def test_interrupted_flow_leaves_usable_price_checkpoint(local_dataset, tmp_path
         np.testing.assert_array_equal(merged.Individual_BuyAmount, raw.Individual_BuyAmount)
     module.preprocess_dataset(path)
     assert len(pd.read_parquet(root / "processed/005930.parquet")) == len(raw)
+    pinned = [root / name for name in (
+        "dataset_manifest.json", "processed_manifest.json", "raw/005930.parquet", "processed/005930.parquet")]
+    hashes = {item: sha256(item) for item in pinned}
+
+    def no_fetch(*args, **kwargs):
+        pytest.fail("Collection with pinned processed inputs must not fetch flow days")
+
+    monkeypatch.setattr(price_collector, "_fetch_investor_day", no_fetch)
+    for mode in ("full", "update"):
+        if manifest["flow_queries_complete"]:
+            module.collect_dataset(path, mode=mode)
+        else:
+            with pytest.raises(ValueError, match="pinned processed inputs"):
+                module.collect_dataset(path, mode=mode)
+    assert {item: sha256(item) for item in pinned} == hashes
+    with (root / "collection.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(ValueError, match="already owns this dataset root"):
+            module.preprocess_dataset(path)
 
 
 def test_short_selected_features_do_not_force_sixty_day_warmup(local_dataset):

@@ -7,6 +7,7 @@ from datetime import date
 
 from .disclosures import (
     KIND_SEARCH,
+    KIND_VIEWER,
     PAGE_SIZE,
     Evidence,
     Response,
@@ -38,6 +39,7 @@ from .market_notices import (
     kind_topic,
     notice_section_key,
     parse_notice,
+    superseded_merger_facts,
 )
 from .market_resolutions import (
     role_correction_windows,
@@ -219,8 +221,11 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
         notices = [(row, tuple(Evidence(**raw) for raw in json.loads(row["Evidence"]))) for row in csv.DictReader(stream)]
     nonstock = [(row, tuple(Evidence(**raw) for raw in row["Evidence"])) for row in coverage.get("nonstock_notices", ())]
     families = [(row, tuple(Evidence(**raw) for raw in row["Evidence"])) for row in coverage.get("kind_final_families", ())]
+    outside_failures = [(row, tuple(Evidence(**raw) for raw in row["Evidence"]))
+                        for row in coverage["failures"] if row.get("OutsidePriceWindows")]
     needed = {(row["AcptNo"], refs[0]) for row, refs in (*notices, *nonstock)}
     needed.update((row["AcptNo"], refs[0]) for row, refs in families)
+    needed.update((row["AcptNo"], refs[0]) for row, refs in outside_failures)
     windows = {_security(row): row for row in coverage["windows"]}
 
     def has_session(key, day):
@@ -241,6 +246,10 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
     }
     expected, proved, daily_targets = {}, set(), {}
     final_accessions = {row["FinalAcptNo"] for row, _ in families}
+    for _, refs in outside_failures:
+        if len(refs) == 9:
+            _, response = _response(archive, refs[4])
+            final_accessions.add(document_route(response).accession)
     filings = {}
 
     def add(rows):
@@ -258,6 +267,11 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
             topic, issuer = kind_topic(row), row.company_id[:5]
             if issuer in issuers and (topic == "structural" or issuer in role_issuers.get(topic, ())):
                 expected.setdefault(row.accession, row)
+    for entry in coverage.get("correction_daily", ()):
+        rows = [row for row in _publication(archive, entry) if row.accession in final_accessions]
+        add(rows)
+        for row in rows:
+            daily_targets.setdefault(row.accession, []).append(row)
     for table in ("company", "archived_market_actions"):
         for code, entries in coverage[table].items():
             for entry in entries:
@@ -305,6 +319,51 @@ def verify_archive_bindings(folder, coverage, archive, session_dates):
             proved.add((row["AcptNo"], refs[0]))
         if review:
             reviews[review.security].append(review)
+    def windows_after_official_facts(filing, facts):
+        issuer = (filing.company_id or filing.stock_code)[:5]
+        if not issuer or not facts or issuer in role_issuers["rename"] or issuer in role_issuers["new_listing"]:
+            return set()
+        affected = {key for key in windows if key.code.startswith(issuer)}
+        return affected if all(fact.effective < windows[key]["first_session"] for fact in facts for key in affected) else set()
+
+    for row, refs in outside_failures:
+        filing = filings.get((row["AcptNo"], refs[0]))
+        require(filing and not filing.withdrawn and not kind_withdrawal(filing.title),
+                "Out-of-window structural decision lacks a verified list row")
+        _, route_response = _response(archive, refs[2])
+        route = document_route(route_response)
+        original, _, family = _official_body(archive, filing, route.document_no, route.form, refs[:4])
+        facts = ([superseded_merger_facts(filing, route.form, original)]
+                 if route.form == "68151" and not original.final else parse_notice(filing, route.form, original))
+        if not original.final:
+            require(len(refs) == 9, "Out-of-window correction lacks original and final evidence")
+            request, referral_response = _response(archive, refs[4])
+            referral = document_route(referral_response)
+            require(final_document_number((original.document_no, "N"), family) == referral.document_no
+                    and row.get("FinalAcptNo", referral.accession) == referral.accession
+                    and request["url"] == f"{KIND_VIEWER}?method=searchContents&docNo={referral.document_no}"
+                    and request["referer"] == f"{KIND_VIEWER}?method=search&acptno={filing.accession}",
+                    "Out-of-window correction final route differs")
+            targets = daily_targets.get(referral.accession, [])
+            require(len(targets) == 1, "Out-of-window correction final list is ambiguous")
+            target, = targets
+            require(target.evidence == refs[5] and target.company_id == filing.company_id,
+                    "Out-of-window correction lacks the verified final listing")
+            final, route, final_family = _official_body(archive, target, referral.document_no, referral.form, refs[5:])
+            require(route == referral and set(family) == set(final_family)
+                    and final.final and not target.withdrawn and not kind_withdrawal(target.title),
+                    "Out-of-window correction is not the verified final document")
+            facts += parse_notice(target, referral.form, final)
+        else:
+            require(len(refs) == 4, "Final out-of-window document has unrelated correction evidence")
+        require(windows_after_official_facts(filing, facts) == {_security(item) for item in row["OutsidePriceWindows"]}
+                and sorted({fact.effective for fact in facts}) == row["VerifiedEffectiveDates"],
+                "Archived event dates or affected price windows differ")
+        proved.add((filing.accession, filing.evidence))
+    for (accession, _document, _form, refs), (sections, _family, final) in documents.items():
+        filing = filings[accession, refs[0]]
+        if final and windows_after_official_facts(filing, list(sections.values())):
+            proved.add((filing.accession, filing.evidence))
     missing = sorted(f"{row.accession} ({row.published})" for row in expected.values()
                      if (row.accession, row.evidence) not in proved)
     require(not missing, f"Missing official structural notice evidence: {', '.join(missing[:10])}")

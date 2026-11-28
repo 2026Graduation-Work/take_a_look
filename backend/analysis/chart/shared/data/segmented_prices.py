@@ -11,7 +11,7 @@ from .validation import validate_krx_raw, validate_prices
 ADJUSTMENT_COLUMNS = ["Code", "ExDate", "PriceFactor", "VolumeFactor", SEGMENT_COLUMN]
 
 
-def adjust_training_window(security, raw, days, as_of, snapshot):
+def adjust_training_window(security, raw, days, as_of, snapshot, *, source=None):
     days = pd.DatetimeIndex(days)
     cutoff = pd.Timestamp(as_of)
     if pd.isna(cutoff) or cutoff.tzinfo is not None:
@@ -19,7 +19,7 @@ def adjust_training_window(security, raw, days, as_of, snapshot):
     if days.empty or days[-1] > cutoff:
         raise ValueError("KRX raw price dates exceed the dataset as_of")
     raw = validate_krx_raw(raw, days)
-    ledger = snapshot.window(security, raw, days)
+    ledger = snapshot.window(security, raw, days, source=source)
     starts = snapshot.segment_starts(security)
     intervals = pd.DatetimeIndex(starts).searchsorted(raw.Date, side="right") - 1
     events = adjustment_events(ledger.resolutions)
@@ -41,12 +41,12 @@ def adjust_training_window(security, raw, days, as_of, snapshot):
     return validate_prices(adjusted, days, event_adjusted=True), pd.concat(applied, ignore_index=True)
 
 
-def adjust_price_history(windows, raw, expected, as_of, snapshot):
+def adjust_price_history(windows, raw, expected, as_of, snapshot, *, source=None):
     price_parts, event_parts = [], []
     for security, name in windows:
-        days = snapshot.days(security)
+        days = snapshot.days(security).intersection(expected)
         bars = raw.loc[raw.Date.isin(days)].reset_index(drop=True)
-        prices, events = adjust_training_window(security, bars, days, as_of, snapshot)
+        prices, events = adjust_training_window(security, bars, days, as_of, snapshot, source=source)
         price_parts.append(prices.assign(Code=security.code, Name=name, IsDelisted=security.delisting is not None))
         if not events.empty:
             event_parts.append(events)

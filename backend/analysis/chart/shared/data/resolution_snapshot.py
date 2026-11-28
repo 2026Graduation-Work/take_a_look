@@ -2,6 +2,7 @@
 
 import csv
 import hashlib
+import io
 import json
 import re
 from collections import Counter, defaultdict
@@ -38,6 +39,7 @@ from .market_resolutions import (
     verify_structural_review_quantities,
 )
 from .resolution_archive import verify_archive_bindings
+from .validation import KRX_RAW_COLUMNS
 
 PRICE_POLICY = "krx_official_action_segments_v2"
 SNAPSHOT_VERSION = 2
@@ -117,6 +119,15 @@ def _scope(manifest):
     require(first <= start <= end <= last and frame["sample_sha256"] is None and isinstance(codes, list)
             and codes == sorted(set(codes)) and all(re.fullmatch(r"[0-9A-Z]{6}", code) for code in codes),
             "Incomplete or sampled resolution scope")
+    if "markets" in frame:
+        markets = frame["markets"]
+        require(isinstance(markets, list) and markets and markets == sorted(set(markets))
+                and set(markets) <= {"KOSPI", "KOSDAQ"}, "Invalid resolution market scope")
+    if "universe_start" in frame:
+        require(start <= _day(frame["universe_start"]) <= end and frame.get("markets")
+                and isinstance(frame.get("include_delisted"), bool), "Invalid verified listing universe scope")
+    if "correction_cutoff" in frame:
+        require(last <= _day(frame["correction_cutoff"]), "Invalid KIND correction publication cutoff")
     return start, end, codes
 
 
@@ -179,18 +190,33 @@ class ResolutionSnapshot:
         window = self.windows[security]
         return self.sessions[(self.sessions >= window["first_session"]) & (self.sessions <= window["last_session"])]
 
-    def window(self, security, raw, sessions):
-        days = self.days(security)
-        require(self.windows[security]["complete"] and days.equals(pd.DatetimeIndex(sessions)),
-                f"{security.code}: resolution snapshot requires the entire verified listing window")
-        require(raw_window_fingerprint(raw, days) == self.windows[security]["raw_sha256"],
+    def select_sessions(self, sessions):
+        days = pd.DatetimeIndex(sessions)
+        require(len(days) and days.equals(self.sessions[(self.sessions >= days[0]) & (self.sessions <= days[-1])]),
+                "Collection calendar requires complete sessions from the resolution snapshot")
+        return days
+
+    def window(self, security, raw, days, *, source=None):
+        full = self.days(security)
+        require(self.windows[security]["complete"] and
+                days.equals(full[(full >= days[0]) & (full <= days[-1])]),
+                f"{security.code}: incomplete or invalid resolution listing window")
+        if days.equals(full):
+            expected_hash = self.windows[security]["raw_sha256"]
+        else:
+            require(source is not None, f"{security.code}: partial window requires verified KRX source days")
+            expected_hash = raw_window_fingerprint(source.bars(security, days), days)
+        require(raw_window_fingerprint(raw, days) == expected_hash,
                 f"{security.code}: KRX raw prices differ from the resolution snapshot")
         ledger = self.ledgers[security]
         review_dates = {row.date for row in ledger.resolutions if row.reason == STRUCTURAL_REVIEW_REASON}
         for candidate in ledger.candidates:
-            if candidate.date in review_dates:
-                require(candidate == observed_structural_review_candidate(security, raw, days, candidate.date),
-                        f"{security.code}: structural review candidate differs from actual KRX prices")
+            if candidate.date not in review_dates or pd.Timestamp(candidate.date) not in days:
+                continue
+            proof = pd.DatetimeIndex([candidate.prev_date, candidate.date])
+            evidence = (raw.loc[raw.Date.isin(proof)] if proof.isin(days).all() else source.bars(security, proof))
+            require(candidate == observed_structural_review_candidate(security, evidence, proof, candidate.date),
+                    f"{security.code}: structural review candidate differs from actual KRX prices")
         return ledger
 
     def segment_starts(self, security):
@@ -207,12 +233,13 @@ class ResolutionSnapshot:
         return frozenset(segment_id(security, start) for start in self.segment_starts(security)
                          if end is None or start < end)
 
-    def review_rows(self, securities=None):
+    def review_rows(self, securities=None, *, sessions=None):
+        included = None if sessions is None else {day.date().isoformat() for day in sessions}
         for security in self.ledgers if securities is None else securities:
             ledger = self.ledgers[security]
             candidates = {item.date: item for item in ledger.candidates}
             for row in ledger.resolutions:
-                if not row.review:
+                if not row.review or (included is not None and row.date not in included):
                     continue
                 candidate = candidates[row.date]
                 day = date.fromisoformat(row.date)
@@ -226,6 +253,49 @@ class ResolutionSnapshot:
                              for item in sorted(accessions)),
                     row.reason, row.failed_check,
                 )))
+
+
+@dataclass(frozen=True)
+class VerifiedSourceDays:
+    _by_code: object
+
+    @staticmethod
+    def _verified_bytes(snapshot, days, source_days, destination=None):
+        days = snapshot.select_sessions(days)
+        pos = snapshot.sessions.get_loc(days[0])
+        if pos:
+            days = snapshot.sessions[pos - 1:pos].append(days)
+        hashes = snapshot.manifest["sources"]["krx_sessions"]
+        for day in days:
+            session = day.date().isoformat()
+            name = f"{session}.parquet"
+            target = Path(destination) / name if destination is not None else None
+            path = target if target is not None and target.exists() else Path(source_days) / name
+            require(path.is_file(), f"Missing verified KRX day {session}: {path}")
+            body = path.read_bytes()
+            require(hashlib.sha256(body).hexdigest() == hashes[session],
+                    f"KRX source day bytes differ from the resolution snapshot: {session}")
+            if target is not None and path != target:
+                put_immutable(target, body)
+            yield body
+
+    @classmethod
+    def check_files(cls, snapshot, days, directory):
+        for _ in cls._verified_bytes(snapshot, days, directory):
+            pass
+
+    @classmethod
+    def read(cls, snapshot, days, source_days, *, destination=None):
+        frames = []
+        for body in cls._verified_bytes(snapshot, days, source_days, destination):
+            frame = pd.read_parquet(io.BytesIO(body), columns=["Code", "MKT_NM", *KRX_RAW_COLUMNS])
+            frame["MKT_NM"] = frame.MKT_NM.replace({"KOSDAQ GLOBAL": "KOSDAQ"})
+            frames.append(frame)
+        return cls(pd.concat(frames, ignore_index=True).groupby("Code", sort=False))
+
+    def bars(self, security, days):
+        rows = self._by_code.get_group(security.code)
+        return rows.loc[rows.MKT_NM.eq(security.market) & rows.Date.isin(days), KRX_RAW_COLUMNS]
 
 
 def kind_document_url(accession):
@@ -254,7 +324,12 @@ def _publication_spans(coverage, refs):
     for table in ("company", "archived_market_actions"):
         for code, entries in coverage[table].items():
             bounded[code].extend(spans(entries))
-    return {start for start, _ in daily}, bounded
+    corrected = coverage.get("correction_daily", ())
+    supplements = spans(corrected)
+    require(all(start == end for start, end in supplements) and len(set(supplements)) == len(supplements),
+            "Duplicate or invalid KIND correction publication coverage")
+    correction_pages = {row["start"]: set(map(_evidence, row["pages"])) for row in corrected}
+    return {start for start, _ in daily}, bounded, correction_pages
 
 
 def _load_tables(folder, manifest):
@@ -270,7 +345,10 @@ def _load_tables(folder, manifest):
             == manifest["sources"].get("review_confirmations_sha256"),
             "Manual review registrations differ from producer lineage")
     windows, refs = {}, set()
-    daily, bounded = _publication_spans(coverage, refs)
+    daily, bounded, correction_pages = _publication_spans(coverage, refs)
+    published = manifest["scope"]
+    require(all(published["published_end"] < day <= published.get("correction_cutoff", published["published_end"])
+                for day in correction_pages), "KIND correction publication is outside the frozen scope")
     nonstock = coverage.get("nonstock_notices", [])
     require(isinstance(nonstock, list) and len(nonstock) == manifest.get("nonstock_notices", 0),
             "Non-stock notice count differs from census manifest")
@@ -283,10 +361,29 @@ def _load_tables(folder, manifest):
                 and row["AcptNo"] not in nonstock_keys, "Invalid or missing official non-stock notice evidence")
         nonstock_keys.add(row["AcptNo"])
         refs.update(map(_evidence, row["Evidence"]))
+    outside, outside_targets = [], set()
+    for failure in coverage["failures"]:
+        if not ({"OutsidePriceWindows", "VerifiedEffectiveDates"} & failure.keys()):
+            continue
+        excluded, dates = failure.get("OutsidePriceWindows"), failure.get("VerifiedEffectiveDates")
+        require(isinstance(excluded, list) and excluded and isinstance(dates, list) and dates
+                and isinstance(failure.get("Evidence"), list) and len(failure["Evidence"]) in {4, 9},
+                "Out-of-window structural decision lacks dated official evidence")
+        keys = {_security(item) for item in excluded}
+        require(len(keys) == len(excluded) and list(map(_day, dates)) == sorted(set(dates)),
+                "Invalid out-of-window security keys or dates")
+        outside.append((keys, dates))
+        evidence = tuple(map(_evidence, failure["Evidence"]))
+        if "FinalAcptNo" in failure:
+            accession = failure["FinalAcptNo"]
+            require(len(evidence) == 9 and isinstance(accession, str) and re.fullmatch(r"[0-9]{14}", accession),
+                    "Invalid archived final accession in out-of-window evidence")
+            outside_targets.add((accession, evidence[5]))
+        refs.update(evidence)
     families = coverage.get("kind_final_families", [])
     require(isinstance(families, list) and len(families) == manifest.get("superseded_documents", 0),
             "KIND final family count differs from census manifest")
-    sources, review_refs = set(), {}
+    sources, review_refs, final_targets = set(), {}, outside_targets
     for row in families:
         identifiers = ("AcptNo", "DocNo", "FinalAcptNo", "FinalDocNo")
         require(isinstance(row, dict) and set(row) - {"OriginalNoticeEvidence", "ReviewWitness"}
@@ -299,6 +396,7 @@ def _load_tables(folder, manifest):
         closed = {_security(item) for item in row["ClosedWindows"]}
         require(len(closed) == len(row["ClosedWindows"]), "Duplicate KIND final family closure window")
         sources.add(row["AcptNo"])
+        final_targets.add((row["FinalAcptNo"], _evidence(row["Evidence"][3])))
         refs.update(map(_evidence, row["Evidence"]))
         if "OriginalNoticeEvidence" in row:
             original = row["OriginalNoticeEvidence"]
@@ -316,7 +414,6 @@ def _load_tables(folder, manifest):
             key = _security(witness["Security"]), _day(witness["Date"])
             _insert(review_refs, key, structural_review_evidence(row["AcptNo"], row["FinalAcptNo"],
                                                                  tuple(map(_evidence, row["Evidence"])), original))
-    published = manifest["scope"]
     first = date.fromisoformat(published["published_start"])
     last = date.fromisoformat(published["published_end"])
     requested = {first + timedelta(days=offset) for offset in range((last - first).days + 1)}
@@ -345,6 +442,8 @@ def _load_tables(folder, manifest):
                                     and not row["unattributed_structural_documents_present"]),
                 "Inconsistent resolution window completeness")
         _insert(windows, security, row)
+    require(all(keys <= windows.keys() and all(day < windows[key]["first_session"] for day in dates for key in keys)
+                for keys, dates in outside), "Structural event is not before the verified price windows")
     require(len(windows) == manifest["security_intervals"] and windows, "Resolution ledger lacks listing windows")
     require(not codes or {key.code for key in windows} == set(codes), "Resolution ledger lacks a requested code")
     require(all(key in windows and day in price_hashes and windows[key]["first_session"] < day <= windows[key]["last_session"]
@@ -366,8 +465,10 @@ def _load_tables(folder, manifest):
         published, applied = _day(row["Published"]), _day(row["AppliedDate"])
         key = (security, accession, form, section)
         evidence = tuple(map(_evidence, json.loads(row["Evidence"])))
-        require(security in windows and security.active(applied)
-                and manifest["scope"]["published_start"] <= published <= manifest["scope"]["published_end"]
+        in_scope = manifest["scope"]["published_start"] <= published <= manifest["scope"]["published_end"]
+        corrected = (row["Final"] == "True" and evidence and (accession, evidence[0]) in final_targets
+                     and evidence[0] in correction_pages.get(published, ()))
+        require(security in windows and security.active(applied) and (in_scope or corrected)
                 and re.fullmatch(r"[0-9]{14}", accession) and re.fullmatch(r"[0-9]{5}", form)
                 and section > 0 and re.fullmatch(r"[0-9]{14}", row["DocNo"]) and evidence and evidence[-1].sha256 == row["Sha256"],
                 "Invalid or duplicate official notice")
@@ -612,7 +713,7 @@ def read_resolution_snapshot(path, *, verify_archive=False):
             "Missing or changed hash-addressed resolution snapshot")
     root = json.loads(path.read_bytes())
     require(root.get("version") == SNAPSHOT_VERSION and root.get("price_policy") == PRICE_POLICY
-            and root.get("segmentation_sha256") == _consumer_hash(), "Unsupported resolution snapshot implementation")
+            and _digest(root.get("segmentation_sha256")), "Unsupported resolution snapshot version or price policy")
     folder = path.with_suffix("")
     require(set(root["files"]) == set(SNAPSHOT_FILES) and all(
         _digest(digest) and (folder / name).is_file() and sha256(folder / name) == digest

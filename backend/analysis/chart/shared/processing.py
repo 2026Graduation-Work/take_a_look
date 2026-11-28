@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,38 @@ def processing_contract(settings=None):
     payload = {key: value for key, value in contract.items() if key != "sha256"}
     payload.update(builder_id=ENGINE, implementation_sha256=sources, upstream=upstream_identity())
     return {**payload, "sha256": canonical_hash(payload)}
+
+
+def processing_compatibility(contract):
+    fields = ("contract_version", "builder_id", "price_basis", "preprocessing",
+              "base_feature_columns", "flow_feature_columns")
+    if not isinstance(contract, dict):
+        raise ValueError("Missing processing contract")
+    payload = {name: value for name, value in contract.items() if name != "sha256"}
+    digest = contract.get("sha256")
+    lineage = payload.get("implementation_sha256")
+    required = {*fields, "implementation_sha256"}
+    if (not required <= payload.keys() or payload.keys() - required - {"upstream"}
+            or canonical_hash(payload) != digest
+            or not isinstance(lineage, dict) or "features/builder.py" not in lineage
+            or not all(isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value)
+                       for value in lineage.values())):
+        raise ValueError("Invalid processing contract")
+    compatibility = {name: payload[name] for name in fields}
+    if "upstream" in payload:
+        upstream = payload["upstream"]
+        keys = ("package", "version", "input_dtype")
+        if not isinstance(upstream, dict) or not set(keys) <= upstream.keys():
+            raise ValueError("Invalid processing engine contract")
+        compatibility["upstream"] = {name: upstream[name] for name in keys}
+    return compatibility
+
+
+def processing_compatible(recorded, expected):
+    try:
+        return processing_compatibility(recorded) == processing_compatibility(expected)
+    except (TypeError, ValueError):
+        return False
 
 
 def build_feature_frame(raw, trading_days, settings=None):

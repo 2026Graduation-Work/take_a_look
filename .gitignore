@@ -101,6 +101,8 @@ backend/analysis/chart/experiments/results/legacy_screening/*
 backend/analysis/chart/experiments/experiment_run_log.txt
 backend/analysis/chart/notebooks/
 backend/analysis/chart/experiments/configs/*
+!backend/analysis/chart/experiments/configs/qlib_2022_2025_h5.yaml
+!backend/analysis/chart/experiments/configs/qlib_2022_2025_h20.yaml
 !backend/analysis/chart/experiments/configs/
 !backend/analysis/chart/experiments/configs/base.yaml
 !backend/analysis/chart/experiments/configs/holdout_2025_h5.yaml

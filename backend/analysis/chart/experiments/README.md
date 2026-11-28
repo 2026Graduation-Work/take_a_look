@@ -29,33 +29,55 @@ python -m experiments.export_oos \
 
 ## 환경과 명령
 
+처음 실행하거나 PR을 확인할 때는 [로컬 수집부터 Qlib 학습·평가까지](LOCAL_REPRODUCTION.md)를 따른다. 임시 5거래일 확인과 2022~2025년 H5/H20 전체 실행을 구분한다.
+
 ```bash
 python -m venv workspace/experiments/.venv
 source workspace/experiments/.venv/bin/activate
 python -m pip install -r experiments/requirements.txt
-python -m experiments.dataset.collect --config experiments/configs/datasets/dataset_kospi.yaml --mode full \
-  --action-snapshot "$ACTION_SNAPSHOT"
+python -m experiments.dataset.collect --config experiments/configs/datasets/dataset_kospi.yaml \
+  --source-root workspace/experiments/sources --kind-request-budget 250
 python -m experiments.dataset.preprocess --config experiments/configs/datasets/dataset_kospi.yaml
+python -m experiments.dataset.verify_training_prices --root workspace/experiments/datasets/shared_v3_kospi_2016
 python -m experiments.features.build_feature_panel --config experiments/configs/sliding_2016_2026_h5.yaml
 python -m experiments.train --config experiments/configs/sliding_2016_2026_h5.yaml
 python -m experiments.run_experiment_analysis --config experiments/configs/sliding_2016_2026_h5.yaml
 ```
 
-먼저 아래 절차로 공식 판정 장부를 고정하고, 출력된 V2 스냅샷 파일 경로를 `ACTION_SNAPSHOT`에 지정한다. H20은 마지막 세 명령의 설정을 `sliding_2016_2026_h20.yaml`로 바꾼다. `--allow-partial`은 검증된 가격 파일만 처리하고 제외 이유를 남길 때 명시적으로 사용한다. 수급 모델 변경·추가 튜닝은 이번 전환에 포함하지 않았다.
+수집 명령은 KRX 가격·상장 이력과 KIND 공시를 검증해 V2 판정 장부를 만들거나 재사용한다. `--kind-request-budget`은 한 번 실행에서 보낼 KIND 요청 수다. 기본값은 250이고 0이면 KIND 캐시만 읽는다. 장기 구간은 예산을 여러 번 나눠 수집할 수 있다. 요청 오류나 예산 소진이 나면 `collection_report.json`을 확인하고 같은 설정과 원천 경로로 다시 실행한다. 완료된 공식 검색으로도 조정 비율을 확정할 수 없으면 구간 경계를 정하고 `review_queue.csv`에 근거를 남긴다. 이 검토표는 수집과 전처리를 계속할 수 있게 하며 추후 검토에 쓴다.
+
+H20은 피처·학습·분석 명령에서 `sliding_2016_2026_h20.yaml`을 쓴다. `--allow-partial`은 검증된 가격 파일만 처리하고 제외 이유를 남길 때 명시적으로 사용한다.
 
 ## 저장과 재개
 
-설정의 `root`에 새 빈 데이터셋 디렉터리를 지정한다. 실험 설정의 벤치마크 파일은 해당 데이터셋의 `benchmarks/KOSPI.parquet`를 가리킨다. 공급자 로그인은 `.env`의 기존 KRX 인증 설정을 사용한다.
+설정의 `root`에 데이터셋 디렉터리를 지정한다. KRX 로그인에는 차트 디렉터리의 `.env` 또는 환경변수 `KRX_ID`와 `KRX_PW`를 사용한다. KIND 공시는 공개 조회를 사용한다. 실험 설정의 벤치마크 파일은 데이터셋의 `benchmarks/KOSPI.parquet`를 가리킨다.
 
-같은 root에서 `collect --mode full`을 다시 실행하면 검증된 수집 파일을 재사용한다. 끝 날짜를 생략하면 고정 장부의 마지막 범위를 사용한다. `--rebuild`는 새 빈 root에서만 허용한다. 처리 버전·builder가 다른 processed 자료는 덮어쓰지 않는다.
+원천 경로는 기본 `workspace/experiments/sources/`다. 검증된 KRX 일별 원주가·지수·수급과 KIND 응답은 이 경로를 공유하는 다음 데이터셋에서도 재사용한다. 새 범위가 기존 원천 범위를 넘으면 빠진 자료만 요청한다. `end_date`를 생략하면 최근 거래일 중 KIND 게시일이 마지막 가격일로부터 최소 3일간 완료된 날짜까지 수집한다. 종료일을 명시했는데 게시 기간이 아직 끝나지 않았으면 해당 날짜를 안내한다. 같은 root의 재실행은 이전에 고정한 종료일과 장부를 사용한다. 정정 공시가 기본 게시 기간 뒤에 나오면 수집 시작 전 완료된 게시일 안에서 공식 연결 경로가 가리키는 날짜만 추가 조회한다. 요청한 종목의 공식 상장 구간에 KRX 원주가가 빠져 있으면 해당 종목과 기간을 보고한다.
 
-데이터는 `workspace/experiments/datasets/`, 예측은 `workspace/experiments/cache/predictions/`, 모델·학습 입력 캐시는 `workspace/experiments/cache/training/`, 결과는 `workspace/experiments/runs/`에 저장한다. 변경된 경로·코드·입력 해시는 새 캐시 식별자를 만든다. 이전 캐시와 manifest는 보존하며 검증 없이 새 식별자로 옮기지 않는다.
+기존 V2 장부를 가져오려면 `--action-snapshot PATH`를 지정한다. 일부 상장 구간만 가져올 때는 원천 경로의 `krx_days/YYYY-MM-DD.parquet`에 장부 해시와 일치하는 일별 파일이 필요하다. 전처리와 검증은 데이터셋에 고정한 자료를 읽으므로 공급자 자격 증명 없이 실행할 수 있다.
+
+가격 또는 수급이 일부만 수집된 상태에서 전처리하면 그 입력이 고정된다. 이후 수집을 계속할 때는 원천 경로를 재사용하고 새 데이터셋 root를 지정한다. 원천 개정판은 별도 원천 경로와 새 데이터셋 root에 수집한다. `--rebuild`는 새 빈 데이터셋 root에서만 허용한다. 데이터는 `workspace/experiments/datasets/`, 예측은 `workspace/experiments/cache/predictions/`, 모델·학습 입력 캐시는 `workspace/experiments/cache/training/`, 결과는 `workspace/experiments/runs/`에 저장한다. 재사용은 고정한 입력 내용과 처리·학습 계약을 검증한 뒤 결정한다. 코드 해시는 만들 때 사용한 구현을 기록한다.
 
 처리 설정의 정본은 `shared/settings.py`다. 기본 데이터셋 YAML의 `preprocessing: shared_v3`가 이를 참조한다. Sigma는 20행·최소 10개 관측, 입력 배리어는 상방 1.5·하방 1.2배다. 연구 라벨과 표본 선택은 별도 실험 설정이다.
 
+## 산출물 형식
+
+| 산출물 | 주요 필드 예시 | 쓰는 곳 |
+| --- | --- | --- |
+| 원천 `krx_days/2025-01-06.parquet` | `Code` 문자열, `Date` 거래일, `RawClose` 정수, `ListedShares` 정수, `MKT_NM`, `SECT_TP_NM` | 같은 원주가에서 종목 식별, 가격 검증, 스팩 구간을 계산한다. |
+| `krx_days/*.json`, KIND `receipts/*.json` | 원천 요청 범위와 `sha256`, 응답 시각, KIND 본문 바이트 수 | 재개에서 검증된 요청을 재사용하고 원문 판본을 고정한다. |
+| `calendar.json`, `benchmarks/*.parquet` | `trading_days`, `observed_end`, 벤치마크 `Date`와 `Close` | KRX 세 경로의 영업일을 대조하고 백테스트 지수를 보존한다. |
+| V2 `snapshots/<sha256>.json` | `version: 2`, `price_policy`, `files`, `evidence_sha256` | 상장 키, 공시 증거, 구간 판정을 하나의 해시에 고정한다. |
+| V2 `candidates.csv`, `notices.csv`, `resolutions.csv`, `coverage.json` | 관측 전후 수치, 공식 공시 `AcptNo`와 `FormId`, 조정 계수, 기간별 증거 | 관측, 공식 사실, 판정을 연결하고 미확인 출처를 확인한다. |
+| `krx_raw_prices/{code}.parquet`, `raw/{code}.parquet`, `price_events_*.parquet` | `RawClose`, 조정 `Close`, `SegmentId`, `ExDate`, `PriceFactor` | 원주가를 보존하고 실제 적용한 조정과 학습 구간을 재현한다. |
+| `dataset_manifest.json`, `processed_manifest.json`, `feature_manifest.json` | 상위 manifest 해시, 파일별 해시, `processing_contract`, 피처 순서 | 입력과 각 단계의 처리 규칙을 연결한다. |
+| 모델 sidecar | 모델 파일 `sha256`, 피처 순서, 전처리 계약, 고정 학습 입력 | 명시한 기존 모델을 검증하고 같은 학습 입력에 대한 캐시를 찾는다. |
+
+일별 가격 열은 [원주가 검증](../shared/data/validation.py), V2 장부 열은 [스냅샷 계약](../shared/data/resolution_snapshot.py), 전처리 필드는 [처리 계약](../shared/processing.py), 모델 sidecar는 [LightGBM 저장 코드](train_src/lgbm_wrapper.py)를 기준으로 한다.
+
 ## 공식 사건표와 KRX 학습 가격
 
-수집 대상 CSV에 KRX 종목코드와 표준코드(ISIN), 주식 종류, 상장·상장폐지일, 시장을 적는다. 상장 중인 증권은 `delisting`을 비워 둔다. OpenDART 법인코드와 발행사의 대표 종목코드를 함께 적는다. 우선주의 `issuer_code`는 법인의 대표 종목코드이고 `code`와 `isin`은 우선주 자체의 식별자다. KRX 개별증권 정보(MDCSTAT01901)와 OpenDART 법인코드에서 각 필드를 확인한다.
+기존 장부를 조사하거나 보강할 때 아래 독립 명령을 사용한다. 수집 대상 CSV에 KRX 종목코드와 표준코드(ISIN), 주식 종류, 상장·상장폐지일, 시장을 적는다. 상장 중인 증권은 `delisting`을 비워 둔다. OpenDART 법인코드와 발행사의 대표 종목코드를 함께 적는다. 우선주의 `issuer_code`는 법인의 대표 종목코드이고 `code`와 `isin`은 우선주 자체의 식별자다. KRX 개별증권 정보(MDCSTAT01901)와 OpenDART 법인코드에서 각 필드를 확인한다.
 
 ```csv
 code,isin,share_class,listing,delisting,corporation,issuer_code,market
@@ -112,7 +134,7 @@ python -m experiments.dataset.freeze_resolution_snapshot \
 
 Census가 V1 공식 단위 변경 자료를 사용했다면 같은 `--action-snapshot`들을 추가한다. 동결 명령은 KRX 파일, 종목 마스터, 장부, 공개 공시 원문과 영수증을 대조한다. 결과는 `official_actions/snapshots/<sha256>.json`과 같은 해시의 하위 디렉터리, `official_actions/archive/`에 저장한다.
 
-학습 수집기는 V2 스냅샷 전체를 새 root에 복사한다. 수집, 전처리, 피처, 학습, 내보내기 manifest가 같은 장부, 생산 코드, 구간 코드와 증거 해시를 사용한다. 같은 root에서 재개하면 고정한 장부를 다시 쓴다. 컬렉터의 KRX 세션이 고정 장부의 전체 세션과 일치해야 한다. `--code`로 만든 완전한 장부는 같은 코드 목록을 `collection.tickers`에 명시한다.
+학습 수집기는 V2 스냅샷 전체를 새 root에 복사한다. 수집, 전처리, 피처, 학습, 내보내기 manifest가 같은 장부, 생산 코드, 구간 코드와 증거 해시를 사용한다. 같은 root에서 재개하면 고정한 장부를 다시 쓴다. 필요한 전체 KRX 세션과 원주가 증거가 있으면 더 넓은 장부를 좁은 기간에 재사용한다. `--code`로 만든 장부는 그 코드 범위 안의 명시적인 `collection.tickers` 요청에 쓴다.
 
 가격 수집기는 KRX 원주가를 `krx_raw_prices/{code}.parquet`에 먼저 보존한다. 원본과 영업일을 검증한 뒤 공식 사건을 적용한다. 승인한 분할·병합·무상증자의 가격과 비교용 거래량은 공시의 교환비율로 각각 환산한다. 무상증자는 권리락일 전 가격과 거래량을 환산하고 후속 신주 상장일에는 같은 비율을 다시 적용하지 않는다. Raw OHLC, `RawVolume`, `RawChange`, `Amount`는 그대로 보존한다. 실제 거래량은 `RawVolume`이다.
 

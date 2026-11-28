@@ -11,6 +11,7 @@ from experiments.config import (
     append_collection_event,
     atomic_json,
     atomic_parquet,
+    chart_path,
     identity,
     load_dataset_config,
 )
@@ -20,11 +21,13 @@ from shared.data.calendar import (  # noqa: F401
     scheduled_sessions,
     verify_calendar_schedule,
 )
+from shared.data.disclosures import put_immutable
 from shared.data.market_notices import SecurityKey
 from shared.data.resolution_snapshot import (
     PRICE_POLICY,
     REVIEW_COLUMNS,
     SEGMENT_COLUMN,
+    VerifiedSourceDays,
     pin_resolution_snapshot,
     read_resolution_snapshot,
     require_price_provenance,
@@ -50,14 +53,15 @@ from shared.data.validation import (  # noqa: F401
     validate_prices,
 )
 from shared.io import sha256
-from shared.processing import build_feature_frame, processing_contract
+from shared.processing import build_feature_frame, processing_compatible, processing_contract
 from shared.settings import TRAINING_PRICE_BASIS, VALIDATION_VERSION
 
 from .census_actions import _write_csv
+from .prepare_sources import KIND_BUDGET, SOURCE_ROOT, collection_plan, prepare_sources
 
 
-def write_review_queue(snapshot, path, *, securities):
-    rows = sorted(snapshot.review_rows(securities), key=lambda row: (row["Code"], row["Date"]))
+def write_review_queue(snapshot, path, *, securities, sessions=None):
+    rows = sorted(snapshot.review_rows(securities, sessions=sessions), key=lambda row: (row["Code"], row["Date"]))
     _write_csv(path, REVIEW_COLUMNS, rows)
     return {"rows": len(rows), "sha256": sha256(path)}
 
@@ -155,16 +159,21 @@ def verify_cached_flows(config_path):
 
 def training_metadata(snapshot, collection, calendar):
     requested = {str(code).zfill(6) for code in collection.get("tickers") or []}
-    scope_codes = set(snapshot.manifest["scope"]["codes"])
-    if scope_codes and requested != scope_codes:
-        raise ValueError("Code-scoped resolution snapshot requires its exact code scope in collection.tickers")
-    days = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
-    if not days.equals(snapshot.sessions):
-        raise ValueError("Collection calendar differs from the complete resolution snapshot scope")
+    scope = snapshot.manifest["scope"]
+    scope_codes = set(scope["codes"])
+    if not set(collection["markets"]) <= set(scope.get("markets", ("KOSPI", "KOSDAQ"))):
+        raise ValueError("Resolution snapshot lacks coverage for the requested markets")
+    if scope_codes and (not requested or not requested <= scope_codes):
+        raise ValueError("Code-scoped resolution snapshot requires a covered collection.tickers subset")
+    days = snapshot.select_sessions(pd.to_datetime(calendar["trading_days"]))
+    if ("universe_start" in scope and days[0] < pd.Timestamp(scope["universe_start"])
+            or collection["include_delisted"] and not scope.get("include_delisted", True)):
+        raise ValueError("Resolution snapshot lacks coverage for the requested listing universe")
     rows = []
     for security, name in snapshot.training_names.items():
         if (security.market not in collection["markets"] or requested and security.code not in requested
-                or security.delisting and not collection["include_delisted"]):
+                or security.delisting and not collection["include_delisted"]
+                or snapshot.days(security).intersection(days).empty):
             continue
         rows.append({"Code": security.code, "Name": name, "Market": security.market, "Isin": security.isin,
                      "ListingDate": security.listing, "DelistingDate": security.delisting,
@@ -189,6 +198,10 @@ def listing_identity(row):
                        row.Market, row.ShareClass)
 
 
+def requires_source_days(snapshot, metadata, days):
+    return any(not snapshot.days(listing_identity(row)).isin(days).all() for row in metadata.itertuples())
+
+
 def verify_training_metadata(root, snapshot, collection, calendar):
     expected = training_metadata(snapshot, collection, calendar)
     stored = pd.read_csv(root / "ticker_metadata.csv", dtype={"Code": str},
@@ -199,7 +212,8 @@ def verify_training_metadata(root, snapshot, collection, calendar):
     return stored
 
 
-def collect_dataset(config_path, *, mode="full", rebuild=False, action_snapshot=None):
+def collect_dataset(config_path, *, mode="full", rebuild=False, action_snapshot=None, source_days=None,
+                    source_root=None, kind_request_budget=KIND_BUDGET):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
     root.mkdir(parents=True, exist_ok=True)
@@ -208,7 +222,36 @@ def collect_dataset(config_path, *, mode="full", rebuild=False, action_snapshot=
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError("A price collector already owns this dataset root") from None
-        return _collect_dataset(config, mode, rebuild, action_snapshot)
+        if kind_request_budget < 0:
+            raise ValueError("KIND request budget must be nonnegative")
+        manifest_path = root / "dataset_manifest.json"
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else None
+        if _collection_complete(manifest, config["collection"]):
+            return _collect_dataset(config, mode, rebuild, action_snapshot, manifest, source_days=source_days)
+        if (root / "processed_manifest.json").is_file():
+            raise ValueError("This dataset has pinned processed inputs; resume collection in a new dataset root")
+        plan_path = root / "collection_source_plan.json"
+        if plan_path.is_file():
+            prior_root = Path(json.loads(plan_path.read_text())["source_root"])
+            if source_root is not None and chart_path(source_root) != prior_root:
+                raise ValueError("Source root changed during collection; use a new dataset root")
+            source_root = prior_root
+        elif (source_root is None and action_snapshot is None and manifest is None
+              and not (root / "collection_action_pin.json").exists()):
+            source_root = chart_path(SOURCE_ROOT)
+        if source_root is None:
+            return _collect_dataset(config, mode, rebuild, action_snapshot, manifest, source_days=source_days)
+        source_root = chart_path(source_root)
+        if root == source_root or root in source_root.parents or source_root in root.parents:
+            raise ValueError("Use separate dataset and source roots")
+        source_root.mkdir(parents=True, exist_ok=True)
+        with (source_root / "writer.lock").open("a") as source_lock:
+            try:
+                fcntl.flock(source_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise ValueError("A collector already owns this official source root") from None
+            return _collect_dataset(config, mode, rebuild, action_snapshot, manifest, source_days=source_days,
+                                    source_root=source_root, kind_budget=kind_request_budget)
 
 
 def pinned_collection_window(snapshot, collection):
@@ -219,7 +262,13 @@ def pinned_collection_window(snapshot, collection):
     return settings
 
 
-def _collect_dataset(config, mode, rebuild, action_snapshot):
+def _collection_complete(manifest, collection):
+    return (manifest and manifest["prices_complete"]
+            and (not collection["investor_flows"] or manifest.get("flow_queries_complete")))
+
+
+def _collect_dataset(config, mode, rebuild, action_snapshot, manifest, *, source_days=None, source_root=None,
+                     kind_budget=KIND_BUDGET):
     from shared.data import providers as source
 
     contract = processing_contract(config["preprocessing"])
@@ -229,9 +278,13 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
     if rebuild and root.exists() and any(path.name != "collection.lock" for path in root.iterdir()):
         raise FileExistsError("--rebuild requires a new dataset root; preserve existing data")
     manifest_path = root / "dataset_manifest.json"
-    manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
     pin_file = root / "collection_action_pin.json"
     collection_identity = identity(config["collection"])
+    evidence_days = root / "official_actions" / "krx_sessions"
+    calendar_path = root / "calendar.json"
+    calendar = None
+    day_proof = None
+    collection = config["collection"]
     if manifest or pin_file.exists():
         pin = manifest if manifest else json.loads(pin_file.read_text())
         if pin["collection_identity"] != collection_identity:
@@ -239,29 +292,63 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
         snapshot = _require_current_training_prices(pin, root)
         if action_snapshot is not None and sha256(action_snapshot) != snapshot.path.stem:
             raise ValueError("Official action snapshot changed; use a new dataset root")
+        if _collection_complete(manifest, collection):
+            try:
+                _verify_materialized_collection(root, manifest, snapshot)
+            except (ValueError, OSError):
+                if mode != "update" or (root / "processed_manifest.json").exists():
+                    raise
+            else:
+                print(f"Verified dataset already complete: {root}")
+                return
+        calendar_settings = pinned_collection_window(snapshot, {
+            **collection, "end_date": pin.get("planned_end") or collection.get("end_date"),
+        })
     else:
         if action_snapshot is None:
-            raise ValueError("An official resolution snapshot is required for a new dataset")
+            plan = collection_plan(root, collection, collection_identity, source_root)
+            calendar_settings = plan["calendar_settings"]
+            atomic_json(root / "collection_report.json", {"status": "running", "stage": "source_preparation"})
+            try:
+                calendar = (json.loads(calendar_path.read_text()) if calendar_path.is_file()
+                            else build_calendar(root, calendar_settings, source_root=source_root / "indices"))
+                _verify_collection_calendar(root, calendar)
+                if (calendar["requested_start"], calendar["checked_end"]) != (
+                        calendar_settings["start_date"], calendar_settings["end_date"]):
+                    raise ValueError("Calendar scope differs from the frozen source plan")
+                action_snapshot, source_days = prepare_sources(root, source_root, calendar, plan, kind_budget=kind_budget)
+            except (ValueError, OSError, RuntimeError) as exc:
+                atomic_json(root / "collection_report.json",
+                            {"status": "failed", "stage": "source_preparation", "reason": str(exc)})
+                raise
+        else:
+            if source_root is not None and (source_root / "krx_days").is_dir():
+                source_days = source_days or source_root / "krx_days"
+            calendar_settings = collection
         source_snapshot = read_resolution_snapshot(action_snapshot)
-        pinned_collection_window(source_snapshot, config["collection"])
+        calendar_settings = pinned_collection_window(source_snapshot, calendar_settings)
+        days = scheduled_sessions(pd.Timestamp(calendar_settings["start_date"]), pd.Timestamp(calendar_settings["end_date"]))
+        scope_metadata = training_metadata(source_snapshot, calendar_settings, {"trading_days": days})
+        if source_days is not None or requires_source_days(source_snapshot, scope_metadata, days):
+            day_proof = VerifiedSourceDays.read(source_snapshot, days, source_days or evidence_days,
+                                               destination=evidence_days)
         snapshot = pin_resolution_snapshot(source_snapshot, root)
         atomic_json(pin_file, {"price_basis": TRAINING_PRICE_BASIS, "price_policy": PRICE_POLICY,
-                               "official_actions": snapshot.provenance, "collection_identity": collection_identity})
+                               "official_actions": snapshot.provenance, "collection_identity": collection_identity,
+                               "planned_end": calendar_settings["end_date"]})
     action_provenance = snapshot.provenance
-    calendar_settings = pinned_collection_window(snapshot, config["collection"])
     append_collection_event(root, {"state": "started", "stage": "collection", "mode": mode})
-    # End date is immutable inside a build, including resumed and update executions.
-    calendar_path = root / "calendar.json"
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "calendar"})
     try:
-        if calendar_path.exists():
-            calendar = json.loads(calendar_path.read_text())
+        if calendar is not None or calendar_path.exists():
+            calendar = calendar or json.loads(calendar_path.read_text())
             if "checked_end" not in calendar:
                 calendar["checked_end"] = calendar["requested_end"]
-            calendar["schedule_validation"] = verify_calendar_schedule(calendar)
-            atomic_json(calendar_path, calendar)
-        else:
+            _verify_collection_calendar(root, calendar)
+        elif source_root is None:
             calendar = build_calendar(root, calendar_settings)
+        else:
+            calendar = build_calendar(root, calendar_settings, source_root=source_root / "indices")
     except Exception as exc:
         append_collection_event(root, {"state": "failed", "stage": "calendar",
                                        "exception_type": type(exc).__name__, "reason": str(exc)})
@@ -286,12 +373,15 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
         atomic_json(root / "collection_report.json",
                     {"status": "failed", "stage": "metadata", "reason": str(exc)})
         raise
+    days = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
     selected = {listing_identity(row) for row in metadata.itertuples()}
-    review_details = write_review_queue(snapshot, root / "review_queue.csv", securities=selected)
+    if day_proof is None and (evidence_days.exists() or requires_source_days(snapshot, metadata, days)):
+        day_proof = VerifiedSourceDays.read(snapshot, days, evidence_days)
+    review_details = write_review_queue(snapshot, root / "review_queue.csv", securities=selected, sessions=days)
     from shared.data.bulk_prices import prepare_bulk_prices, stock_raw
 
-    report = {"prices": [], "flow_failures": [], "market_history_verified": False}
-    bulk = prepare_bulk_prices(root, metadata, calendar, report, source)
+    report = {"prices": [], "flow_failures": [], "market_history_verified": True}
+    bulk = None if day_proof else prepare_bulk_prices(root, metadata, calendar, report, source)
     atomic_json(root / "collection_report.json", {"status": "running", "stage": "prices"})
     price_files = {}
     krx_raw_files = dict((manifest or {}).get("krx_raw_files", {}))
@@ -310,8 +400,9 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
             if saved is None:
                 raw_parts = []
                 for security, _ in windows:
-                    days = snapshot.days(security)
-                    raw = stock_raw(bulk, code, days) if bulk is not None else None
+                    days = snapshot.days(security).intersection(expected)
+                    raw = day_proof.bars(security, days) if day_proof is not None else (
+                        stock_raw(bulk, code, days) if bulk is not None else None)
                     if raw is None:
                         raw = fetch_raw_window(security, days, source=source,
                             progress=lambda event: append_collection_event(root, event))
@@ -321,7 +412,7 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
                 previous["Date"] = pd.to_datetime(previous.Date).dt.normalize()
                 check_raw_overlap(previous, saved)
 
-            frame, event_parts = adjust_price_history(windows, saved, expected, as_of, snapshot)
+            frame, event_parts = adjust_price_history(windows, saved, expected, as_of, snapshot, source=day_proof)
             if not original_path.exists():
                 preserve_training_raw(original_path, saved)
             krx_raw_files[path.name] = sha256(original_path)
@@ -387,6 +478,8 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
         "price_policy": PRICE_POLICY,
         "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
+        "planned_end": calendar_settings["end_date"],
+        "source_day_proof": day_proof is not None,
         "raw_files": price_files,
         "krx_raw_files": krx_raw_files,
         "price_events": event_details,
@@ -463,31 +556,42 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
                 **report, "status": "running", "stage": "flows", "flow_progress": progress,
             })
 
+        def verified_flow(path, day):
+            receipt = path.with_suffix(".json")
+            if not receipt.is_file():
+                return None
+            meta = json.loads(receipt.read_text())
+            if (not path.is_file() or meta.get("validation_version") != VALIDATION_VERSION
+                    or meta.get("sha256") != sha256(path)):
+                raise ValueError(f"Verified KRX investor flow cache changed: {path}")
+            return validate_flow(pd.read_parquet(path), day, source._FLOW_COLUMNS)
+
         for day in pd.to_datetime(calendar["trading_days"]):
             record_flow({"date": str(day.date()), "state": "checking_cache"})
             cache = root / "investor_flow_cache" / f"{day:%Y-%m-%d}.parquet"
             version = cache.with_suffix(".json")
             try:
-                flow = None
-                if cache.exists() and version.exists():
-                    try:
-                        meta = json.loads(version.read_text())
-                        if meta.get("validation_version") == VALIDATION_VERSION and meta.get(
-                            "sha256"
-                        ) == sha256(cache):
-                            flow = validate_flow(pd.read_parquet(cache), day, source._FLOW_COLUMNS)
-                    except (ValueError, OSError):
-                        pass
+                shared = cache if source_root is None else source_root / "investor_flows" / cache.name
+                flow = verified_flow(cache, day)
+                if flow is None and cache != shared:
+                    flow = verified_flow(shared, day)
                 if flow is None:
                     flow = validate_flow(
                         source._fetch_investor_day(day, progress=record_flow), day, source._FLOW_COLUMNS
                     )
-                    atomic_parquet(cache, flow)
-                    atomic_json(
-                        version, {"validation_version": VALIDATION_VERSION, "sha256": sha256(cache)}
-                    )
+                    atomic_parquet(shared, flow)
+                    atomic_json(shared.with_suffix(".json"), {
+                        "validation_version": VALIDATION_VERSION, "sha256": sha256(shared),
+                    })
                 else:
                     progress["cached_days"] += 1
+                if cache != shared and not version.exists():
+                    if cache.exists():
+                        atomic_parquet(cache, flow)
+                        atomic_json(version, {"validation_version": VALIDATION_VERSION, "sha256": sha256(cache)})
+                    else:
+                        put_immutable(cache, shared.read_bytes())
+                        put_immutable(version, shared.with_suffix(".json").read_bytes())
                 parts.append(flow)
                 progress["completed_days"] += 1
                 record_flow({"state": "complete"})
@@ -516,6 +620,8 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
         "price_policy": PRICE_POLICY,
         "official_actions": action_provenance,
         "end_date": calendar["observed_end"],
+        "planned_end": calendar_settings["end_date"],
+        "source_day_proof": day_proof is not None,
         "raw_files": checkpoint["raw_files"],
         "krx_raw_files": krx_raw_files,
         "price_events": event_details,
@@ -533,15 +639,39 @@ def _collect_dataset(config, mode, rebuild, action_snapshot):
     report["prices_complete"] = manifest["prices_complete"]
     report["flow_queries_complete"] = manifest["flow_queries_complete"]
     report["flows_complete"] = manifest["flows_complete"]
-    report["status"] = (
-        "failed"
-        if failed
-        else "complete"
-    )
+    report["status"] = "failed" if failed or (source_root is not None and report["flow_failures"]) else "complete"
     atomic_json(root / "collection_report.json", report)
-    if failed:
+    if failed or source_root is not None and report["flow_failures"]:
         raise RuntimeError(f"Dataset incomplete; inspect {root / 'collection_report.json'}")
     print(f"Verified dataset: {root}; frozen end: {calendar['observed_end']}")
+
+
+def _verify_collection_calendar(root, calendar):
+    verify_calendar_schedule(calendar)
+    for name, digest in calendar.get("benchmarks", {}).items():
+        if sha256(root / "benchmarks" / name) != digest:
+            raise ValueError(f"Verified dataset benchmark changed: {name}")
+
+
+def _verify_materialized_collection(root, manifest, snapshot):
+    calendar = json.loads((root / "calendar.json").read_text())
+    calendar.setdefault("checked_end", calendar["requested_end"])
+    _verify_collection_calendar(root, calendar)
+    metadata = verify_training_metadata(root, snapshot, manifest["config"]["collection"], calendar)
+    if manifest.get("source_day_proof"):
+        days = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
+        VerifiedSourceDays.check_files(snapshot, days, root / "official_actions" / "krx_sessions")
+    expected = {f"{code}.parquet" for code in metadata.Code}
+    for key, directory in (("raw_files", "raw"), ("krx_raw_files", "krx_raw_prices")):
+        if set(manifest[key]) != expected:
+            raise ValueError("Complete collection manifest does not cover all selected listings")
+        for name, digest in manifest[key].items():
+            if sha256(root / directory / name) != digest:
+                raise ValueError(f"Verified dataset input changed: {directory}/{name}")
+    for path, digest in (("review_queue.csv", manifest["review_queue"]["sha256"]),
+                         (manifest["price_events"]["path"], manifest["price_events"]["sha256"])):
+        if sha256(root / path) != digest:
+            raise ValueError(f"Verified dataset input changed: {path}")
 
 
 def _require_current_training_prices(manifest, root, *, verify_archive=False):
@@ -575,8 +705,20 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     config = load_dataset_config(config_path)
     root = Path(config["root"])
     manifest_path = root / "dataset_manifest.json"
-    if not manifest_path.exists():
-        raise FileNotFoundError("Run price_collector.py --config first")
+    if not root.is_dir():
+        raise FileNotFoundError("Run experiments.dataset.collect --config first")
+    with (root / "collection.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("A collector or preprocessor already owns this dataset root") from None
+        if not manifest_path.is_file():
+            raise FileNotFoundError("Run experiments.dataset.collect --config first")
+        return _preprocess_dataset(config, manifest_path, allow_partial=allow_partial)
+
+
+def _preprocess_dataset(config, manifest_path, *, allow_partial):
+    root = manifest_path.parent
     manifest = json.loads(manifest_path.read_text())
     snapshot = _require_current_training_prices(manifest, root)
     if not manifest.get("prices_complete") and not allow_partial:
@@ -589,8 +731,15 @@ def preprocess_dataset(config_path, *, rebuild=False, allow_partial=False):
     previous_processed = root / "processed_manifest.json"
     if previous_processed.exists():
         previous = json.loads(previous_processed.read_text())
-        if previous.get("processing_contract") != contract:
+        if not processing_compatible(previous.get("processing_contract"), contract):
             raise ValueError("Preserve the previous processed data; use a new dataset root for this builder")
+        if (previous["dataset_manifest_sha256"] == sha256(manifest_path)
+                and previous.get("allow_partial") == allow_partial):
+            validate_processed_inputs(config)
+            print(f"Verified preprocessing already complete: {root}")
+            return
+        if "krx_raw_files" in manifest:
+            raise ValueError("Preserve previously processed inputs; use a new dataset root for this revision")
     reports = []
     outputs, policy_excluded = {}, {}
     for name in sorted(manifest["raw_files"]):
@@ -681,13 +830,13 @@ def validate_processed_inputs(config):
     if processed.get("allow_partial"):
         expected_raw = {name: expected_raw.get(name) for name in processed["raw_files"]}
     contract = processing_contract(config["preprocessing"])
-    if processed.get("processing_contract") != contract:
+    if not processing_compatible(processed.get("processing_contract"), contract):
         raise ValueError("Shared processing changed; rerun preprocessing in a new dataset root")
     if (processed["settings"] != config["preprocessing"] or processed["raw_files"] != expected_raw
             or processed.get("dataset_manifest_sha256") != sha256(root / "dataset_manifest.json")):
         raise ValueError("Dataset changed; rerun preprocessing before preparing features")
-    if processed["implementation_sha256"] != contract["implementation_sha256"]["features/builder.py"]:
-        raise ValueError("Feature implementation changed; rerun preprocessing")
+    if processed["implementation_sha256"] != processed["processing_contract"]["implementation_sha256"]["features/builder.py"]:
+        raise ValueError("Processed feature implementation lineage differs")
     for directory, fingerprints in (
         ("raw", processed["raw_files"]),
         ("processed", processed["files"]),

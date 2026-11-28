@@ -15,11 +15,11 @@ from experiments.backtest.engine import configured_benchmark
 from experiments.evaluation.backtest_metrics import calculate_trading_metrics
 from experiments.evaluation.random_baseline import compare_with_random
 from experiments.experiment_utils import (
-    cache_dir,
     find_processed_dir,
     generate_predictions_hash,
     load_predictions,
     load_universe_intervals,
+    predictions_cache_path,
     resolve_splits,
     resolve_tickers,
     result_dir,
@@ -220,7 +220,7 @@ def check_backtest(config_path, predictions_path=None):
         pred_hash = generate_predictions_hash(config, splits)
         result["predictions_hash"] = pred_hash
         cache = Path(predictions_path) if predictions_path else (
-            Path(cache_dir(__file__, create=False)) / f"{pred_hash}_predictions.parquet"
+            Path(predictions_cache_path(config, splits, __file__, create=False))
         )
         result["cache_exists"] = cache.is_file()
         if not result["cache_exists"]:

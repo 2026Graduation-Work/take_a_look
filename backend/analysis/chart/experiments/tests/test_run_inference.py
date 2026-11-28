@@ -15,7 +15,7 @@ from shared.data.market_notices import SecurityKey
 from shared.data.market_resolutions import Resolution
 from shared.data.resolution_snapshot import PRICE_POLICY, read_resolution_snapshot, segment_id
 from shared.features.columns import BASE_FEATURES
-from shared.io import atomic_json, atomic_parquet, sha256
+from shared.io import atomic_json, atomic_parquet, canonical_hash, sha256
 from shared.processing import QLIB_PREPROCESSING, build_feature_frame, processing_contract
 from shared.settings import TRAINING_PRICE_BASIS
 from shared.tests.official_fixtures import fake_isin, fixture_snapshot
@@ -124,6 +124,21 @@ def test_worker_rejects_changed_model_sidecar(research_model, field, value, erro
     atomic_json(manifest_path, manifest)
     with pytest.raises(ValueError, match=error):
         init_worker(model_path, legacy_without_manifest=True)
+
+
+def test_worker_accepts_old_provenance_and_rejects_an_unknown_builder(research_model):
+    model_path, _, manifest_path, manifest = research_model
+    contract = manifest["processing_contract"]
+    contract["implementation_sha256"]["processing.py"] = "1" * 64
+    contract["sha256"] = canonical_hash({key: value for key, value in contract.items() if key != "sha256"})
+    atomic_json(manifest_path, manifest)
+    init_worker(model_path)
+
+    contract["builder_id"] = "future_engine"
+    contract["sha256"] = canonical_hash({key: value for key, value in contract.items() if key != "sha256"})
+    atomic_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="Model processing contract mismatch"):
+        init_worker(model_path)
 
 
 def test_worker_predicts_with_qlib_contract_or_explicit_legacy_defaults(

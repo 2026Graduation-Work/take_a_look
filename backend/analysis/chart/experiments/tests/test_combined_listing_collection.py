@@ -41,7 +41,8 @@ def _additional_listing(number, amount, reason):
     return filing, "70791", KindBody(text.encode(), "utf-8", evidence, accession, (accession,), True)
 
 
-@pytest.mark.parametrize("case,check", [
+@pytest.mark.parametrize("case,check,automated", [
+    *((case, check, False) for case, check in [
     ("simple", ""), ("matched", ""), ("delta-only", ""), ("mismatch", "combined_bonus_listing_totals_mismatch"),
     ("unavailable", "combined_bonus_listing_source_missing"), ("invalid", "combined_bonus_listing_source_unverified"),
     ("extra-unavailable", "combined_bonus_listing_source_missing"),
@@ -50,8 +51,10 @@ def _additional_listing(number, amount, reason):
     ("pure-unavailable", ""),
     ("withdrawn-unavailable", "combined_bonus_listing_source_unverified"),
     ("bad-terms", ""),
+    ]),
+    ("matched", "", True), ("unavailable", "combined_bonus_listing_source_missing", True),
 ])
-def test_collects_additional_listings_only_when_needed_for_combined_bonus(case, check):
+def test_collects_additional_listings_only_when_needed_for_combined_bonus(case, check, automated):
     raw = pd.read_csv(FIXTURES / "126880.bonus-prices.csv.gz", dtype={"Code": str}).rename(columns={"MKT_NM": "Market"})
     raw["Date"] = pd.to_datetime(raw.Date)
     quote, quote_form, quote_body = official_body("20160802000269")
@@ -95,7 +98,7 @@ def test_collects_additional_listings_only_when_needed_for_combined_bonus(case, 
         other_filings = [bad, unneeded]
 
     def document(filing, *, cache_only=False):
-        assert cache_only == (filing in additional_filings)
+        assert cache_only == (filing in additional_filings and not automated)
         if (filing == expected_failure and case in {"unavailable", "extra-unavailable", "known-unavailable", "pure-unavailable",
                                                     "withdrawn-unavailable"}
                 or case == "bad-terms" and filing == unneeded):
@@ -111,7 +114,7 @@ def test_collects_additional_listings_only_when_needed_for_combined_bonus(case, 
     assert [candidate.date for candidate in candidates] == [EX_DAY]
     notices, blocked, unparsed, structural_gaps, _, failures, *_ = _collect_notices(
         client, [term, quote, *additional_filings, *other_filings], {SECURITY: {"제이엔케이히터"}}, {SECURITY: candidates},
-        anchors={}, spac_keys=set(), bounded=True, raw_prices={SECURITY: raw},
+        anchors={}, spac_keys=set(), bounded=True, raw_prices={SECURITY: raw}, acquire_supplements=automated,
     )
     assert not blocked and not structural_gaps
     expected_calls = {"bad-terms": 3, "withdrawn-unavailable": 2}.get(case, 2 + len(additions))
@@ -123,7 +126,8 @@ def test_collects_additional_listings_only_when_needed_for_combined_bonus(case, 
     assert event.kind == (Resolution.SEGMENT_BREAK if check else Resolution.BONUS)
     if case in {"unavailable", "invalid", "extra-unavailable", "known-unavailable", "withdrawn-unavailable"}:
         failure, = failures
-        assert (failure["Stage"], failure["FailedCheck"], failure["AcptNo"]) == ("kind_notice", check, expected_failure.accession)
+        stage = "kind_document" if automated and case == "unavailable" else "kind_notice"
+        assert (failure["Stage"], failure["FailedCheck"], failure["AcptNo"]) == (stage, check, expected_failure.accession)
         assert vars(expected_failure.evidence) in failure["Evidence"]
         assert expected_failure.evidence in {item.source for item in event.evidence}
         if case == "withdrawn-unavailable":

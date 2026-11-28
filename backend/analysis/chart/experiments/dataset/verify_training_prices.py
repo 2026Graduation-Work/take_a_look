@@ -10,9 +10,14 @@ from experiments.dataset.pipeline import (
     _require_current_training_prices,
     eligible_training_prices,
     listing_identity,
+    requires_source_days,
     verify_training_metadata,
 )
-from shared.data.resolution_snapshot import SEGMENT_COLUMN, require_price_provenance
+from shared.data.resolution_snapshot import (
+    SEGMENT_COLUMN,
+    VerifiedSourceDays,
+    require_price_provenance,
+)
 from shared.data.segmented_prices import (
     ADJUSTMENT_COLUMNS,
     adjust_training_window,
@@ -34,12 +39,17 @@ def verify(root):
     if set(manifest["raw_files"]) != expected_files or set(manifest["krx_raw_files"]) != expected_files:
         raise ValueError("Dataset files differ from the pinned listing scope")
     selected = {listing_identity(row) for row in metadata.itertuples()}
+    sessions = pd.DatetimeIndex(pd.to_datetime(calendar["trading_days"]))
+    evidence_days = root / "official_actions" / "krx_sessions"
+    day_proof = (VerifiedSourceDays.read(snapshot, sessions, evidence_days)
+                 if manifest.get("source_day_proof") or evidence_days.exists()
+                 or requires_source_days(snapshot, metadata, sessions) else None)
     review = root / "review_queue.csv"
     if sha256(review) != manifest["review_queue"]["sha256"]:
         raise ValueError("The review queue hash differs from the manifest")
     with review.open(newline="", encoding="utf-8") as stream:
         rows = list(csv.DictReader(stream))
-    expected_review = sorted(snapshot.review_rows(selected), key=lambda row: (row["Code"], row["Date"]))
+    expected_review = sorted(snapshot.review_rows(selected, sessions=sessions), key=lambda row: (row["Code"], row["Date"]))
     if len(rows) != manifest["review_queue"]["rows"] or rows != [
         {key: str(value) for key, value in row.items()} for row in expected_review
     ]:
@@ -67,9 +77,10 @@ def verify(root):
         validate_segments(stored, required=True)
         for row in intervals.itertuples():
             security = listing_identity(row)
-            days = snapshot.days(security)
+            days = snapshot.days(security).intersection(sessions)
             reviewed, applied = adjust_training_window(
                 security, raw.loc[raw.Date.isin(days)].reset_index(drop=True), days, manifest["end_date"], snapshot,
+                source=day_proof,
             )
             checked_prices.append(reviewed.assign(Code=row.Code, Name=row.Name, IsDelisted=row.IsDelisted))
             if not applied.empty:

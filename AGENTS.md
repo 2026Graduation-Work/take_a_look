@@ -20,6 +20,8 @@
 - 커밋·PR 전 변경 블록을 로컬에서 검증한다. Python은 해당 블록에서 `ruff check .`와 `pytest`, 웹은 `frontend/`에서 `pnpm build`를 실행한다.
 - [schema/](schema/)는 블록 간 계약의 정본이며 동결 상태다. 전원 합의 후 변경하고 [프론트 타입](frontend/lib/types.ts)을 함께 맞춘다. Supabase 스키마도 프론트가 직접 조회하는 계약이다.
 - [설문 문항과 TypeScript 채점](frontend/lib/profiling/)은 한 벌로 관리한다. 변경 시 골든·속성 테스트와 [Python 계약 검사](backend/profiling/survey/test_question_bank.py)를 통과시킨다.
+- CLI 입력과 외부 응답, 저장된 산출물을 읽는 경계에서 데이터 무결성과 호환성을 검증한다. 검증을 통과한 데이터는 내부 단계마다 다시 검사하지 않는다. [데이터 검증과 재사용](docs/CONTRIBUTING.md#데이터-검증과-재사용)을 따른다.
+- 새 거부 조건이 막으려는 잘못된 결과나 데이터 손실을 구체적으로 적는다. 문제 입력을 거부하고 조건이 비슷한 정상 입력을 수용하는지 기존 테스트 모음에서 검증한다.
 
 ## 운영과 안전
 

@@ -61,7 +61,7 @@ def init_worker(model_path, legacy_without_manifest=False):
     global _model, _preprocessing
     import lightgbm as lgb
     from shared.io import sha256
-    from shared.processing import processing_contract
+    from shared.processing import processing_compatible, processing_contract
     from shared.settings import PREPROCESSING
 
     _model, _preprocessing = None, None
@@ -79,7 +79,7 @@ def init_worker(model_path, legacy_without_manifest=False):
         if (
             not isinstance(contract, dict)
             or not isinstance(settings := contract.get("preprocessing"), dict)
-            or contract != processing_contract(settings)
+            or not processing_compatible(contract, processing_contract(settings))
         ):
             raise ValueError(f"Model processing contract mismatch: {manifest_path}")
     elif legacy_without_manifest:

@@ -93,3 +93,71 @@ def test_flow_activation_refuses_incomplete_preview_before_config_write(tmp_path
         refresh_pack.main(["--h5-result", "h5", "--h20-result", "h20", "--pack-id", "new",
                            "--with-flows", "--activate"])
     assert config.read_bytes() == original
+
+
+
+def test_export_verifies_shared_predictions_across_equivalent_training_runs(tmp_path, monkeypatch):
+    from experiments.experiment_utils import generate_predictions_hash, resolve_splits
+    from experiments.export import refresh_pack
+
+    monkeypatch.setattr(refresh_pack, "CHART_ROOT", tmp_path)
+    names = list(BASE_FEATURES)
+
+    class Model:
+        def num_model_per_iteration(self):
+            return 3
+
+        def feature_name(self):
+            return names
+
+    monkeypatch.setattr(refresh_pack.lgb, "Booster", lambda **kwargs: Model())
+    cache = tmp_path / "workspace/experiments/cache"
+    models = cache / "training/models"
+    predictions = cache / "predictions"
+    models.mkdir(parents=True)
+    predictions.mkdir()
+    store = tmp_path / "dataset/feature_store/pinned"
+    store.mkdir(parents=True)
+    item = store / "005930.parquet"
+    item.write_bytes(b"verified feature payload")
+    feature = store / "feature_manifest.json"
+    atomic_json(feature, {**NEW_POLICY, "feature_columns": names, "file_hashes": {item.name: sha256_file(item)}})
+    contract = processing_contract()
+    result_dirs = {}
+    prediction_sidecars = {}
+    for horizon in (5, 20):
+        run = tmp_path / f"run-{horizon}"
+        run.mkdir()
+        result_dirs[horizon] = run
+        cfg = {"contract_version": 3, "experiment_name": "exported", "evaluation": {"random_baseline_runs": 0},
+               "features": {"groups": ["base"], "materialized_dir": str(store)},
+               "dataset": {"root": str(store.parent.parent), "preprocessing": PREPROCESSING},
+               "data": {"price_dir": str(store), "start_date": "2016-01-01", "end_date": "2026-10-06",
+                        "split_strategy": "sliding",
+                        "sliding": {"start_year": 2016, "end_year": 2026, "train_window_years": 3}},
+               "model": {"params": {"n_estimators": 3}}, "labels": {"type": "dynamic_sigma", "horizon": horizon},
+               "feature_columns": names, "processing_contract": contract}
+        key = generate_predictions_hash(cfg, resolve_splits(cfg))
+        model = models / f"{key}_fold7_model.txt"
+        model.write_bytes(b"model")
+        atomic_json(f"{model}.manifest.json", {"cache_key": model.name, "sha256": sha256_file(model),
+                                               "feature_columns": names, "processing_contract": contract})
+        prediction = predictions / f"{key}_predictions.parquet"
+        pd.DataFrame({"Date": [f"{year}-10-06" for year in range(2019, 2027)], "fold_id": range(8),
+                      "prob_down": 0.2, "prob_neutral": 0.3, "prob_up": 0.5}).to_parquet(prediction)
+        trained = {**cfg, "experiment_name": "original", "evaluation": {"random_baseline_runs": 99},
+                   "data": {**cfg["data"], "price_dir": str(tmp_path / "archived-original-location")}}
+        prediction_sidecars[horizon] = Path(f"{prediction}.manifest.json")
+        atomic_json(prediction_sidecars[horizon], {"predictions_hash": key, "sha256": sha256_file(prediction),
+                                                    "feature_columns": names, "processing_contract": contract,
+                                                    "config": trained})
+        atomic_json(run / "run_manifest.json", {**NEW_POLICY, "predictions_hash": key,
+                    "feature_columns": names, "processing_contract": contract, "config": cfg,
+                    "feature_manifest_sha256": sha256_file(feature)})
+
+    assert refresh_pack.verify_runs(result_dirs)[3] == store.parent.parent
+    sidecar = json.loads(prediction_sidecars[5].read_text())
+    sidecar["config"]["model"]["params"]["n_estimators"] = 4
+    atomic_json(prediction_sidecars[5], sidecar)
+    with pytest.raises(ValueError, match="prediction training inputs differ"):
+        refresh_pack.verify_runs(result_dirs)
