@@ -372,7 +372,7 @@ export default function StockDetailView({
 
         {reading.error && <p role="alert" className="m-0 text-xs text-danger">{reading.error}</p>}
 
-        {/* 읽는 법은 넓은 화면에서 탭 줄 오른쪽 끝, 좁은 화면에서는 탭 위 오른쪽(탭이 넘치지 않게) */}
+        {/* 가이드는 넓은 화면에서 탭 줄 오른쪽 끝, 좁은 화면에서는 탭 위 오른쪽(탭이 넘치지 않게) */}
         <div className="flex min-w-0 flex-wrap items-end gap-x-2 border-b border-line">
         <div
           role="tablist"
@@ -400,7 +400,7 @@ export default function StockDetailView({
         </div>
           {readingHistoryKey && !loading && (
             <button type="button" ref={readingReplay} className="btn-text order-first ml-auto min-h-11 shrink-0 whitespace-nowrap sm:order-none"
-              disabled={reading.state === "loading"} onClick={(event) => reading.start(event.currentTarget)}>읽는 법</button>
+              disabled={reading.state === "loading"} onClick={(event) => reading.start(event.currentTarget)}>가이드</button>
           )}
         </div>
 
