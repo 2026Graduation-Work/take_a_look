@@ -1,0 +1,14 @@
+contract_version: 3
+dataset_id: qlib_smoke_2025_01
+root: workspace/experiments/smoke/qlib_2025_01/dataset
+collection:
+  start_date: '2025-01-06'
+  end_date: '2025-01-10'
+  markets:
+  - KOSPI
+  include_delisted: true
+  investor_flows: true
+  tickers:
+  - 005930
+  - 005935
+preprocessing: qlib_alpha158

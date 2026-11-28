@@ -29,6 +29,8 @@ python -m experiments.export_oos \
 
 ## 환경과 명령
 
+처음 실행하거나 PR을 확인할 때는 [로컬 수집부터 Qlib 학습·평가까지](LOCAL_REPRODUCTION.md)를 따른다. 임시 5거래일 확인과 2022~2025년 H5/H20 전체 실행을 구분한다.
+
 ```bash
 python -m venv workspace/experiments/.venv
 source workspace/experiments/.venv/bin/activate
