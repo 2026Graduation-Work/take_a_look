@@ -1,6 +1,7 @@
 "use client";
 
 import type { User } from "@supabase/supabase-js";
+import { PRIVACY_EFFECTIVE } from "./privacy";
 import {
   PROFILE_STORAGE_KEY,
   PROFILE_UPDATED_EVENT,
@@ -151,13 +152,14 @@ export async function signUpWithPassword(
   email: string,
   password: string,
   name: string,
+  consentedAt: string,
 ): Promise<{ needsEmailConfirmation: boolean }> {
   const client = getSupabaseClient();
   if (!client) throw new Error("이 배포에는 계정 기능이 아직 연결되지 않았어요.");
   const { data, error } = await client.auth.signUp({
     email,
     password,
-    options: { emailRedirectTo: `${window.location.origin}/login`, data: { full_name: name } },
+    options: { emailRedirectTo: `${window.location.origin}/login`, data: { full_name: name, privacy_consent: { version: PRIVACY_EFFECTIVE, at: consentedAt, age_14_or_older: true } } },
   });
   if (error) throw new Error(`가입 실패: ${koreanAuthError(error.message)}`);
   return { needsEmailConfirmation: !data.session };

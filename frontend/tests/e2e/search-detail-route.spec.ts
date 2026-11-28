@@ -27,6 +27,7 @@ for (const mode of ["데모", "로그인"]) {
       await page.getByLabel("이름").fill("검색 검사");
       await page.getByLabel("이메일").fill("qa-search@example.com");
       await page.getByLabel("비밀번호").fill("qa-password");
+      for (const box of await page.getByRole("checkbox").all()) await box.check();
       await page.getByRole("button", { name: "가입하고 시작", exact: true }).click();
       await expect(page).toHaveURL("/");
     }
