@@ -28,7 +28,10 @@ English summary: [README.en.md](README.en.md)
 - **보유 종목 넣기**: 검색으로 넣거나 증권 앱 캡처를 올리면 기기 안에서 글자를 읽어 종목과 수량을 채웁니다(사진은 어디에도 보내지 않음). 처음 한 번 읽는 도구를 받는 동안 단계(1/3~3/3)와 남은 시간을 보여 주고, 두 번째부터는 바로 읽습니다. ETF, 해외 주식은 아직 다루지 않는다고 따로 알려 줍니다. 수량과 평균 매입가에 음수나 문자처럼 잘못된 값을 넣으면 고쳐 저장하지 않고 그대로 보여 주며 저장을 막습니다.
 - **코스피 전 종목**: 검색으로 코스피 전 종목의 상세(모델 신호, 최근 공시, 수급, 가격 흔들림)를 보고 보유 종목으로 넣을 수 있습니다. 2026-10-26 게시 기준으로 서빙 대상 912종목 중 793종목에 1주, 4주 신호가 나오고, 나머지 119종목은 수급 기록이 모자라거나 피처를 만들 수 없어 "이 종목은 오늘 모델 신호가 없어요"로 안내합니다. 보유, 관심 종목은 뉴스 분위기와 최신 정기보고서 재무도 매일, 매주 채워집니다.
 - **원으로 읽는 숫자**: 수익률 범위 끝과 전일 대비 등락을 원으로도 씁니다("−9.5% (약 249,000원)", "+1,200원 (+1.8%)"). 내부 점수는 화면 본문에 쓰지 않고 '계산 근거' 안에서만 범위와 함께 씁니다.
-- **이용 안내**: 서비스 취지, 시작하는 순서, 하루 5분 공부 루틴, 화면 읽는 법, 용어 모음을 한 페이지([/guide](https://takealook-skku.vercel.app/guide))에 모았습니다. 로그인 없이 열립니다.
+- **시장 브리핑과 초보 투자 팁**: 모든 화면 위에 KOSPI, KOSDAQ 지수와 시장 흔들림, 거래 단계를 한 줄로 보여 주고(기준일은 ⓘ 안), 그 아래 '알고 계셨나요?' 띠에 출처를 확인한 팁 42개를 돌아가며 보여 줍니다. '자세히 ›'로 들어가 읽은 뒤 '원래 화면으로 돌아가기'로 보던 화면과 탭으로 돌아옵니다.
+- **종목 상세 가이드**: 탭 줄 끝 '가이드'를 누르면 각 근거를 언제 보고 어떻게 비교할지 화면을 짚어 가며 안내합니다.
+- **안내 세 화면**: [이용 안내](https://takealook-skku.vercel.app/guide)(취지, 시작 순서, 하루 5분 루틴, 서비스의 한계), [알고 계셨나요?](https://takealook-skku.vercel.app/tips)(주제별 팁과 출처), [용어 모음](https://takealook-skku.vercel.app/glossary)(가나다순)으로 나눴습니다. 로그인 없이 열립니다.
+- **개인정보**: 가입할 때 만 14세 이상 확인과 개인정보 수집, 이용 동의를 받고, [처리방침](https://takealook-skku.vercel.app/privacy)에 처리 근거, 보관 기간, 국외 이전(Supabase, Vercel)을 밝힙니다.
 
 <p>
   <img src="docs/images/onboarding-welcome-mobile.png" alt="모바일 환영 화면" width="30%" />
@@ -54,6 +57,8 @@ English summary: [README.en.md](README.en.md)
 | 종목 상세 | [/stocks/005930](https://takealook-skku.vercel.app/stocks/005930) | 필요(데모 가능) |
 | 모델 성적표 | [/performance](https://takealook-skku.vercel.app/performance) | 필요(데모 가능) |
 | 이용 안내 | [/guide](https://takealook-skku.vercel.app/guide) | 없음 |
+| 알고 계셨나요? | [/tips](https://takealook-skku.vercel.app/tips) | 없음 |
+| 용어 모음 | [/glossary](https://takealook-skku.vercel.app/glossary) | 없음 |
 | 개인정보 처리방침 | [/privacy](https://takealook-skku.vercel.app/privacy) | 없음 |
 | 로그인, 가입 | [/login](https://takealook-skku.vercel.app/login) | 없음 |
 
