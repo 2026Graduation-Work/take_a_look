@@ -93,8 +93,8 @@ test("문장 바로 뒤의 밑줄 링크를 누르면 해당 팁의 설명과 �
   const strip = tipStrip(page);
   const sentence = strip.getByText(first.title, { exact: false });
   const link = sentence.getByRole("link", { name: "자세히 보기" });
-  await expect(sentence).toHaveText(first.title + " 자세히 보기");
-  await expect(link).toHaveCSS("text-decoration-line", "underline");
+  await expect(sentence).toHaveText(first.title + " 자세히 보기 ›");
+  await expect(link).toHaveCSS("text-decoration-line", "none");
   await expect(strip.getByRole("link")).toHaveCount(1);
   await sentence.click({ position: { x: 8, y: 8 } });
   await expect(page).toHaveURL("/");

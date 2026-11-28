@@ -159,13 +159,6 @@ export default function LoginForm() {
                 </label>
                 {tab === "signup" && <p id="password-help" className="m-0 text-2xs text-muted">8자 이상으로 적어 주세요.</p>}
               </div>
-              {tab === "signup" && (
-                <p className="m-0 text-2xs text-muted">
-                  가입하면 이메일과 이름, 성향 진단 결과, 보유 종목과 관심 종목, 판단 메모를 서울 리전 서버에 저장해요. 내 계정으로만
-                  읽고 쓸 수 있고, 판단 근거를 보여 주는 데에만 써요.{" "}
-                  <Link href="/privacy" className="text-brand hover:underline">개인정보 처리방침</Link>
-                </p>
-              )}
               <Messages notice={notice} error={error} />
               <StepNav
                 className="pt-2"
@@ -195,8 +188,9 @@ export default function LoginForm() {
             </div>
           )}
           {emailOpen && tab === "signup" && (
-            <p className="m-0 text-center text-xs text-muted">
-              처음이라면 <Link href="/guide" className="text-brand hover:underline">이용 안내</Link>
+            <p className="m-0 flex justify-center gap-4 text-xs">
+              <Link href="/guide" className="text-brand hover:underline">이용 안내</Link>
+              <Link href="/privacy" className="text-brand hover:underline">개인정보 처리방침</Link>
             </p>
           )}
         </section>

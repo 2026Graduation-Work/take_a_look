@@ -132,17 +132,19 @@ function TipStripContent({ closing, onDismiss }: { closing: boolean; onDismiss: 
             className={`m-0 min-h-[3.2em] text-xs text-body sm:min-h-0 ${step > 0 ? "motion-safe:animate-[tip-rise_180ms_ease-out]" : ""}`}
           >
             {tip.title}{" "}
-            <ReadingEntryLink href={tipHref({ id: tip.id })} className="ml-2 whitespace-nowrap text-2xs text-brand underline underline-offset-2">
-              자세히 보기
+            <ReadingEntryLink href={tipHref({ id: tip.id })} className="ml-2 whitespace-nowrap text-2xs text-brand hover:underline">
+              자세히<span className="sr-only"> 보기</span><span aria-hidden="true"> ›</span>
             </ReadingEntryLink>
           </p>
         </div>
         <button
           type="button"
           onClick={onDismiss}
-          className="col-start-2 row-start-1 min-h-11 min-w-11 justify-self-end whitespace-nowrap text-xs text-body hover:underline sm:col-start-3 sm:pointer-fine:min-h-8"
+          aria-label="오늘은 그만 보기"
+          title="오늘은 그만 보기"
+          className="col-start-2 row-start-1 min-h-11 min-w-11 justify-self-end text-base leading-none text-muted hover:text-ink sm:col-start-3 sm:pointer-fine:min-h-8 sm:pointer-fine:min-w-8"
         >
-          오늘은 그만 보기
+          <span aria-hidden="true">×</span>
         </button>
       </div>
     </div>
