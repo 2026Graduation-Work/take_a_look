@@ -182,10 +182,10 @@ def export(suite, output, input_evidence):
                        "start": str(min(p[0] for p in periods).date()), "end": str(max(p[1] for p in periods).date()),
                        "primary_metric": "annual_mean_roc_auc", "aggregation": "equal_weight_annual_mean",
                        "initial_cash": 10_000_000, "classification_threshold": 0.5, "strategy_threshold": 0.65,
-                       "volatile_definition": "각 연도의 공통 예측 표본에서 일별 Sigma 평균 상위 20% 날짜입니다. 날짜 수는 올림하며 동점은 날짜순입니다.",
+                       "volatile_definition": "각 연도의 공통 예측 표본에서 하루 가격 흔들림(시그마) 평균이 큰 상위 20% 날짜예요. 날짜 수는 올림하고 동점은 날짜순으로 골라요.",
                        "source": "2019~2025 KOSPI 공통 수급·심리 관측 표본의 저장된 OOS 예측 및 연도별 백테스트",
-                       "limitations": "수급·심리 관측이 완전한 공통 표본에 한정됩니다. 수정가격·정보 시점의 한계가 남고, 손대지 않은 최종 검증 표본이나 통계적 유의성의 증거가 아닙니다.",
-                       "backtest_scope": "매년 자금 1,000만 원을 초기화한 독립 평가입니다. 수익률·Sharpe·MDD는 연도별 단순평균, 거래 수는 합계입니다. 고변동일 백테스트는 미산출입니다."},
+                       "limitations": "수급과 심리 관측이 모두 있는 공통 표본에 한정돼요. 수정가격과 정보 시점의 한계가 남고, 손대지 않은 최종 검증 표본이나 통계적 유의성의 증거가 아니에요.",
+                       "backtest_scope": "매년 자금 1,000만 원으로 새로 시작한 독립 평가예요. 수익률, Sharpe, MDD는 연도별 단순평균, 거래 수는 합계예요. 고변동일 백테스트는 계산하지 않았어요."},
         "four_run_metrics": [r for r in rows if r["sample"] == "all"],
         "volatile_subsample_metrics": [r for r in rows if r["sample"] != "all"], "comparison_deltas": deltas,
     }

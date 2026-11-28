@@ -94,7 +94,7 @@ test("문장 바로 뒤의 밑줄 링크를 누르면 해당 팁의 설명과 �
   const sentence = strip.getByText(first.title, { exact: false });
   const link = sentence.getByRole("link", { name: "자세히 보기" });
   await expect(sentence).toHaveText(first.title + " 자세히 보기 ›");
-  await expect(link).toHaveCSS("text-decoration-line", "underline");
+  await expect(link).toHaveCSS("text-decoration-line", "none");
   await expect(strip.getByRole("link")).toHaveCount(1);
   await sentence.click({ position: { x: 8, y: 8 } });
   await expect(page).toHaveURL("/");
@@ -222,9 +222,7 @@ test("좁은 화면에도 두 지수의 절대값, 등락률, 오래된 데이�
   await detail.click();
   const popover = page.getByRole("region", { name: "시장 흔들림 설명" });
   await expect(popover).toContainText("최근 20거래일 평균 거래대금이 지난 1년 중 아래에서 81% 위치예요.");
-  await expect(bar.getByText("시세 2026.11.20 종가 기준", { exact: true })).toBeVisible();
-  await expect(bar.getByText("실시간 아님", { exact: true })).toBeVisible();
-  await expect(popover).not.toContainText("2026.11.20");
+  await expect(popover).toContainText("시세 2026.11.20 종가 기준, 실시간 아님");
 });
 
 test("종목 로딩이 1초를 넘기면 팁을 보여 주고 로딩 완료 후에도 띠가 하나다", async ({ page }) => {

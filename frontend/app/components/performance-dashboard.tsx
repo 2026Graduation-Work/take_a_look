@@ -19,6 +19,9 @@ import {
   type DeltaOutcome,
   type MetricDefinition,
 } from "@/lib/performance-display";
+// 11/25 #447 수익률 기준 비교(B − A), 정본 docs/research/e0-baseline/ic_comparison.csv. 같은 OOS 예측이라 이 JSON과 기간이 같다
+const RANK_IC_DELTA = "4주 +0.0003, 1주 -0.0006";
+const RANK_IC_DEFINITION = "같은 날 종목들을 모델 점수 순서와 실제 수익률 순서로 줄 세웠을 때 얼마나 비슷한지예요. 두 기간 모두 차이가 우연히 생길 수 있는 범위 안이라(월 단위 부트스트랩 t 0.93, -1.96, 채택 기준 t 2 이상) 개선으로 보지 않았어요.";
 import type { ComparisonDeltaRow, ComparisonProfile, ComparisonResults, ComparisonSample } from "@/lib/performance-types";
 import type { InvestorProfileSummary, MarketStatus } from "@/lib/types";
 
@@ -129,6 +132,19 @@ export default function PerformanceDashboard({
                       </MarketDetail>
                     </span>,
                     both((row) => formatAucDelta(row.delta_B_minus_A_auc)),
+                  ],
+                  [
+                    <span key="ic" className="inline-flex items-center gap-1">
+                      실제 수익률 순서(Rank IC)
+                      <MarketDetail
+                        title="Rank IC 설명"
+                        className="-my-3 inline-flex"
+                        label={<><span aria-hidden className="px-1 text-muted">ⓘ</span><span className="sr-only">Rank IC 설명 보기</span></>}
+                      >
+                        <p className="m-0">{RANK_IC_DEFINITION}</p>
+                      </MarketDetail>
+                    </span>,
+                    RANK_IC_DELTA,
                   ],
                   ["모의 투자 연수익률", both((row) => formatDeltaValue(row.delta_B_minus_A_cumulative_return, RETURN_METRIC))],
                 ]}

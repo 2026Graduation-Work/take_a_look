@@ -32,7 +32,7 @@ export default function HeatmapLabel({ name, detail }: { name: string; detail: s
     <span
       ref={content}
       aria-hidden="true"
-      className={`absolute inset-0 flex gap-x-2 gap-y-1 px-2.5 py-1.5 ${mode === "stack" ? "flex-col justify-between" : "items-center justify-between"}`}
+      className={`absolute inset-0 flex gap-x-2 gap-y-1 px-2 py-2 ${mode === "stack" ? "flex-col justify-between" : "items-center justify-between"}`}
     >
       <span className="min-w-0 shrink-0 truncate text-sm font-semibold">{name}</span>
       <span className={`shrink-0 whitespace-nowrap text-xs font-medium tabular-nums ${mode === "stack" ? "self-end" : ""} ${mode === "name" ? "invisible absolute" : ""}`}>{detail}</span>
