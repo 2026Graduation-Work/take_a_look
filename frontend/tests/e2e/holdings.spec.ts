@@ -10,6 +10,7 @@ async function signUp(page: Page) {
   await page.getByLabel("이름").fill("보유 사용자");
   await page.getByLabel("이메일").fill("holdings@example.com");
   await page.getByLabel("비밀번호").fill("secret123");
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page).toHaveURL("/");
 }

@@ -236,6 +236,7 @@ test("로그인 계정은 데모 기록과 분리되고 예전 프로필에 진�
   await page.getByLabel("이름").fill("읽는 법 테스터");
   await page.getByLabel("이메일").fill("reading@example.com");
   await page.getByLabel("비밀번호").fill("demo-only-123");
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page).toHaveURL("/");
   await page.evaluate((key) => localStorage.setItem(key, '{"status":"dismissed"}'), demoKey);

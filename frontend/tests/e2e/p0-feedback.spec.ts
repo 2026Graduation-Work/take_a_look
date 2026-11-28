@@ -94,6 +94,7 @@ test("4. 진단 중 브라우저 뒤로 가기는 한 단계씩 돌아간다(가
   await page.getByLabel("이름").fill("기록 사용자");
   await page.getByLabel("이메일").fill("history@example.com");
   await page.getByLabel("비밀번호").fill("secret123");
+  for (const box of await page.getByRole("checkbox").all()) await box.check();
   await page.getByRole("button", { name: "가입하고 시작" }).click();
   await expect(page).toHaveURL(/\/survey$/);
   await backStepsOneAtATime(page);
